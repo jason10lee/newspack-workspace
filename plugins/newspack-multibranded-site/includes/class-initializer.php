@@ -20,6 +20,7 @@ class Initializer {
 		Admin::init();
 
 		Customizations\Url::init();
+		Customizations\ShowPageOnFront::init();
 	}
 
 }

@@ -148,6 +148,7 @@ class Taxonomy {
 
 		// Initialize metadata.
 		Meta\Url::init();
+		Meta\ShowPageOnFront::init();
 	}
 
 	/**
