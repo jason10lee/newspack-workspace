@@ -8,9 +8,16 @@
 namespace Newspack_Multibranded_Site;
 
 /**
- * Newspack Multi-branded site term meta parent class
+ * Newspack Multi-branded site meta parent class
  */
 abstract class Meta {
+
+	/**
+	 * The meta type
+	 *
+	 * @var string
+	 */
+	public static $type = 'term';
 
 	/**
 	 * Initializes the Meta
@@ -26,19 +33,22 @@ abstract class Meta {
 	 */
 	public static function register_option() {
 		$params = [
-			'object_subtype' => Taxonomy::SLUG,
-			'description'    => static::get_description(),
-			'single'         => true,
-			'show_in_rest'   => [
+			'description'   => static::get_description(),
+			'single'        => true,
+			'show_in_rest'  => [
 				'schema' => static::get_schema(),
 			],
-			'auth_callback'  => function() {
+			'auth_callback' => function() {
 				return current_user_can( 'manage_options' );
 			},
 		];
 
+		if ( 'term' === static::$type ) {
+			$params['object_subtype'] = Taxonomy::SLUG;
+		}
+
 		register_meta(
-			'term',
+			static::$type,
 			static::get_key(),
 			$params
 		);

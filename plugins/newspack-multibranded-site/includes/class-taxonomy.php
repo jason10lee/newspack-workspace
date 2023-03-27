@@ -152,6 +152,7 @@ class Taxonomy {
 		// Initialize metadata.
 		Meta\Url::init();
 		Meta\ShowPageOnFront::init();
+		Meta\Post_Primary_Brand::init();
 	}
 
 	/**
