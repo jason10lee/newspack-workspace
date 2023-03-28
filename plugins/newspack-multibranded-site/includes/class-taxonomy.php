@@ -55,6 +55,9 @@ class Taxonomy {
 	 * @return ?WP_Term The current brand term.
 	 */
 	public static function get_current() {
+		if ( empty( self::$current_brand ) ) {
+			self::determine_current_brand();
+		}
 		return self::$current_brand;
 	}
 
