@@ -18,6 +18,9 @@ class Initializer {
 	public static function init() {
 		Taxonomy::init();
 		Admin::init();
+
+		Customizations\Url::init();
+		Customizations\ShowPageOnFront::init();
 	}
 
 }
