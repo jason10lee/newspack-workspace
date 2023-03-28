@@ -22,6 +22,7 @@ class Initializer {
 		Customizations\Url::init();
 		Customizations\ShowPageOnFront::init();
 		Customizations\Logo::init();
+		Customizations\Menus::init();
 	}
 
 }
