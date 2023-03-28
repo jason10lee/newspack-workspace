@@ -22,6 +22,6 @@ if ( ! defined( 'NEWSPACK_MULTIBRANDED_SITE_PLUGIN_DIR' ) ) {
 // Load language files.
 load_plugin_textdomain( 'newspack-plugin', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
 
-require_once 'vendor/autoload.php';
+require_once plugin_dir_path( __FILE__ ) . '/vendor/autoload.php';
 
 Newspack_Multibranded_Site\Initializer::init();
