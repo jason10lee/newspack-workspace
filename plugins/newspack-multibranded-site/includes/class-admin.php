@@ -53,6 +53,26 @@ class Admin {
 	 */
 	public static function admin_init() {
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue_scripts' ) );
+		add_filter( 'admin_body_class', array( __CLASS__, 'body_class' ) );
+	}
+
+	/**
+	 * Add Newspack admin body class, necessary for wizard styling.
+	 *
+	 * @param string $classes Space-separated list of CSS classes.
+	 * @return string
+	 */
+	public static function body_class( $classes ) {
+		$screen = get_current_screen();
+
+		$is_newspack_screen = ( 'toplevel_page_newspack-' === substr( $screen->base, 0, 23 ) );
+		if ( ! $screen || ! $is_newspack_screen ) {
+			return $classes;
+		}
+
+		$classes .= ' admin_page_newspack-multi-branded-sites';
+
+		return $classes;
 	}
 
 	/**
