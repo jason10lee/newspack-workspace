@@ -19,6 +19,11 @@ Thumbs.db
 
 # Composer
 /vendor/
+/node_modules/
+/dist/
+.DS_Store
+release
+.cache
 
 # Tests
 codecov/
