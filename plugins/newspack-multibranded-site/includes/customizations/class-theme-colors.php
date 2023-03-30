@@ -19,14 +19,18 @@ class Theme_Colors {
 	 * Initializes
 	 */
 	public static function init() {
+		add_action( 'init', [ __CLASS__, 'register_theme_colors_filters' ] );
+	}
+
+	/**
+	 * Registers the filters that will be used to filter the theme colors
+	 *
+	 * Running on init so themes have time to filter the registered colors
+	 *
+	 * @return void
+	 */
+	public static function register_theme_colors_filters() {
 		$colors = self::get_registered_theme_colors();
-		$colors = [
-			[
-				'theme_mod_name' => 'primary_color',
-				'label'          => __( 'Primary Color', 'newspack' ),
-				'default'        => '#00669b',
-			],
-		];
 		foreach ( $colors as $color ) {
 			add_filter( 'theme_mod_' . $color['theme_mod_name'], [ __CLASS__, 'filter_theme_color' ] );
 		}
