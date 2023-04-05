@@ -121,10 +121,25 @@ class Taxonomy {
 	 * @return ?WP_Term The current brand for the post.
 	 */
 	public static function get_current_brand_for_post( $post_or_post_id ) {
-		$post  = $post_or_post_id instanceof \WP_Post ? $post_or_post_id : get_post( $post_or_post_id );
+		$post = $post_or_post_id instanceof \WP_Post ? $post_or_post_id : get_post( $post_or_post_id );
+
+		if ( ! in_array( $post->post_type, self::POST_TYPES, true ) ) {
+			return;
+		}
+
 		$terms = wp_get_post_terms( $post->ID, self::SLUG );
-		if ( in_array( $post->post_type, self::POST_TYPES, true ) && 1 === count( $terms ) ) {
+
+		if ( 1 === count( $terms ) ) {
 			return $terms[0];
+		}
+
+		$post_primary_brand = get_post_meta( $post->ID, self::PRIMARY_META_KEY, true );
+
+		if ( $post_primary_brand ) {
+			$term = get_term( $post_primary_brand, self::SLUG );
+			if ( $term instanceof \WP_Term ) {
+				return $term;
+			}
 		}
 	}
 

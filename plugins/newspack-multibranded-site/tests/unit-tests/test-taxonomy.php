@@ -70,23 +70,29 @@ class TestTaxonomy extends WP_UnitTestCase {
 	 * Tests get current brand and determine current brand methods
 	 */
 	public function test_determine_current_brand() {
-		$author        = $this->factory->user->create_and_get();
-		$term1         = $this->factory->term->create_and_get( array( 'taxonomy' => Taxonomy::SLUG ) );
-		$term2         = $this->factory->term->create_and_get( array( 'taxonomy' => Taxonomy::SLUG ) );
-		$category      = $this->factory->term->create_and_get( array( 'taxonomy' => 'category' ) );
-		$post          = $this->factory->post->create_and_get(
+		$author                    = $this->factory->user->create_and_get();
+		$term1                     = $this->factory->term->create_and_get( array( 'taxonomy' => Taxonomy::SLUG ) );
+		$term2                     = $this->factory->term->create_and_get( array( 'taxonomy' => Taxonomy::SLUG ) );
+		$category                  = $this->factory->term->create_and_get( array( 'taxonomy' => 'category' ) );
+		$post                      = $this->factory->post->create_and_get(
 			array(
 				'post_title'  => 'Post 1',
 				'post_author' => $author->ID,
 			)
 		);
-		$post_2_brands = $this->factory->post->create_and_get(
+		$post_2_brands             = $this->factory->post->create_and_get(
 			array(
 				'post_title'  => 'Post 2',
 				'post_author' => $author->ID,
 			)
 		);
-		$page          = $this->factory->post->create_and_get(
+		$post_2_brands_and_primary = $this->factory->post->create_and_get(
+			array(
+				'post_title'  => 'Post 2 and primary',
+				'post_author' => $author->ID,
+			)
+		);
+		$page                      = $this->factory->post->create_and_get(
 			array(
 				'post_title' => 'Post 2',
 				'post_type'  => 'page',
@@ -96,6 +102,8 @@ class TestTaxonomy extends WP_UnitTestCase {
 		wp_set_post_terms( $post->ID, $term1->term_id, Taxonomy::SLUG );
 		wp_set_post_terms( $post->ID, $category->term_id, 'category' );
 		wp_set_post_terms( $post_2_brands->ID, [ $term1->term_id, $term2->term_id ], Taxonomy::SLUG );
+		wp_set_post_terms( $post_2_brands_and_primary->ID, [ $term1->term_id, $term2->term_id ], Taxonomy::SLUG );
+		add_post_meta( $post_2_brands_and_primary->ID, Taxonomy::PRIMARY_META_KEY, $term2->term_id );
 		wp_set_post_terms( $post_2_brands->ID, $category->term_id, 'category' );
 
 		// home.
@@ -121,6 +129,10 @@ class TestTaxonomy extends WP_UnitTestCase {
 		// Post with two brands.
 		$this->go_to( get_permalink( $post_2_brands->ID ) );
 		$this->assertSame( null, Taxonomy::get_current(), 'Null should be returned if on post with two brands' );
+
+		// Post with two brands and primary.
+		$this->go_to( get_permalink( $post_2_brands_and_primary->ID ) );
+		$this->assertSame( $term2->term_id, Taxonomy::get_current()->term_id, 'Primary brand should be returned if on post with two brands and primary' );
 
 		// author archive.
 		$this->go_to( get_author_posts_url( $author->ID ) );
