@@ -49,8 +49,6 @@ class Taxonomy {
 			add_action( 'init', [ __CLASS__, 'register_taxonomy' ] ); // For CLI and tests.
 		}
 		add_action( 'wp', [ __CLASS__, 'determine_current_brand' ] );
-
-		add_action( 'admin_init', [ __CLASS__, 'register_options' ] );
 	}
 
 	/**
