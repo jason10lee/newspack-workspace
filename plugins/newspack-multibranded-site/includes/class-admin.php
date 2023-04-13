@@ -116,12 +116,24 @@ class Admin {
 			'support_email'  => $support_email,
 		);
 
+		$menus = array_map(
+			function( $menu ) {
+				return array(
+					'value' => $menu->term_id,
+					'label' => $menu->name,
+				);
+			},
+			wp_get_nav_menus()
+		);
+
 		$aux_data = array(
 			'is_e2e'              => class_exists( \Newspack\Starter_Content::class ) && \Newspack\Starter_Content::is_e2e(),
 			'is_debug_mode'       => class_exists( \Newspack\Newspack::class ) && \Newspack\Newspack::is_debug_mode(),
 			'has_completed_setup' => get_option( NEWSPACK_SETUP_COMPLETE ),
 			'site_title'          => get_option( 'blogname' ),
 			'theme_colors'        => Customizations\Theme_Colors::get_registered_theme_colors(),
+			'menu_locations'      => get_registered_nav_menus(),
+			'menus'               => $menus,
 		);
 
 		wp_localize_script( self::MULTI_BRANDED_PAGE_SLUG, 'newspack_urls', $urls );

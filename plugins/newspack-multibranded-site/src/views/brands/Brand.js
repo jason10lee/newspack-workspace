@@ -70,6 +70,22 @@ const Brand = ( { brands = [], saveBrand, fetchLogoAttachment } ) => {
 		setShowOnFrontSelect( value );
 	};
 
+	const updateMenus = ( location, menu ) => {
+		const menus = brand.meta._menus ? brand.meta._menus : [];
+		const menuIndex = menus.findIndex( _menu => location === _menu.location );
+
+		const updatedMenus =
+			menuIndex > -1
+				? menus.map( _menu => ( location === _menu.location ? { ..._menu, menu } : _menu ) )
+				: [ ...menus, { location, menu } ];
+
+		return updateBrand( {
+			meta: {
+				_menus: updatedMenus,
+			},
+		} );
+	};
+
 	const baseUrl = `${ newspack_urls.site }/${ 'no' === brand.meta._custom_url ? 'brand/' : '' }`;
 
 	const fetchPublicPages = () => {
@@ -88,6 +104,16 @@ const Brand = ( { brands = [], saveBrand, fetchLogoAttachment } ) => {
 			( 'yes' === showOnFrontSelect && 0 < brand.meta._show_page_on_front ) );
 
 	const registeredThemeColors = newspack_aux_data.theme_colors;
+	const menuLocations = newspack_aux_data.menu_locations;
+	const availableMenus = newspack_aux_data.menus;
+
+	const findSelectedMenu = location => {
+		if ( ! brand.meta._menus ) {
+			return 0;
+		}
+		const selectedMenu = brand.meta._menus.find( menu => menu.location === location );
+		return selectedMenu ? selectedMenu.menu : 0;
+	};
 
 	return (
 		<Fragment>
@@ -200,6 +226,27 @@ const Brand = ( { brands = [], saveBrand, fetchLogoAttachment } ) => {
 					/>
 				) }
 			</Card>
+
+			<SectionHeader
+				title={ __( 'Menus', 'newspack-multibranded-site' ) }
+				description={ __( 'Customize the menus for this brand', 'newspack-multibranded-site' ) }
+			/>
+
+			{ Object.keys( menuLocations ).map( location => (
+				<SelectControl
+					label={ menuLocations[ location ] }
+					value={ findSelectedMenu( location ) }
+					options={ [
+						{
+							label: __( 'Same as site', 'newspack-multibranded-site' ),
+							value: 0,
+							disabled: false,
+						},
+						...availableMenus,
+					] }
+					onChange={ menuId => updateMenus( location, menuId ) }
+				/>
+			) ) }
 
 			<div className="newspack-buttons-card">
 				<Button
