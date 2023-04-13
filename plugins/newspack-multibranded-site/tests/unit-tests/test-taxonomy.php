@@ -6,6 +6,7 @@
  */
 
 use Newspack_Multibranded_Site\Taxonomy;
+use Newspack_Multibranded_Site\Meta\ShowPageOnFront;
 
 /**
  * Sample test case.
@@ -76,6 +77,7 @@ class TestTaxonomy extends WP_UnitTestCase {
 		$author_with_invalid_brand_2 = $this->factory->user->create_and_get();
 		$brand1                      = $this->factory->term->create_and_get( array( 'taxonomy' => Taxonomy::SLUG ) );
 		$brand2                      = $this->factory->term->create_and_get( array( 'taxonomy' => Taxonomy::SLUG ) );
+		$brand_with_page_on_front    = $this->factory->term->create_and_get( array( 'taxonomy' => Taxonomy::SLUG ) );
 		$simple_category             = $this->factory->term->create_and_get( array( 'taxonomy' => 'category' ) );
 		$category_with_brand         = $this->factory->term->create_and_get( array( 'taxonomy' => 'category' ) );
 		$simple_category_child       = $this->factory->term->create_and_get(
@@ -116,6 +118,12 @@ class TestTaxonomy extends WP_UnitTestCase {
 				'post_type'  => 'page',
 			)
 		);
+		$page2                       = $this->factory->post->create_and_get(
+			array(
+				'post_title' => 'Page 2',
+				'post_type'  => 'page',
+			)
+		);
 
 		wp_set_post_terms( $post->ID, $brand1->term_id, Taxonomy::SLUG );
 		wp_set_post_terms( $post->ID, $simple_category->term_id, 'category' );
@@ -130,6 +138,8 @@ class TestTaxonomy extends WP_UnitTestCase {
 
 		add_term_meta( $category_with_brand->term_id, Taxonomy::PRIMARY_META_KEY, $brand1->term_id );
 		add_term_meta( $tag_with_brand->term_id, Taxonomy::PRIMARY_META_KEY, $brand1->term_id );
+
+		add_term_meta( $brand_with_page_on_front->term_id, ShowPageOnFront::get_key(), $page2->ID );
 
 		// home.
 		$this->go_to( '/' );
@@ -190,5 +200,10 @@ class TestTaxonomy extends WP_UnitTestCase {
 		// tag with brand.
 		$this->go_to( get_term_link( $tag_with_brand ) );
 		$this->assertSame( $brand1->term_id, Taxonomy::get_current()->term_id, 'Brand should be returned if on tag with brand' );
+
+		// Brand with page on front
+		$this->go_to( get_term_link( $brand_with_page_on_front ) );
+		$this->assertSame( $brand_with_page_on_front->term_id, Taxonomy::get_current()->term_id, 'Brand should be returned if on brand with page on front' );
+		var_dump( get_queried_object() );
 	}
 }

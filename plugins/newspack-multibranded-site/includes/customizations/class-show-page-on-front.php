@@ -16,11 +16,19 @@ use Newspack_Multibranded_Site\Taxonomy;
 class ShowPageOnFront {
 
 	/**
+	 * Whether the query has been filtered in the current request
+	 *
+	 * @var boolean
+	 */
+	protected static $filtered = false;
+
+	/**
 	 * Initializes
 	 */
 	public static function init() {
 		add_action( 'pre_get_posts', [ __CLASS__, 'pre_get_posts' ], 20 );
 		add_filter( 'body_class', [ __CLASS__, 'body_class' ], 10, 2 );
+		add_filter( 'template_include', [ __CLASS__, 'template_include' ] );
 	}
 
 	/**
@@ -49,6 +57,7 @@ class ShowPageOnFront {
 					$query->query      = [ 'page_id' => $page->ID ];
 					$query->query_vars = $query->query;
 					$query->parse_query();
+					self::$filtered = true;
 				}
 			}
 		}
@@ -79,6 +88,7 @@ class ShowPageOnFront {
 
 		$classes = array_merge(
 			[
+				'newspack-front-page',
 				'page-template-default',
 				'page-id-' . $show_page_on_front,
 			],
@@ -86,6 +96,20 @@ class ShowPageOnFront {
 		);
 
 		return $classes;
+	}
+
+	/**
+	 * Filters the template to use when displaying a page on front
+	 *
+	 * @param string $template The template file.
+	 * @return string
+	 */
+	public static function template_include( $template ) {
+		if ( is_page() && self::$filtered ) {
+			$template = get_front_page_template();
+		}
+
+		return $template;
 	}
 
 

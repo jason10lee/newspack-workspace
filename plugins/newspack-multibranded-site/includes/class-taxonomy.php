@@ -124,6 +124,11 @@ class Taxonomy {
 	 * @return ?WP_Term The current brand for the post.
 	 */
 	public static function get_current_brand_for_post( $post_or_post_id ) {
+		// Account for Brands with page on front.
+		if ( $post_or_post_id instanceof WP_Term ) {
+			return self::get_current_brand_for_term( $post_or_post_id );
+		}
+
 		$post = $post_or_post_id instanceof \WP_Post ? $post_or_post_id : get_post( $post_or_post_id );
 
 		if ( ! in_array( $post->post_type, self::POST_TYPES, true ) ) {
