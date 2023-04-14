@@ -75,17 +75,22 @@ const Brands = ( { setError, wizardApiFetch } ) => {
 	};
 
 	const deleteBrand = brand => {
-		wizardApiFetch( {
-			path: `/wp/v2/brand/${ brand.id }`,
-			method: 'DELETE',
-			quiet: true,
-		} )
-			.then( result => {
-				console.log( 'result', result );
+		// eslint-disable-next-line no-alert
+		if ( confirm( __( 'Are you sure you want to delete this brand?', 'newspack' ) ) ) {
+			return wizardApiFetch( {
+				path: addQueryArgs( `/wp/v2/brand/${ brand.id }`, { force: true } ),
+				method: 'DELETE',
+				quiet: true,
 			} )
-			.catch( e => {
-				setError( e );
-			} );
+				.then( result => {
+					if ( result.deleted ) {
+						setBrands( oldBrands => oldBrands.filter( oldBrand => brand.id !== oldBrand.id ) );
+					}
+				} )
+				.catch( e => {
+					setError( e );
+				} );
+		}
 	};
 
 	const fetchLogoAttachment = ( brandId, attachmentId ) => {
