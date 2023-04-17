@@ -201,9 +201,8 @@ class TestTaxonomy extends WP_UnitTestCase {
 		$this->go_to( get_term_link( $tag_with_brand ) );
 		$this->assertSame( $brand1->term_id, Taxonomy::get_current()->term_id, 'Brand should be returned if on tag with brand' );
 
-		// Brand with page on front
+		// Brand with page on front.
 		$this->go_to( get_term_link( $brand_with_page_on_front ) );
 		$this->assertSame( $brand_with_page_on_front->term_id, Taxonomy::get_current()->term_id, 'Brand should be returned if on brand with page on front' );
-		var_dump( get_queried_object() );
 	}
 }
