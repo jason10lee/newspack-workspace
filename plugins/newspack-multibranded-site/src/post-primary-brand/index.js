@@ -105,9 +105,8 @@ function customizeSelector( OriginalComponent ) {
 					<NewspackPostPrimaryBrand { ...props } />
 				</div>
 			);
-		} else {
-			return <OriginalComponent { ...props } />;
 		}
+		return <OriginalComponent { ...props } />;
 	};
 }
 wp.hooks.addFilter(
