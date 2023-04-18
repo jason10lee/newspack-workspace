@@ -35,7 +35,7 @@ const NewspackPostPrimaryBrand = ( { slug } ) => {
 
 	const [ currentPrimaryBrand, setCurrentPrimaryBrand ] = useState( null );
 
-	const { terms, availableTerms, taxonomy } = useSelect(
+	const { terms, availableTerms } = useSelect(
 		select => {
 			const { getCurrentPost, getEditedPostAttribute } = select( 'core/editor' );
 			const { getTaxonomy, getEntityRecords } = select( coreStore );
