@@ -109,6 +109,6 @@ function customizeSelector( OriginalComponent ) {
 		return <OriginalComponent { ...props } />;
 wp.hooks.addFilter(
 	'editor.PostTaxonomyType',
-	'newspack/set-custom-term-selector',
+	'newspack/multibranded-site/brand-selector-filter',
 	customizeSelector
 );
