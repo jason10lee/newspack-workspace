@@ -100,7 +100,7 @@ function customizeSelector( OriginalComponent ) {
 	return function ( props ) {
 		if ( props.slug === TAXONOMY_SLUG ) {
 			return (
-				<div class="newspack-multibranded-site-brand-control">
+				<div className="newspack-multibranded-site-brand-control">
 					<OriginalComponent { ...props } />
 					<NewspackPostPrimaryBrand { ...props } />
 				</div>
