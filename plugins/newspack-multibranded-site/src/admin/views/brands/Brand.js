@@ -28,6 +28,10 @@ const Brand = ( { brands = [], saveBrand, fetchLogoAttachment } ) => {
 	const { brandId } = useParams();
 	const selectedBrand = brands.find( ( { id } ) => id === Number( brandId ) );
 
+	const registeredThemeColors = newspack_aux_data.theme_colors;
+	const menuLocations = newspack_aux_data.menu_locations;
+	const availableMenus = newspack_aux_data.menus;
+
 	useEffect( () => {
 		if ( selectedBrand ) {
 			updateBrand( selectedBrand );
@@ -38,17 +42,39 @@ const Brand = ( { brands = [], saveBrand, fetchLogoAttachment } ) => {
 		}
 	}, [ selectedBrand ] );
 
-	const getThemeColor = colorName =>
-		brand.meta._theme_colors?.find( c => colorName === c.name )?.color;
+	const getThemeColor = colorName => {
+		const color = brand.meta._theme_colors?.find( c => colorName === c.name )?.color;
+		return color
+			? color
+			: registeredThemeColors.find( c => colorName === c.theme_mod_name )?.default;
+	};
+
+	const hasCustomThemeColor = colorName => {
+		const color = brand.meta._theme_colors?.find( c => colorName === c.name )?.color;
+		return color ? true : false;
+	};
 
 	const setThemeColor = ( name, color ) => {
 		const themeColors = brand?.meta._theme_colors ? brand?.meta._theme_colors : [];
 		const colorIndex = themeColors.findIndex( _color => name === _color.name );
+		let updatedThemeColors = [];
 
-		const updatedThemeColors =
-			colorIndex > -1
-				? themeColors.map( _color => ( name === _color.name ? { ..._color, color } : _color ) )
-				: [ ...themeColors, { name, color } ];
+		if ( ! color && colorIndex > -1 ) {
+			// Resetting default color.
+			themeColors.splice( colorIndex, 1 );
+			updatedThemeColors = themeColors;
+		} else if ( color && colorIndex > -1 ) {
+			// Updating color.
+			updatedThemeColors = themeColors.map( _color =>
+				name === _color.name ? { ..._color, color } : _color
+			);
+		} else if ( color && colorIndex === -1 ) {
+			// Adding color.
+			updatedThemeColors = [ ...themeColors, { name, color } ];
+		} else if ( ! color && colorIndex === -1 ) {
+			// should not happen.
+			return;
+		}
 
 		return updateBrand( {
 			meta: {
@@ -103,10 +129,6 @@ const Brand = ( { brands = [], saveBrand, fetchLogoAttachment } ) => {
 		( 'no' === showOnFrontSelect ||
 			( 'yes' === showOnFrontSelect && 0 < brand.meta._show_page_on_front ) );
 
-	const registeredThemeColors = newspack_aux_data.theme_colors;
-	const menuLocations = newspack_aux_data.menu_locations;
-	const availableMenus = newspack_aux_data.menus;
-
 	const findSelectedMenu = location => {
 		if ( ! brand.meta._menus ) {
 			return 0;
@@ -133,13 +155,6 @@ const Brand = ( { brands = [], saveBrand, fetchLogoAttachment } ) => {
 				<Grid columns={ 1 } gutter={ 16 }>
 					<ImageUpload
 						className="newspack-brand__header__logo"
-						style={ {
-							...( getThemeColor( 'header_background_hex' )
-								? {
-										backgroundColor: getThemeColor( 'header_background_hex' ),
-								  }
-								: {} ),
-						} }
 						label={ __( 'Logo', 'newspack-multibranded-site' ) }
 						image={ brand.meta._logo }
 						onChange={ _logo => updateBrand( { meta: { _logo } } ) }
@@ -162,7 +177,17 @@ const Brand = ( { brands = [], saveBrand, fetchLogoAttachment } ) => {
 					return (
 						<Card noBorder key={ color.theme_mod_name }>
 							<ColorPicker
-								label={ color.label }
+								className="newspack-brand__theme-mod-color-picker"
+								label={
+									<Fragment>
+										<span>{ color.label }</span>
+										{ hasCustomThemeColor( color.theme_mod_name ) && (
+											<Button isLink onClick={ () => setThemeColor( color.theme_mod_name, '' ) }>
+												{ __( 'Reset default color', 'newspack-multibranded-site' ) }
+											</Button>
+										) }
+									</Fragment>
+								}
 								color={ getThemeColor( color.theme_mod_name ) }
 								onChange={ newColor => setThemeColor( color.theme_mod_name, newColor ) }
 							/>
