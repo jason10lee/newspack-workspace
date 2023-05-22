@@ -1,10 +1,12 @@
 # A set of files you probably don't want in your WordPress.org distribution
 
 .*ignore
-.*rc*
-*.config.js
+.*rc\*
+_.config.js
 .git
 .github
+.cache
+.vscode
 .circleci
 .DS_Store
 Thumbs.db
@@ -22,13 +24,10 @@ phpcs.xml.dist
 README.md
 PULL_REQUEST_TEMPLATE.md
 webpack.config.js
-*.sql
-*.tar.gz
-*.zip
+_.sql
+_.tar.gz
+_.zip
 node_modules
 /tests
 /bin
 /src
-
-# This plugin does not load any dependencies
-vendor
