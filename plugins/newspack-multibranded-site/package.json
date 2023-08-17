@@ -33,7 +33,7 @@
 		"*.php": "npm run lint:php:staged"
 	},
 	"dependencies": {
-		"newspack-components": "^2.1.0",
+		"newspack-components": "^2",
 		"react": "^18.2.0",
 		"react-dom": "^18.2.0",
 		"react-router-dom": "^6.9.0"
