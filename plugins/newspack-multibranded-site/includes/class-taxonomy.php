@@ -150,12 +150,14 @@ class Taxonomy {
 			return;
 		}
 
+		// Check if post is assigned to only one brand.
 		$terms = wp_get_post_terms( $post->ID, self::SLUG );
 
 		if ( 1 === count( $terms ) ) {
 			return $terms[0];
 		}
 
+		// Check if post has a primary brand.
 		$post_primary_brand = get_post_meta( $post->ID, self::PRIMARY_META_KEY, true );
 
 		if ( $post_primary_brand ) {
@@ -165,6 +167,7 @@ class Taxonomy {
 			}
 		}
 
+		// Check if post is a cover page for a brand.
 		if ( 'page' === $post->post_type ) {
 			$brand = Show_Page_On_Front::get_brand_page_is_cover_for( $post->ID );
 			if ( $brand ) {
@@ -174,6 +177,24 @@ class Taxonomy {
 				}
 			}
 		}
+
+		// Check if post is assigned to a brand through a category.
+		$categories     = wp_get_post_categories( $post->ID );
+		$category_brand = null;
+		foreach ( $categories as $category ) {
+			$brand = self::get_current_brand_for_term( $category );
+			if ( $brand ) {
+				if ( ! $category_brand || $category_brand->term_id === $brand->term_id ) {
+					$category_brand = $brand;
+					continue;
+				}
+
+				// Found more than one eligible brand, return null.
+				return null;
+			}
+		}
+
+		return $category_brand;
 	}
 
 	/**
