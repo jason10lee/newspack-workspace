@@ -1,3 +1,15 @@
+# [1.2.0](https://github.com/Automattic/newspack-multibranded-site/compare/v1.1.0...v1.2.0) (2023-12-11)
+
+
+### Bug Fixes
+
+* release process ([5a93b1f](https://github.com/Automattic/newspack-multibranded-site/commit/5a93b1f5ba4449f9ed85a1635f62cd77ce8ee6e5))
+
+
+### Features
+
+* use brand in pages set as brand fronts ([#29](https://github.com/Automattic/newspack-multibranded-site/issues/29)) ([7ab39d6](https://github.com/Automattic/newspack-multibranded-site/commit/7ab39d69801ac8639675106f307a75e88ff9511a))
+
 # [1.2.0-alpha.1](https://github.com/Automattic/newspack-multibranded-site/compare/v1.1.0...v1.2.0-alpha.1) (2023-11-30)
 
 

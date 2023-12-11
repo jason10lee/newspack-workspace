@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Newspack Multi-branded site
  * Description: A plugin to allow your site to host multiple brands
- * Version: 1.2.0-alpha.1
+ * Version: 1.2.0
  * Author: Automattic
  * Author URI: https://newspack.com/
  * License: GPL3
