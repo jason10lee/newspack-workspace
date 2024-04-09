@@ -213,6 +213,9 @@ $republish_content = apply_filters( 'republication_tracker_tool_republish_articl
 			<article class="republish-article">
 				<h3><?php esc_html_e( 'Republish this article', 'republication-tracker-tool' ); ?></h3>
 				<h1><?php echo esc_html( $post_object->post_title ); ?></h1>
+
+				<?php do_action( 'republication_tracker_tool_before_republish_content', $post_object ); ?>
+
 				<div class="republish-article__content">
 					<?php if ( ! empty( $license_statement ) ) : ?>
 						<section class="republish-article__license">
@@ -226,6 +229,8 @@ $republish_content = apply_filters( 'republication_tracker_tool_republish_articl
 						</button>
 					</section>
 				</div>
+
+				<?php do_action( 'republication_tracker_tool_after_republish_content', $post_object ); ?>
 			</article>
 		</main>
 </section>
