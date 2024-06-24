@@ -12,14 +12,20 @@ const path = require( 'path' );
 /**
  * Internal variables
  */
-const admin = path.join( __dirname, 'src/admin' );
-const postPrimaryBrand = path.join( __dirname, 'src/post-primary-brand' );
-const promptBrands = path.join( __dirname, 'src/prompt-brands' );
+const entry = {
+	admin: path.join( __dirname, 'src/admin' ),
+	postPrimaryBrand: path.join( __dirname, 'src/post-primary-brand' ),
+	promptBrands: path.join( __dirname, 'src/prompt-brands' ),
+};
+
+Object.keys( entry ).forEach( key => {
+	entry[ key ] = [ 'regenerator-runtime/runtime', entry[ key ] ];
+} );
 
 const webpackConfig = getBaseWebpackConfig(
 	{ WP: true },
 	{
-		entry: { admin, postPrimaryBrand, promptBrands },
+		entry,
 		'output-path': path.join( __dirname, 'dist' ),
 	}
 );
