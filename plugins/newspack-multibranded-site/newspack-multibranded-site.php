@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Newspack Multibranded Site
  * Description: Brand different content and sections of your site with unique colors and navigation.
- * Version: 1.4.0-alpha.1
+ * Version: 1.4.0
  * Author: Automattic
  * Author URI: https://newspack.com/
  * License: GPL3

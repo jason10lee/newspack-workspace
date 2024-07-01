@@ -1,3 +1,15 @@
+# [1.4.0](https://github.com/Automattic/newspack-multibranded-site/compare/v1.3.0...v1.4.0) (2024-07-01)
+
+
+### Bug Fixes
+
+* update newspack-scripts to v5.5.1 ([#47](https://github.com/Automattic/newspack-multibranded-site/issues/47)) ([89f82e8](https://github.com/Automattic/newspack-multibranded-site/commit/89f82e84e5094d3b0c9037e4a5dc9e6de86ff190))
+
+
+### Features
+
+* ensure regenerator-runtime is available (for WP 6.6) ([4dff4ef](https://github.com/Automattic/newspack-multibranded-site/commit/4dff4ef170cdf315218c4302b1b1e805e6a12f9f))
+
 # [1.3.0](https://github.com/Automattic/newspack-multibranded-site/compare/v1.2.0...v1.3.0) (2024-04-08)
 
 
