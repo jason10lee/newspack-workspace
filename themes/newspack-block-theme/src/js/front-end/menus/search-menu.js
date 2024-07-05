@@ -5,13 +5,14 @@
  */
 import { domReady } from '../utils'; // Global utils.
 import { MENU_OPEN_CLASS_NAME } from './consts'; // Menu constants.
+import { createOverlay, removeOverlay } from './utils'; // Menu utils.
 
-// A class name to append to the body element when the mobile menu is open.
+// A class name to append to the body element when the search is open.
 const openClassName = MENU_OPEN_CLASS_NAME + 'search-menu';
 
 domReady( function () {
 	/**
-	 * Mobile Menu toggle and overlay JavaScript.
+	 * Search toggle and overlay JavaScript.
 	 */
 	const body = document.body,
 		searchContain = document.querySelector( '.search-menu' ),
@@ -32,7 +33,7 @@ domReady( function () {
 	}
 
 	/**
-	 * @description Fires either the opening or closing functions for a menu.
+	 * @description Fires either the opening or closing functions for the search.
 	 * @param {event} event Click event.
 	 */
 	const searchMenuToggle = event => {
@@ -45,27 +46,25 @@ domReady( function () {
 	};
 
 	/**
-	 * @description Opens specifed slide-out menu.
+	 * @description Opens specifed search.
 	 */
 	const openMenu = () => {
 		body.classList.add( openClassName );
-		searchOpenButton.parentNode.classList.add( 'newspack-icon-close' );
-		searchOpenButton.parentNode.classList.remove( 'newspack-icon-search' );
 		searchOpenButton.innerHTML = '<span>' + newspackScreenReaderText.close_search + '</span>';
 		searchContents.querySelector( 'input[type="search"]' ).focus();
+		createOverlay();
 	};
 
 	/**
-	 * @description Closes specifed slide-out menu.
+	 * @description Closes specifed search.
 	 */
 	const closeMenu = () => {
 		if ( ! body.classList.contains( openClassName ) ) {
 			return;
 		}
 		body.classList.remove( openClassName );
-		searchOpenButton.parentNode.classList.add( 'newspack-icon-search' );
-		searchOpenButton.parentNode.classList.remove( 'newspack-icon-close' );
 		searchOpenButton.innerHTML = '<span>' + newspackScreenReaderText.open_search + '</span>';
+		removeOverlay();
 	};
 
 	document.addEventListener( 'keydown', event => {
@@ -74,7 +73,7 @@ domReady( function () {
 		}
 	} );
 
-	// Find each mobile toggle and attaches an event listener.
+	// Find each search toggle and attaches an event listener.
 	for ( let i = 0; i < searchToggle.length; i++ ) {
 		searchToggle[ i ].addEventListener( 'click', searchMenuToggle, false );
 	}
