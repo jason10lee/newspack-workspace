@@ -56,7 +56,9 @@ ol {
 		z-index: sass-utils.$zindex-fixed-element;
 
 		.admin-bar &:is(header) {
-			top: var(--wp-admin--admin-bar--height);
+			@include sass-utils.media(small) {
+				top: var(--wp-admin--admin-bar--height);
+			}
 		}
 	}
 
