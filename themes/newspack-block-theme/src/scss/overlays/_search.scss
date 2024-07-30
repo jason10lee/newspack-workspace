@@ -1,15 +1,17 @@
-@use 'sass-utils';
-@use 'mixins';
+@use '../sass-utils';
+@use '../mixins';
 
 /**
  * Search menu styles
  */
-.search-contents {
+.search-menu__contents {
 	left: 50%;
 	margin: 0;
-	max-width: var(--wp--style--global--content-size);
+	max-width: calc( var(--wp--preset--spacing--30) + var(--wp--style--global--content-size) + var(--wp--preset--spacing--30) );
 	opacity: 0;
 	overflow: visible;
+	padding-left: var(--wp--preset--spacing--30);
+	padding-right: var(--wp--preset--spacing--30);
 	position: fixed !important; // !important to override some styles in the editor.
 	top: -100%;
 	transform: translateX(-50%);
@@ -27,12 +29,8 @@
 	.wp-block-search {
 		box-shadow: var(--wp--preset--shadow--elevation-3);
 	}
-}
 
-.menu-open--search-menu {
-	overflow: hidden;
-
-	.search-contents {
+	.menu-open--search-menu & {
 		animation: search-contents__fade-in-animation 250ms ease-in-out;
 		opacity: 1;
 		top: calc(10vh + var(--wp--custom--spacing--75));

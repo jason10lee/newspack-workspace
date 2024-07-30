@@ -13,16 +13,16 @@ domReady( function () {
 	 * Mobile Menu toggle and overlay JavaScript.
 	 */
 	const body = document.body,
-		headerContain = document.querySelector( '.mobile-header' ),
-		mobileToggle = document.querySelectorAll( '.mobile-menu-toggle' ),
-		mobileSidebar = document.querySelector( '.mobile-sidebar' );
+		headerContain = document.querySelector( '.header-mobile' ),
+		mobileToggle = document.querySelectorAll( '.mobile-menu__toggle' ),
+		mobileContents = document.querySelector( '.mobile-menu__contents' );
 
-	if ( ! headerContain || ! mobileToggle.length || ! mobileSidebar ) {
+	if ( ! headerContain || ! mobileToggle.length || ! mobileContents ) {
 		return;
 	}
 
-	const mobileOpenButton = headerContain.querySelector( '.mobile-menu-toggle a' ),
-		mobileCloseButton = mobileSidebar.querySelector( '.mobile-menu-toggle a' );
+	const mobileOpenButton = headerContain.querySelector( '.mobile-menu__toggle a' ),
+		mobileCloseButton = mobileContents.querySelector( '.mobile-menu__toggle a' );
 
 	/**
 	 * @description Fires either the opening or closing functions for a menu.
@@ -43,6 +43,7 @@ domReady( function () {
 	 */
 	const openMenu = () => {
 		body.classList.add( openClassName );
+		mobileContents.classList.add( openClassName );
 		mobileCloseButton.focus();
 		createOverlay();
 	};
@@ -52,6 +53,7 @@ domReady( function () {
 	 */
 	const closeMenu = () => {
 		body.classList.remove( openClassName );
+		mobileContents.classList.remove( openClassName );
 		mobileOpenButton.focus();
 		removeOverlay();
 	};

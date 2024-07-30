@@ -4,22 +4,11 @@
 /**
  * Mobile Header and Menu
  */
-.mobile-header {
+.header-mobile {
 	width: 100%;
 
 	> .wp-block-group {
 		width: inherit;
-	}
-}
-
-// Mobile menu
-.mobile-sidebar {
-	.menu-open--mobile-menu & {
-		@include mixins.overlay-visible;
-	}
-
-	&.wp-block {
-		display: none;
 	}
 }
 
