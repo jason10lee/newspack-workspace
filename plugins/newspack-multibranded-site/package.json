@@ -1,6 +1,6 @@
 {
 	"name": "newspack-multibranded-site",
-	"version": "1.4.0",
+	"version": "2.0.0",
 	"description": "A plugin to allow your site to host multiple brands",
 	"license": "GPL-3.0",
 	"browserslist": [

@@ -1,3 +1,47 @@
+# [2.0.0](https://github.com/Automattic/newspack-multibranded-site/compare/v1.4.0...v2.0.0) (2024-08-13)
+
+
+### Bug Fixes
+
+* do not break wp_update_term ([#51](https://github.com/Automattic/newspack-multibranded-site/issues/51)) ([70c0ea4](https://github.com/Automattic/newspack-multibranded-site/commit/70c0ea414aa87e2386865011767cb8252b430ef7))
+* update dependencies to support `@wordpress/scripts` ([#45](https://github.com/Automattic/newspack-multibranded-site/issues/45)) ([de1a172](https://github.com/Automattic/newspack-multibranded-site/commit/de1a1725911c7a3d2b711099f24f12f11b58ec5e))
+
+
+### Features
+
+* **ga:** add brand as custom parameter to GA4 ([bff4df3](https://github.com/Automattic/newspack-multibranded-site/commit/bff4df371e5c29d5cd412f7c874547e31f1b0f5c))
+
+
+### BREAKING CHANGES
+
+* Updates dependencies for compatibility with WordPress 6.6.*, but breaks JS in WordPress 6.5.* and below. If you need support for WP 6.5.*, please do not upgrade to this new major version.
+
+* chore: refactor for newspack-scripts dependency updates
+
+* chore: update newspack-scripts to v5.6.0-alpha.3
+
+* chore: add .stylelintrc.js
+
+* chore: update newspack-scripts to v5.6.0-alpha.4
+
+* fix: add missing Prettier config files
+
+* chore: update newspack-scripts to 5.6.0-alpha.5
+
+* chore: update newspack-scripts to v5.6.0-alpha.7
+
+* fix: format SCSS
+
+* chore: update newspack-scripts to v5.6.0-alpha.8
+
+* fix: phpcs errors
+
+* chore: update newspack-components to v3.0.0
+
+* fix: phpcs error
+
+* chore: bump newspack-scripts to v5.5.2
+
 # [1.4.0](https://github.com/Automattic/newspack-multibranded-site/compare/v1.3.0...v1.4.0) (2024-07-01)
 
 
