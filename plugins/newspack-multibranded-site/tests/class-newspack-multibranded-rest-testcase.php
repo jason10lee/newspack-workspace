@@ -174,5 +174,4 @@ class Newspack_Multibranded_Rest_Testcase extends WP_UnitTestCase {
 
 		return $response;
 	}
-
 }

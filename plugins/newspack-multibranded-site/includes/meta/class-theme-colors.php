@@ -57,5 +57,4 @@ class Theme_Colors extends Meta {
 			'default'  => [],
 		);
 	}
-
 }

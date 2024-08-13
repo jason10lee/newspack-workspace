@@ -105,7 +105,7 @@ class Admin {
 	public static function enqueue_scripts( $handler ) {
 		if ( false === strpos( $handler, self::MULTI_BRANDED_PAGE_SLUG ) ) {
 			return;
-		};
+		}
 
 		\wp_register_script(
 			self::MULTI_BRANDED_PAGE_SLUG,
@@ -170,5 +170,4 @@ class Admin {
 			'https://unpkg.com/tachyons@4.12.0/css/tachyons.min.css'
 		);
 	}
-
 }

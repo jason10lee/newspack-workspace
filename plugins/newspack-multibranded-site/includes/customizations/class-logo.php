@@ -57,5 +57,4 @@ class Logo {
 
 		return $html;
 	}
-
 }

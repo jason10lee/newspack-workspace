@@ -60,5 +60,4 @@ class Post_Primary_Brand extends Meta {
 			'nullable' => true,
 		);
 	}
-
 }

@@ -78,5 +78,4 @@ class Test_Rest_Post_Primary_Brand extends Newspack_Multibranded_Rest_Testcase {
 		$data     = $response->get_data();
 		$this->assertSame( 400, $response->get_status() );
 	}
-
 }

@@ -84,5 +84,4 @@ class Url {
 
 		return $termlink;
 	}
-
 }

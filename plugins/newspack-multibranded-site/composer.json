@@ -4,11 +4,11 @@
 	"type": "wordpress-plugin",
 	"license": "GPL-3.0",
 	"require-dev": {
-		"automattic/vipwpcs": "^2.0.0",
-		"wp-coding-standards/wpcs": "*",
+		"automattic/vipwpcs": "^3.0",
+		"wp-coding-standards/wpcs": "^3.0",
 		"dealerdirect/phpcodesniffer-composer-installer": "*",
 		"phpcompatibility/phpcompatibility-wp": "*",
-		"yoast/phpunit-polyfills": "^1.1",
+		"yoast/phpunit-polyfills": "^2.0",
 		"phpunit/phpunit": "^7.0 || ^9.5"
 	},
 	"autoload": {
@@ -17,7 +17,11 @@
 		]
 	},
 	"config": {
+		"platform": {
+			"php": "8.0"
+		},
 		"allow-plugins": {
+			"composer/installers": true,
 			"dealerdirect/phpcodesniffer-composer-installer": true
 		}
 	}

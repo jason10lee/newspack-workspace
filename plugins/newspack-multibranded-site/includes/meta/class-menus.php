@@ -56,5 +56,4 @@ class Menus extends Meta {
 			],
 		);
 	}
-
 }

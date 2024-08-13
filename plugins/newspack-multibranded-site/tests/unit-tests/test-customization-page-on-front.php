@@ -30,5 +30,4 @@ class TestCustomizationPageOnFront extends WP_UnitTestCase {
 		$this->assertNull( Show_Page_On_Front::get_brand_page_is_cover_for( 123 ) );
 		$this->assertNull( Show_Page_On_Front::get_brand_page_is_cover_for( 456 ) );
 	}
-
 }

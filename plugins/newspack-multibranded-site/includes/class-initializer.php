@@ -27,6 +27,6 @@ class Initializer {
 		Customizations\Blogname::init();
 		Customizations\Popups_Should_Display_Prompt::init();
 		Customizations\Body_Class::init();
+		Integrations\Google_Analytics::init();
 	}
-
 }

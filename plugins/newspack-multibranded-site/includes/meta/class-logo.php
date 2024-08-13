@@ -43,5 +43,4 @@ class Logo extends Meta {
 			'nullable' => true,
 		);
 	}
-
 }

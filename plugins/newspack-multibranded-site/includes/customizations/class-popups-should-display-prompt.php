@@ -50,5 +50,4 @@ class Popups_Should_Display_Prompt {
 		$popup_term_ids = wp_list_pluck( $popup_terms, 'term_id' );
 		return in_array( $brand->term_id, $popup_term_ids, true );
 	}
-
 }

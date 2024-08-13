@@ -273,5 +273,4 @@ class Taxonomy {
 			self::$current_brand = null;
 		}
 	}
-
 }

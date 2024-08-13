@@ -137,5 +137,4 @@ abstract class Meta {
 	 * @return array
 	 */
 	abstract public static function get_schema();
-
 }

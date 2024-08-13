@@ -106,16 +106,15 @@ const Brands = ( { setError, wizardApiFetch } ) => {
 					const brandIndex = brandsList.findIndex( _brand => brandId === _brand.id );
 					return brandIndex > -1
 						? brandsList.map( _brand =>
-								brandId === _brand.id
-									? {
-											..._brand,
-											meta: {
-												..._brand.meta,
-												_logo: { ...attachment, url: attachment.source_url },
-											},
-									  }
-									: _brand
-						  )
+							brandId === _brand.id
+								? {
+									..._brand,
+									meta: {
+										..._brand.meta,
+										_logo: { ...attachment, url: attachment.source_url },
+									},
+								} : _brand
+						)
 						: brandsList;
 				} )
 			)

@@ -53,5 +53,4 @@ class Tag_Primary_Brand extends Meta {
 			'nullable' => true,
 		);
 	}
-
 }

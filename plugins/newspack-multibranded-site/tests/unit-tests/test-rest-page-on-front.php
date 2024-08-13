@@ -58,5 +58,4 @@ class Test_PageOnFront extends Newspack_Multibranded_Rest_Testcase {
 		$data     = $response->get_data();
 		$this->assertSame( 400, $response->get_status() );
 	}
-
 }

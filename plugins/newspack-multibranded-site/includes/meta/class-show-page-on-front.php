@@ -43,5 +43,4 @@ class Show_Page_On_Front extends Meta {
 			'nullable' => true,
 		);
 	}
-
 }

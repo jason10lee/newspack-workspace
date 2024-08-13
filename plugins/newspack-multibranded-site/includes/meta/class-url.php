@@ -45,5 +45,4 @@ class Url extends Meta {
 			'default'  => 'no',
 		);
 	}
-
 }

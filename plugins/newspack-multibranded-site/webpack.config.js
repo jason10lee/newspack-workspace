@@ -2,6 +2,7 @@
  **** WARNING: No ES6 modules here. Not transpiled! ****
  */
 /* eslint-disable import/no-nodejs-modules */
+/* eslint-disable @typescript-eslint/no-var-requires */
 
 /**
  * External dependencies
@@ -18,15 +19,9 @@ const entry = {
 	promptBrands: path.join( __dirname, 'src/prompt-brands' ),
 };
 
-Object.keys( entry ).forEach( key => {
-	entry[ key ] = [ 'regenerator-runtime/runtime', entry[ key ] ];
-} );
-
 const webpackConfig = getBaseWebpackConfig(
-	{ WP: true },
 	{
 		entry,
-		'output-path': path.join( __dirname, 'dist' ),
 	}
 );
 

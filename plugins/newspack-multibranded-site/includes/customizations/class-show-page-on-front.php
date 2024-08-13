@@ -206,5 +206,4 @@ class Show_Page_On_Front {
 		$front_pages = self::get_front_pages();
 		return isset( $front_pages[ $page_id ] ) ? $front_pages[ $page_id ] : null;
 	}
-
 }

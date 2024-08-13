@@ -49,5 +49,4 @@ class Filter_Posts {
 			)
 		);
 	}
-
 }

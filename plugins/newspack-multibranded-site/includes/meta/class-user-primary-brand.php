@@ -51,5 +51,4 @@ class User_Primary_Brand extends Meta {
 			'nullable' => true,
 		);
 	}
-
 }

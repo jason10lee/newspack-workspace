@@ -37,5 +37,4 @@ class Body_Class {
 
 		return $classes;
 	}
-
 }

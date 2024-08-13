@@ -65,6 +65,11 @@ class Cat_Primary_Brand {
 	 * @param int $term_id Term ID.
 	 */
 	public static function save_term( $term_id ) {
+		// Only act on the edit term screen.
+		if ( ! isset( $_POST[ Taxonomy::PRIMARY_META_KEY ] ) ) {
+			return;
+		}
+
 		check_admin_referer( 'update-tag_' . $term_id );
 
 		if ( ! empty( $_POST[ Taxonomy::PRIMARY_META_KEY ] ) ) {

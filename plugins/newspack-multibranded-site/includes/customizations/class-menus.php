@@ -48,5 +48,4 @@ class Menus {
 
 		return $nav_menu_locations;
 	}
-
 }

@@ -34,5 +34,4 @@ class Blogname {
 		}
 		return $brand->name;
 	}
-
 }

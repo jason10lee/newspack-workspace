@@ -23,7 +23,7 @@ require_once "{$newspack_multibranded_site_test_dir}/includes/functions.php";
  * Manually load the plugin being tested.
  */
 function newspack_multibranded_site_manually_load_plugin() {
-	require dirname( dirname( __FILE__ ) ) . '/newspack-multibranded-site.php';
+	require dirname( __DIR__ ) . '/newspack-multibranded-site.php';
 }
 
 tests_add_filter( 'muplugins_loaded', 'newspack_multibranded_site_manually_load_plugin' );
@@ -46,4 +46,4 @@ require_once __DIR__ . '/../vendor/yoast/phpunit-polyfills/phpunitpolyfills-auto
 // Start up the WP testing environment.
 require "{$newspack_multibranded_site_test_dir}/includes/bootstrap.php";
 
-require dirname( __FILE__ ) . '/class-newspack-multibranded-rest-testcase.php';
+require __DIR__ . '/class-newspack-multibranded-rest-testcase.php';

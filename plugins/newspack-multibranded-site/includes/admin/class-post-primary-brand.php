@@ -74,6 +74,4 @@ class Post_Primary_Brand {
 		}
 		return $taxonomies;
 	}
-
-
 }

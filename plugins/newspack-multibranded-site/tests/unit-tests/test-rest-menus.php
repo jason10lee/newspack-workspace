@@ -73,5 +73,4 @@ class Test_Rest_Menus extends Newspack_Multibranded_Rest_Testcase {
 
 		$this->assertSame( 400, $response->get_status() );
 	}
-
 }

@@ -106,5 +106,4 @@ class Theme_Colors {
 
 		return $value;
 	}
-
 }
