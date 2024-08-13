@@ -1,3 +1,10 @@
+## [0.7.2](https://github.com/Automattic/super-cool-ad-inserter-plugin/compare/v0.7.1...v0.7.2) (2024-08-13)
+
+
+### Bug Fixes
+
+* update dependencies to support `@wordpress/scripts` ([#182](https://github.com/Automattic/super-cool-ad-inserter-plugin/issues/182)) ([51d2163](https://github.com/Automattic/super-cool-ad-inserter-plugin/commit/51d21635d52067eae37fcd88854a4222a391e348))
+
 ## [0.7.1](https://github.com/Automattic/super-cool-ad-inserter-plugin/compare/v0.7.0...v0.7.1) (2024-07-01)
 
 
