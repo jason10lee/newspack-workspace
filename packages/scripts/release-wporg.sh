@@ -10,6 +10,7 @@
 SVN_PLUGINS_URL="https://plugins.svn.wordpress.org"
 SVN_REPO_LOCAL_PATH="release/svn"
 WP_ORG_PLUGIN_NAME="${WP_ORG_PLUGIN_NAME:=$CIRCLE_PROJECT_REPONAME}"
+SVN_REPO_URL="$SVN_PLUGINS_URL/$WP_ORG_PLUGIN_NAME"
 
 LATEST_GIT_TAG=$(git describe --tags `git rev-list --tags --max-count=1`)
 # Remove the "v" at the beginning of the git tag
@@ -20,7 +21,7 @@ sudo apt-get update
 sudo apt-get install subversion
 
 # Check if the latest SVN tag exists already
-TAG=$(svn ls "$SVN_PLUGINS_URL/$WP_ORG_PLUGIN_NAME/tags/$LATEST_SVN_TAG")
+TAG=$(svn ls "$SVN_REPO_URL/tags/$LATEST_SVN_TAG")
 error=$?
 if [ $error == 0 ]; then
   # Tag exists, don't deploy
@@ -31,7 +32,8 @@ fi
 # Wait a moment to avoid a 429 by WPORG's server.
 sleep 3
 
-svn checkout -q "$SVN_PLUGINS_URL/$WP_ORG_PLUGIN_NAME" .
+svn checkout -q "$SVN_REPO_URL" .
+
 rm -rf trunk
 
 cp -r "../$CIRCLE_PROJECT_REPONAME" ./trunk
