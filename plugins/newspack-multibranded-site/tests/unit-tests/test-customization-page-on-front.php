@@ -30,4 +30,25 @@ class TestCustomizationPageOnFront extends WP_UnitTestCase {
 		$this->assertNull( Show_Page_On_Front::get_brand_page_is_cover_for( 123 ) );
 		$this->assertNull( Show_Page_On_Front::get_brand_page_is_cover_for( 456 ) );
 	}
+
+	/**
+	 * Ensure that front page filter is not applied when visiting the feed for the brand
+	 */
+	public function test_rss_feed_intact() {
+		$brand_with_page_on_front = $this->factory->term->create_and_get( array( 'taxonomy' => Taxonomy::SLUG ) );
+
+		$page2 = $this->factory->post->create_and_get(
+			array(
+				'post_title' => 'Page 2',
+				'post_type'  => 'page',
+			)
+		);
+		add_term_meta( $brand_with_page_on_front->term_id, Show_Page_On_Front_Meta::get_key(), $page2->ID );
+
+		$this->go_to( get_term_link( $brand_with_page_on_front ) );
+		$this->assertTrue( Show_Page_On_Front::is_filtered() );
+
+		$this->go_to( get_term_link( $brand_with_page_on_front ) . '&feed=rss' );
+		$this->assertFalse( Show_Page_On_Front::is_filtered() );
+	}
 }
