@@ -1,3 +1,11 @@
+## [2.0.1](https://github.com/Automattic/newspack-multibranded-site/compare/v2.0.0...v2.0.1) (2024-10-09)
+
+
+### Bug Fixes
+
+* Preserve RSS feed for brands with page on front ([46f8524](https://github.com/Automattic/newspack-multibranded-site/commit/46f85248ecca7a10ec98a385ea4376082f59f7fc))
+* Preserve RSS feed for brands with page on front Merge pull request [#55](https://github.com/Automattic/newspack-multibranded-site/issues/55) from Automattic/hotfix/rss-feed ([eb117c4](https://github.com/Automattic/newspack-multibranded-site/commit/eb117c451d8f5a6ee38394eb0fb8d5fb12502a8b))
+
 # [2.0.0](https://github.com/Automattic/newspack-multibranded-site/compare/v1.4.0...v2.0.0) (2024-08-13)
 
 

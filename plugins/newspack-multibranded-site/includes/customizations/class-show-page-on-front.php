@@ -45,13 +45,24 @@ class Show_Page_On_Front {
 	}
 
 	/**
+	 * Checks whether the current request is being filtered by this customization
+	 *
+	 * @return boolean
+	 */
+	public static function is_filtered() {
+		return self::$filtered;
+	}
+
+	/**
 	 * Change the query if we want to display a page on front
 	 *
 	 * @param WP_Query $query The WP_Query object.
 	 * @return void
 	 */
 	public static function pre_get_posts( &$query ) {
-		if ( ! $query->is_main_query() || is_admin() ) {
+		self::$filtered = false;
+
+		if ( ! $query->is_main_query() || is_admin() || is_feed() ) {
 			return;
 		}
 
@@ -118,7 +129,7 @@ class Show_Page_On_Front {
 	 * @return string
 	 */
 	public static function template_include( $template ) {
-		if ( is_page() && self::$filtered ) {
+		if ( is_page() && self::is_filtered() ) {
 			$template = get_front_page_template();
 		}
 
