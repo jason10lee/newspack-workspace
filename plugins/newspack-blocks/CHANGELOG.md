@@ -1,3 +1,10 @@
+## [4.2.4](https://github.com/Automattic/newspack-blocks/compare/v4.2.3...v4.2.4) (2024-10-28)
+
+
+### Bug Fixes
+
+* let "Cover fees" checkbox work with any payment method ([#1915](https://github.com/Automattic/newspack-blocks/issues/1915)) ([0a3da2e](https://github.com/Automattic/newspack-blocks/commit/0a3da2eb38a9cd69bcd2a3348954b1fa3f9c9f59))
+
 ## [4.2.3](https://github.com/Automattic/newspack-blocks/compare/v4.2.2...v4.2.3) (2024-10-22)
 
 
