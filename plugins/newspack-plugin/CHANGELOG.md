@@ -1,3 +1,10 @@
+## [5.5.2](https://github.com/Automattic/newspack-plugin/compare/v5.5.1...v5.5.2) (2024-10-28)
+
+
+### Bug Fixes
+
+* let "Cover fees" checkbox work with any payment method ([#3491](https://github.com/Automattic/newspack-plugin/issues/3491)) ([74ea6cc](https://github.com/Automattic/newspack-plugin/commit/74ea6cc76a45cc76eb06d73444a9890031f0507c))
+
 ## [5.5.1](https://github.com/Automattic/newspack-plugin/compare/v5.5.0...v5.5.1) (2024-10-11)
 
 
