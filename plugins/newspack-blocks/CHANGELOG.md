@@ -1,3 +1,10 @@
+## [4.3.3](https://github.com/Automattic/newspack-blocks/compare/v4.3.2...v4.3.3) (2024-10-29)
+
+
+### Bug Fixes
+
+* remove expensive query before registering video playlist block ([#1930](https://github.com/Automattic/newspack-blocks/issues/1930)) ([9d967e0](https://github.com/Automattic/newspack-blocks/commit/9d967e0e415ca78018540c2c033c06fd2fe64fab))
+
 ## [4.3.2](https://github.com/Automattic/newspack-blocks/compare/v4.3.1...v4.3.2) (2024-10-29)
 
 
