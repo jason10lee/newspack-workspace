@@ -1,3 +1,10 @@
+## [4.3.2](https://github.com/Automattic/newspack-blocks/compare/v4.3.1...v4.3.2) (2024-10-29)
+
+
+### Bug Fixes
+
+* dont cache blocks for staff ([2d30450](https://github.com/Automattic/newspack-blocks/commit/2d30450aa4047e92275e5d78c8ccb31ca96b345e))
+
 ## [4.3.1](https://github.com/Automattic/newspack-blocks/compare/v4.3.0...v4.3.1) (2024-10-28)
 
 
