@@ -1,3 +1,5 @@
+/* global newspack_aux_data */
+
 import apiFetch from '@wordpress/api-fetch';
 import { addQueryArgs, cleanForSlug } from '@wordpress/url';
 import { Fragment, useState, useEffect } from '@wordpress/element';
@@ -112,7 +114,7 @@ const Brand = ( { brands = [], saveBrand, fetchLogoAttachment } ) => {
 		} );
 	};
 
-	const baseUrl = `${ newspack_urls.site }/${ 'no' === brand.meta._custom_url ? 'brand/' : '' }`;
+	const baseUrl = `${ newspack_aux_data.site }/${ 'no' === brand.meta._custom_url ? 'brand/' : '' }`;
 
 	const fetchPublicPages = () => {
 		// Limiting to 100 pages, just in case.

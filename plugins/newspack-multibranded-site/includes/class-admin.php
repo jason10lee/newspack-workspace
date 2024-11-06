@@ -115,23 +115,6 @@ class Admin {
 			true
 		);
 
-		$plugin_data   = get_plugin_data( NEWSPACK_MULTIBRANDED_SITE_PLUGIN_FILE );
-		$support_email = ( defined( 'NEWSPACK_SUPPORT_EMAIL' ) && NEWSPACK_SUPPORT_EMAIL ) ? NEWSPACK_SUPPORT_EMAIL : false;
-
-		$urls = array(
-			'dashboard'      => esc_url( admin_url( 'admin.php?page=' . self::MULTI_BRANDED_PAGE_SLUG ) ),
-			'bloginfo'       => array(
-				'name' => get_bloginfo( 'name' ),
-			),
-			'plugin_version' => array(
-				'label' => $plugin_data['Name'] . ' ' . $plugin_data['Version'],
-			),
-			'homepage'       => get_edit_post_link( get_option( 'page_on_front', false ) ),
-			'site'           => get_site_url(),
-			'support'        => esc_url( 'https://help.newspack.com/' ),
-			'support_email'  => $support_email,
-		);
-
 		$menus = array_map(
 			function( $menu ) {
 				return array(
@@ -143,15 +126,20 @@ class Admin {
 		);
 
 		$aux_data = array(
-			'is_e2e'         => class_exists( '\Newspack\Starter_Content' ) && \Newspack\Starter_Content::is_e2e(),
-			'is_debug_mode'  => class_exists( '\Newspack\Newspack' ) && \Newspack\Newspack::is_debug_mode(),
-			'site_title'     => get_option( 'blogname' ),
 			'theme_colors'   => Customizations\Theme_Colors::get_registered_theme_colors(),
 			'menu_locations' => get_registered_nav_menus(),
 			'menus'          => $menus,
+			'site'           => get_site_url(),
 		);
 
-		wp_localize_script( self::MULTI_BRANDED_PAGE_SLUG, 'newspack_urls', $urls );
+		wp_localize_script(
+			self::MULTI_BRANDED_PAGE_SLUG,
+			'newspack_urls',
+			[
+				'dashboard' => esc_url( admin_url( 'admin.php?page=' . self::MULTI_BRANDED_PAGE_SLUG ) ),
+				'support'   => esc_url( 'https://help.newspack.com/' ),
+			]
+		);
 		wp_localize_script( self::MULTI_BRANDED_PAGE_SLUG, 'newspack_aux_data', $aux_data );
 
 		\wp_enqueue_script( self::MULTI_BRANDED_PAGE_SLUG );
