@@ -11,12 +11,13 @@
 	&__base-url-radio-control {
 		margin-bottom: 16px;
 
-		.components-base-control__field > div {
+		.components-base-control__field > div,
+		.components-radio-control__group-wrapper {
 			justify-content: flex-start;
 			flex-direction: row;
 
 			.components-radio-control__option {
-				margin-right: 32px;
+				margin-right: 20px;
 
 				&:last-child {
 					margin-right: 0;
