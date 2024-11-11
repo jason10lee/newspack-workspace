@@ -1,7 +1,7 @@
 === Newspack Theme ===
 Contributors: Automattic
 Tags:
-Requires at least: 4.9.6
+Requires at least: 6.6
 Tested up to: WordPress 5.0
 Stable tag: 1.3
 License: GPLv2 or later

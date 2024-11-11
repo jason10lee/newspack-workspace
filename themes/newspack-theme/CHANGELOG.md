@@ -1,3 +1,11 @@
+## [2.1.1-alpha.1](https://github.com/Automattic/newspack-theme/compare/v2.1.0...v2.1.1-alpha.1) (2024-11-11)
+
+
+### Bug Fixes
+
+* merge pull request [#2398](https://github.com/Automattic/newspack-theme/issues/2398) from Automattic/trunk ([dc50674](https://github.com/Automattic/newspack-theme/commit/dc506747b204479959ff55b45013d85df3cd841a))
+* update theme descriptions and do not strip from style.css files ([#2401](https://github.com/Automattic/newspack-theme/issues/2401)) ([28770e0](https://github.com/Automattic/newspack-theme/commit/28770e0d011bc28df4d33200caf961ac2fbda07b))
+
 # [2.1.0](https://github.com/Automattic/newspack-theme/compare/v2.0.1...v2.1.0) (2024-10-28)
 
 
