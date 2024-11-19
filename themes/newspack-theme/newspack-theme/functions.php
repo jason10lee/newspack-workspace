@@ -15,6 +15,7 @@ if ( version_compare( $GLOBALS['wp_version'], '4.7', '<' ) ) {
 	return;
 }
 
+
 if ( ! function_exists( 'newspack_is_amp' ) ) {
 	/**
 	 * Determine whether it is an AMP response.
@@ -41,7 +42,11 @@ if ( ! function_exists( 'newspack_setup' ) ) :
 		 * If you're building a theme based on Newspack Theme, use a find and replace
 		 * to change 'newspack' to the name of your theme in all the template files.
 		 */
-		load_theme_textdomain( 'newspack', get_template_directory() . '/languages' );
+		if ( version_compare( $GLOBALS['wp_version'], '6.7', '<' ) ) {
+			load_theme_textdomain( 'newspack', get_template_directory() . '/languages' );
+		} else {
+			load_textdomain( 'newspack', get_template_directory() . '/languages/' . determine_locale() . '.mo' );
+		}
 
 		// Add default posts and comments RSS feed links to head.
 		add_theme_support( 'automatic-feed-links' );
