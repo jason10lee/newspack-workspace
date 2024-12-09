@@ -1,3 +1,10 @@
+## [5.8.2](https://github.com/Automattic/newspack-plugin/compare/v5.8.1...v5.8.2) (2024-12-09)
+
+
+### Bug Fixes
+
+* **esp-sync:** schedule second sync upon subscription reactivation, just in case ([#3603](https://github.com/Automattic/newspack-plugin/issues/3603)) ([9334295](https://github.com/Automattic/newspack-plugin/commit/93342955db2f70afa9feac6eb8fa349f3703fd72))
+
 ## [5.8.1](https://github.com/Automattic/newspack-plugin/compare/v5.8.0...v5.8.1) (2024-11-26)
 
 
