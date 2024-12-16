@@ -1,3 +1,10 @@
+## [2.0.3](https://github.com/Automattic/newspack-multibranded-site/compare/v2.0.2...v2.0.3) (2024-12-16)
+
+
+### Bug Fixes
+
+* load text domain on init hook ([#66](https://github.com/Automattic/newspack-multibranded-site/issues/66)) ([f7d8261](https://github.com/Automattic/newspack-multibranded-site/commit/f7d8261b6d6e1172d4442a8413cfcb7d7ab2d70f))
+
 ## [2.0.2](https://github.com/Automattic/newspack-multibranded-site/compare/v2.0.1...v2.0.2) (2024-11-11)
 
 
