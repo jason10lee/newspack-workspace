@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Newspack Multibranded Site
  * Description: Brand different content and sections of your site with unique colors and navigation.
- * Version: 2.0.2
+ * Version: 2.0.3-alpha.1
  * Author: Automattic
  * Author URI: https://newspack.com/
  * License: GPL3
@@ -24,16 +24,21 @@ if ( ! defined( 'NEWSPACK_MULTIBRANDED_SITE_PLUGIN_FILE' ) ) {
 	define( 'NEWSPACK_MULTIBRANDED_SITE_PLUGIN_FILE', __FILE__ );
 }
 
-// Load language files.
-load_plugin_textdomain( 'newspack-plugin', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
-
 require_once __DIR__ . '/vendor/autoload.php';
 
 Newspack_Multibranded_Site\Initializer::init();
 
+// Load language files.
+add_action(
+	'init',
+	function () {
+		load_plugin_textdomain( 'newspack-multibranded-site', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
+	}
+);
+
 add_action(
 	'plugins_loaded',
-	function() {
+	function () {
 		if ( class_exists( 'Newspack_Manager\\Updater' ) ) {
 			new Newspack_Manager\Updater(
 				'newspack-multibranded-site/newspack-multibranded-site.php',
