@@ -1,3 +1,10 @@
+## [5.10.1](https://github.com/Automattic/newspack-plugin/compare/v5.10.0...v5.10.1) (2024-12-16)
+
+
+### Bug Fixes
+
+* **sync:** strip unsuffixed UTM meta keys from normalized contact data ([#3623](https://github.com/Automattic/newspack-plugin/issues/3623)) ([5bbcc7b](https://github.com/Automattic/newspack-plugin/commit/5bbcc7bc505c1ee022b66285f5753b41705b5c22))
+
 # [5.10.0](https://github.com/Automattic/newspack-plugin/compare/v5.9.2...v5.10.0) (2024-12-16)
 
 
