@@ -1,3 +1,10 @@
+## [5.10.5](https://github.com/Automattic/newspack-plugin/compare/v5.10.4...v5.10.5) (2025-01-07)
+
+
+### Bug Fixes
+
+* **recaptcha:** verify v2 on all modal checkout requests ([#3644](https://github.com/Automattic/newspack-plugin/issues/3644)) ([88277e9](https://github.com/Automattic/newspack-plugin/commit/88277e9b77151b8dc176cae09b2a92989ac4ddf4))
+
 ## [5.10.4](https://github.com/Automattic/newspack-plugin/compare/v5.10.3...v5.10.4) (2024-12-23)
 
 
