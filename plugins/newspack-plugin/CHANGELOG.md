@@ -1,3 +1,23 @@
+# [5.12.0](https://github.com/Automattic/newspack-plugin/compare/v5.11.3...v5.12.0) (2025-01-20)
+
+
+### Bug Fixes
+
+* **cli:** verify-reader CLI command ([#3660](https://github.com/Automattic/newspack-plugin/issues/3660)) ([c639af7](https://github.com/Automattic/newspack-plugin/commit/c639af78b9ba7cf73ef01e7f499a2389e0626343))
+* **recaptcha:** replace alerts with generic errors ([#3627](https://github.com/Automattic/newspack-plugin/issues/3627)) ([44ef2d2](https://github.com/Automattic/newspack-plugin/commit/44ef2d2a4b38483bce979a4c68b0aa2afb4d0a9a))
+* remove newspack_corrections_ids meta ([#3675](https://github.com/Automattic/newspack-plugin/issues/3675)) ([dad258b](https://github.com/Automattic/newspack-plugin/commit/dad258b2e113310fd312e345f80fc54bb84cf928))
+* **wcs:** migrate-expired-subscriptions handle manual subscriptions ([#3663](https://github.com/Automattic/newspack-plugin/issues/3663)) ([e0f32e8](https://github.com/Automattic/newspack-plugin/commit/e0f32e87eba3e9562f6f7b40d185c9308d86ae84))
+
+
+### Features
+
+* **corrections:** add corrections and clarifications behind feature flag ([#3638](https://github.com/Automattic/newspack-plugin/issues/3638)) ([ea745cf](https://github.com/Automattic/newspack-plugin/commit/ea745cff1a77bf422bb6f1c77b4dd2ca83e8ff69))
+
+
+### Performance Improvements
+
+* **data-events:** queue dispatches to execute on shutdown ([#3616](https://github.com/Automattic/newspack-plugin/issues/3616)) ([510a1a0](https://github.com/Automattic/newspack-plugin/commit/510a1a04881c9bccf3389ecd6dbf6b82a13d461b))
+
 ## [5.11.3](https://github.com/Automattic/newspack-plugin/compare/v5.11.2...v5.11.3) (2025-01-17)
 
 
