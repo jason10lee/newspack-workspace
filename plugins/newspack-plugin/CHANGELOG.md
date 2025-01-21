@@ -1,3 +1,10 @@
+## [5.12.1](https://github.com/Automattic/newspack-plugin/compare/v5.12.0...v5.12.1) (2025-01-21)
+
+
+### Bug Fixes
+
+* **ras-sync:** account for missing creation data and first/last name ([#3677](https://github.com/Automattic/newspack-plugin/issues/3677)) ([9ed12bc](https://github.com/Automattic/newspack-plugin/commit/9ed12bc86eca956b2e4a047feba9042db168e46f))
+
 # [5.12.0](https://github.com/Automattic/newspack-plugin/compare/v5.11.3...v5.12.0) (2025-01-20)
 
 
