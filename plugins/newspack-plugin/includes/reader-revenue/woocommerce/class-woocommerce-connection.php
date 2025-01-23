@@ -111,6 +111,12 @@ class WooCommerce_Connection {
 
 		if ( class_exists( 'WC_Form_Handler' ) ) {
 			\remove_action( 'wp_loaded', [ 'WC_Form_Handler', 'checkout_action' ], 20 );
+
+			// Throw error if someone attempts a POST to the Checkout.
+			if ( filter_input( INPUT_POST, 'woocommerce_checkout_place_order', FILTER_SANITIZE_SPECIAL_CHARS ) ) {
+				http_response_code( 403 );
+				exit();
+			}
 		}
 	}
 

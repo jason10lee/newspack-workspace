@@ -1,3 +1,10 @@
+## [5.12.2](https://github.com/Automattic/newspack-plugin/compare/v5.12.1...v5.12.2) (2025-01-23)
+
+
+### Bug Fixes
+
+* hotfix checkout tweaks ([#3693](https://github.com/Automattic/newspack-plugin/issues/3693)) ([7be88aa](https://github.com/Automattic/newspack-plugin/commit/7be88aa53786e2916151bd427980bdd1bcf56c6b))
+
 ## [5.12.1](https://github.com/Automattic/newspack-plugin/compare/v5.12.0...v5.12.1) (2025-01-21)
 
 
