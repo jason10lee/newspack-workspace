@@ -153,14 +153,14 @@ const CorrectionsModal = () => {
 					{ corrections.length > 0 ? (
 						<PanelBody
 						title={ __( 'Corrections List', 'newspack-plugin' ) }
-						initialOpen={true}
+						initialOpen={ true }
 						>
 							{ corrections.map( ( correction ) => (
 									<div key={correction.ID} className="correction-item">
 										<div>
 											<SelectControl
 												className='correction-select-type'
-												label="Type"
+												label={ __( 'Type', 'newspack-plugin' ) }
 												value={ correction.type }
 												options={ types }
 												onChange={ ( value ) => updateCorrection( correction.ID, correction.post_content, value, correction.date ) }
@@ -209,26 +209,26 @@ const CorrectionsModal = () => {
 
 					<PanelBody
 						title={ __( 'Add New Correction', 'newspack-plugin' ) }
-						initialOpen={false}
+						initialOpen={ false }
 					>
 						<div className="correction-item">
 							<SelectControl
 								className='correction-select-type'
 								label={ __( 'Type', 'newspack-plugin' ) }
-								value={newCorrectionType}
-								options={types}
+								value={ newCorrectionType }
+								options={ types }
 								onChange={ ( value ) => setNewCorrectionType( value ) }
 							/>
 							<TextareaControl
 								className='correction-textarea'
 								label={ __( 'Description', 'newspack-plugin' ) }
-								rows={3}
-								value={newCorrection}
+								rows={ 3 }
+								value={ newCorrection }
 								onChange={ ( value ) => setNewCorrection( value ) }
 							/>
 							<Button
 								className='correction-add'
-								onClick={saveCorrection}
+								onClick={ saveCorrection }
 								disabled={ ! newCorrection }
 								variant='primary'
 								icon={ <Icon icon={ create } height={ 24 } width={ 24 } /> }
