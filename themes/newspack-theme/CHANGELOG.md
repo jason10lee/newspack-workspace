@@ -1,3 +1,16 @@
+# [2.5.0](https://github.com/Automattic/newspack-theme/compare/v2.4.3...v2.5.0) (2025-02-17)
+
+
+### Bug Fixes
+
+* make sure featured image behind images are centred ([#2430](https://github.com/Automattic/newspack-theme/issues/2430)) ([871838d](https://github.com/Automattic/newspack-theme/commit/871838d2e31a952aef94cddca8680f1d201df764))
+
+
+### Features
+
+* add corrections archive template ([#2431](https://github.com/Automattic/newspack-theme/issues/2431)) ([09897b0](https://github.com/Automattic/newspack-theme/commit/09897b099f026b02a700dfc65ecd312396556dc5))
+* add font-loading class ([#2418](https://github.com/Automattic/newspack-theme/issues/2418)) ([24888a3](https://github.com/Automattic/newspack-theme/commit/24888a352fe77ec8c2a59b14d8222d92c68457c5))
+
 # [2.5.0-alpha.1](https://github.com/Automattic/newspack-theme/compare/v2.4.3...v2.5.0-alpha.1) (2025-02-07)
 
 
