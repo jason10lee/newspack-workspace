@@ -1,3 +1,10 @@
+# [5.14.0](https://github.com/Automattic/newspack-plugin/compare/v5.13.5...v5.14.0) (2025-02-17)
+
+
+### Features
+
+* **esp-sync:** queue data events sync to run once ([#3661](https://github.com/Automattic/newspack-plugin/issues/3661)) ([#3759](https://github.com/Automattic/newspack-plugin/issues/3759)) ([74c7122](https://github.com/Automattic/newspack-plugin/commit/74c7122b06e64819fdef1b251f25cb35cc1ddb30))
+
 ## [5.13.5](https://github.com/Automattic/newspack-plugin/compare/v5.13.4...v5.13.5) (2025-02-17)
 
 
