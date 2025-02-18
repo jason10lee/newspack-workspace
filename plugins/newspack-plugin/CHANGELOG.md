@@ -1,3 +1,10 @@
+## [5.14.1](https://github.com/Automattic/newspack-plugin/compare/v5.14.0...v5.14.1) (2025-02-18)
+
+
+### Bug Fixes
+
+* **esp-sync:** broken CLI sync command ([#3762](https://github.com/Automattic/newspack-plugin/issues/3762)) ([f609670](https://github.com/Automattic/newspack-plugin/commit/f6096706dfba077b13dd3e91687cb4e949ed50b5))
+
 # [5.14.0](https://github.com/Automattic/newspack-plugin/compare/v5.13.5...v5.14.0) (2025-02-17)
 
 
