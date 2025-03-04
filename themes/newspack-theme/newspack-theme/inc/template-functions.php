@@ -485,7 +485,7 @@ add_filter( 'walker_nav_menu_start_el', 'newspack_add_dropdown_icons', 10, 4 );
  * @return string the default hexidecimal color.
  */
 function newspack_get_primary_color() {
-	return '#3366ff';
+	return '#003da5';
 }
 
 /**
