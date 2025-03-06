@@ -694,12 +694,15 @@ function newspack_convert_modified_to_time_ago( $post_time, $format, $post ) {
  * Check whether updated date should be displayed.
  */
 function newspack_should_display_updated_date() {
+	if ( ! is_singular( 'post' ) ) {
+		return false;
+	}
 	$show_updated_date_sitewide = get_theme_mod( 'post_updated_date', false );
 
 	$hide_updated_date_post     = get_post_meta( get_the_ID(), 'newspack_hide_updated_date', true );
 	$show_updated_date_post     = get_post_meta( get_the_ID(), 'newspack_show_updated_date', true ) && ! $show_updated_date_sitewide;
 
-	if ( is_single() && ( ( $show_updated_date_sitewide && ! $hide_updated_date_post ) || $show_updated_date_post ) ) {
+	if ( ( $show_updated_date_sitewide && ! $hide_updated_date_post ) || $show_updated_date_post ) {
 		$post          = get_post();
 		$publish_date  = $post->post_date;
 		$modified_date = $post->post_modified;
@@ -779,3 +782,26 @@ function newspack_inject_post_summary( $content ) {
 	return newspack_post_summary_markup( $summary ) . $content;
 }
 add_filter( 'the_content', 'newspack_inject_post_summary', 11 );
+
+/**
+ * Change the number of corrections per page for the Corrections archive.
+ *
+ * @param WP_Query $query The WP_Query instance.
+ */
+function newspack_corrections_per_page( $query ) {
+	if (
+		! class_exists( 'Newspack\Corrections' )
+		|| is_admin()
+		|| ! $query->is_main_query()
+		|| ! is_post_type_archive( \Newspack\Corrections::POST_TYPE )
+	) {
+		return;
+	}
+
+	$per_page = defined( 'NEWSPACK_CORRECTIONS_ARCHIVE_PER_PAGE' ) && is_int( NEWSPACK_CORRECTIONS_ARCHIVE_PER_PAGE ) ? NEWSPACK_CORRECTIONS_ARCHIVE_PER_PAGE : 20;
+
+	$query->set( 'posts_per_page', $per_page );
+
+	return $query;
+}
+add_filter( 'pre_get_posts', 'newspack_corrections_per_page' );
