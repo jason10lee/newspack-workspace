@@ -1,3 +1,10 @@
+## [6.0.1](https://github.com/Automattic/newspack-plugin/compare/v6.0.0...v6.0.1) (2025-03-06)
+
+
+### Bug Fixes
+
+* is-without-password condition ([707c245](https://github.com/Automattic/newspack-plugin/commit/707c2451c9c75e9e12190aa726ec3de5eb5b80e9))
+
 # [6.0.0](https://github.com/Automattic/newspack-plugin/compare/v5.15.0...v6.0.0) (2025-03-04)
 
 
