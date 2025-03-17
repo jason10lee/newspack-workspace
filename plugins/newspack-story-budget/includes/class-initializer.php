@@ -2,7 +2,7 @@
 /**
  * Newspack Story Budget plugin initialization.
  *
- * @package Newspack
+ * @package Newspack_Story_Budget
  */
 
 namespace Newspack_Story_Budget;
@@ -15,6 +15,6 @@ class Initializer {
 	 * Runs the initialization.
 	 */
 	public static function init() {
-		// Init the plugin.
+		Fields::init();
 	}
 }
