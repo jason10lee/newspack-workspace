@@ -1,3 +1,16 @@
+# [2.7.0-alpha.1](https://github.com/Automattic/newspack-theme/compare/v2.6.0...v2.7.0-alpha.1) (2025-03-06)
+
+
+### Bug Fixes
+
+* hide updated date from non-post posttypes ([#2453](https://github.com/Automattic/newspack-theme/issues/2453)) ([3f05aa8](https://github.com/Automattic/newspack-theme/commit/3f05aa8106fcd5b99b88cd2034fcc97035cc4a8b))
+
+
+### Features
+
+* Style Corrections archive templates ([#2438](https://github.com/Automattic/newspack-theme/issues/2438)) ([78ff38c](https://github.com/Automattic/newspack-theme/commit/78ff38cdc1ad054e1a82f402a61884e7495aa194))
+* update login screen when no custom logo ([#2442](https://github.com/Automattic/newspack-theme/issues/2442)) ([fd6b22b](https://github.com/Automattic/newspack-theme/commit/fd6b22b5651287b22260cc6d89c30fd87f28d38c))
+
 # [2.6.0](https://github.com/Automattic/newspack-theme/compare/v2.5.0...v2.6.0) (2025-03-04)
 
 
