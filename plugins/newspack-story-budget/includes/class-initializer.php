@@ -18,5 +18,6 @@ class Initializer {
 		Budgets::init();
 		Fields::init();
 		API::init();
+		Admin::init();
 	}
 }

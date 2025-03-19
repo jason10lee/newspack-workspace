@@ -1,0 +1,39 @@
+@import "@wordpress/dataviews/build-style/style.css";
+
+.toplevel_page_newspack-story-budget {
+	background: #fff;
+}
+
+.wrap {
+	margin: 10px 0 0 -20px;
+}
+
+#newspack-story-budget-app {
+	.newspack-story-budget-header {
+		padding: 16px 48px;
+		border-bottom: 1px solid #f0f0f0;
+		min-height: 40px;
+		h1 {
+			flex-grow: 1;
+			flex-basis: 0;
+			white-space: nowrap;
+		}
+	}
+	.newspack-story-budget-loading {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+		max-width: 400px;
+		height: 100px;
+		margin: 30vh auto 0;
+		text-align: center;
+		> div {
+			width: 100%;
+			> div {
+				left: 0; // Fix progress indicator position.
+			}
+		}
+	}
+}

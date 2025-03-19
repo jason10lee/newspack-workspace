@@ -8,10 +8,9 @@ workflows:
   all:
     jobs:
       - newspack/build
-      # TODO: reenable if there's some JS or SCSS.
-      # - newspack/lint-js-scss:
-      #     requires:
-      #       - newspack/build
+      - newspack/lint-js-scss:
+          requires:
+            - newspack/build
       - newspack/build-distributable:
           requires:
             - newspack/build
