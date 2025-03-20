@@ -114,6 +114,19 @@ function newspack_custom_top_posts_thumb_size( $get_image_options ) {
 add_filter( 'jetpack_top_posts_widget_image_options', 'newspack_custom_top_posts_thumb_size' );
 
 /**
+ * Increase the size of images when using the One Column, One Column Wide, or No Header/Footer templates.
+ *
+ * @param int $content_width The content width.
+ */
+function newspack_larger_content_width( $content_width ){
+	if ( ! is_front_page() && is_page_template( 'single-wide.php' ) || is_page_template( 'single-feature.php' ) || is_page_template( 'no-header-footer.php' ) ) {
+		return 2000;
+	}
+	return $content_width;
+}
+add_filter( 'jetpack_content_width', 'newspack_larger_content_width' );
+
+/**
  * Alter featured-image default visibility for content-options.
  */
 function newspack_override_post_thumbnail( $width ) {
