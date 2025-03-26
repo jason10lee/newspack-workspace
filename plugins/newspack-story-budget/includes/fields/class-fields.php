@@ -361,7 +361,7 @@ class Fields {
 				continue;
 			}
 			$value = call_user_func( $field->get_post_save_callback(), $post_id );
-			if ( ! empty( $value ) ) {
+			if ( null !== $value ) {
 				\update_post_meta( $post_id, $field->get_post_meta_name(), $value );
 			} else {
 				\delete_post_meta( $post_id, $field->get_post_meta_name() );
