@@ -113,6 +113,10 @@ body.toplevel_page_newspack-story-budget {
 				margin-bottom: 16px;
 			}
 		}
+		&__value-tooltip {
+			max-width: 300px;
+			text-align: left;
+		}
 	}
 	&__table-row-field {
 		margin: 0 -8px;

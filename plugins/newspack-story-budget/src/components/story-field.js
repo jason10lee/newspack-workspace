@@ -8,6 +8,7 @@ import {
 	__experimentalHStack as HStack,
 	Dropdown,
 	Button,
+	Tooltip,
 } from '@wordpress/components';
 import { __experimentalInspectorPopoverHeader as InspectorPopoverHeader } from '@wordpress/block-editor';
 import { useSelect, useDispatch } from '@wordpress/data';
@@ -94,12 +95,30 @@ export default ( {
 
 	const displayValue = getDisplayValue( field, value );
 
+	const collapsedValue =
+		displayValue?.length > 70
+			? `${ displayValue.slice( 0, 67 ) }...`
+			: null;
+
 	if ( ! canEdit ) {
 		return (
 			<div className="newspack-story-budget__field">
-				<span className="newspack-story-budget__field__value">
-					{ displayValue !== null ? displayValue : '--' }
-				</span>
+				{ collapsedValue ? (
+					<Tooltip
+						text={ displayValue }
+						delay={ 300 }
+						placement="bottom-start"
+						className="newspack-story-budget__field__value-tooltip"
+					>
+						<span className="newspack-story-budget__field__value">
+							{ collapsedValue }
+						</span>
+					</Tooltip>
+				) : (
+					<span className="newspack-story-budget__field__value">
+						{ displayValue !== null ? displayValue : '--' }
+					</span>
+				) }
 			</div>
 		);
 	}
@@ -132,7 +151,7 @@ export default ( {
 								Click to set
 							</span>
 						) : (
-							displayValue
+							collapsedValue || displayValue
 						) }
 					</Button>
 				) }
@@ -186,7 +205,10 @@ export default ( {
 												onClose();
 											} }
 										>
-											{ __( 'Save', 'newspack-story-budget' ) }
+											{ __(
+												'Save',
+												'newspack-story-budget'
+											) }
 										</Button>
 										<Button
 											variant="secondary"
@@ -195,7 +217,10 @@ export default ( {
 												setEditedValue( value );
 											} }
 										>
-											{ __( 'Cancel', 'newspack-story-budget' ) }
+											{ __(
+												'Cancel',
+												'newspack-story-budget'
+											) }
 										</Button>
 									</HStack>
 								) }
