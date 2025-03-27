@@ -327,7 +327,7 @@ class API {
 				continue;
 			}
 			$value = self::sanitize_field_value( $field, $value );
-			if ( null === $value ) {
+			if ( null === $value && null !== $request->get_param( $key ) ) {
 				return new \WP_Error(
 					'invalid_value',
 					sprintf(
@@ -372,7 +372,7 @@ class API {
 				__( 'Missing field.', 'newspack-story-budget' )
 			);
 		}
-		if ( null === $value ) {
+		if ( null === $value && null !== $request->get_param( $key ) ) {
 			return new \WP_Error(
 				'invalid_value',
 				sprintf(
