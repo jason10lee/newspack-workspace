@@ -118,13 +118,13 @@ add_filter( 'jetpack_top_posts_widget_image_options', 'newspack_custom_top_posts
  *
  * @param int $content_width The content width.
  */
-function newspack_larger_content_width( $content_width ){
+function newspack_change_content_width( $content_width ){
 	if ( ! is_front_page() && is_page_template( 'single-wide.php' ) || is_page_template( 'single-feature.php' ) || is_page_template( 'no-header-footer.php' ) ) {
 		return 2000;
 	}
 	return $content_width;
 }
-add_filter( 'jetpack_content_width', 'newspack_larger_content_width' );
+add_filter( 'jetpack_content_width', 'newspack_change_content_width' );
 
 /**
  * Alter featured-image default visibility for content-options.
