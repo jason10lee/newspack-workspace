@@ -1,3 +1,10 @@
+## [2.0.4](https://github.com/Automattic/newspack-multibranded-site/compare/v2.0.3...v2.0.4) (2025-03-31)
+
+
+### Bug Fixes
+
+* **posts-listing:** don't show empty brand dropdown ([#69](https://github.com/Automattic/newspack-multibranded-site/issues/69)) ([98bf17a](https://github.com/Automattic/newspack-multibranded-site/commit/98bf17af7ca508d82d175cbd447e27a1fdfa15cb))
+
 ## [2.0.3](https://github.com/Automattic/newspack-multibranded-site/compare/v2.0.2...v2.0.3) (2024-12-16)
 
 
