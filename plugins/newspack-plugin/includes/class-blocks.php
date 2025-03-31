@@ -46,13 +46,13 @@ final class Blocks {
 			[
 				'has_newsletters'         => class_exists( 'Newspack_Newsletters_Subscription' ),
 				'has_reader_activation'   => Reader_Activation::is_enabled(),
-				'newsletters_url'         => Wizards::get_wizard( 'engagement' )->newsletters_settings_url(),
+				'newsletters_url'         => Wizards::get_wizard( 'newsletters' )->newsletters_settings_url(),
 				'has_google_oauth'        => Google_OAuth::is_oauth_configured(),
 				'google_logo_svg'         => \Newspack\Newspack_UI_Icons::get_svg( 'google' ),
 				'reader_activation_terms' => Reader_Activation::get_setting( 'terms_text' ),
 				'reader_activation_url'   => Reader_Activation::get_setting( 'terms_url' ),
 				'has_recaptcha'           => Recaptcha::can_use_captcha(),
-				'recaptcha_url'           => admin_url( 'admin.php?page=newspack-connections-wizard' ),
+				'recaptcha_url'           => admin_url( 'admin.php?page=newspack-settings' ),
 				'corrections_enabled'     => wp_is_block_theme() && class_exists( 'Newspack\Corrections' ) && defined( 'NEWSPACK_CORRECTIONS_ENABLED' ) && NEWSPACK_CORRECTIONS_ENABLED,
 			]
 		);
