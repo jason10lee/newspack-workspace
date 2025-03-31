@@ -1,3 +1,39 @@
+# [2.8.0](https://github.com/Automattic/newspack-theme/compare/v2.7.0...v2.8.0) (2025-03-31)
+
+
+### Bug Fixes
+
+* change content_width function name ([#2470](https://github.com/Automattic/newspack-theme/issues/2470)) ([8e5f229](https://github.com/Automattic/newspack-theme/commit/8e5f2293f7dc52c476f81bce11d9db50964dbcef))
+* **post-dates:** use JS for "time ago" dates ([#2457](https://github.com/Automattic/newspack-theme/issues/2457)) ([891d3d9](https://github.com/Automattic/newspack-theme/commit/891d3d98881b53bf58dab34ffb725a048626bc75))
+* update json files with MD5 hash versions ([#2458](https://github.com/Automattic/newspack-theme/issues/2458)) ([fc0ec4a](https://github.com/Automattic/newspack-theme/commit/fc0ec4aeda6fba3a0c8f63d149c9b3fb863bfbc8))
+
+
+### Features
+
+* add small image size for smaller featured images ([#2456](https://github.com/Automattic/newspack-theme/issues/2456)) ([f0d10de](https://github.com/Automattic/newspack-theme/commit/f0d10de85f84040dd997762febccd765cac39f62))
+* increase content_width for certain templates ([#2454](https://github.com/Automattic/newspack-theme/issues/2454)) ([5053e7a](https://github.com/Automattic/newspack-theme/commit/5053e7a0ec6537c1b77013f3d38f714cd2fc2e35))
+
+# [2.8.0-alpha.2](https://github.com/Automattic/newspack-theme/compare/v2.8.0-alpha.1...v2.8.0-alpha.2) (2025-03-28)
+
+
+### Bug Fixes
+
+* change content_width function name ([#2470](https://github.com/Automattic/newspack-theme/issues/2470)) ([8e5f229](https://github.com/Automattic/newspack-theme/commit/8e5f2293f7dc52c476f81bce11d9db50964dbcef))
+
+# [2.8.0-alpha.1](https://github.com/Automattic/newspack-theme/compare/v2.7.0...v2.8.0-alpha.1) (2025-03-20)
+
+
+### Bug Fixes
+
+* **post-dates:** use JS for "time ago" dates ([#2457](https://github.com/Automattic/newspack-theme/issues/2457)) ([891d3d9](https://github.com/Automattic/newspack-theme/commit/891d3d98881b53bf58dab34ffb725a048626bc75))
+* update json files with MD5 hash versions ([#2458](https://github.com/Automattic/newspack-theme/issues/2458)) ([fc0ec4a](https://github.com/Automattic/newspack-theme/commit/fc0ec4aeda6fba3a0c8f63d149c9b3fb863bfbc8))
+
+
+### Features
+
+* add small image size for smaller featured images ([#2456](https://github.com/Automattic/newspack-theme/issues/2456)) ([f0d10de](https://github.com/Automattic/newspack-theme/commit/f0d10de85f84040dd997762febccd765cac39f62))
+* increase content_width for certain templates ([#2454](https://github.com/Automattic/newspack-theme/issues/2454)) ([5053e7a](https://github.com/Automattic/newspack-theme/commit/5053e7a0ec6537c1b77013f3d38f714cd2fc2e35))
+
 # [2.7.0](https://github.com/Automattic/newspack-theme/compare/v2.6.0...v2.7.0) (2025-03-18)
 
 
