@@ -48,14 +48,26 @@ export const getStories = createSelector(
 	]
 );
 
-export const hasFetchedStory = ( state, id ) => !! state.stories[ id ];
-
 export const getStory = ( state, id ) => state.stories[ id ];
 
 export const getView = state => state.view;
 
+export const canEditStory = ( state, id ) =>
+	state.meta.stories.can_edit || state.stories[ id ]?.metadata?.can_edit;
+
+export const getStoriesMeta = state => state.meta.stories;
+
+export const getStoryMeta = ( state, id, key ) =>
+	key
+		? state.stories[ id ]?.metadata?.[ key ]
+		: state.stories[ id ]?.metadata;
+
 export const getErrors = state => state.errors;
 
-export const getFieldError = ( state, storyId, fieldId ) => state.errors[ `${ storyId }-${ fieldId }` ];
+export const getFieldError = ( state, storyId, fieldId ) =>
+	state.errors[ `${ storyId }-${ fieldId }` ];
 
-export const getStoryError = ( state, storyId ) => state.errors[ `story-${ storyId }` ];
+export const getStoryError = ( state, storyId ) =>
+	state.errors[ `story-${ storyId }` ];
+
+export const getStoryMetaFetchQueue = state => state.meta.storyMetaFetchQueue;

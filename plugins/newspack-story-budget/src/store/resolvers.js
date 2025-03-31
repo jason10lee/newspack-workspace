@@ -32,11 +32,73 @@ export const getStories =
 		await dispatch.fetchStories();
 	};
 
+export const getStoriesMeta =
+	() =>
+	async ( { dispatch } ) => {
+		await dispatch.fetchStoriesMeta();
+	};
+
 export const getStory =
 	id =>
-	async ( { dispatch, select } ) => {
-		if ( select.hasFetchedStory( id ) ) {
+	async ( { resolveSelect, dispatch, select, registry } ) => {
+		// Fetch the entire story if it's not already fetched.
+		if ( ! select.getStory( id ) ) {
+			await dispatch.fetchStory( id );
 			return;
 		}
-		await dispatch.fetchStory( id );
+		// Bail if the story meta is already fetched.
+		if ( select.getStoryMeta( id ) ) {
+			return;
+		}
+		// Bail if the story meta is being fetched.
+		const { hasStartedResolution } = registry.select( NAMESPACE );
+		if ( hasStartedResolution( 'getStoryMeta', id ) ) {
+			return;
+		}
+		// Fetch the story meta.
+		await resolveSelect.getStoryMeta( id );
+	};
+
+export const getStoryMeta =
+	( id, key ) =>
+	async ( { dispatch, select, registry } ) => {
+		// Bail if the metadata is already fetched.
+		if ( select.getStoryMeta( id, key ) ) {
+			return;
+		}
+		// Bail if the story is being fetched.
+		const { hasStartedResolution } = registry.select( NAMESPACE );
+		if ( hasStartedResolution( 'getStory', id ) ) {
+			return;
+		}
+		// Fetch story and bail if it's not fetched.
+		if ( ! select.getStory( id ) ) {
+			await dispatch.fetchStory( id );
+			return;
+		}
+		// Fetch the story meta.
+		await dispatch.queueStoryMetaFetch( id );
+	};
+
+export const canEditStory =
+	id =>
+	async ( { resolveSelect, select, registry } ) => {
+		// If the user can edit stories, they can edit any story.
+		if ( select.getStoriesMeta()?.can_edit ) {
+			return;
+		}
+		// Bail if the story `can_edit` metadata is fetched.
+		if ( select.getStoryMeta( id, 'can_edit' ) !== undefined ) {
+			return;
+		}
+		// Bail if the story or story meta is being fetched.
+		const { hasStartedResolution } = registry.select( NAMESPACE );
+		if (
+			hasStartedResolution( 'getStory', id ) ||
+			hasStartedResolution( 'getStoryMeta', id )
+		) {
+			return;
+		}
+		// Fetch the story meta.
+		await resolveSelect.getStoryMeta( id, 'can_edit' );
 	};

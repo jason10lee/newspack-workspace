@@ -53,7 +53,7 @@ class Test_API extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Test get budget stories.
+	 * Test get stories.
 	 */
 	public function test_get_stories() {
 		$request = new \WP_REST_Request( 'GET', sprintf( '%s/stories', API::NAMESPACE ) );
@@ -68,7 +68,35 @@ class Test_API extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Test get budget stories search.
+	 * Test get stories as author.
+	 */
+	public function test_get_stories_as_author() {
+		$author = $this->factory->user->create(
+			[
+				'role' => 'author',
+			]
+		);
+		$post_id = self::factory()->post->create(
+			[
+				'post_author' => $author,
+			]
+		);
+		$story = new Story( $post_id );
+		$story->update_budgets( [ self::$budgets[0] ] );
+
+		wp_set_current_user( $author );
+
+		$request = new \WP_REST_Request( 'GET', sprintf( '%s/stories', API::NAMESPACE ) );
+		$response = API::get_stories( $request );
+
+		$data = $response->get_data();
+
+		$this->assertCount( 1, $data['stories'] );
+		$this->assertEquals( $post_id, $data['stories'][0]['id'] );
+	}
+
+	/**
+	 * Test get stories search.
 	 */
 	public function test_get_stories_search() {
 		$story = self::factory()->post->create(

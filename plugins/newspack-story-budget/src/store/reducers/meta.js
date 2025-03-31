@@ -74,6 +74,25 @@ export default ( state = INITIAL_STATE.meta, action ) => {
 					[ action.payload.id ]: false,
 				},
 			};
+		case 'STORIES_META_SET':
+			return {
+				...state,
+				stories: action.payload,
+			};
+		case 'STORY_META_FETCH_QUEUE':
+			return {
+				...state,
+				storyMetaFetchQueue: {
+					...state.storyMetaFetchQueue,
+					[ action.payload.id ]: true,
+				},
+			};
+		case 'STORY_META_BATCH_START':
+		case 'STORY_META_BATCH_SET':
+			return {
+				...state,
+				storyMetaFetchQueue: {},
+			};
 		default:
 			return state;
 	}

@@ -81,8 +81,14 @@ export default () => {
 	const [ editMode, setEditMode ] = useState( false );
 	const [ modalOpen, setModalOpen ] = useState( false );
 
-	const { clearErrors, setView, setSearching, search, fetchStories, fetchStory } =
-		useDispatch( storeNamespace );
+	const {
+		clearErrors,
+		setView,
+		setSearching,
+		search,
+		fetchStories,
+		fetchStory,
+	} = useDispatch( storeNamespace );
 
 	const doSearch = debounce( search, 300 );
 
@@ -153,7 +159,7 @@ export default () => {
 			isEligible: item => !! item.metadata?.edit_url,
 			isPrimary: false,
 			icon: <Icon icon={ edit } />,
-			callback: ( items ) => {
+			callback: items => {
 				if ( items[ 0 ].metadata?.edit_url ) {
 					window.open( items[ 0 ].metadata.edit_url );
 				}
@@ -172,9 +178,7 @@ export default () => {
 				size="small"
 				title={ __( 'Something went wrong', 'newspack-story-budget' ) }
 			>
-				<VStack
-					spacing={ 4 }
-				>
+				<VStack spacing={ 4 }>
 					<Notice
 						className="newspack-story-budget__error"
 						isDismissible={ false }
@@ -193,8 +197,9 @@ export default () => {
 							onClick={ () => {
 								clearErrors();
 								fetchStories();
-							} }>
-								{ __( 'Refetch stories', 'newspack-story-budget' ) }
+							} }
+						>
+							{ __( 'Refetch stories', 'newspack-story-budget' ) }
 						</Button>
 					</HStack>
 				</VStack>
@@ -215,7 +220,7 @@ export default () => {
 					: stories.slice(
 							( view.page - 1 ) * view.perPage,
 							( view.page - 1 ) * view.perPage + view.perPage
-					)
+					  )
 			}
 			paginationInfo={ {
 				totalItems: stories.length,

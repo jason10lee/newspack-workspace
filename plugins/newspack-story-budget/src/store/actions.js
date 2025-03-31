@@ -1,7 +1,7 @@
 /* globals newspackStoryBudget */
 import { __ } from '@wordpress/i18n';
 import { apiFetch } from '@wordpress/data-controls';
-import { resolveSelect } from '@wordpress/data';
+import { resolveSelect, select, dispatch } from '@wordpress/data';
 import { NAMESPACE } from './constants';
 
 const { apiNamespace } = newspackStoryBudget;
@@ -9,10 +9,17 @@ const { apiNamespace } = newspackStoryBudget;
 export function* initializeEntitiesConfig() {
 	yield resolveSelect( NAMESPACE ).getFields();
 	yield resolveSelect( NAMESPACE ).getBudgets();
-	yield resolveSelect( 'core' ).canUser( 'update', {
-		kind: 'postType',
-		name: 'post',
-	} );
+	yield resolveSelect( NAMESPACE ).getStoriesMeta();
+
+	// Watch for story meta fetch queue.
+	setInterval( () => {
+		const storyIds = Object.keys(
+			select( NAMESPACE ).getStoryMetaFetchQueue()
+		);
+		if ( storyIds.length > 0 ) {
+			dispatch( NAMESPACE ).fetchStoryMetaBatch( storyIds );
+		}
+	}, 300 );
 }
 
 export function setSearching() {
@@ -127,12 +134,28 @@ export function* fetchStories() {
 			payload: stories,
 		};
 	} catch ( error ) {
-		const message = error?.message || __( 'Error fetching stories. Please try again.', 'newspack-story-budget' )
+		const message =
+			error?.message ||
+			__(
+				'Error fetching stories. Please try again.',
+				'newspack-story-budget'
+			);
 		return {
 			type: 'STORIES_ERROR',
 			payload: { message },
 		};
 	}
+}
+
+export function* fetchStoriesMeta() {
+	const result = yield apiFetch( {
+		path: `${ apiNamespace }/stories/meta`,
+		method: 'GET',
+	} );
+	return {
+		type: 'STORIES_META_SET',
+		payload: result,
+	};
 }
 
 export function* fetchStory( id ) {
@@ -147,12 +170,48 @@ export function* fetchStory( id ) {
 			payload: result,
 		};
 	} catch ( error ) {
-		const message = error?.message || __( 'Error fetching story. Please try again.', 'newspack-story-budget' )
+		const message =
+			error?.message ||
+			__(
+				'Error fetching story. Please try again.',
+				'newspack-story-budget'
+			);
 		return {
 			type: 'FETCH_STORY_ERROR',
 			payload: { id, message },
 		};
 	}
+}
+
+export function* fetchStoryMeta( id ) {
+	const result = yield apiFetch( {
+		path: `${ apiNamespace }/stories/${ id }/meta`,
+		method: 'GET',
+	} );
+	return {
+		type: 'STORY_META_SET',
+		payload: { id, result },
+	};
+}
+
+export function* fetchStoryMetaBatch( storyIds ) {
+	yield { type: 'STORY_META_BATCH_START' };
+	const result = yield apiFetch( {
+		path: `${ apiNamespace }/stories/meta/batch`,
+		method: 'POST',
+		data: { story_ids: storyIds },
+	} );
+	return {
+		type: 'STORY_META_BATCH_SET',
+		payload: result,
+	};
+}
+
+export function queueStoryMetaFetch( id ) {
+	return {
+		type: 'STORY_META_FETCH_QUEUE',
+		payload: { id },
+	};
 }
 
 export function* saveStory( id, story ) {
@@ -168,7 +227,9 @@ export function* saveStory( id, story ) {
 			payload: result,
 		};
 	} catch ( error ) {
-		const message = error?.message || __( 'Error saving story.', 'newspack-story-budget' );
+		const message =
+			error?.message ||
+			__( 'Error saving story.', 'newspack-story-budget' );
 		return { type: 'SAVE_STORY_ERROR', payload: { id, story, message } };
 	}
 }
@@ -187,8 +248,13 @@ export function* saveStoryField( id, slug, value ) {
 			payload: { id, slug, value: result[ slug ] },
 		};
 	} catch ( error ) {
-		const message = error?.message || __( 'Error saving field.', 'newspack-story-budget' );
-		return { type: 'SAVE_STORY_FIELD_ERROR', payload: { id, slug, value, message } };
+		const message =
+			error?.message ||
+			__( 'Error saving field.', 'newspack-story-budget' );
+		return {
+			type: 'SAVE_STORY_FIELD_ERROR',
+			payload: { id, slug, value, message },
+		};
 	}
 }
 

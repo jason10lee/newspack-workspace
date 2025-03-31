@@ -24,16 +24,12 @@ import { NAMESPACE as storeNamespace } from '../store/constants';
 import StoryFieldPanel from './story-field-panel';
 
 export default ( { storyId, onCancel } ) => {
-	const { fields, story, isLoadingStory, canEdit, storyError } = useSelect( select => ( {
+	const { fields, story, isLoadingStory, canEditStory, storyError } = useSelect( select => ( {
 		fields: select( storeNamespace ).getFields(),
 		story: select( storeNamespace ).getStory( storyId ),
 		isLoadingStory: select( storeNamespace ).isLoadingStory( storyId ),
+		canEditStory: select( storeNamespace ).canEditStory( storyId ),
 		storyError: select( storeNamespace ).getStoryError( storyId ),
-		canEdit: select( 'core' ).canUser( 'update', {
-			kind: 'postType',
-			name: 'post',
-			id: storyId,
-		} ),
 	} ) );
 	const { saveStory, clearErrors } = useDispatch( storeNamespace );
 	const [ editedStory, setEditedStory ] = useState( story );
@@ -100,16 +96,18 @@ export default ( { storyId, onCancel } ) => {
 						<Spinner />
 					</VStack>
 				) }
-				<iframe
-					title={ story.title }
-					src={ story.metadata.preview_url }
-					style={ {
-						width: '100%',
-						height: '100%',
-						minHeight: '500px',
-					} }
-					onLoad={ () => setIsIframeLoading( false ) }
-				/>
+				{ story.metadata.preview_url && (
+					<iframe
+						title={ story.title }
+						src={ story.metadata.preview_url }
+						style={ {
+							width: '100%',
+							height: '100%',
+							minHeight: '500px',
+						} }
+						onLoad={ () => setIsIframeLoading( false ) }
+					/>
+				) }
 			</VStack>
 			<VStack justify="top" className="newspack-story-budget__sidebar">
 				{ ! isIframeLoading && storyError && (
@@ -135,14 +133,14 @@ export default ( { storyId, onCancel } ) => {
 						onChange={ handleFieldChange }
 					/>
 				</div>
-				{ ( canEdit || onCancel ) && (
+				{ ( canEditStory || onCancel ) && (
 					<HStack
 						expanded
 						direction="row-reverse"
 						justify="end"
 						style={ { padding: '16px', boxSizing: 'border-box' } }
 					>
-						{ canEdit && (
+						{ canEditStory && (
 							<Button
 								variant="primary"
 								disabled={ isLoadingStory }
@@ -156,7 +154,7 @@ export default ( { storyId, onCancel } ) => {
 							disabled={ isLoadingStory }
 							onClick={ handleCancel }
 						>
-							{ canEdit
+							{ canEditStory
 								? __( 'Cancel', 'newspack-story-budget' )
 								: __( 'Close', 'newspack-story-budget' ) }
 						</Button>

@@ -41,7 +41,7 @@ class API {
 			[
 				'methods'             => 'GET',
 				'callback'            => [ __CLASS__, 'get_stories' ],
-				'permission_callback' => [ __CLASS__, 'permission_callback' ],
+				'permission_callback' => [ __CLASS__, 'stories_permission_callback' ],
 				'args'                => [
 					'limit'  => [
 						'description' => __( 'Number of stories to return.', 'newspack-story-budget' ),
@@ -57,11 +57,40 @@ class API {
 
 		register_rest_route(
 			self::NAMESPACE,
+			'/stories/meta',
+			[
+				'methods'             => 'GET',
+				'callback'            => [ __CLASS__, 'get_stories_meta' ],
+				'permission_callback' => [ __CLASS__, 'stories_permission_callback' ],
+			]
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
+			'/stories/meta/batch',
+			[
+				'methods'             => 'POST',
+				'callback'            => [ __CLASS__, 'get_stories_meta_batch' ],
+				'permission_callback' => [ __CLASS__, 'stories_permission_callback' ],
+				'args'                => [
+					'story_ids' => [
+						'description' => __( 'Array of story IDs to fetch meta for.', 'newspack-story-budget' ),
+						'type'        => 'array',
+						'items'       => [
+							'type' => 'integer',
+						],
+					],
+				],
+			]
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
 			'/stories/search',
 			[
 				'methods'             => 'POST',
 				'callback'            => [ __CLASS__, 'get_stories_search' ],
-				'permission_callback' => [ __CLASS__, 'permission_callback' ],
+				'permission_callback' => [ __CLASS__, 'stories_permission_callback' ],
 				'args'                => [
 					's' => [
 						'description' => __( 'Search query.', 'newspack-story-budget' ),
@@ -77,7 +106,17 @@ class API {
 			[
 				'methods'             => 'GET',
 				'callback'            => [ __CLASS__, 'get_story' ],
-				'permission_callback' => [ __CLASS__, 'permission_callback' ],
+				'permission_callback' => [ __CLASS__, 'stories_permission_callback' ],
+			]
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
+			'/stories/(?P<id>\d+)/meta',
+			[
+				'methods'             => 'GET',
+				'callback'            => [ __CLASS__, 'get_story_meta' ],
+				'permission_callback' => [ __CLASS__, 'stories_permission_callback' ],
 			]
 		);
 
@@ -87,7 +126,7 @@ class API {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ __CLASS__, 'update_story' ],
-				'permission_callback' => [ __CLASS__, 'permission_callback' ],
+				'permission_callback' => [ __CLASS__, 'stories_permission_callback' ],
 			]
 		);
 
@@ -97,7 +136,7 @@ class API {
 			[
 				'methods'             => 'POST',
 				'callback'            => [ __CLASS__, 'update_story_field' ],
-				'permission_callback' => [ __CLASS__, 'permission_callback' ],
+				'permission_callback' => [ __CLASS__, 'stories_permission_callback' ],
 				'args'                => [
 					'id'    => [
 						'description' => __( 'The post ID of the story to update.', 'newspack-story-budget' ),
@@ -179,12 +218,39 @@ class API {
 	}
 
 	/**
-	 * Permission callback.
+	 * Permission callback for non-story entities.
 	 *
 	 * @return bool
 	 */
 	public static function permission_callback() {
-		return current_user_can( 'edit_others_posts' );
+		return current_user_can( 'edit_posts' );
+	}
+
+	/**
+	 * Permission callback for stories.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 *
+	 * @return bool
+	 */
+	public static function stories_permission_callback( $request ) {
+		// Check if the user can edit a single story.
+		$id = $request->get_param( 'id' );
+		if ( $id ) {
+			return current_user_can( 'edit_post', $id );
+		}
+
+		// Check if the user can edit the stories in batch requests.
+		$story_ids = $request->get_param( 'story_ids' );
+		if ( $story_ids ) {
+			foreach ( $story_ids as $story_id ) {
+				if ( ! current_user_can( 'edit_post', $story_id ) ) {
+					return false;
+				}
+			}
+		}
+
+		return current_user_can( 'edit_posts' );
 	}
 
 	/**
@@ -200,19 +266,61 @@ class API {
 			'offset'         => $request->get_param( 'offset' ) ?? 0,
 		];
 
+		// If the user is not an editor, filter the stories by the user's stories.
+		if ( ! current_user_can( 'edit_others_posts' ) ) {
+			$query_args['author'] = get_current_user_id();
+		}
+
 		$stories = Budgets::get_stories( $query_args );
 
 		return rest_ensure_response(
 			[
 				'stories' => array_map(
 					function( $story ) {
-						return $story->to_array();
+						return $story->to_array( false );
 					},
 					$stories
 				),
 				'total'   => Budgets::$stories_query->found_posts,
 			]
 		);
+	}
+
+	/**
+	 * Get stories meta.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	public static function get_stories_meta( $request ) {
+		return rest_ensure_response(
+			[
+				'can_edit' => current_user_can( 'edit_others_posts' ),
+			]
+		);
+	}
+
+	/**
+	 * Get stories meta batch.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	public static function get_stories_meta_batch( $request ) {
+		$story_ids = $request->get_param( 'story_ids' );
+
+		$results = [];
+		foreach ( $story_ids as $story_id ) {
+			$story = new Story( $story_id );
+			if ( ! $story->is_valid() ) {
+				continue;
+			}
+			$results[ $story_id ] = $story->get_metadata();
+		}
+
+		return rest_ensure_response( $results );
 	}
 
 	/**
@@ -228,6 +336,12 @@ class API {
 			'posts_per_page' => -1,
 			's'              => $request->get_param( 's' ) ?? '',
 		];
+
+		// If the user is not an editor, filter the stories by the user's stories.
+		if ( ! current_user_can( 'edit_others_posts' ) ) {
+			$query_args['author'] = get_current_user_id();
+		}
+
 		return rest_ensure_response(
 			[
 				'story_ids' => Budgets::get_stories( $query_args ),
@@ -253,6 +367,22 @@ class API {
 		$story->refresh();
 
 		return rest_ensure_response( $story->to_array() );
+	}
+
+	/**
+	 * Get story meta.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	public static function get_story_meta( $request ) {
+		$story = new Story( $request->get_param( 'id' ) );
+		if ( ! $story->is_valid() ) {
+			return new \WP_Error( 'story_not_found', __( 'Story not found.', 'newspack-story-budget' ), [ 'status' => 404 ] );
+		}
+
+		return rest_ensure_response( $story->get_metadata() );
 	}
 
 	/**
@@ -453,7 +583,14 @@ class API {
 			return new \WP_Error( 'budget_not_found', __( 'Budget not found.', 'newspack-story-budget' ), [ 'status' => 404 ] );
 		}
 
-		$stories = $budget->get_stories();
+		$query_args = [];
+
+		// If the user is not an editor, filter the stories by the user's stories.
+		if ( ! current_user_can( 'edit_others_posts' ) ) {
+			$query_args['author'] = get_current_user_id();
+		}
+
+		$stories = $budget->get_stories( $query_args );
 
 		return rest_ensure_response(
 			[
@@ -486,6 +623,11 @@ class API {
 			'posts_per_page' => -1,
 			's'              => $request->get_param( 's' ) ?? '',
 		];
+
+		// If the user is not an editor, filter the stories by the user's stories.
+		if ( ! current_user_can( 'edit_others_posts' ) ) {
+			$query_args['author'] = get_current_user_id();
+		}
 
 		return rest_ensure_response(
 			[

@@ -162,21 +162,19 @@ class Story {
 	/**
 	 * Get story in array format.
 	 *
+	 * @param bool $include_metadata Whether to include metadata.
+	 *
 	 * @return array
 	 */
-	public function to_array() {
+	public function to_array( $include_metadata = true ) {
 		$all_fields = Fields::get_all_fields();
-		$values = [
-			// `id` and `metadata are protected keys.
-			'id'       => $this->id,
-
-			// Static post info that doesn't need to be presented as fields.
-			'metadata' => [
-				'edit_url'    => \get_edit_post_link( $this->id, 'edit' ),
-				'preview_url' => \add_query_arg( 'newspack-story-preview', true, get_permalink( $this->id ) ),
-				'slug'        => \get_post_field( 'post_name', $this->post ),
-			],
+		$values     = [
+			'id' => $this->id,
 		];
+
+		if ( $include_metadata ) {
+			$values['metadata'] = $this->get_metadata();
+		}
 
 		foreach ( $all_fields as $field ) {
 			$value = $field->get_value( $this->id );
@@ -189,5 +187,19 @@ class Story {
 			$values[ $field->get_slug() ] = $value;
 		}
 		return $values;
+	}
+
+	/**
+	 * Get story metadata.
+	 *
+	 * @return array
+	 */
+	public function get_metadata() {
+		return [
+			'slug'        => \get_post_field( 'post_name', $this->post ),
+			'preview_url' => \add_query_arg( 'newspack-story-preview', true, get_permalink( $this->id ) ),
+			'edit_url'    => \get_edit_post_link( $this->id, 'edit' ),
+			'can_edit'    => current_user_can( 'edit_post', $this->id ),
+		];
 	}
 }

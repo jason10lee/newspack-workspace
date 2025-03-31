@@ -37,7 +37,7 @@ class Admin {
 		add_menu_page(
 			__( 'Story Budget', 'newspack-story-budget' ),
 			__( 'Story Budget', 'newspack-story-budget' ),
-			'edit_others_posts',
+			'edit_posts',
 			'newspack-story-budget',
 			[ __CLASS__, 'render_admin_page' ],
 			$icon,
@@ -107,7 +107,7 @@ class Admin {
 	 * Check if the story preview is enabled.
 	 */
 	protected static function is_story_preview() {
-		return current_user_can( 'edit_others_posts' ) && isset( $_GET['newspack-story-preview'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		return current_user_can( 'edit_post', get_the_ID() ) && isset( $_GET['newspack-story-preview'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 	}
 
 	/**

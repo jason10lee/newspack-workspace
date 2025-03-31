@@ -10,6 +10,10 @@ export const INITIAL_STATE = {
 		loading: false,
 		progress: 0,
 		searching: false,
+		storyMetaFetchQueue: {},
+		stories: {
+			can_edit: false,
+		},
 	},
 	view: {
 		type: 'table',

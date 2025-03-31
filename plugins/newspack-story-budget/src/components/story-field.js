@@ -32,19 +32,17 @@ export default ( {
 	saveInPlace = false,
 	popoverProps,
 } ) => {
-	const { story, field, canEditPost, isLoadingStory, fieldError } = useSelect(
-		select => ( {
+	const { story, field, canEditStory, isLoadingStory, fieldError } =
+		useSelect( select => ( {
 			story: select( storeNamespace ).getStory( storyId ),
 			field: select( storeNamespace ).getField( fieldId ),
 			isLoadingStory: select( storeNamespace ).isLoadingStory( storyId ),
-			fieldError: select( storeNamespace ).getFieldError( storyId, fieldId ),
-			canEditPost: select( 'core' ).canUser( 'update', {
-				kind: 'postType',
-				name: 'post',
-				id: storyId,
-			} ),
-		} )
-	);
+			canEditStory: select( storeNamespace ).canEditStory( storyId ),
+			fieldError: select( storeNamespace ).getFieldError(
+				storyId,
+				fieldId
+			),
+		} ) );
 
 	const { saveStoryField, clearErrors } = useDispatch( storeNamespace );
 
@@ -57,7 +55,7 @@ export default ( {
 		return null;
 	}
 
-	const canEdit = allowEdit && canEditPost && field.is_editable;
+	const canEdit = allowEdit && canEditStory && field.is_editable;
 
 	const displayValue = utils.fields.getDisplayValue( field, value );
 
@@ -100,7 +98,7 @@ export default ( {
 					}
 				}
 				contentClassName="newspack-story-budget__field__popover"
-				onToggle={ () => setIsOpen( !isOpen ) }
+				onToggle={ () => setIsOpen( ! isOpen ) }
 				renderToggle={ ( { onToggle } ) => (
 					<Button
 						className="newspack-story-budget__field__button"
@@ -129,22 +127,20 @@ export default ( {
 							title={ field.name }
 							onClose={ onClose }
 						/>
-						{
-							saveInPlace && fieldError && (
-								<Notice
-									className="newspack-story-budget__error"
-									isDismissible={ false }
-									status="error"
-								>
-									{ fieldError }
-								</Notice>
-							)
-						}
+						{ saveInPlace && fieldError && (
+							<Notice
+								className="newspack-story-budget__error"
+								isDismissible={ false }
+								status="error"
+							>
+								{ fieldError }
+							</Notice>
+						) }
 						{ field.description && field.type !== 'boolean' && (
 							<p>{ field.description }</p>
 						) }
 						<form
-							onSubmit={ async (e) => {
+							onSubmit={ async e => {
 								e.preventDefault();
 								if ( saveInPlace ) {
 									const response = await saveStoryField(
@@ -178,6 +174,7 @@ export default ( {
 									>
 										<Button
 											variant="primary"
+											disabled={ value === editedValue }
 											type="submit"
 										>
 											{ __(

@@ -22,6 +22,29 @@ export default ( state = INITIAL_STATE.stories, action ) => {
 					[ action.payload.slug ]: action.payload.value,
 				},
 			};
+		case 'STORY_META_SET':
+			return {
+				...state,
+				[ action.payload.id ]: {
+					...state[ action.payload.id ],
+					metadata: {
+						...state[ action.payload.id ].metadata,
+						...action.payload.result,
+					},
+				},
+			};
+		case 'STORY_META_BATCH_SET':
+			const newState = { ...state };
+			for ( const [ id, result ] of Object.entries( action.payload ) ) {
+				newState[ id ] = {
+					...state[ id ],
+					metadata: {
+						...state[ id ].metadata,
+						...result,
+					},
+				};
+			}
+			return newState;
 		default:
 			return state;
 	}

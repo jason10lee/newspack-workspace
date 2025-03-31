@@ -7,14 +7,18 @@ import {
 	__experimentalInputControl as InputControl,
 	__experimentalVStack as VStack,
 	CheckboxControl,
-	RadioControl,
 	SelectControl,
 	DatePicker,
 	DateTimePicker,
 	TextareaControl,
 } from '@wordpress/components';
+import { useId } from '@wordpress/element';
 
 export default ( { field, value, onChange = () => {} } ) => {
+	const componentId = useId();
+
+	const getOptionId = option => `${ componentId }-${ option.value }`;
+
 	if ( ! field ) {
 		return null;
 	}
@@ -60,13 +64,20 @@ export default ( { field, value, onChange = () => {} } ) => {
 	}
 
 	if ( field.options?.length ) {
+		const options = field.options.map( option => ( {
+			...option,
+			label: option.label || option.name,
+			disabled: ! option.user_can_apply || option.disabled,
+		} ) );
+
 		if ( field.is_multiple ) {
 			return (
 				<VStack spacing={ 2 }>
-					{ field.options.map( option => (
+					{ options.map( option => (
 						<CheckboxControl
 							key={ option.value }
 							label={ option.label }
+							disabled={ option.disabled }
 							checked={ value.includes( option.value ) }
 							value={ value }
 							onChange={ checked => {
@@ -84,12 +95,27 @@ export default ( { field, value, onChange = () => {} } ) => {
 			);
 		}
 		return (
-			<RadioControl
-				options={ field.options }
-				hideLabelFromVision
-				selected={ value }
-				{ ...controlProps }
-			/>
+			<VStack spacing={ 2 }>
+				{ options.map( option => (
+					<div
+						key={ getOptionId( option ) }
+						className="newspack-story-budget__control__radio-option"
+					>
+						<input
+							id={ getOptionId( option ) }
+							type="radio"
+							label={ option.label }
+							disabled={ option.disabled }
+							checked={ value === option.value }
+							value={ option.value }
+							onChange={ ev => onChange( ev.target.value ) }
+						/>
+						<label htmlFor={ getOptionId( option ) }>
+							{ option.label }
+						</label>
+					</div>
+				) ) }
+			</VStack>
 		);
 	}
 
