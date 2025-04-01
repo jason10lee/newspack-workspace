@@ -28,7 +28,10 @@ class Search {
 	 */
 	protected static function should_add_fields_to_wp_admin_search( $query ) {
 		global $pagenow;
-		return is_admin() && 'edit.php' === $pagenow && $query->is_main_query() && ! empty( $query->query_vars['s'] );
+		$is_story_budget_search = ! empty( $query->query_vars['story_budget_search'] );
+		$is_wp_admin_search = is_admin() && 'edit.php' === $pagenow && $query->is_main_query();
+
+		return ! empty( $query->query_vars['s'] ) && ( $is_story_budget_search || $is_wp_admin_search );
 	}
 
 	/**

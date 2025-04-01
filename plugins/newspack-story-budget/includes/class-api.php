@@ -332,9 +332,10 @@ class API {
 	 */
 	public static function get_stories_search( $request ) {
 		$query_args = [
-			'fields'         => 'ids',
-			'posts_per_page' => -1,
-			's'              => $request->get_param( 's' ) ?? '',
+			'story_budget_search' => true,
+			'fields'              => 'ids',
+			'posts_per_page'      => -1,
+			's'                   => $request->get_param( 's' ) ?? '',
 		];
 
 		// If the user is not an editor, filter the stories by the user's stories.
@@ -619,9 +620,10 @@ class API {
 		}
 
 		$query_args = [
-			'fields'         => 'ids',
-			'posts_per_page' => -1,
-			's'              => $request->get_param( 's' ) ?? '',
+			'story_budget_search' => true,
+			'fields'              => 'ids',
+			'posts_per_page'      => -1,
+			's'                   => $request->get_param( 's' ) ?? '',
 		];
 
 		// If the user is not an editor, filter the stories by the user's stories.

@@ -98,21 +98,39 @@ class Test_Search extends WP_UnitTestCase {
 
 		// Test non-admin context.
 		$pagenow = 'index.php'; // phpcs:ignore
+		$query->query_vars['s'] = 'test';
+		$query->query_vars['story_budget_search'] = false;
 		$this->assertFalse( $this->invoke_protected_method( 'should_add_fields_to_wp_admin_search', [ $query ] ) );
 
 		// Test admin context but wrong page.
 		$pagenow = 'post.php'; // phpcs:ignore
 		set_current_screen( 'admin' );
+		$query->query_vars['s'] = 'test';
+		$query->query_vars['story_budget_search'] = false;
 		$this->assertFalse( $this->invoke_protected_method( 'should_add_fields_to_wp_admin_search', [ $query ] ) );
 
 		// Test correct page but no search term.
 		$pagenow = 'edit.php'; // phpcs:ignore
 		$query->query_vars['s'] = '';
+		$query->query_vars['story_budget_search'] = false;
 		$this->assertFalse( $this->invoke_protected_method( 'should_add_fields_to_wp_admin_search', [ $query ] ) );
 
-		// Test all conditions met.
+		// Test all conditions met for WP admin search.
 		$query->query_vars['s'] = 'test';
+		$query->query_vars['story_budget_search'] = false;
+		$query->is_main_query = true;
 		$this->assertTrue( $this->invoke_protected_method( 'should_add_fields_to_wp_admin_search', [ $query ] ) );
+
+		// Test story_budget_search parameter.
+		$pagenow = 'not-index.php'; // phpcs:ignore
+		$query->query_vars['s'] = 'test';
+		$query->query_vars['story_budget_search'] = true;
+		$this->assertTrue( $this->invoke_protected_method( 'should_add_fields_to_wp_admin_search', [ $query ] ) );
+
+		// Test story_budget_search parameter with empty search term.
+		$query->query_vars['s'] = '';
+		$query->query_vars['story_budget_search'] = true;
+		$this->assertFalse( $this->invoke_protected_method( 'should_add_fields_to_wp_admin_search', [ $query ] ) );
 	}
 
 	/**
