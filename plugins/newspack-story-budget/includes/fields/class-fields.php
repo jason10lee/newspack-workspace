@@ -250,6 +250,16 @@ class Fields {
 				'slug'               => 'is_locked',
 				'type'               => 'boolean',
 			],
+			[
+				'description'        => __( 'The status of the post in WordPress.', 'newspack-story-budget' ),
+				'get_value_callback' => [ __CLASS__, 'get_post_wp_status' ],
+				'is_editable'        => false,
+				'is_filterable'      => true,
+				'name'               => __( 'WP Status', 'newspack-story-budget' ),
+				'show_in_table'      => false,
+				'slug'               => 'wp_status',
+				'type'               => 'text',
+			],
 
 			// Fields specific to NNE Concord.
 			[
@@ -799,5 +809,23 @@ class Fields {
 			require_once ABSPATH . 'wp-admin/includes/post.php';
 		}
 		return (bool) \wp_check_post_lock( $post_id );
+	}
+
+	/**
+	 * Get the status of the post in WordPress.
+	 *
+	 * @param int $post_id The post ID.
+	 *
+	 * @return string The status of the post in WordPress.
+	 */
+	public static function get_post_wp_status( $post_id = null ) {
+		if ( ! $post_id ) {
+			$post_id = \get_the_ID();
+		}
+		$story = new Story( $post_id );
+		if ( ! $story->is_valid() ) {
+			return false;
+		}
+		return $story->post->post_status;
 	}
 }
