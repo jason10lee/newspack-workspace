@@ -144,6 +144,12 @@
 	}
 }
 
+/* Load More button */
+[data-type="newspack-blocks/homepage-articles"] .wp-block-button__link {
+	height: auto;
+	width: auto;
+}
+
 .newspack-block {
 	&--error.components-placeholder {
 		color: colors.$color__error;
