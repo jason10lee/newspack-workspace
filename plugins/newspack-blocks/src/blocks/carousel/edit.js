@@ -150,6 +150,7 @@ class Edit extends Component {
 			autoplay,
 			categories,
 			includeSubcategories,
+			categoryJoinType,
 			customTaxonomies,
 			delay,
 			hideControls,
@@ -361,7 +362,7 @@ class Edit extends Component {
 				</div>
 
 				<InspectorControls>
-					<PanelBody title={ __( 'Content', 'newspack-blocks' ) }>
+					<PanelBody title={ __( 'Content', 'newspack-blocks' ) } className='newspack-block__panel is-content'>
 						{ postsToShow && (
 							<QueryControls
 								numberOfItems={ postsToShow }
@@ -375,6 +376,10 @@ class Edit extends Component {
 								includeSubcategories={ includeSubcategories }
 								onIncludeSubcategoriesChange={ value =>
 									setAttributes( { includeSubcategories: value } )
+								}
+								categoryJoinType={ categoryJoinType }
+								onCategoryJoinTypeChange={ value =>
+									setAttributes( { categoryJoinType: value } )
 								}
 								tags={ tags }
 								onTagsChange={ value => setAttributes( { tags: value } ) }
