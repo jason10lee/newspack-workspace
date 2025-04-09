@@ -22,14 +22,18 @@ const appReducer = combineReducers( {
 } );
 
 const reducer = ( state, action ) => {
+	let newState;
+
 	if ( action.type === 'HYDRATE' ) {
-		return {
+		newState = {
 			...state,
-			...action.payload,
+			...{
+				[ action.payload.key ]: action.payload.data,
+			},
 		};
 	}
 
-	const newState = appReducer( state, action );
+	newState = appReducer( newState ?? state, action );
 
 	// Store cacheable state.
 	for ( const key in STORAGE_KEYS ) {

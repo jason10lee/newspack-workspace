@@ -2,10 +2,7 @@ import { INITIAL_STATE } from '../constants';
 
 export const actions = {
 	STORIES_SET: 'STORIES_SET',
-	SAVE_STORY_SUCCESS: 'SAVE_STORY_SUCCESS',
 	STORIES_APPEND: 'STORIES_APPEND',
-	STORIES_ADD: 'STORIES_ADD',
-	SAVE_STORY_FIELD_SUCCESS: 'SAVE_STORY_FIELD_SUCCESS',
 	STORY_META_SET: 'STORY_META_SET',
 	STORY_META_BATCH_SET: 'STORY_META_BATCH_SET',
 };
@@ -17,7 +14,6 @@ export default ( state = INITIAL_STATE.stories, action ) => {
 				...state,
 				...action.payload,
 			};
-		case actions.SAVE_STORY_SUCCESS:
 		case actions.STORIES_APPEND: {
 			const newState = { ...state };
 			for ( const [ id, story ] of Object.entries( action.payload ) ) {
@@ -25,19 +21,6 @@ export default ( state = INITIAL_STATE.stories, action ) => {
 			}
 			return newState;
 		}
-		case actions.STORIES_ADD:
-			return {
-				...state,
-				[ action.payload.id ]: action.payload,
-			};
-		case actions.SAVE_STORY_FIELD_SUCCESS:
-			return {
-				...state,
-				[ action.payload.id ]: {
-					...state[ action.payload.id ],
-					[ action.payload.slug ]: action.payload.value,
-				},
-			};
 		case actions.STORY_META_SET:
 			return {
 				...state,

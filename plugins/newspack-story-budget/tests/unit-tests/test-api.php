@@ -98,7 +98,7 @@ class Test_API extends \WP_UnitTestCase {
 			$data['stories']
 		);
 
-		$this->assertEquals( $story_ids, $response_story_ids );
+		$this->assertEqualsCanonicalizing( $story_ids, $response_story_ids );
 
 		$story_ids[] = 99999; // Bogus story ID.
 		$request->set_param( 'ids', $story_ids );

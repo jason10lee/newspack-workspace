@@ -174,7 +174,7 @@ export default () => {
 	const refresh = () => {
 		clearErrors();
 		fetchFields();
-		refreshStories();
+		refreshStories( false );
 	};
 
 	const actions = [

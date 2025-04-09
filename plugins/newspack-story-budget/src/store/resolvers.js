@@ -1,7 +1,6 @@
 /**
  * Internal dependencies
  */
-import { getCache } from './cache';
 import { NAMESPACE } from './constants';
 
 export const getFields =
@@ -32,11 +31,10 @@ export const getBudgets =
 
 export const getStories =
 	() =>
-	async ( { dispatch } ) => {
-		// If there are cached stories, refresh the cache. Otherwise, do a full fetch.
-		const cachedStories = getCache( 'stories' );
-		if ( cachedStories?.data && cachedStories?.timestamp ) {
-			await dispatch.refreshStories();
+	async ( { dispatch, select } ) => {
+		// If we have a last refresh timestamp, refresh the stories. Otherwise, do a full fetch.
+		if ( select.getLastRefresh() ) {
+			await dispatch.refreshStories( false );
 		} else {
 			await dispatch.fetchStories();
 		}

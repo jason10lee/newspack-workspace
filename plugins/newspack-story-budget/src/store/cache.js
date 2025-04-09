@@ -6,16 +6,12 @@ const STORAGE_KEY_BASE = 'newspack-story-budget-';
 // Cache configuration.
 export const STORAGE_KEYS = {
 	fields: {
-		actions: [
-			'fetchFields'
-		],
+		actions: [ 'fetchFields' ],
 		ttl: 1000 * 60 * 60 * 24, // 24 hours
 	},
 	stories: {
-		actions: [
-			'refreshStories',
-		],
-		ttl: 1000 * 60, // 1 minute
+		actions: [ 'refreshStories' ],
+		ttl: 1000 * 30, // 30 seconds
 	},
 	view: {}, // No expiration.
 };
@@ -56,11 +52,18 @@ export function getCache( key ) {
 	if ( ! STORAGE_KEYS.hasOwnProperty( key ) ) {
 		return null;
 	}
-	const cache = decode( sessionStorage.getItem( STORAGE_KEY_BASE + key ) );
-	if ( ! cache?.data ) {
+	try {
+		const cache = decode(
+			sessionStorage.getItem( STORAGE_KEY_BASE + key )
+		);
+		if ( ! cache?.data ) {
+			return null;
+		}
+		return cache;
+	} catch ( error ) {
+		console.warn( 'Unable to get cache for key:', key, error ); // eslint-disable-line no-console
 		return null;
 	}
-	return cache;
 }
 
 /**
@@ -73,7 +76,15 @@ export function setCache( key, data ) {
 	if ( ! STORAGE_KEYS.hasOwnProperty( key ) ) {
 		return;
 	}
-	sessionStorage.setItem( STORAGE_KEY_BASE + key, encode( { data, timestamp: Date.now() } ) );
+
+	try {
+		sessionStorage.setItem(
+			STORAGE_KEY_BASE + key,
+			encode( { data, timestamp: Date.now() } )
+		);
+	} catch ( error ) {
+		console.warn( 'Unable to set cache for key:', key, error ); // eslint-disable-line no-console
+	}
 }
 
 /**
@@ -85,5 +96,9 @@ export function deleteCache( key ) {
 	if ( ! STORAGE_KEYS.hasOwnProperty( key ) ) {
 		return;
 	}
-	sessionStorage.removeItem( STORAGE_KEY_BASE + key );
+	try {
+		sessionStorage.removeItem( STORAGE_KEY_BASE + key );
+	} catch ( error ) {
+		console.warn( 'Unable to delete cache for key:', key, error ); // eslint-disable-line no-console
+	}
 }

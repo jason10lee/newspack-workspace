@@ -19,7 +19,11 @@ export function* initializeEntitiesConfig() {
 		if ( stored?.data ) {
 			yield {
 				type: 'HYDRATE',
-				payload: { [ key ]: stored.data },
+				payload: {
+					key,
+					timestamp: stored.timestamp,
+					data: stored.data,
+				},
 			};
 		}
 	}
@@ -42,7 +46,13 @@ export function* initializeEntitiesConfig() {
 	for ( const key in STORAGE_KEYS ) {
 		const cache = STORAGE_KEYS[ key ];
 		if ( cache?.actions?.length && cache?.ttl ) {
-			setInterval( () => cache.actions.forEach( action => dispatch( NAMESPACE )[ action ]() ), cache.ttl );
+			setInterval(
+				() =>
+					cache.actions.forEach( action =>
+						dispatch( NAMESPACE )[ action ]()
+					),
+				cache.ttl
+			);
 		}
 	}
 }
@@ -155,17 +165,15 @@ export function* fetchStories() {
 		};
 		while ( stories.length < total ) {
 			const next = yield apiFetch( {
-				path: addQueryArgs(
-					`${ apiNamespace }/stories`, {
-						offset: stories.length
-					}
-				),
+				path: addQueryArgs( `${ apiNamespace }/stories`, {
+					offset: stories.length,
+				} ),
 			} );
 			stories.push( ...next.stories );
 			yield {
 				type: 'FETCH_PROGRESS',
 				payload: { result: next, progress: stories.length / total },
-			}
+			};
 		}
 		return {
 			type: 'STORIES_SET',
@@ -185,23 +193,26 @@ export function* fetchStories() {
 			type: 'STORIES_ERROR',
 			payload: { message },
 		};
+	} finally {
+		yield { type: 'FETCH_END' };
 	}
 }
 
 /**
  * Refresh stories modified since a certain timestamp from the API.
  *
+ * @param {boolean} silent Whether to suppress errors and loading state.
+ *
  * @return {Object} Action object.
  */
-export function* refreshStories() {
-	const cachedStories = getCache( 'stories' );
-	const { timestamp } = cachedStories || {};
+export function* refreshStories( silent = true ) {
+	const lastRefresh = select( NAMESPACE ).getLastRefresh();
 
-	yield { type: 'REFRESH_START' };
+	yield { type: 'REFRESH_START', payload: { silent } };
 	try {
 		const params = { metadata: true };
-		if ( timestamp ) {
-			params.since = Math.floor( timestamp / 1000 ) // UNIX timestamp in seconds.
+		if ( lastRefresh ) {
+			params.since = Math.floor( lastRefresh / 1000 ); // UNIX timestamp in seconds.
 		}
 		const result = yield apiFetch( {
 			path: addQueryArgs( `${ apiNamespace }/stories`, params ),
@@ -214,6 +225,9 @@ export function* refreshStories() {
 			} );
 			stories.push( ...next.stories );
 		}
+		if ( ! stories.length ) {
+			return;
+		}
 		return {
 			type: 'STORIES_APPEND',
 			payload: stories.reduce( ( acc, story ) => {
@@ -222,6 +236,9 @@ export function* refreshStories() {
 			}, {} ),
 		};
 	} catch ( error ) {
+		if ( silent ) {
+			return;
+		}
 		const message =
 			error?.message ||
 			__(
@@ -232,6 +249,8 @@ export function* refreshStories() {
 			type: 'STORIES_ERROR',
 			payload: { message },
 		};
+	} finally {
+		yield { type: 'REFRESH_END' };
 	}
 }
 
@@ -254,8 +273,8 @@ export function* fetchStory( id ) {
 		} );
 		yield { type: 'FETCH_STORY_SUCCESS', payload: { id } };
 		return {
-			type: 'STORIES_ADD',
-			payload: result,
+			type: 'STORIES_APPEND',
+			payload: { [ id ]: result },
 		};
 	} catch ( error ) {
 		const message =
@@ -310,7 +329,7 @@ export function* saveStory( id, story ) {
 			method: 'POST',
 			data: story,
 		} );
-		yield { type: 'STORIES_ADD', payload: result };
+		yield { type: 'STORIES_APPEND', payload: { [ id ]: result } };
 		return {
 			type: 'SAVE_STORY_SUCCESS',
 			payload: result,
@@ -331,7 +350,7 @@ export function* saveStoryField( id, slug, value ) {
 			method: 'POST',
 			data: { value },
 		} );
-		yield { type: 'STORIES_ADD', payload: result };
+		yield { type: 'STORIES_APPEND', payload: { [ id ]: result } };
 		return {
 			type: 'SAVE_STORY_FIELD_SUCCESS',
 			payload: { id, slug, value: result[ slug ] },
