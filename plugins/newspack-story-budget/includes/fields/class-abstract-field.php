@@ -76,6 +76,13 @@ abstract class Abstract_Field {
 	protected $show_in_table = false;
 
 	/**
+	 * Whether the field should be always visible in the dynamic Budgets table.
+	 *
+	 * @var bool
+	 */
+	protected $always_visible_in_table = false;
+
+	/**
 	 * Whether the field should be shown in the WP post editor sidebar.
 	 *
 	 * @var bool
@@ -156,16 +163,17 @@ abstract class Abstract_Field {
 	public function __construct( $args ) {
 		$this->errors = new \WP_Error();
 
-		$this->name                   = \sanitize_text_field( $args['name'] );
-		$this->description            = ! empty( $args['description'] ) ? \sanitize_text_field( $args['description'] ) : null;
-		$this->slug                   = ! empty( $args['slug'] ) ? \sanitize_title( $args['slug'] ) : \sanitize_title( $this->name );
-		$this->is_filterable          = ! empty( $args['is_filterable'] ) ? true : false;
-		$this->is_multiple            = ! empty( $args['is_multiple'] ) ? true : false;
-		$this->is_searchable          = ! empty( $args['is_searchable'] ) ? true : false;
-		$this->is_sortable            = ! empty( $args['is_sortable'] ) ? true : false;
-		$this->show_in_table          = ! empty( $args['show_in_table'] ) ? true : false;
-		$this->show_in_editor         = ! empty( $args['show_in_editor'] ) ? true : false;
-		$this->show_in_wp_posts_table = ! empty( $args['show_in_wp_posts_table'] ) ? true : false;
+		$this->name                    = \sanitize_text_field( $args['name'] );
+		$this->description             = ! empty( $args['description'] ) ? \sanitize_text_field( $args['description'] ) : null;
+		$this->slug                    = ! empty( $args['slug'] ) ? \sanitize_title( $args['slug'] ) : \sanitize_title( $this->name );
+		$this->is_filterable           = ! empty( $args['is_filterable'] ) ? true : false;
+		$this->is_multiple             = ! empty( $args['is_multiple'] ) ? true : false;
+		$this->is_searchable           = ! empty( $args['is_searchable'] ) ? true : false;
+		$this->is_sortable             = ! empty( $args['is_sortable'] ) ? true : false;
+		$this->show_in_table           = ! empty( $args['show_in_table'] ) ? true : false;
+		$this->always_visible_in_table = ! empty( $args['always_visible_in_table'] ) ? true : false;
+		$this->show_in_editor          = ! empty( $args['show_in_editor'] ) ? true : false;
+		$this->show_in_wp_posts_table  = ! empty( $args['show_in_wp_posts_table'] ) ? true : false;
 
 		if ( ! empty( $args['type'] ) ) {
 			$type = $this->set_type( $args['type'] );
@@ -307,18 +315,19 @@ abstract class Abstract_Field {
 	 */
 	public function to_array() {
 		return [
-			'slug'                   => $this->slug,
-			'name'                   => $this->name,
-			'description'            => $this->description,
-			'type'                   => $this->type,
-			'is_editable'            => $this->is_editable,
-			'is_multiple'            => $this->is_multiple,
-			'is_filterable'          => $this->is_filterable,
-			'is_searchable'          => $this->is_searchable,
-			'is_sortable'            => $this->is_sortable,
-			'show_in_table'          => $this->show_in_table,
-			'show_in_editor'         => $this->show_in_editor,
-			'show_in_wp_posts_table' => $this->show_in_wp_posts_table,
+			'slug'                    => $this->slug,
+			'name'                    => $this->name,
+			'description'             => $this->description,
+			'type'                    => $this->type,
+			'is_editable'             => $this->is_editable,
+			'is_multiple'             => $this->is_multiple,
+			'is_filterable'           => $this->is_filterable,
+			'is_searchable'           => $this->is_searchable,
+			'is_sortable'             => $this->is_sortable,
+			'show_in_table'           => $this->show_in_table,
+			'always_visible_in_table' => $this->always_visible_in_table,
+			'show_in_editor'          => $this->show_in_editor,
+			'show_in_wp_posts_table'  => $this->show_in_wp_posts_table,
 		];
 	}
 

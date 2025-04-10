@@ -152,8 +152,9 @@ export default () => {
 	const dataViewFields = fields.map( field => ( {
 		id: field.slug,
 		label: field.name,
-		isVisible: () => field.show_in_table,
+		isVisible: () => field.show_in_table || field.always_visible_in_table,
 		type: field.type,
+		enableHiding: ! field.always_visible_in_table,
 		enableSorting: field.is_sortable,
 		elements: getFieldElements( field ),
 		filterBy: field.is_filterable
