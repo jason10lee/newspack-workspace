@@ -78,6 +78,7 @@ export function setCache( key, data ) {
 	}
 
 	try {
+		sessionStorage.removeItem( STORAGE_KEY_BASE + key );
 		sessionStorage.setItem(
 			STORAGE_KEY_BASE + key,
 			encode( { data, timestamp: Date.now() } )
