@@ -88,9 +88,6 @@ workflows:
       - lint:
           requires:
             - build
-      - build_distributables:
-          requires:
-            - build
       - release:
           requires:
             - build
@@ -101,6 +98,11 @@ workflows:
                 - alpha
                 - /^hotfix\/.*/
                 - /^epic\/.*/
+      - build_distributables:
+          requires:
+            - build
+            # Running this after release ensure the version number in files will be correct.
+            - release
       - post_release:
           requires:
             - release

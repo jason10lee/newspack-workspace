@@ -1,3 +1,18 @@
+# [2.9.0-alpha.1](https://github.com/Automattic/newspack-theme/compare/v2.8.0...v2.9.0-alpha.1) (2025-04-04)
+
+
+### Bug Fixes
+
+* change content_width function name ([#2470](https://github.com/Automattic/newspack-theme/issues/2470)) ([9592756](https://github.com/Automattic/newspack-theme/commit/9592756c12271b0b34b6a4310a10cfc96a68c8ec))
+* correct appearance of membership discount in Woo ([#2465](https://github.com/Automattic/newspack-theme/issues/2465)) ([bc3a1f6](https://github.com/Automattic/newspack-theme/commit/bc3a1f64919ac5a5cdad3e7ac4de68c14c69cd42))
+* **notice:** fetchpriority notice for images ([#2472](https://github.com/Automattic/newspack-theme/issues/2472)) ([dfc820b](https://github.com/Automattic/newspack-theme/commit/dfc820b0059f1103ed80be19a4be719588f5576a))
+* remove deprecated geo-location support ([#2468](https://github.com/Automattic/newspack-theme/issues/2468)) ([8c8eca8](https://github.com/Automattic/newspack-theme/commit/8c8eca83d3b1a98331145d4012da47811a1f30bf))
+
+
+### Features
+
+* frontend display of bylines ([#2469](https://github.com/Automattic/newspack-theme/issues/2469)) ([33137ff](https://github.com/Automattic/newspack-theme/commit/33137ffb1256b6a2f7842c54b4b443fb7a6023cd))
+
 # [2.8.0](https://github.com/Automattic/newspack-theme/compare/v2.7.0...v2.8.0) (2025-03-31)
 
 
