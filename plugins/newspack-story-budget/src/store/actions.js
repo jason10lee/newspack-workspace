@@ -32,16 +32,6 @@ export function* initializeEntitiesConfig() {
 	yield resolveSelect( NAMESPACE ).getBudgets();
 	yield resolveSelect( NAMESPACE ).getStoriesMeta();
 
-	// Watch for story meta fetch queue.
-	setInterval( () => {
-		const storyIds = Object.keys(
-			select( NAMESPACE ).getStoryMetaFetchQueue()
-		);
-		if ( storyIds.length > 0 ) {
-			dispatch( NAMESPACE ).fetchStoryMetaBatch( storyIds );
-		}
-	}, 300 );
-
 	// Periodically refresh cacheable state.
 	for ( const key in STORAGE_KEYS ) {
 		const cache = STORAGE_KEYS[ key ];
@@ -327,7 +317,22 @@ export function* fetchStoryMetaBatch( storyIds ) {
 	};
 }
 
+let storyMetaFetchTimeout;
+
+const debouncedFetchStoryMetaBatch = () => {
+	clearTimeout( storyMetaFetchTimeout );
+	storyMetaFetchTimeout = setTimeout( () => {
+		const storyIds = Object.keys(
+			select( NAMESPACE ).getStoryMetaFetchQueue()
+		);
+		if ( storyIds.length > 0 ) {
+			dispatch( NAMESPACE ).fetchStoryMetaBatch( storyIds );
+		}
+	}, 300 );
+};
+
 export function queueStoryMetaFetch( id ) {
+	debouncedFetchStoryMetaBatch();
 	return {
 		type: 'STORY_META_FETCH_QUEUE',
 		payload: { id },
