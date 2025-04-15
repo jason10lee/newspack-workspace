@@ -101,8 +101,10 @@ export function setView( args ) {
 				return 0;
 			}
 			// When displaying hidden columns, sort by default order.
-			return fields.find( f => f.slug === a )?.default_order -
-				fields.find( f => f.slug === b )?.default_order;
+			return (
+				fields.find( f => f.slug === a )?.default_order -
+				fields.find( f => f.slug === b )?.default_order
+			);
 		} );
 	}
 	return {
@@ -209,7 +211,10 @@ export function* fetchStories() {
  * @return {Object} Action object.
  */
 export function* refreshStories( silent = true ) {
-	const lastRefresh = select( NAMESPACE ).getLastRefresh();
+	// If no last refresh timestamp is found, resort to 30 minutes ago.
+	const lastRefresh =
+		select( NAMESPACE ).getLastRefresh() ||
+		Date.now() - 30 * 60 * 1000;
 
 	yield { type: 'REFRESH_START', payload: { silent } };
 	try {

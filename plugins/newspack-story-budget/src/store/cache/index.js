@@ -1,3 +1,5 @@
+import { minify, restore } from './minifier';
+
 /**
  * Helper functions for caching data in session storage.
  */
@@ -59,6 +61,8 @@ export function getCache( key ) {
 		if ( ! cache?.data ) {
 			return null;
 		}
+		cache.data = restore( cache.data, cache.keyMap );
+
 		return cache;
 	} catch ( error ) {
 		console.warn( 'Unable to get cache for key:', key, error ); // eslint-disable-line no-console
@@ -77,11 +81,17 @@ export function setCache( key, data ) {
 		return;
 	}
 
+	const minified = minify( data );
+
 	try {
 		sessionStorage.removeItem( STORAGE_KEY_BASE + key );
 		sessionStorage.setItem(
 			STORAGE_KEY_BASE + key,
-			encode( { data, timestamp: Date.now() } )
+			encode( {
+				timestamp: Date.now(),
+				keyMap: minified.keyMap,
+				data: minified.data,
+			} )
 		);
 	} catch ( error ) {
 		console.warn( 'Unable to set cache for key:', key, error ); // eslint-disable-line no-console

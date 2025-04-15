@@ -1,4 +1,4 @@
-import { encode, decode, getCache, setCache, deleteCache } from './cache';
+import { encode, decode, getCache, setCache, deleteCache } from '.';
 
 describe( 'Cache functionality', () => {
 	beforeEach( () => {
