@@ -4,13 +4,7 @@
  * WordPress dependencies
  */
 import { Button, Modal, ToggleControl } from '@wordpress/components';
-import {
-	useCallback,
-	useMemo,
-	useEffect,
-	useState,
-	useRef,
-} from '@wordpress/element';
+import { useCallback, useMemo, useState, useRef } from '@wordpress/element';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/edit-post';
 import { __ } from '@wordpress/i18n';
@@ -105,6 +99,39 @@ const transformByline = element => {
 
 	return clonebylineElement.innerHTML;
 };
+
+/**
+ * Get the author tokens for a post.
+ *
+ * @param {number} postId The post ID.
+ *
+ * @return {Object[]} The author tokens.
+ */
+function useAuthorTokens( postId ) {
+	const { postAuthor, coAuthors } = useSelect( select => {
+		return {
+			postAuthor: select( coreStore ).getUser(
+				select( 'core/editor' ).getEditedPostAttribute( 'author' ),
+				BASE_QUERY
+			),
+			coAuthors:
+				postId && select( 'cap/authors' )
+					? select( 'cap/authors' ).getAuthors( postId )
+					: [],
+		};
+	} );
+
+	if ( coAuthors.length ) {
+		return coAuthors
+			.filter( author => author.userType === 'wpuser' )
+			.map( author => ( {
+				id: parseInt( author.id ),
+				name: author.display,
+			} ) );
+	}
+
+	return [ postAuthor ];
+}
 
 /**
  * Component for the custom byline modal.
@@ -213,9 +240,6 @@ const Tokens = ( { tokens, tokensInUse, insertToken } ) => {
  * The byline settings panel component.
  */
 const BylinesSettingsPanel = () => {
-	/** Tokens with authors assigned to the post */
-	const [ tokens, setTokens ] = useState( [] );
-
 	/** Tokens that are in use by the custom byline */
 	const [ tokensInUse, setTokensInUse ] = useState( [] );
 
@@ -234,39 +258,11 @@ const BylinesSettingsPanel = () => {
 		[]
 	);
 
+	const tokens = useAuthorTokens( postId );
+
 	const { getEditedPostAttribute } = useSelect( select =>
 		select( 'core/editor' )
 	);
-
-	/** Fetch post author(s) */
-	const { postAuthor, coAuthors } = useSelect( select => {
-		const { getUser } = select( coreStore );
-		const _authorId = getEditedPostAttribute( 'author' );
-
-		return {
-			postAuthor: getUser( _authorId, BASE_QUERY ),
-			coAuthors:
-				postId && select( 'cap/authors' )
-					? select( 'cap/authors' ).getAuthors( postId )
-					: [],
-		};
-	} );
-
-	/**
-	 * Set tokens when authors change.
-	 */
-	useEffect( () => {
-		if ( coAuthors?.length ) {
-			setTokens(
-				coAuthors.map( author => ( {
-					id: parseInt( author.id ),
-					name: author.display,
-				} ) )
-			);
-		} else {
-			setTokens( [ postAuthor ] );
-		}
-	}, [ coAuthors, postAuthor ] );
 
 	/** Toggle if custom byline is enabled */
 	const [ isEnabled, setIsEnabled ] = useState(
