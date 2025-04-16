@@ -116,7 +116,7 @@ export default () => {
 	}
 
 	const getFieldElements = field => {
-		if ( ! field.is_filterable ) {
+		if ( ! field.is_filterable || 'no' === field.is_filterable ) {
 			return undefined;
 		}
 		if ( field.options?.length ) {
@@ -157,10 +157,10 @@ export default () => {
 		enableHiding: ! field.always_visible_in_table,
 		enableSorting: field.is_sortable,
 		elements: getFieldElements( field ),
-		filterBy: field.is_filterable
+		filterBy: field.is_filterable && field.is_filterable !== 'no'
 			? {
 					operators: getFilterByOperators( field ),
-					isPrimary: field.slug === 'budgets',
+					isPrimary: field.is_filterable === 'always',
 			  }
 			: undefined,
 		render: value => (

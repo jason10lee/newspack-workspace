@@ -22,9 +22,9 @@ abstract class Abstract_Field {
 	/**
 	 * Optional description for the field, if editable.
 	 *
-	 * @var mixed
+	 * @var string
 	 */
-	protected $description = null;
+	protected $description = '';
 
 	/**
 	 * Whether the field is editable or read-only.
@@ -35,10 +35,13 @@ abstract class Abstract_Field {
 
 	/**
 	 * Whether the field can be used to filter stories.
+	 * yes - the field can be used to filter stories.
+	 * no - the field cannot be used to filter stories.
+	 * always - the field can be used to filter stories, and is always visible in the filter bar.
 	 *
-	 * @var bool
+	 * @var string yes|no|always
 	 */
-	protected $is_filterable = false;
+	protected $is_filterable = 'no';
 
 	/**
 	 * If true, the field's value is an array of values.
@@ -155,7 +158,7 @@ abstract class Abstract_Field {
 	 *    Configuration for initializing a field.
 	 *    @type string   $description?            Optional description of the field's purpose.
 	 *    @type bool     $is_editable?            Whether the field is editable or read-only.
-	 *    @type bool     $is_filterable?          Whether the field can be used to filter stories.
+	 *    @type string   $is_filterable?          Whether the field can be used to filter stories.
 	 *    @type bool     $is_multiple?            If true, the field's value is an array of values.
 	 *    @type bool     $is_searchable?          Whether the field can be used to search stories.
 	 *    @type bool     $is_sortable?            Whether the field can be used to sort stories.
@@ -171,26 +174,23 @@ abstract class Abstract_Field {
 		$this->errors = new \WP_Error();
 
 		$this->name                    = \sanitize_text_field( $args['name'] );
-		$this->description             = ! empty( $args['description'] ) ? \sanitize_text_field( $args['description'] ) : null;
+		$this->description             = ! empty( $args['description'] ) ? \sanitize_text_field( $args['description'] ) : $this->description;
 		$this->slug                    = ! empty( $args['slug'] ) ? \sanitize_title( $args['slug'] ) : \sanitize_title( $this->name );
-		$this->is_filterable           = ! empty( $args['is_filterable'] ) ? true : false;
-		$this->is_multiple             = ! empty( $args['is_multiple'] ) ? true : false;
-		$this->is_searchable           = ! empty( $args['is_searchable'] ) ? true : false;
-		$this->is_sortable             = ! empty( $args['is_sortable'] ) ? true : false;
-		$this->show_in_table           = ! empty( $args['show_in_table'] ) ? true : false;
-		$this->always_visible_in_table = ! empty( $args['always_visible_in_table'] ) ? true : false;
-		$this->show_in_editor          = ! empty( $args['show_in_editor'] ) ? true : false;
-		$this->show_in_wp_posts_table  = ! empty( $args['show_in_wp_posts_table'] ) ? true : false;
+		$this->is_filterable           = ! empty( $args['is_filterable'] ) && in_array( $args['is_filterable'], [ 'yes', 'no', 'always' ], true ) ? \sanitize_text_field( $args['is_filterable'] ) : $this->is_filterable;
+		$this->default_order           = isset( $args['default_order'] ) ? (float) $args['default_order'] : $this->default_order;
+		$this->is_multiple             = ! empty( $args['is_multiple'] ) ? true : $this->is_multiple;
+		$this->is_searchable           = ! empty( $args['is_searchable'] ) ? true : $this->is_searchable;
+		$this->is_sortable             = ! empty( $args['is_sortable'] ) ? true : $this->is_sortable;
+		$this->show_in_table           = ! empty( $args['show_in_table'] ) ? true : $this->show_in_table;
+		$this->always_visible_in_table = ! empty( $args['always_visible_in_table'] ) ? true : $this->always_visible_in_table;
+		$this->show_in_editor          = ! empty( $args['show_in_editor'] ) ? true : $this->show_in_editor;
+		$this->show_in_wp_posts_table  = ! empty( $args['show_in_wp_posts_table'] ) ? true : $this->show_in_wp_posts_table;
 
 		if ( ! empty( $args['type'] ) ) {
 			$type = $this->set_type( $args['type'] );
 			if ( \is_wp_error( $type ) ) {
 				$this->errors->add( $type->get_error_code(), $type->get_error_message() );
 			}
-		}
-
-		if ( isset( $args['default_order'] ) ) {
-			$this->default_order = (float) $args['default_order'];
 		}
 
 		if ( 191 < strlen( $this->get_post_meta_name() ) ) {

@@ -2,7 +2,7 @@ export const filter = ( stories, fields, view ) => {
 	for ( const { operator, value, field } of view.filters ) {
 		const fieldObject = fields.find( f => f.slug === field );
 
-		if ( ! fieldObject?.is_filterable ) {
+		if ( ! fieldObject?.is_filterable || 'no' === fieldObject.is_filterable ) {
 			continue;
 		}
 

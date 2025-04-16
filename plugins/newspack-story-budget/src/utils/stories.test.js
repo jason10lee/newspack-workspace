@@ -3,14 +3,16 @@ import { filter, sort } from './stories';
 describe( 'stories utils', () => {
 	describe( 'filter', () => {
 		const mockFields = [
-			{ slug: 'status', type: 'text', is_filterable: true },
+			{ slug: 'status', type: 'text', is_filterable: 'yes' },
 			{
 				slug: 'categories',
 				type: 'text',
-				is_filterable: true,
+				is_filterable: 'yes',
 				is_multiple: true,
 			},
-			{ slug: 'priority', type: 'number', is_filterable: true },
+			{ slug: 'priority', type: 'number', is_filterable: 'yes' },
+			{ slug: 'author', type: 'text', is_filterable: 'no' },
+			{ slug: 'featured', type: 'boolean', is_filterable: 'always' },
 		];
 
 		const mockStories = [
@@ -18,9 +20,23 @@ describe( 'stories utils', () => {
 				status: 'draft',
 				categories: [ 'news', 'politics' ],
 				priority: 1,
+				author: 'John Doe',
+				featured: true,
 			},
-			{ status: 'published', categories: [ 'sports' ], priority: 2 },
-			{ status: 'draft', categories: [ 'news' ], priority: 3 },
+			{
+				status: 'published',
+				categories: [ 'sports' ],
+				priority: 2,
+				author: 'Jane Smith',
+				featured: false,
+			},
+			{
+				status: 'draft',
+				categories: [ 'news' ],
+				priority: 3,
+				author: 'Bob Johnson',
+				featured: true,
+			},
 		];
 
 		it( 'should filter stories by exact match', () => {
@@ -115,6 +131,38 @@ describe( 'stories utils', () => {
 			};
 			const result = filter( mockStories, mockFields, view );
 			expect( result ).toEqual( mockStories );
+		} );
+
+		it( 'should handle fields with is_filterable set to "no"', () => {
+			const view = {
+				filters: [
+					{ operator: 'is', field: 'author', value: 'John Doe' },
+				],
+			};
+			const result = filter( mockStories, mockFields, view );
+			expect( result ).toEqual( mockStories );
+		} );
+
+		it( 'should filter fields with is_filterable set to "yes"', () => {
+			const view = {
+				filters: [
+					{ operator: 'is', field: 'priority', value: 1 },
+				],
+			};
+			const result = filter( mockStories, mockFields, view );
+			expect( result ).toHaveLength( 1 );
+			expect( result[ 0 ].priority ).toBe( 1 );
+		} );
+
+		it( 'should filter fields with is_filterable set to "always"', () => {
+			const view = {
+				filters: [
+					{ operator: 'is', field: 'featured', value: true },
+				],
+			};
+			const result = filter( mockStories, mockFields, view );
+			expect( result ).toHaveLength( 2 );
+			expect( result.every( story => story.featured === true ) ).toBe( true );
 		} );
 	} );
 
