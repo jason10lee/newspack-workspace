@@ -1,3 +1,10 @@
+## [6.4.2](https://github.com/Automattic/newspack-plugin/compare/v6.4.1...v6.4.2) (2025-04-17)
+
+
+### Bug Fixes
+
+* change nonce strategy for data events ([#3924](https://github.com/Automattic/newspack-plugin/issues/3924)) ([dba7e6b](https://github.com/Automattic/newspack-plugin/commit/dba7e6b8113c55db8c8091755cacb5ceed94209e))
+
 ## [6.4.1](https://github.com/Automattic/newspack-plugin/compare/v6.4.0...v6.4.1) (2025-04-16)
 
 
