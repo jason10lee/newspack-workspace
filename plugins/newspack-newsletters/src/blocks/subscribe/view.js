@@ -44,7 +44,7 @@ domReady( function () {
 		const spinner = document.createElement( 'span' );
 		spinner.classList.add( 'spinner' );
 
-		form.endFlow = ( message, status = 500, wasSubscribed = false ) => {
+		form.endFlow = ( message, status = 500, wasSubscribed = false, metadata = {} ) => {
 			container.setAttribute( 'data-status', status );
 			const messageNode = document.createElement( 'p' );
 			emailInput.removeAttribute( 'disabled' );
@@ -59,6 +59,19 @@ domReady( function () {
 			if ( status === 200 ) {
 				container.replaceChild( responseContainer, form );
 				form.dispatchEvent( successEvent );
+				if ( metadata?.registered ) {
+					window.newspackRAS = window.newspackRAS || [];
+					window.newspackRAS.push( function( ras ) {
+						const activity = { email: emailInput.value, registration_method: metadata?.registration_method };
+						if ( metadata?.newspack_popup_id ) {
+							activity.newspack_popup_id = metadata?.newspack_popup_id;
+						}
+						if ( metadata?.gate_post_id ) {
+							activity.gate_post_id = metadata?.gate_post_id;
+						}
+						ras.dispatchActivity( 'reader_registered', activity );
+					} );
+				}
 			}
 		};
 		form.addEventListener( 'submit', ev => {
@@ -96,9 +109,10 @@ domReady( function () {
 							message,
 							newspack_newsletters_subscribed: wasSubscribed,
 							newspack_newsletters_subscribe,
+							metadata,
 						} ) => {
 							nonce = newspack_newsletters_subscribe;
-							form.endFlow( message, res.status, wasSubscribed );
+							form.endFlow( message, res.status, wasSubscribed, metadata );
 						}
 					);
 			} );
