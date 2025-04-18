@@ -7,6 +7,8 @@
 
 namespace Newspack_Blocks;
 
+use Newspack_Blocks\Tracking\Data_Events;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -344,11 +346,6 @@ final class Modal_Checkout {
 		}
 
 		$cart_item_data = self::amend_cart_item_data( [ 'referer' => $referer ] );
-
-		$newspack_popup_id = filter_input( INPUT_GET, 'newspack_popup_id', FILTER_SANITIZE_NUMBER_INT );
-		if ( $newspack_popup_id ) {
-			$cart_item_data['newspack_popup_id'] = $newspack_popup_id;
-		}
 
 		/** Apply NYP custom price */
 		$price = filter_input( INPUT_GET, 'price', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
@@ -711,7 +708,7 @@ final class Modal_Checkout {
 									$price          = $variation->get_price();
 									$price_html     = $variation->get_price_html();
 									$frequency      = '';
-									$product_type = \Newspack_Blocks\Tracking\Data_Events::get_product_type( $product_id );
+									$product_type = Data_Events::get_product_type( $product_id );
 
 									// Use suggested price if NYP is active and set for variation.
 									if ( \Newspack_Blocks::can_use_name_your_price() && \WC_Name_Your_Price_Helpers::is_nyp( $variation_id ) ) {
@@ -1523,7 +1520,16 @@ final class Modal_Checkout {
 	 */
 	public static function pass_url_param_on_redirect( $location ) {
 		if ( self::is_modal_checkout() ) {
-			$location = \add_query_arg( [ 'modal_checkout' => 1 ], $location );
+			$params = [ 'modal_checkout' => 1 ];
+			$newspack_popup_id = filter_input( INPUT_GET, 'newspack_popup_id', FILTER_SANITIZE_NUMBER_INT );
+			$gate_post_id = filter_input( INPUT_GET, 'memberships_content_gate', FILTER_SANITIZE_NUMBER_INT );
+			if ( $newspack_popup_id ) {
+				$params['newspack_popup_id'] = $newspack_popup_id;
+			}
+			if ( $gate_post_id ) {
+				$params['memberships_content_gate'] = $gate_post_id;
+			}
+			$location = \add_query_arg( $params, $location );
 		}
 		return $location;
 	}
@@ -1679,10 +1685,8 @@ final class Modal_Checkout {
 			foreach ( $cart->get_cart() as $cart_item_key => $cart_item ) :
 				$_product = apply_filters( 'woocommerce_cart_item_product', $cart_item['data'], $cart_item, $cart_item_key );
 				if ( $_product && $_product->exists() && $cart_item['quantity'] > 0 && apply_filters( 'woocommerce_checkout_cart_item_visible', true, $cart_item, $cart_item_key ) ) :
-					// Create an empty array to store data order information.
-					$data_order_details = [];
 					// Create an array of order information to pass to GA4 via JavaScript.
-					$data_order_details = \Newspack_Blocks\Tracking\Data_Events::build_js_data_events( $_product->get_id(), $cart_item, $_product->get_parent_id() );
+					$data_order_details = Data_Events::build_js_data_events( $_product->get_id(), $cart_item );
 					?>
 					<p id="modal-checkout-product-details" data-order-details='<?php echo wp_json_encode( $data_order_details ); ?>'>
 						<strong>
