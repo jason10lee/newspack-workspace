@@ -1,3 +1,10 @@
+## [4.10.1](https://github.com/Automattic/newspack-blocks/compare/v4.10.0...v4.10.1) (2025-04-21)
+
+
+### Bug Fixes
+
+* **recaptcha:** move clone button code to Newspack\Recaptcha class ([#2111](https://github.com/Automattic/newspack-blocks/issues/2111)) ([a7bcdbd](https://github.com/Automattic/newspack-blocks/commit/a7bcdbd221b19fdbc4d565b0233d1b6de954c1b0))
+
 # [4.10.0](https://github.com/Automattic/newspack-blocks/compare/v4.9.2...v4.10.0) (2025-04-14)
 
 
