@@ -1,3 +1,10 @@
+## [6.4.4](https://github.com/Automattic/newspack-plugin/compare/v6.4.3...v6.4.4) (2025-04-21)
+
+
+### Bug Fixes
+
+* **recaptcha-v2:** clone Place Order button for all checkouts, not just modal ([#3930](https://github.com/Automattic/newspack-plugin/issues/3930)) ([90287ab](https://github.com/Automattic/newspack-plugin/commit/90287ab84e42762816633fd11fc7e677c7fa7780))
+
 ## [6.4.3](https://github.com/Automattic/newspack-plugin/compare/v6.4.2...v6.4.3) (2025-04-21)
 
 
