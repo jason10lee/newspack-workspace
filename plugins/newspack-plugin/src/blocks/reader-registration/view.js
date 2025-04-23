@@ -35,6 +35,7 @@ window.newspackRAS.push( function( readerActivation ) {
 				return;
 			}
 
+			let body = new FormData( form );
 			const messageElement = container.querySelector( '.newspack-registration__response' );
 			const submitElement = form.querySelector( 'button[type="submit"]' );
 			const spinner = document.createElement( 'span' );
@@ -72,23 +73,28 @@ window.newspackRAS.push( function( readerActivation ) {
 				container.classList.add( `newspack-registration--${ isSuccess ? 'success' : 'error' }` );
 				if ( isSuccess ) {
 					successElement.classList.remove( 'newspack-registration--hidden' );
-					form.remove();
 					if ( data?.email ) {
+						body = new FormData( form );
 						readerActivation.setReaderEmail( data.email );
 						// Set authenticated only if email is set, otherwise an error will be thrown.
 						readerActivation.setAuthenticated( data?.authenticated );
 
 						if ( data.authenticated && ! data.existing_user ) {
-							const activity = { email: data.email, registration_method: data?.metadata?.registration_method || 'registration-block' };
+							const lists = body.getAll( 'lists[]' );
+							const baseActivity = { email: data.email };
 							if ( data?.metadata?.newspack_popup_id ) {
-								activity.newspack_popup_id = data.metadata?.newspack_popup_id;
+								baseActivity.newspack_popup_id = data.metadata.newspack_popup_id;
 							}
 							if ( data?.metadata?.gate_post_id ) {
-								activity.gate_post_id = data.metadata?.gate_post_id;
+								baseActivity.gate_post_id = data.metadata.gate_post_id;
 							}
-							readerActivation.dispatchActivity( 'reader_registered', activity );
+							if ( lists?.length ) {
+								readerActivation.dispatchActivity( 'newsletter_signup', { ...baseActivity, newsletters_subscription_method: 'reader-registration', lists } );
+							}
+							readerActivation.dispatchActivity( 'reader_registered', { ...baseActivity, registration_method: data?.metadata?.registration_method || 'registration-block' } );
 						}
 					}
+					form.remove();
 				} else if ( messageNode ) {
 					messageElement.appendChild( messageNode );
 					messageElement.classList.remove( 'newspack-registration--hidden' );
@@ -108,7 +114,7 @@ window.newspackRAS.push( function( readerActivation ) {
 					return form.endLoginFlow( 'Please enter a vaild email address.', 400 );
 				}
 
-				const body = new FormData( form );
+				body = new FormData( form );
 				if ( ! body.has( 'npe' ) || ! body.get( 'npe' ) ) {
 					return form.endFlow( 'Please enter a vaild email address.', 400 );
 				}
