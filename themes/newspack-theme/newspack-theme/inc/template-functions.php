@@ -691,12 +691,28 @@ function newspack_convert_modified_to_time_ago( $post_time, $format, $post ) {
 }
 
 /**
+ * Return a filterable array of supported post types for the updated date functionality.
+ *
+ * @return array Array of post type slugs.
+ */
+function newspack_get_updated_date_supported_post_types() {
+	/**
+	 * Filter post types that support the updated date functionality.
+	 *
+	 * @return array Array of post type slugs.
+	 */
+	return apply_filters( 'newspack_updated_date_supported_post_types', array( 'post' ) );
+}
+
+/**
  * Check whether updated date should be displayed.
  */
 function newspack_should_display_updated_date() {
-	if ( ! is_singular( 'post' ) ) {
+	$supported_post_types = newspack_get_updated_date_supported_post_types();
+	if ( ! is_singular( $supported_post_types ) ) {
 		return false;
 	}
+
 	$show_updated_date_sitewide = get_theme_mod( 'post_updated_date', false );
 
 	$hide_updated_date_post     = get_post_meta( get_the_ID(), 'newspack_hide_updated_date', true );
