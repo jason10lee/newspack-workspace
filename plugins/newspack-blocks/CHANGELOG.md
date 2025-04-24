@@ -1,3 +1,10 @@
+## [4.10.2](https://github.com/Automattic/newspack-blocks/compare/v4.10.1...v4.10.2) (2025-04-24)
+
+
+### Bug Fixes
+
+* add the timezone to the Content Loop datetime attribute ([#2113](https://github.com/Automattic/newspack-blocks/issues/2113)) ([6fbd004](https://github.com/Automattic/newspack-blocks/commit/6fbd0044bd7b5822d464bd569cc4941df5d81e19))
+
 ## [4.10.1](https://github.com/Automattic/newspack-blocks/compare/v4.10.0...v4.10.1) (2025-04-21)
 
 
