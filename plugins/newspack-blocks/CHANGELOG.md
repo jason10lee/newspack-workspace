@@ -1,3 +1,10 @@
+# [4.11.0](https://github.com/Automattic/newspack-blocks/compare/v4.10.2...v4.11.0) (2025-05-08)
+
+
+### Features
+
+* update styles for the Subscription Confirmation checkbox ([#2117](https://github.com/Automattic/newspack-blocks/issues/2117)) ([e61c430](https://github.com/Automattic/newspack-blocks/commit/e61c43045d4fcff282baac6c18b1c3d711c7cc46))
+
 ## [4.10.2](https://github.com/Automattic/newspack-blocks/compare/v4.10.1...v4.10.2) (2025-04-24)
 
 
