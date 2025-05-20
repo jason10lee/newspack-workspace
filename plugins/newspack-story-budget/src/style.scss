@@ -348,6 +348,10 @@ body.toplevel_page_newspack-story-budget {
 		padding-left: 24px;
 		z-index: 99999;
 		pointer-events: none;
+
+		.components-snackbar__action.components-button {
+			margin-left: 8px;
+		}
 	}
 }
 
