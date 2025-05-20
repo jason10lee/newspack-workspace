@@ -22,8 +22,11 @@ import {
 	SlotFillProvider,
 	DropdownMenu,
 	Icon,
+	Snackbar,
 } from '@wordpress/components';
 import { plus } from '@wordpress/icons';
+import { store as noticesStore } from '@wordpress/notices';
+import { useSelect } from '@wordpress/data';
 
 /**
  * Internal dependencies.
@@ -71,6 +74,8 @@ const StoryPage = () => {
 
 const StoryBudget = () => {
 	const location = useLocation();
+
+	const notices = useSelect( ( select ) => select( noticesStore ).getNotices( 'newspack-story-budget' ) );
 
 	const navigationItems = [
 		{ label: __( 'Stories', 'newspack-story-budget' ), path: '/stories' },
@@ -192,6 +197,16 @@ const StoryBudget = () => {
 						</Route>
 						<Redirect to="/stories" />
 					</Switch>
+				</div>
+				<div className="newspack-story-budget__notices">
+					{ notices.map( ( notice ) => (
+						<Snackbar
+							key={ notice.id }
+							actions={ notice.actions }
+						>
+							{ notice.content }
+						</Snackbar>
+					) ) }
 				</div>
 			</div>
 		</SlotFillProvider>
