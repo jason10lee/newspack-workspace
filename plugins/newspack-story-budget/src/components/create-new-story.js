@@ -14,13 +14,19 @@ import {
 } from '@wordpress/components';
 
 /**
+ * External dependencies.
+ */
+import { useParams } from 'react-router-dom';
+
+/**
  * Internal dependencies.
  */
 import { NAMESPACE as storeNamespace } from '../store/constants';
 
 const CreateStoryModal = ( { onClose } ) => {
+	const { budgetId } = useParams();
 	const [ storyName, setStoryName ] = useState( '' );
-	const [ selectedBudget, setSelectedBudget ] = useState( '' );
+	const [ selectedBudget, setSelectedBudget ] = useState( budgetId || '' );
 	const [ newBudgetName, setNewBudgetName ] = useState( '' );
 
 	const {
@@ -39,6 +45,8 @@ const CreateStoryModal = ( { onClose } ) => {
 
 	const { createStory, fetchFields, clearErrors } =
 		useDispatch( storeNamespace );
+
+	if ( budgetId ) { fetchFields(); }
 
 	const isSubmitting = isCreatingStory || isCreatingBudget;
 	const error = storyError || budgetError;

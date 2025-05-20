@@ -52,7 +52,7 @@ const CreateBudgetModal = ( { onClose } ) => {
 					context: 'newspack-story-budget',
 					actions: [
 						{
-							url: '#/stories/new',
+							url: `#/stories/new/${result.id}`,
 							label: __( 'Create a new story', 'newspack-story-budget' ),
 							onClick: () => { removeNotice( result.id, 'newspack-story-budget' ); },
 						},
@@ -60,10 +60,6 @@ const CreateBudgetModal = ( { onClose } ) => {
 						 * TODO: Figure out how to display multiple actions in snackbar.
 						 * ref: https://github.com/WordPress/gutenberg/blob/7b3850b6a39ce45948f09efe750451c6323a4613/packages/components/src/snackbar/index.tsx#L120-L127
 						 */
-						{
-							url: '#/stories/existing',
-							label: 'add an existing one',
-						},
 					],
 					onDismiss: () => { removeNotice( result.id, 'newspack-story-budget' ); }
 				}

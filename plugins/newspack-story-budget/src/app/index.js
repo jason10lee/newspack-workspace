@@ -137,7 +137,7 @@ const StoryBudget = () => {
 							</AppHeaderActions>
 							<Stories />
 							<Switch>
-								<Route path="/stories/new" exact>
+								<Route path="/stories/new/:budgetId?" exact>
 									<ModalPage
 										title={ __(
 											'Add New Story / Create New Story',
