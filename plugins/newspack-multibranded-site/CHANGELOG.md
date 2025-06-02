@@ -1,3 +1,11 @@
+## [2.0.6](https://github.com/Automattic/newspack-multibranded-site/compare/v2.0.5...v2.0.6) (2025-06-02)
+
+
+### Bug Fixes
+
+* add customization class to fix site title url ([#73](https://github.com/Automattic/newspack-multibranded-site/issues/73)) ([aff3784](https://github.com/Automattic/newspack-multibranded-site/commit/aff37847cffbfaf07e1f7cc25584d1f4a1dcd76d))
+* **admin:** campaigns admin page detection ([#74](https://github.com/Automattic/newspack-multibranded-site/issues/74)) ([b5382f8](https://github.com/Automattic/newspack-multibranded-site/commit/b5382f85530ca852ff946d9686182caed5a06745))
+
 ## [2.0.5](https://github.com/Automattic/newspack-multibranded-site/compare/v2.0.4...v2.0.5) (2025-05-14)
 
 
