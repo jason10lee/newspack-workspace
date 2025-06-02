@@ -1,3 +1,21 @@
+## [2.9.1](https://github.com/Automattic/newspack-theme/compare/v2.9.0...v2.9.1) (2025-06-02)
+
+
+### Bug Fixes
+
+* add custom site titles ([#2486](https://github.com/Automattic/newspack-theme/issues/2486)) ([fc91ed9](https://github.com/Automattic/newspack-theme/commit/fc91ed905d5aaa020f9dbcb49d35291f9ecf0051))
+* add filter to show the update date on post types ([#2484](https://github.com/Automattic/newspack-theme/issues/2484)) ([ec9c1bf](https://github.com/Automattic/newspack-theme/commit/ec9c1bfd3bf782e88257f9e4349a3d4cd1630344))
+* **category-links:** adjust category links to handle links in sponsor descriptions ([#2488](https://github.com/Automattic/newspack-theme/issues/2488)) ([882c271](https://github.com/Automattic/newspack-theme/commit/882c2719071967670fd557383c5a9afbcad30282))
+
+## [2.9.1-alpha.1](https://github.com/Automattic/newspack-theme/compare/v2.9.0...v2.9.1-alpha.1) (2025-05-23)
+
+
+### Bug Fixes
+
+* add custom site titles ([#2486](https://github.com/Automattic/newspack-theme/issues/2486)) ([fc91ed9](https://github.com/Automattic/newspack-theme/commit/fc91ed905d5aaa020f9dbcb49d35291f9ecf0051))
+* add filter to show the update date on post types ([#2484](https://github.com/Automattic/newspack-theme/issues/2484)) ([ec9c1bf](https://github.com/Automattic/newspack-theme/commit/ec9c1bfd3bf782e88257f9e4349a3d4cd1630344))
+* **category-links:** adjust category links to handle links in sponsor descriptions ([#2488](https://github.com/Automattic/newspack-theme/issues/2488)) ([882c271](https://github.com/Automattic/newspack-theme/commit/882c2719071967670fd557383c5a9afbcad30282))
+
 # [2.9.0](https://github.com/Automattic/newspack-theme/compare/v2.8.0...v2.9.0) (2025-04-14)
 
 
