@@ -43,8 +43,9 @@ import Sites from '../components/sites';
 import AuthorizingSite from '../components/authorizing-site';
 import SitesNav from '../components/sites-nav';
 
-import { NOTICE_CONTEXT } from '../store/constants';
+import { NOTICE_CONTEXT, NAMESPACE as storeNamespace } from '../store/constants';
 import { isAuthorizingSite, getCurrentSiteName } from '../utils/sites';
+import { isBudgetStories } from '../utils/budgets';
 
 import '../style.scss';
 
@@ -89,9 +90,10 @@ const StoryPage = () => {
 const StoryBudget = () => {
 	const location = useLocation();
 
-	const notices = useSelect( select =>
-		select( noticesStore ).getNotices( NOTICE_CONTEXT )
-	);
+	const { notices, budgetStoryMeta } = useSelect( select => ( {
+		notices: select( noticesStore ).getNotices( NOTICE_CONTEXT ),
+		budgetStoryMeta: select( storeNamespace ).getBudgetStoryMeta(),
+	} ) );
 
 	const navigationItems = [
 		{ label: __( 'Stories', 'newspack-story-budget' ), path: '/stories' },
@@ -112,6 +114,10 @@ const StoryBudget = () => {
 
 		if ( currentNavItem ) {
 			parts.push( currentNavItem.label );
+		}
+
+		if ( isBudgetStories() && budgetStoryMeta?.name ) {
+			parts.push( budgetStoryMeta.name );
 		}
 
 		return parts.join( ' / ' );

@@ -54,10 +54,13 @@ const LoadingSpinner = () => (
 );
 
 export default () => {
-	const [ editMode, setEditMode ] = useState( false );
-	const [ searchTerm, setSearchTerm ] = useState( '' );
-	const [ budgetStatus, setBudgetStatus ] = useState( BUDGET_STATUS.ACTIVE );
-	const [ page, setPage ] = useState( 1 );
+	const { view, totalBudgets, isLoading } = useSelect(
+		select => ( {
+			view: select( storeNamespace ).getBudgetsView(),
+			totalBudgets: select( storeNamespace ).getBudgetsCount(),
+			isLoading: select( storeNamespace ).isBudgetsLoading(),
+		} )
+	);
 
 	const {
 		setBudgetsView,
@@ -65,14 +68,10 @@ export default () => {
 		searchBudgets
 	} = useDispatch( storeNamespace );
 
-	const { view, totalBudgets, isLoading } = useSelect(
-		select => ( {
-			view: select( storeNamespace ).getBudgetsView(),
-			totalBudgets: select( storeNamespace ).getBudgetsCount(),
-			isLoading: select( storeNamespace ).isBudgetsLoading(),
-		} ),
-		[ searchTerm, budgetStatus, page ]
-	);
+	const [ editMode, setEditMode ] = useState( false );
+	const [ searchTerm, setSearchTerm ] = useState( view.search );
+	const [ budgetStatus, setBudgetStatus ] = useState( view.filters?.find( filter => filter.field === 'status' )?.value ?? BUDGET_STATUS.ACTIVE );
+	const [ page, setPage ] = useState( view.page );
 
 	const doSearch = debounce( searchBudgets, 300 );
 

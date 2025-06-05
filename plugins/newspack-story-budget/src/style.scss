@@ -291,6 +291,12 @@ body.toplevel_page_newspack-story-budget {
 			}
 		}
 
+		&-actions {
+			.components-dropdown-menu__menu-item[aria-label="budget-archive"] {
+				color: #d63638;
+			}
+		}
+
 		/**
 		 * Overrides for the Newspack Action Card component to match the design.
 		 */

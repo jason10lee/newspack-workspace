@@ -121,3 +121,8 @@ export const getStoryError = ( state, storyId ) =>
 	state.errors[ `story-${ storyId }` ];
 
 export const getStoryMetaFetchQueue = state => state.meta.storyMetaFetchQueue;
+
+export const getBudgetStoryMeta = ( state ) => {
+	const budgetId = Object.values(state.stories)[0]?.budgets;
+	return state.budgets.find( b => b.id === budgetId );
+}

@@ -8,6 +8,7 @@ import { addQueryArgs } from '@wordpress/url';
  */
 import { STORAGE_KEYS, getCache, canUseCache } from './cache';
 import { NAMESPACE } from './constants';
+import { isBudgetStories, getCurrentBudget } from '../utils/budgets';
 
 export function* initializeEntitiesConfig() {
 	// Hydrate state from cache if available.
@@ -311,7 +312,10 @@ export function* fetchStories() {
 	};
 	yield { type: 'FETCH_START' };
 	try {
-		const result = yield apiFetch( { path: '/stories' } );
+		const path = isBudgetStories()
+			? addQueryArgs( `/budgets/${ getCurrentBudget() }/stories` )
+			: '/stories';
+		const result = yield apiFetch( { path } );
 		const { stories, total } = result;
 		yield {
 			type: 'FETCH_PROGRESS',

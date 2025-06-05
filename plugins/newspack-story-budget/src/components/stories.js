@@ -106,11 +106,19 @@ export default () => {
 		}
 	}, [ view.search ] );
 
+	useEffect( () => {
+		return () => {
+			if ( utils.budgets.isBudgetStories() ) {
+				utils.budgets.redirectWithCleanUrl();
+			}
+		};
+	}, [] );
+
 	if ( isLoading && undefined !== progress && progress < 1 ) {
 		return (
 			<div className="newspack-story-budget__loading">
 				<ProgressBar value={ Math.ceil( progress * 100 ) } />
-				<p>Fetching Stories...</p>
+				<p>{ __( 'Fetching Stories…', 'newspack-story-budget' ) }</p>
 			</div>
 		);
 	}
@@ -149,29 +157,37 @@ export default () => {
 		return [ 'isAny', 'isNone' ];
 	};
 
-	const dataViewFields = fields.map( field => ( {
-		id: field.slug,
-		label: field.name,
-		isVisible: () => field.show_in_table || field.always_visible_in_table,
-		type: field.type,
-		enableHiding: ! field.always_visible_in_table,
-		enableSorting: field.is_sortable,
-		elements: getFieldElements( field ),
-		filterBy:
-			field.is_filterable && field.is_filterable !== 'no'
-				? {
-						operators: getFilterByOperators( field ),
-						isPrimary: field.is_filterable === 'always',
-				  }
-				: undefined,
-		render: value => (
-			<TableRowField
-				story={ value.item }
-				field={ field }
-				allowEdit={ editMode && ! isRefreshing }
-			/>
-		),
-	} ) );
+	const dataViewFields = fields
+		.filter( field => {
+			// Skip the budgets field if we're viewing a budget's stories.
+			if ( 'budgets' === field.slug && utils.budgets.isBudgetStories() ) {
+				return false;
+			}
+			return true;
+		} )
+		.map( field => ( {
+			id: field.slug,
+			label: field.name,
+			isVisible: () => field.show_in_table || field.always_visible_in_table,
+			type: field.type,
+			enableHiding: ! field.always_visible_in_table,
+			enableSorting: field.is_sortable,
+			elements: getFieldElements( field ),
+			filterBy:
+				field.is_filterable && field.is_filterable !== 'no'
+					? {
+							operators: getFilterByOperators( field ),
+							isPrimary: field.is_filterable === 'always',
+					}
+					: undefined,
+			render: value => (
+				<TableRowField
+					story={ value.item }
+					field={ field }
+					allowEdit={ editMode && ! isRefreshing }
+				/>
+			),
+		} ) );
 
 	const refresh = () => {
 		clearErrors();

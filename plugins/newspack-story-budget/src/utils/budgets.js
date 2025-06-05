@@ -51,3 +51,24 @@ export const sortByOrder = ( items, order ) => {
 		return 0;
 	} );
 };
+
+export const isBudgetStories = () => {
+	const urlParams = new URLSearchParams( window.location.search );
+	return urlParams.has( 'budget_id' );
+}
+
+export const getCurrentBudget = () => {
+	const urlParams = new URLSearchParams( window.location.search );
+
+	const budgetId = urlParams.get( 'budget_id' );
+
+	return budgetId ? budgetId : null;
+}
+
+export const redirectWithCleanUrl = () => {
+	const url = new URL( window.location.href );
+
+	url.searchParams.delete( 'budget_id' );
+
+	window.location.replace( url.toString() );
+}

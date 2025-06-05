@@ -1,5 +1,6 @@
 import { minify, restore } from './minifier';
 import { isRemoteSite } from '../../utils/sites';
+import { isBudgetStories } from '../../utils/budgets';
 
 /**
  * Helper functions for caching data in session storage.
@@ -128,6 +129,11 @@ export function canUseCache() {
 
 	// Don't use cache if sessionStorage is not available.
 	if ( 'undefined' === typeof sessionStorage ) {
+		return false;
+	}
+
+	// Don't use cache if the user is on the budget stories page.
+	if ( isBudgetStories() ) {
 		return false;
 	}
 

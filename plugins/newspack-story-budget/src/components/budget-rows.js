@@ -161,7 +161,13 @@ const BudgetRows = ( { allowEdit, budgetStatus, isSearching } ) => {
 	const getBudgetControls = ( budget ) => [
 		{
 			title: __( 'View Stories', 'newspack-story-budget' ),
-			onClick: () => {},
+			onClick: () => {
+				const url = new URL( window.location.href );
+				url.hash = '#/stories';
+				url.searchParams.set( 'budget_id', budget.id );
+
+				window.location.assign( url.toString() );
+			},
 		},
 		{
 			title: budget.archived
@@ -177,6 +183,7 @@ const BudgetRows = ( { allowEdit, budgetStatus, isSearching } ) => {
 					}
 				);
 			},
+			label: budget.archived ? 'budget-unarchive' : 'budget-archive',
 		}
 	];
 
@@ -251,9 +258,9 @@ const BudgetRows = ( { allowEdit, budgetStatus, isSearching } ) => {
 											icon={ moreVertical }
 											label={ __( 'Actions', 'newspack-story-budget' ) }
 											controls={ getBudgetControls( budget ) }
-											className="newspack-story-budget__budget-actions"
 											popoverProps={ {
 												placement: 'bottom-end',
+												className: 'newspack-story-budget__budget-actions',
 											} }
 										/>
 									)

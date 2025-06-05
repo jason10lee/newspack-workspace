@@ -2,6 +2,7 @@
  * Internal dependencies
  */
 import { NAMESPACE } from './constants';
+import { canUseCache } from '../store/cache';
 
 export const getFields =
 	() =>
@@ -32,8 +33,8 @@ export const getBudgets =
 export const getStories =
 	() =>
 	async ( { dispatch, select } ) => {
-		// If we have a last refresh timestamp, refresh the stories. Otherwise, do a full fetch.
-		if ( select.getLastRefresh() ) {
+		// If we have a last refresh timestamp or if we want to fetch a budget's stories, refresh the stories. Otherwise, do a full fetch.
+		if ( ! canUseCache() && select.getLastRefresh() ) {
 			await dispatch.refreshStories( false );
 		} else {
 			await dispatch.fetchStories();
