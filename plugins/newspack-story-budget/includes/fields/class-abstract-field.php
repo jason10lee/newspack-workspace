@@ -152,6 +152,13 @@ abstract class Abstract_Field {
 	protected $errors = null;
 
 	/**
+	 * Weather the field should be show when creating a new story via add new story modal.
+	 * 
+	 * @var bool
+	 */
+	protected $show_in_add_new_story = false;
+
+	/**
 	 * Object contructor.
 	 *
 	 * @param array $args {
@@ -164,6 +171,7 @@ abstract class Abstract_Field {
 	 *    @type bool     $is_sortable?            Whether the field can be used to sort stories.
 	 *    @type string   $name                    The human-readable name of the field.
 	 *    @type string   $show_in_table?          Whether the field should be shown in the dynamic Budgets table.
+	 *    @type bool     $show_in_add_new_story? Whether the field should be shown in the add new story modal.
 	 *    @type string   $show_in_editor?         Whether the field should be shown in the WP post editor sidebar.
 	 *    @type string   $show_in_wp_posts_table? Whether the field should be shown in the WP posts table.
 	 *    @type string   $slug?                   The unique slug ID for the field. If not given, will be generated from the name.
@@ -185,6 +193,7 @@ abstract class Abstract_Field {
 		$this->always_visible_in_table = ! empty( $args['always_visible_in_table'] ) ? true : $this->always_visible_in_table;
 		$this->show_in_editor          = ! empty( $args['show_in_editor'] ) ? true : $this->show_in_editor;
 		$this->show_in_wp_posts_table  = ! empty( $args['show_in_wp_posts_table'] ) ? true : $this->show_in_wp_posts_table;
+		$this->show_in_add_new_story   = ! empty( $args['show_in_add_new_story'] ) ? true : $this->show_in_add_new_story;
 
 		if ( ! empty( $args['type'] ) ) {
 			$type = $this->set_type( $args['type'] );
@@ -349,6 +358,7 @@ abstract class Abstract_Field {
 			'always_visible_in_table' => $this->always_visible_in_table,
 			'show_in_editor'          => $this->show_in_editor,
 			'show_in_wp_posts_table'  => $this->show_in_wp_posts_table,
+			'show_in_add_new_story'   => $this->show_in_add_new_story,
 		];
 	}
 
@@ -359,6 +369,15 @@ abstract class Abstract_Field {
 	 */
 	public function show_in_wp_posts_table() {
 		return $this->show_in_wp_posts_table;
+	}
+
+	/**
+	 * True if the field should be shown in add new story modal, false if not.
+	 *
+	 * @return bool
+	 */
+	public function show_in_add_new_story() {
+		return $this->show_in_add_new_story;
 	}
 
 	/**

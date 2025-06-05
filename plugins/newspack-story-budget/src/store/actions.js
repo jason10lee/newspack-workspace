@@ -223,12 +223,12 @@ export function* createBudget( budget ) {
  * @return {Object} Action object.
  */
 export function* createStory( storyData ) {
-	if ( ! storyData.title || ! storyData.title.trim() ) {
+	if ( ! storyData.name || ! storyData.name.trim() ) {
 		return {
 			type: 'SET_STORY_ERROR',
 			payload: {
 				message: __(
-					'Story title is required',
+					'Story name is required',
 					'newspack-story-budget'
 				),
 			},
@@ -268,10 +268,13 @@ export function* createStory( storyData ) {
 			storyData.budgets = [ budgetResult.id ];
 		}
 
-		const storyDataToSend = {
-			title: storyData.title || '',
-			budgets: storyData.budgets || [],
-		};
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		const { newBudgetName, ...storyDataToSend } = storyData;
+
+		// fallback to title if name is not provided.
+		if ( ! storyDataToSend.title || ! storyDataToSend.title.trim() ) {
+			storyDataToSend.title = storyDataToSend.name.trim();
+		}
 
 		const result = yield apiFetch( {
 			path: '/stories',

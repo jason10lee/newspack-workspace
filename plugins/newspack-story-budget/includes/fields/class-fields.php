@@ -368,16 +368,16 @@ class Fields {
 				'default_order' => 18,
 			],
 			[
-				'description'   => __( 'The print publications this story will be published on.', 'newspack-story-budget' ),
-				'is_editable'   => true,
-				'is_sortable'   => false,
-				'is_multiple'   => true,
-				'is_filterable' => 'always',
-				'name'          => __( 'Publications', 'newspack-story-budget' ),
-				'show_in_table' => true,
-				'slug'          => 'nne_publications',
-				'type'          => 'text',
-				'options'       => [
+				'description'           => __( 'The print publications this story will be published on.', 'newspack-story-budget' ),
+				'is_editable'           => true,
+				'is_sortable'           => false,
+				'is_multiple'           => true,
+				'is_filterable'         => 'always',
+				'name'                  => __( 'Publications', 'newspack-story-budget' ),
+				'show_in_table'         => true,
+				'slug'                  => 'nne_publications',
+				'type'                  => 'text',
+				'options'               => [
 					[
 						'label' => 'Concord Monitor',
 						'value' => 'concordmonitor.com',
@@ -419,7 +419,8 @@ class Fields {
 						'value' => 'vnews.com',
 					],
 				],
-				'default_order' => 19,
+				'default_order'         => 19,
+				'show_in_add_new_story' => true,
 			],
 		];
 	}

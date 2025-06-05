@@ -452,8 +452,8 @@ class API {
 	 * @return \WP_REST_Response|\WP_Error Rest response or error.
 	 */
 	public static function create_story( $request ) {
-		$title      = $request->get_param( 'title' );
-		$budget_ids = $request->get_param( 'budgets' );
+		$fields     = $request->get_params();
+		$title      = $fields['title'] ?? '';
 
 		if ( empty( $title ) ) {
 			return new \WP_Error(
@@ -463,7 +463,7 @@ class API {
 			);
 		}
 
-		if ( empty( $budget_ids ) || ! is_array( $budget_ids ) ) {
+		if ( isset( $fields['budgets'] ) && ( empty( $fields['budgets'] ) || ! is_array( $fields['budgets'] ) ) ) {
 			return new \WP_Error(
 				'invalid_story_budget',
 				__( 'At least one budget must be selected.', 'newspack-story-budget' ),
@@ -486,19 +486,13 @@ class API {
 		}
 
 		$story = new Story( $post_id );
-		$set_fields = $story->update(
-			[
-				'name'   => $title,
-				'status' => 'writing',
-			]
-		);
+		
+		$excluded_keys = [ 'title', 'newBudgetName', '_locale' ];
+		$custom_fields = array_diff_key( $fields, array_flip( $excluded_keys ) );
+		$set_fields    = $story->update( $custom_fields );
 
 		if ( is_wp_error( $set_fields ) ) {
 			return $set_fields;
-		}
-
-		if ( ! empty( $budget_ids ) && is_array( $budget_ids ) ) {
-			$story->update_budgets( $budget_ids );
 		}
 
 		return rest_ensure_response( $story->to_array() );

@@ -375,6 +375,16 @@ body.toplevel_page_newspack-story-budget {
 		color: wp-colors.$alert-red;
 	}
 
+	&__field-label {
+		font-size: 11px;
+		font-weight: 500;
+		line-height: 1.4;
+		text-transform: uppercase;
+		display: block;
+		margin-bottom: calc(8px);
+		padding: 0;
+	}
+
 	&__notices {
 		position: fixed;
 		bottom: 24px;

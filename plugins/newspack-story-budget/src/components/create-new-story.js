@@ -12,6 +12,7 @@ import {
 	TextControl,
 	SelectControl,
 } from '@wordpress/components';
+import StoryFieldControl from './story-field-control';
 
 /**
  * Internal dependencies.
@@ -22,6 +23,7 @@ const CreateStoryModal = ( { onClose } ) => {
 	const [ storyName, setStoryName ] = useState( '' );
 	const [ selectedBudget, setSelectedBudget ] = useState( '' );
 	const [ newBudgetName, setNewBudgetName ] = useState( '' );
+	const [ customFieldValues, setCustomFieldValues ] = useState( {} );
 
 	const {
 		budgetsField,
@@ -29,12 +31,14 @@ const CreateStoryModal = ( { onClose } ) => {
 		budgetError,
 		isCreatingStory,
 		isCreatingBudget,
+		allfields,
 	} = useSelect( select => ( {
 		budgetsField: select( storeNamespace ).getField( 'budgets' ),
 		storyError: select( storeNamespace ).getErrors()?.storyError || null,
 		budgetError: select( storeNamespace ).getErrors()?.budgetError || null,
 		isCreatingStory: select( storeNamespace ).isCreatingStory(),
 		isCreatingBudget: select( storeNamespace ).isCreatingBudget(),
+		allfields: select( storeNamespace ).getFields() || {},
 	} ) );
 
 	const { createStory, fetchFields, clearErrors } =
@@ -52,14 +56,22 @@ const CreateStoryModal = ( { onClose } ) => {
 		...( budgetsField?.options || [] ),
 	];
 
+	const handleFieldChange = ( fieldSlug, newValue ) => {
+		setCustomFieldValues( prev => ( {
+			...prev,
+			[ fieldSlug ]: newValue,
+		} ) );
+	};
+
 	const handleSubmit = async e => {
 		e.preventDefault();
 
 		clearErrors();
 
 		const createStoryArgs = {
-			title: storyName.trim(),
+			name: storyName.trim(),
 			budgets: [],
+			... customFieldValues,
 		};
 
 		if ( selectedBudget === 'new' ) {
@@ -117,6 +129,21 @@ const CreateStoryModal = ( { onClose } ) => {
 					</div>
 				) }
 
+				{ Object.entries( allfields )
+					.filter( ( [ , field ] ) => field?.show_in_add_new_story )
+					.map( ( [ , field ] ) => (
+						<div key={ field.slug }>
+							<div className="newspack-story-budget__field-label">
+								{ field.name }
+							</div>
+							<StoryFieldControl
+								field={ field }
+								value={ customFieldValues[ field.slug ] }
+								onChange={ newValue => handleFieldChange( field.slug, newValue ) }
+							/>
+						</div>
+					) )
+				}
 				{ error && (
 					<div className="newspack-story-budget__error-message">
 						{ error.message }
