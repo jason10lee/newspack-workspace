@@ -690,7 +690,19 @@ function newspack_the_site_title() {
 	echo wp_kses_post( newspack_site_title() );
 }
 
-// post_modified
+/**
+ * If available, returns a link to the accessibility statement page.
+ */
+function newspack_accessibility_page_link() {
+	// Check if the Newspack Accessibility Statement Page class exists.
+	if ( class_exists( '\Newspack\Accessibility_Statement_Page' ) ) {
+		$page_data = \Newspack\Accessibility_Statement_Page::get_page();
+		// If an Accessibility Statement page exists and is published, display a link to it.
+		if ( $page_data && ( $page_data['pageUrl'] ?? '' ) && 'publish' === ( $page_data['status'] ?? '' ) ) {
+			echo '<a class="accessibility-statement-link" href="' . esc_url( $page_data['pageUrl'] ) . '">' . esc_html( $page_data['title'] ?? '' ) . '</a>';
+		}
+	}
+}
 
 /**
  * Change date to 'time ago' format if enabled in the Customizer.
