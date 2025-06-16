@@ -26,6 +26,42 @@ export const useFields = () => {
 };
 
 /**
+ * Hook to get the field enhanced with props from the story metadata.
+ *
+ * @param {number} storyId   The story ID.
+ * @param {string} fieldSlug The field slug.
+ *
+ * @return {Object} The field enhanced with props.
+ */
+export const useStoryField = ( storyId, fieldSlug ) => {
+	const field = useSelect(
+		select => select( NAMESPACE ).getField( fieldSlug ),
+		[ fieldSlug ]
+	);
+
+	const fieldsProps = useSelect(
+		select => select( NAMESPACE ).getStoryMeta( storyId, 'fields_props' ),
+		[ storyId ]
+	);
+
+	return useMemo( () => {
+		if ( ! field ) {
+			return null;
+		}
+
+		const fieldProps = fieldsProps?.[ fieldSlug ];
+		if ( ! fieldProps ) {
+			return field;
+		}
+
+		return {
+			...field,
+			...fieldProps,
+		};
+	}, [ field, fieldsProps ] );
+};
+
+/**
  * Hook to get the fields for DataViews.
  *
  * @param {Object}  params           The hook parameters.

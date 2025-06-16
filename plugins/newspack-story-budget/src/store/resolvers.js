@@ -34,7 +34,7 @@ export const getStories =
 	() =>
 	async ( { dispatch, select } ) => {
 		// If we have a last refresh timestamp or if we want to fetch a budget's stories, refresh the stories. Otherwise, do a full fetch.
-		if ( ! canUseCache() && select.getLastRefresh() ) {
+		if ( canUseCache() && select.getLastRefresh() ) {
 			await dispatch.refreshStories( false );
 		} else {
 			await dispatch.fetchStories();

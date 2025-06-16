@@ -21,6 +21,7 @@ import { useState } from '@wordpress/element';
 import { NAMESPACE as storeNamespace } from '../store/constants';
 import StoryFieldControl from './story-field-control';
 import utils from '../utils';
+import { useStoryField } from '../hooks';
 
 export default ( {
 	fieldId,
@@ -32,17 +33,19 @@ export default ( {
 	saveInPlace = false,
 	popoverProps,
 } ) => {
-	const { story, field, canEditStory, isLoadingStory, fieldError } =
-		useSelect( select => ( {
+	const { story, canEditStory, isLoadingStory, fieldError } = useSelect(
+		select => ( {
 			story: select( storeNamespace ).getStory( storyId ),
-			field: select( storeNamespace ).getField( fieldId ),
 			isLoadingStory: select( storeNamespace ).isLoadingStory( storyId ),
 			canEditStory: select( storeNamespace ).canEditStory( storyId ),
 			fieldError: select( storeNamespace ).getFieldError(
 				storyId,
 				fieldId
 			),
-		} ) );
+		} )
+	);
+
+	const field = useStoryField( storyId, fieldId );
 
 	const { saveStoryField, clearErrors } = useDispatch( storeNamespace );
 
@@ -88,7 +91,14 @@ export default ( {
 	}
 
 	return (
-		<div className="newspack-story-budget__field">
+		// Disable reason: we need to prevent the click event from bubbling up to
+		// the table row, which may trigger bulk edit selection and stop the
+		// popover from opening.
+		// eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+		<div
+			className="newspack-story-budget__field"
+			onClick={ e => e.stopPropagation() }
+		>
 			<Dropdown
 				open={ isOpen && ! isLoadingStory }
 				popoverProps={
