@@ -20,11 +20,8 @@ import {
 	Modal,
 	Button,
 	SlotFillProvider,
-	DropdownMenu,
-	Icon,
 	Snackbar,
 } from '@wordpress/components';
-import { plus } from '@wordpress/icons';
 import { store as noticesStore } from '@wordpress/notices';
 import { useSelect } from '@wordpress/data';
 
@@ -149,41 +146,17 @@ const StoryBudget = () => {
 					<Switch>
 						<Route path="/stories">
 							<AppHeaderActions>
-								<DropdownMenu
-									label={ __(
-										'Add New Story',
-										'newspack-story-budget'
-									) }
-									toggleProps={ {
-										variant: 'primary',
-										children: __(
+								{ canManage && (
+									<Button
+										variant="primary"
+										href="#/stories/new"
+									>
+										{ __(
 											'Add New Story',
 											'newspack-story-budget'
-										),
-									} }
-									controls={ [
-										{
-											title: __(
-												'Create New Story',
-												'newspack-story-budget'
-											),
-											onClick: () =>
-												( window.location.href =
-													'#/stories/new' ),
-										},
-										{
-											title: __(
-												'Add Existing Story(ies)',
-												'newspack-story-budget'
-											),
-											onClick: () =>
-												( window.location.href =
-													'#/stories/existing' ),
-										},
-									] }
-									icon={ <Icon icon={ plus } /> }
-									iconPosition="right"
-								/>
+										) }
+									</Button>
+								) }
 								<SitesNav />
 							</AppHeaderActions>
 							<Stories />
@@ -204,7 +177,7 @@ const StoryBudget = () => {
 								<Route path="/stories/new" exact>
 									<ModalPage
 										title={ __(
-											'Add New Story / Create New Story',
+											'Add New Story',
 											'newspack-story-budget'
 										) }
 										closeHref="#/stories"
@@ -217,15 +190,6 @@ const StoryBudget = () => {
 											}
 										/>
 									</ModalPage>
-								</Route>
-								<Route path="/stories/existing" exact>
-									<ModalPage
-										title={ __(
-											'Add Existing Story(ies)',
-											'newspack-story-budget'
-										) }
-										closeHref="#/stories"
-									/>
 								</Route>
 								<Route path="/stories/:id">
 									<StoryPage />
