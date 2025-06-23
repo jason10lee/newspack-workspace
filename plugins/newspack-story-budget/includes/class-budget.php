@@ -33,6 +33,13 @@ class Budget {
 	public $archived;
 
 	/**
+	 * Auto-archive date.
+	 *
+	 * @var string|null
+	 */
+	public $archive_at;
+
+	/**
 	 * Stories query object.
 	 *
 	 * @var \WP_Query
@@ -66,6 +73,11 @@ class Budget {
 	const ORDER_META_KEY = 'order';
 
 	/**
+	 * Meta Key for archive date.
+	 */
+	const ARCHIVE_DATE_META_KEY = 'auto_archive_date';
+
+	/**
 	 * Constructor.
 	 *
 	 * @param int|\WP_Term $term Budget ID or term object.
@@ -81,6 +93,7 @@ class Budget {
 
 		$this->archived    = (bool) get_term_meta( $this->id, self::ARCHIVE_META_KEY, true );
 		$this->order       = (int) get_term_meta( $this->id, self::ORDER_META_KEY, true );
+		$this->archive_at  = $this->get_auto_archive();
 		$this->story_count = $this->get_stories_count();
 	}
 
@@ -121,6 +134,7 @@ class Budget {
 	public function archive() {
 		$this->archived = true;
 		$this->order    = 0;
+		$this->clear_auto_archive();
 		delete_term_meta( $this->id, self::ORDER_META_KEY );
 		return \update_term_meta( $this->id, self::ARCHIVE_META_KEY, true );
 	}
@@ -219,6 +233,7 @@ class Budget {
 			'description' => $this->term->description,
 			'slug'        => $this->term->slug,
 			'archived'    => $this->archived,
+			'archive_at'  => $this->archive_at,
 			'story_count' => $this->story_count,
 			'order'       => $this->order,
 		];
@@ -243,5 +258,44 @@ class Budget {
 	 */
 	public function get_stories_count() {
 		return 0;
+	}
+
+	/**
+	 * Get the budget term object.
+	 *
+	 * @param string $date Optional. The date to format the term object.
+	 *
+	 * @return \WP_Term
+	 */
+	public function set_auto_archive( $date ) {
+		if ( $this->archived ) {
+			return false;
+		}
+
+		if ( ! $date instanceof \DateTime ) {
+			$date = new \DateTime( $date );
+		}
+
+		$this->archive_at = $date->setTime( 0, 0, 0 )->format( 'c' );
+		return update_term_meta( $this->id, self::ARCHIVE_DATE_META_KEY, $this->archive_at );
+	}
+
+	/**
+	 * Get the auto-archive date for this budget.
+	 *
+	 * @return string The auto-archive date in ISO 8601 format, or an empty string if not set.
+	 */
+	public function get_auto_archive() {
+		$date = get_term_meta( $this->id, self::ARCHIVE_DATE_META_KEY, true );
+		return empty( $date ) ? '' : ( new \DateTime( $date ) )->format( 'c' );
+	}
+
+	/**
+	 * Clear the auto-archive date for this budget.
+	 */
+	public function clear_auto_archive() {
+		$result = delete_term_meta( $this->id, self::ARCHIVE_DATE_META_KEY );
+		$this->archive_at = '';
+		return $result;
 	}
 }

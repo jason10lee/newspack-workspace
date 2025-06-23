@@ -144,4 +144,81 @@ class Test_Budgets extends \WP_UnitTestCase {
 		$this->assertCount( 1, $result );
 		$this->assertEquals( $story_1, $result[0]->id );
 	}
+
+	/**
+	 * Test register_cron_jobs and clear_cron_jobs.
+	 */
+	public function test_register_and_clear_cron_jobs() {
+		Budgets::clear_cron_jobs();
+
+		$this->assertFalse(
+			wp_next_scheduled( Budgets::AUTO_ARCHIVE_CRON_HOOK ),
+			'Cron hook should not be scheduled initially'
+		);
+
+		Budgets::register_cron_jobs();
+
+		$timestamp = wp_next_scheduled( Budgets::AUTO_ARCHIVE_CRON_HOOK );
+		$this->assertNotFalse(
+			$timestamp,
+			'Cron hook should be scheduled after registration'
+		);
+
+		Budgets::clear_cron_jobs();
+
+		$this->assertFalse(
+			wp_next_scheduled( Budgets::AUTO_ARCHIVE_CRON_HOOK ),
+			'Cron hook should be cleared after clear_cron_jobs()'
+		);
+	}
+
+	/**
+	 * Test process_auto_archive_budgets method.
+	 */
+	public function test_process_auto_archive_budgets() {
+		$budget_id = self::$budgets[0];
+		$budget = new Budget( $budget_id );
+		$budget->unarchive();
+
+		$yesterday = new \DateTime( 'yesterday' );
+		$budget->set_auto_archive( $yesterday );
+
+		$future_budget_id = self::$budgets[1];
+		$future_budget = new Budget( $future_budget_id );
+		$future_budget->unarchive();
+		$future_budget->set_auto_archive( new \DateTime( '+1 week' ) );
+
+		$archived_count = Budgets::process_auto_archive_budgets();
+
+		$this->assertEquals( 1, $archived_count, 'Should archive exactly one budget' );
+
+		$refreshed_budget = new Budget( $budget_id );
+		$this->assertTrue( $refreshed_budget->archived, 'Past-due budget should be archived' );
+
+		$refreshed_future_budget = new Budget( $future_budget_id );
+		$this->assertFalse( $refreshed_future_budget->archived, 'Future-dated budget should not be archived' );
+		$this->assertNotEmpty( $refreshed_future_budget->archive_at, 'Future auto-archive date should remain' );
+	}
+
+	/**
+	 * Test process_auto_archive_budgets with no eligible budgets.
+	 */
+	public function test_process_auto_archive_budgets_no_eligible() {
+		$budget1 = new Budget( self::$budgets[0] );
+		$budget1->unarchive();
+		$budget1->clear_auto_archive();
+
+		$budget2 = new Budget( self::$budgets[1] );
+		$budget2->unarchive();
+		$budget2->set_auto_archive( new \DateTime( '+1 week' ) );
+
+		$result = Budgets::process_auto_archive_budgets();
+		$this->assertEmpty( $result );
+
+		$refreshed_budget1 = new Budget( self::$budgets[0] );
+		$this->assertFalse( $refreshed_budget1->archived );
+
+		$refreshed_budget2 = new Budget( self::$budgets[1] );
+		$this->assertFalse( $refreshed_budget2->archived );
+	}
 }

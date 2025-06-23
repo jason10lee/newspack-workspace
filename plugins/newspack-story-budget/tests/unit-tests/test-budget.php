@@ -73,6 +73,7 @@ class Test_Budget extends \WP_UnitTestCase {
 				'slug'        => get_term( $budget_id, Budgets::TAXONOMY )->slug,
 				'description' => get_term( $budget_id, Budgets::TAXONOMY )->description,
 				'archived'    => false,
+				'archive_at'  => '',
 				'story_count' => 0,
 				'order'       => 0,
 			],
@@ -107,5 +108,71 @@ class Test_Budget extends \WP_UnitTestCase {
 
 		// Assert that returned items are stories.
 		$this->assertContainsOnlyInstancesOf( 'Newspack_Story_Budget\Story', $stories );
+	}
+
+	/**
+	 * Test setting and getting auto-archive date.
+	 */
+	public function test_set_get_auto_archive() {
+		$budget_id = self::$budgets[0];
+		$budget    = new Budget( $budget_id );
+
+		$budget->unarchive();
+		$this->assertFalse( $budget->archived );
+		$this->assertEmpty( $budget->archive_at );
+
+		$future_date = new \DateTime( '+3 days' );
+		$result      = $budget->set_auto_archive( $future_date );
+		$this->assertNotEmpty( $result );
+
+		$refreshed_budget = new Budget( $budget_id );
+		$this->assertNotEmpty( $refreshed_budget->archive_at );
+
+		$stored_date = new \DateTime( $refreshed_budget->archive_at );
+		$this->assertEquals(
+			$future_date->format( 'c' ),
+			$stored_date->format( 'c' )
+		);
+	}
+
+	/**
+	 * Test clearing auto-archive date.
+	 */
+	public function test_clear_auto_archive() {
+		$budget_id = self::$budgets[1];
+		$budget    = new Budget( $budget_id );
+
+		$budget->unarchive();
+
+		$future_date = new \DateTime( '+3 days' );
+		$budget->set_auto_archive( $future_date );
+
+		$this->assertNotEmpty( $budget->archive_at );
+
+		$result = $budget->clear_auto_archive();
+		$this->assertTrue( $result );
+
+		$refreshed_budget = new Budget( $budget_id );
+		$this->assertEmpty( $refreshed_budget->archive_at );
+	}
+
+	/**
+	 * Test that archiving a budget clears its auto-archive date.
+	 */
+	public function test_archive_clears_auto_archive() {
+		$budget_id = self::$budgets[0];
+		$budget    = new Budget( $budget_id );
+
+		$budget->unarchive();
+
+		$future_date = new \DateTime( '+1 week' );
+		$budget->set_auto_archive( $future_date );
+		$this->assertNotEmpty( $budget->archive_at );
+
+		$budget->archive();
+
+		$refreshed_budget = new Budget( $budget_id );
+		$this->assertTrue( $refreshed_budget->archived );
+		$this->assertEmpty( $refreshed_budget->archive_at );
 	}
 }

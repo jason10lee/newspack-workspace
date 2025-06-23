@@ -18,6 +18,11 @@ class Budgets {
 	const TAXONOMY = 'newspack_story_budget';
 
 	/**
+	 * Cron hook name for auto-archiving budgets.
+	 */
+	const AUTO_ARCHIVE_CRON_HOOK = 'newspack_story_budget_auto_archive_budgets';
+
+	/**
 	 * Stories query object.
 	 *
 	 * @var \WP_Query
@@ -29,6 +34,11 @@ class Budgets {
 	 */
 	public static function init() {
 		add_action( 'init', [ __CLASS__, 'register_taxonomy' ], 5 ); // Before the fields are initialized.
+
+		// Auto-archive cron.
+		add_action( 'init', [ __CLASS__, 'register_cron_jobs' ] );
+		add_action( self::AUTO_ARCHIVE_CRON_HOOK, [ __CLASS__, 'process_auto_archive_budgets' ] );
+		register_deactivation_hook( NEWSPACK_STORY_BUDGET_PLUGIN_FILE, [ __CLASS__, 'clear_cron_jobs' ] );
 	}
 
 	/**
@@ -202,5 +212,65 @@ class Budgets {
 			$budget        = new Budget( $budget_id );
 			$budget->order = $order;
 		}
+	}
+
+	/**
+	 * Register the daily cron job for auto-archiving budgets.
+	 */
+	public static function register_cron_jobs() {
+		if ( ! wp_next_scheduled( self::AUTO_ARCHIVE_CRON_HOOK ) ) {
+			wp_schedule_event( time(), 'daily', self::AUTO_ARCHIVE_CRON_HOOK );
+		}
+	}
+
+	/**
+	 * Clear the scheduled cron event.
+	 */
+	public static function clear_cron_jobs() {
+		$timestamp = wp_next_scheduled( self::AUTO_ARCHIVE_CRON_HOOK );
+		if ( $timestamp ) {
+			wp_unschedule_event( $timestamp, self::AUTO_ARCHIVE_CRON_HOOK );
+		}
+	}
+
+	/**
+	 * Process auto-archiving of budgets.
+	 * This method is called by the cron job.
+	 */
+	public static function process_auto_archive_budgets() {
+		$args = array(
+			'taxonomy'   => self::TAXONOMY,
+			'hide_empty' => false,
+			'meta_query' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+				'relation' => 'AND',
+				array(
+					'key'     => Budget::ARCHIVE_META_KEY,
+					'compare' => 'NOT EXISTS',
+				),
+				array(
+					'key'     => Budget::ARCHIVE_DATE_META_KEY,
+					'compare' => '<=',
+					'value'   => gmdate( 'c' ),
+					'type'    => 'DATE',
+				),
+			),
+		);
+
+		$budget_terms = get_terms( $args );
+
+		if ( is_wp_error( $budget_terms ) || empty( $budget_terms ) ) {
+			return;
+		}
+
+		$archived_count = 0;
+		foreach ( $budget_terms as $term ) {
+			$budget = new Budget( $term );
+			if ( $budget->is_valid() ) {
+				$budget->archive();
+				$archived_count++;
+			}
+		}
+
+		return $archived_count;
 	}
 }

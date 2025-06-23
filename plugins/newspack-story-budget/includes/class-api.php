@@ -959,6 +959,13 @@ class API {
 					$budget->unarchive();
 				}
 			}
+			if ( 'archive_at' === $key ) {
+				if ( empty( $value ) ) {
+					$budget->clear_auto_archive();
+				} else {
+					$budget->set_auto_archive( $value );
+				}
+			}
 		}
 
 		return rest_ensure_response(

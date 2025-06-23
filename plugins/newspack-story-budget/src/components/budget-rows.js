@@ -9,6 +9,8 @@ import { useDispatch, useSelect } from '@wordpress/data';
 import { useState, useEffect } from '@wordpress/element';
 import {
 	__experimentalHStack as HStack,
+	__experimentalVStack as VStack,
+	__experimentalText as Text,
 	Icon,
 	DropdownMenu,
 } from '@wordpress/components';
@@ -27,7 +29,8 @@ import {
  */
 import { NAMESPACE as storeNamespace } from '../store/constants';
 import { BUDGET_STATUS } from './budgets';
-import BudgetField from './budget-field';
+import BudgetNameField from './budget-field/budget-field-name';
+import BudgetAutoArchiveDateField from './budget-field/budget-field-auto-archive-date';
 
 const BudgetRows = ( { allowEdit, budgetStatus, isSearching } ) => {
 	const [ draggedItem, setDraggedItem ] = useState( null );
@@ -237,12 +240,29 @@ const BudgetRows = ( { allowEdit, budgetStatus, isSearching } ) => {
 										) }
 										<span className="newspack-story-budget__budget-title__name">
 											{ allowEdit ? (
-												<BudgetField
-													budget={ budget }
-													onUpdateBudget={ onUpdateBudget }
-												/>
+												<div className="newspack-story-budget__field">
+													<BudgetNameField budget={ budget } onUpdateBudget={ onUpdateBudget } />
+													<BudgetAutoArchiveDateField budget={ budget } onUpdateBudget={ onUpdateBudget } />
+												</div>
 											) : (
-												budget.name
+												<VStack>
+													<span>{ budget.name }</span>
+													{ budget.archive_at && (
+														<Text size="small" variant="muted">
+															{ __( 'Auto-archive set for ', 'newspack-story-budget' ) }
+															{ new Date( budget.archive_at )
+																.toLocaleDateString(
+																	'en-US',
+																	{
+																		year: 'numeric',
+																		month: 'long', 
+																		day: 'numeric'
+																	}
+																)
+															}
+														</Text>
+													) }
+												</VStack>
 											) }
 										</span>
 									</HStack>
