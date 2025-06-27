@@ -36,6 +36,13 @@ class Status {
 	private $required_capability;
 
 	/**
+	 * The order of the status.
+	 *
+	 * @var int
+	 */
+	private $order = 0;
+
+	/**
 	 * Any errors that occurred during creation.
 	 *
 	 * @var WP_Error|null
@@ -73,6 +80,7 @@ class Status {
 		$this->slug = $term->slug;
 		$this->label = $term->name;
 		$this->required_capability = get_term_meta( $term->term_id, Statuses::CAPABILITY_META_KEY, true );
+		$this->order = (int) get_term_meta( $term->term_id, Statuses::ORDER_META_KEY, true );
 	}
 
 	/**
@@ -95,6 +103,7 @@ class Status {
 		if ( $term ) {
 			$this->label = $term->name;
 			$this->required_capability = get_term_meta( $term->term_id, Statuses::CAPABILITY_META_KEY, true );
+			$this->order = get_term_meta( $term->term_id, Statuses::ORDER_META_KEY, true ) || 0;
 		} else {
 			// If term doesn't exist, set an error.
 			$this->errors->add(
@@ -131,6 +140,14 @@ class Status {
 		return $this->required_capability;
 	}
 
+	/**
+	 * Get the order of the status.
+	 *
+	 * @return int
+	 */
+	public function get_order() {
+		return $this->order;
+	}
 	/**
 	 * Whether the current user can use this status.
 	 *

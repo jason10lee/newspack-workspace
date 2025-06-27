@@ -24,6 +24,11 @@ class Statuses {
 	const CAPABILITY_META_KEY = 'required_capability';
 
 	/**
+	 * The order term meta key.
+	 */
+	const ORDER_META_KEY = 'order';
+
+	/**
 	 * Initialize the class.
 	 */
 	public static function init() {
@@ -78,27 +83,32 @@ class Statuses {
 					'slug'       => 'writing',
 					'label'      => __( 'Writing', 'newspack-story-budget' ),
 					'capability' => '',
+					'order'      => 1,
 					'is_default' => true,
 				],
 				[
 					'slug'       => 'editing',
 					'label'      => __( 'Editing', 'newspack-story-budget' ),
 					'capability' => '',
+					'order'      => 2,
 				],
 				[
 					'slug'       => 'factcheck',
 					'label'      => __( 'Fact-checking', 'newspack-story-budget' ),
 					'capability' => 'edit_others_posts',
+					'order'      => 3,
 				],
 				[
 					'slug'       => 'approved',
 					'label'      => __( 'Approved', 'newspack-story-budget' ),
 					'capability' => 'edit_others_posts',
+					'order'      => 4,
 				],
 				[
 					'slug'       => 'published',
 					'label'      => __( 'Published', 'newspack-story-budget' ),
 					'capability' => 'edit_others_posts',
+					'order'      => 5,
 				],
 			]
 		);
@@ -133,19 +143,8 @@ class Statuses {
 
 		foreach ( self::get_default_statuses() as $status ) {
 			$term = term_exists( $status['slug'], self::TAXONOMY );
-
 			if ( ! $term ) {
-				$term = wp_insert_term(
-					$status['label'],
-					self::TAXONOMY,
-					[
-						'slug' => $status['slug'],
-					]
-				);
-
-				if ( ! is_wp_error( $term ) && ! empty( $status['capability'] ) ) {
-					update_term_meta( $term['term_id'], self::CAPABILITY_META_KEY, $status['capability'] );
-				}
+				self::create_status( $status['label'], $status['slug'], $status['capability'], $status['order'] );
 			}
 		}
 	}
@@ -172,6 +171,13 @@ class Statuses {
 				$statuses[] = $status;
 			}
 		}
+
+		usort(
+			$statuses,
+			function( $a, $b ) {
+				return $a->get_order() - $b->get_order();
+			}
+		);
 
 		return $statuses;
 	}
@@ -204,6 +210,45 @@ class Statuses {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * Create a status.
+	 *
+	 * @param string $label      The status label.
+	 * @param string $slug       The status slug.
+	 * @param string $capability The capability required to use this status.
+	 * @param int    $order      The order of the status.
+	 *
+	 * @return WP_Term|WP_Error The term object or WP_Error on failure.
+	 */
+	public static function create_status( $label, $slug, $capability = '', $order = 0 ) {
+		$existing_status = self::get_status( $slug );
+		if ( $existing_status ) {
+			return new \WP_Error(
+				'status_already_exists',
+				__( 'Status already exists.', 'newspack-story-budget' )
+			);
+		}
+
+		$term = wp_insert_term(
+			$label,
+			self::TAXONOMY,
+			[
+				'slug' => $slug,
+			]
+		);
+
+		if ( ! is_wp_error( $term ) ) {
+			if ( ! empty( $capability ) ) {
+				update_term_meta( $term['term_id'], self::CAPABILITY_META_KEY, $capability );
+			}
+			if ( ! empty( $order ) ) {
+				update_term_meta( $term['term_id'], self::ORDER_META_KEY, $order );
+			}
+		}
+
+		return $term;
 	}
 
 	/**
@@ -256,5 +301,26 @@ class Statuses {
 			return null;
 		}
 		return new Status( $terms[0] );
+	}
+
+	/**
+	 * Reset statuses.
+	 *
+	 * DANGER: This will delete all statuses and reset to the default statuses.
+	 *
+	 * @return void
+	 */
+	public static function dangerously_reset_statuses() {
+		$terms = get_terms(
+			[
+				'taxonomy'   => self::TAXONOMY,
+				'hide_empty' => false,
+			]
+		);
+		foreach ( $terms as $term ) {
+			wp_delete_term( $term->term_id, self::TAXONOMY );
+		}
+		delete_option( 'np_story_budget_default_statuses_initialized' );
+		self::register_default_statuses();
 	}
 }
