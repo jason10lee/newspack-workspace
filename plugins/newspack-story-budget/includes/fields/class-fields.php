@@ -378,6 +378,20 @@ class Fields {
 		if ( ! $story->is_valid() ) {
 			return;
 		}
+		self::update_read_only_fields( $post_id );
+		self::update_modified( $post_id );
+	}
+
+	/**
+	 * Update read-only fields for the story.
+	 *
+	 * @param int $post_id The post ID.
+	 */
+	public static function update_read_only_fields( $post_id ) {
+		$story = new Story( $post_id );
+		if ( ! $story->is_valid() ) {
+			return;
+		}
 		$fields = self::get_all_fields();
 		foreach ( $fields as $field ) {
 			if ( $field->is_editable() || ! $field->get_post_save_callback() ) {
@@ -390,7 +404,6 @@ class Fields {
 				\delete_post_meta( $post_id, $field->get_post_meta_name() );
 			}
 		}
-		self::update_modified( $post_id );
 	}
 
 	/**

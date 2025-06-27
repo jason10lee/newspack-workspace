@@ -156,7 +156,7 @@ class Story {
 	 * Refresh read-only fields for the story.
 	 */
 	public function refresh() {
-		Fields::on_post_update( $this->id );
+		Fields::update_read_only_fields( $this->id );
 	}
 
 	/**
