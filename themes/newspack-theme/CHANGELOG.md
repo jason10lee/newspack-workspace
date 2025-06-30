@@ -1,3 +1,10 @@
+# [2.11.0-alpha.1](https://github.com/Automattic/newspack-theme/compare/v2.10.0...v2.11.0-alpha.1) (2025-06-19)
+
+
+### Features
+
+* add the Accessibility Statement link to the site's footer ([#2506](https://github.com/Automattic/newspack-theme/issues/2506)) ([73eeab9](https://github.com/Automattic/newspack-theme/commit/73eeab9971ecc31d7d5bb43bbcefd7d466d5586a))
+
 # [2.10.0](https://github.com/Automattic/newspack-theme/compare/v2.9.1...v2.10.0) (2025-06-16)
 
 
