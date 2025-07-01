@@ -1,3 +1,10 @@
+## [6.11.1](https://github.com/Automattic/newspack-plugin/compare/v6.11.0...v6.11.1) (2025-07-01)
+
+
+### Bug Fixes
+
+* **audience-wizard:** salesforce settings rendering ([#4045](https://github.com/Automattic/newspack-plugin/issues/4045)) ([fd9c3bc](https://github.com/Automattic/newspack-plugin/commit/fd9c3bc7b39874cc71c7995a034ef29b96c3ebf1))
+
 # [6.11.0](https://github.com/Automattic/newspack-plugin/compare/v6.10.0...v6.11.0) (2025-07-01)
 
 
