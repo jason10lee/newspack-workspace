@@ -1,3 +1,10 @@
+## [4.14.2](https://github.com/Automattic/newspack-blocks/compare/v4.14.1...v4.14.2) (2025-07-02)
+
+
+### Bug Fixes
+
+* revert payment gateway check changes from [#2135](https://github.com/Automattic/newspack-blocks/issues/2135) ([#2160](https://github.com/Automattic/newspack-blocks/issues/2160)) ([0bb9977](https://github.com/Automattic/newspack-blocks/commit/0bb9977a3b1328013b16f59f030faacb64fed9c8))
+
 ## [4.14.1](https://github.com/Automattic/newspack-blocks/compare/v4.14.0...v4.14.1) (2025-07-02)
 
 
