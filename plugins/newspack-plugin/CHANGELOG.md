@@ -1,3 +1,10 @@
+## [6.11.2](https://github.com/Automattic/newspack-plugin/compare/v6.11.1...v6.11.2) (2025-07-02)
+
+
+### Bug Fixes
+
+* **log:** ensure `user_email` is always a string ([#4064](https://github.com/Automattic/newspack-plugin/issues/4064)) ([4f1ece5](https://github.com/Automattic/newspack-plugin/commit/4f1ece577ea089e4a31249a3dd1c75cf78e28b8a))
+
 ## [6.11.1](https://github.com/Automattic/newspack-plugin/compare/v6.11.0...v6.11.1) (2025-07-01)
 
 
