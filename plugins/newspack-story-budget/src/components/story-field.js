@@ -162,6 +162,7 @@ export default ( {
 						<form
 							onSubmit={ async e => {
 								clearErrors( storyId, fieldId );
+								setIsOpen( false );
 								e.preventDefault();
 								if ( saveInPlace ) {
 									const response = await saveStoryField(
