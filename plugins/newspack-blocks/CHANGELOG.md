@@ -1,3 +1,10 @@
+## [4.14.3](https://github.com/Automattic/newspack-blocks/compare/v4.14.2...v4.14.3) (2025-07-08)
+
+
+### Bug Fixes
+
+* **modal-checkout:** return array when getting event handlers ([#2162](https://github.com/Automattic/newspack-blocks/issues/2162)) ([c9ba6ec](https://github.com/Automattic/newspack-blocks/commit/c9ba6ec285e2da43d1178451e9d80bba8044974a))
+
 ## [4.14.2](https://github.com/Automattic/newspack-blocks/compare/v4.14.1...v4.14.2) (2025-07-02)
 
 
