@@ -533,10 +533,48 @@ export function* saveStoryField( id, slug, value ) {
 }
 
 /**
+ * Save one or multiple stories.
+ *
+ * @param {Array} ids    Array of story IDs.
+ * @param {Array} fields Array of fields to update.
+ *
+ * @return {Object} Action object.
+ */
+export function* saveStories( ids, fields ) {
+	yield { type: 'SAVE_STORIES_START', payload: { ids, fields } };
+	try {
+		const result = yield apiFetch( {
+			path: '/stories/update',
+			method: 'POST',
+			data: { ids, fields },
+		} );
+		if ( result.stories?.length ) {
+			yield {
+				type: 'STORIES_APPEND',
+				payload: result.stories.reduce( ( acc, story ) => {
+					acc[ story.id ] = story;
+					return acc;
+				}, {} ),
+			};
+		}
+		return {
+			type: 'SAVE_STORIES_SUCCESS',
+			payload: { ids, fields, result },
+		};
+	} catch ( error ) {
+		return {
+			type: 'SAVE_STORIES_ERROR',
+			payload: { ids, fields, message: error?.message },
+		};
+	}
+}
+
+/**
  * Clears all errors or specific errors
  *
  * @param {string|null} storyId The story ID to clear errors for, or null for all
  * @param {string|null} fieldId The field ID to clear errors for, or null for all
+ *
  * @return {Object} Action object
  */
 export function clearErrors( storyId = null, fieldId = null ) {
@@ -548,6 +586,12 @@ export function clearErrors( storyId = null, fieldId = null ) {
 	return {
 		type: fieldId ? 'CLEAR_FIELD_ERROR' : 'CLEAR_STORY_ERROR',
 		payload: { id: storyId, slug: fieldId },
+	};
+}
+
+export function clearSaveStoriesErrors() {
+	return {
+		type: 'CLEAR_SAVE_STORIES_ERRORS',
 	};
 }
 

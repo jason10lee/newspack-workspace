@@ -13,6 +13,8 @@ import {
  */
 import StoryField from './story-field';
 
+const EMPTY_STRING = '';
+
 export default ( { field, story, anchor = 'field', onChange } ) => {
 	const [ popoverAnchor, setPopoverAnchor ] = useState( null );
 
@@ -45,7 +47,7 @@ export default ( { field, story, anchor = 'field', onChange } ) => {
 			<StoryField
 				fieldId={ field.slug }
 				storyId={ story.id }
-				value={ story[ field.slug ] || '' }
+				value={ story[ field.slug ] || EMPTY_STRING }
 				onChange={ onChange }
 				popoverProps={ popoverProps }
 			/>

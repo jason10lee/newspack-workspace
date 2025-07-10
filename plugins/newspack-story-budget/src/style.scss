@@ -1,6 +1,5 @@
 /* stylelint-disable no-invalid-position-at-import-rule */
 @use "~@wordpress/base-styles/colors" as wp-colors;
-
 @import "@wordpress/dataviews/build-style/style.css";
 
 body.toplevel_page_newspack-story-budget {
@@ -174,6 +173,11 @@ body.toplevel_page_newspack-story-budget {
 			text-align: left;
 		}
 	}
+	&__field-description {
+		color: wp-colors.$gray-700;
+		font-size: 12px;
+		margin: 0;
+	}
 	&__table-row-field {
 		margin: 0 -8px;
 		position: relative;
@@ -218,7 +222,18 @@ body.toplevel_page_newspack-story-budget {
 			}
 		}
 	}
-
+	&__dropdown-menu {
+		.components-dropdown-menu__toggle {
+			svg {
+				margin-right: -6px;
+			}
+			&.is-opened {
+				svg {
+					transform: rotate(180deg);
+				}
+			}
+		}
+	}
 	&__budget {
 		border-radius: 4px;
 		margin: 0;

@@ -142,6 +142,34 @@ class API {
 
 		register_rest_route(
 			self::NAMESPACE,
+			'/stories/update',
+			[
+				'methods'             => 'POST',
+				'callback'            => [ __CLASS__, 'update_stories' ],
+				'permission_callback' => [ __CLASS__, 'stories_permission_callback' ],
+				'args'                => [
+					'ids'    => [
+						'description' => __( 'Array of story IDs to update.', 'newspack-story-budget' ),
+						'type'        => 'array',
+						'items'       => [ 'type' => 'integer' ],
+					],
+					'fields' => [
+						'description' => __( 'Array of fields to update.', 'newspack-story-budget' ),
+						'type'        => 'array',
+						'items'       => [
+							'type'       => 'object',
+							'properties' => [
+								'slug'  => [ 'type' => 'string' ],
+								'value' => [ 'type' => 'mixed' ],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		register_rest_route(
+			self::NAMESPACE,
 			'/stories/(?P<id>\d+)',
 			[
 				'methods'             => 'GET',
@@ -565,6 +593,43 @@ class API {
 			[
 				'story_ids' => Budgets::get_stories( $query_args ),
 				'total'     => Budgets::$stories_query->found_posts,
+			]
+		);
+	}
+
+	/**
+	 * Update one or multiple stories.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 *
+	 * @return \WP_REST_Response Updated stories.
+	 */
+	public static function update_stories( $request ) {
+		$story_ids = $request->get_param( 'ids' );
+
+		$fields = [];
+		foreach ( $request->get_param( 'fields' ) as $field ) {
+			$fields[ $field['slug'] ] = $field['value'];
+		}
+
+		$stories = [];
+		foreach ( $story_ids as $story_id ) {
+			$story = new Story( $story_id );
+			if ( ! $story->is_valid() ) {
+				continue;
+			}
+			if ( ! current_user_can( 'edit_post', $story_id ) ) {
+				continue;
+			}
+			$result = $story->update( $fields );
+			if ( ! \is_wp_error( $result ) ) {
+				$stories[] = $story->to_array();
+			}
+		}
+
+		return rest_ensure_response(
+			[
+				'stories' => $stories,
 			]
 		);
 	}

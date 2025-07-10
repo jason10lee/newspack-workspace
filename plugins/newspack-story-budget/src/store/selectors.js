@@ -7,14 +7,26 @@ import { canUseCache } from './cache';
 export const isLoading = state => state.meta.loading || state.meta.searching;
 export const isRefreshing = state => state.meta.refreshing;
 
+export const isBusy = state =>
+	state.meta.loading ||
+	state.meta.searching ||
+	state.meta.refreshing ||
+	state.meta.savingStories ||
+	( state.meta.loadingStory &&
+		Object.values( state.meta.loadingStory || {} ).some( v => v ) ) ||
+	false;
+
 export const isLoadingStory = ( state, id ) =>
 	state.meta.loadingStory?.[ id ] ?? false;
+
+export const isSavingStories = state => state.meta.savingStories;
 
 export const isLoadingStories = state =>
 	state.meta.loadingStory &&
 	Object.values( state.meta.loadingStory ).some( Boolean );
 
 export const isCreatingStory = state => state.meta.isCreatingStory ?? false;
+
 export const isCreatingBudget = state => state.meta.isCreatingBudget ?? false;
 
 export const getProgress = state => state.meta.progress;
@@ -150,6 +162,8 @@ export const getStoryError = ( state, storyId ) =>
 	state.errors[ `story-${ storyId }` ];
 
 export const getStoryMetaFetchQueue = state => state.meta.storyMetaFetchQueue;
+
+export const getSaveStoriesError = state => state.errors[ 'save-stories' ];
 
 export const getBudgetStoryMeta = state => {
 	const budgetId = Object.values( state.stories )[ 0 ]?.budgets;

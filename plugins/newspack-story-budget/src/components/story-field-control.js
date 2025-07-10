@@ -14,7 +14,9 @@ import {
 } from '@wordpress/components';
 import { useId } from '@wordpress/element';
 
-export default ( { field, value, onChange = () => {} } ) => {
+const EMPTY_STRING = '';
+
+export default ( { field, value, onChange = () => {}, ...props } ) => {
 	const componentId = useId();
 
 	const getOptionId = option => `${ componentId }-${ option.value }`;
@@ -43,12 +45,15 @@ export default ( { field, value, onChange = () => {} } ) => {
 			}
 			onChange( val );
 		},
+		...props,
 	};
 
 	// The budgets field should always render a select control.
 	if ( field.slug === 'budgets' ) {
 		return (
 			<SelectControl
+				__next40pxDefaultSize
+				__nextHasNoMarginBottom
 				options={ [
 					{
 						value: '',
@@ -56,7 +61,7 @@ export default ( { field, value, onChange = () => {} } ) => {
 					},
 					...field.options,
 				] }
-				value={ value || '' }
+				value={ value || EMPTY_STRING }
 				multiple={ field.is_multiple }
 				{ ...controlProps }
 			/>
@@ -70,7 +75,8 @@ export default ( { field, value, onChange = () => {} } ) => {
 			disabled:
 				( option.hasOwnProperty( 'user_can_apply' ) &&
 					! option.user_can_apply ) ||
-				option.disabled,
+				option.disabled ||
+				props.disabled,
 		} ) );
 
 		if ( field.is_multiple ) {
@@ -98,6 +104,7 @@ export default ( { field, value, onChange = () => {} } ) => {
 											  ) || []
 									);
 								} }
+								{ ...props }
 							/>
 							<label htmlFor={ getOptionId( option ) }>
 								{ option.label }
@@ -115,13 +122,14 @@ export default ( { field, value, onChange = () => {} } ) => {
 						className="newspack-story-budget__control__radio-option"
 					>
 						<input
+							{ ...props }
 							id={ getOptionId( option ) }
 							type="radio"
 							label={ option.label }
-							disabled={ option.disabled }
 							checked={ value === option.value }
 							value={ option.value }
 							onChange={ ev => onChange( ev.target.value ) }
+							disabled={ option.disabled }
 						/>
 						<label htmlFor={ getOptionId( option ) }>
 							{ option.label }
@@ -151,7 +159,14 @@ export default ( { field, value, onChange = () => {} } ) => {
 	}
 
 	if ( field.type === 'longtext' ) {
-		return <TextareaControl value={ value || '' } { ...controlProps } />;
+		return (
+			<TextareaControl
+				__next40pxDefaultSize
+				__nextHasNoMarginBottom
+				value={ value || EMPTY_STRING }
+				{ ...controlProps }
+			/>
+		);
 	}
 
 	if ( field.type === 'boolean' ) {
@@ -168,5 +183,11 @@ export default ( { field, value, onChange = () => {} } ) => {
 		controlProps.type = 'number';
 	}
 
-	return <InputControl value={ value || '' } { ...controlProps } />;
+	return (
+		<InputControl
+			__next40pxDefaultSize
+			value={ value || EMPTY_STRING }
+			{ ...controlProps }
+		/>
+	);
 };

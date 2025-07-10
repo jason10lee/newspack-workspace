@@ -15,6 +15,7 @@ import { NAMESPACE } from '../store/constants';
 import TableRowField from '../components/table-row-field';
 import { getFieldElements, getFilterByOperators } from '../utils/fields';
 import { isBudgetStories } from '../utils/budgets';
+import StoriesEdit from '../components/stories-edit';
 
 /**
  * Hook to get all fields
@@ -138,7 +139,7 @@ export const useStoryActions = () => {
 		() => [
 			...applyFilters( 'newspack-story-budget.actions', [
 				{
-					id: 'view',
+					id: 'view-story',
 					label: __( 'View', 'newspack-story-budget' ),
 					isPrimary: true,
 					icon: <Icon icon={ seen } />,
@@ -146,6 +147,15 @@ export const useStoryActions = () => {
 						fetchStory( items[ 0 ].id );
 						window.location.hash = '#/stories/' + items[ 0 ].id;
 					},
+				},
+				{
+					id: 'edit-story',
+					label: __( 'Edit Story', 'newspack-story-budget' ),
+					isPrimary: true,
+					supportsBulk: true,
+					icon: <Icon icon={ edit } />,
+					hideModalHeader: true,
+					RenderModal: StoriesEdit,
 				},
 				{
 					id: 'refresh',

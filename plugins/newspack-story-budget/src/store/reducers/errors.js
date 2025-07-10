@@ -8,6 +8,16 @@ export default ( state = INITIAL_STATE.errors, action ) => {
 				...state,
 				stories: action.payload.message,
 			};
+		case 'SAVE_STORIES_ERROR':
+			return {
+				...state,
+				'save-stories': action.payload.message,
+			};
+		case 'CLEAR_SAVE_STORIES_ERROR':
+			return {
+				...state,
+				'save-stories': null,
+			};
 		case 'BUDGETS_ERROR':
 			return {
 				...state,

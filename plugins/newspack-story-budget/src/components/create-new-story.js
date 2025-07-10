@@ -157,7 +157,7 @@ const CreateStoryModal = ( { onClose } ) => {
 
 				<HStack justify="end">
 					<Button
-						variant="secondary"
+						variant="tertiary"
 						onClick={ onClose }
 						disabled={ isSubmitting }
 					>

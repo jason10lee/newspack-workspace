@@ -89,6 +89,31 @@ export default ( state = INITIAL_STATE.meta, action ) => {
 				...state,
 				storyMetaFetchQueue: {},
 			};
+		case 'SAVE_STORIES_START':
+			return {
+				...state,
+				savingStories: true,
+				loadingStory: {
+					...state.loadingStory,
+					...action.payload.ids.reduce( ( acc, id ) => {
+						acc[ id ] = true;
+						return acc;
+					}, {} ),
+				},
+			};
+		case 'SAVE_STORIES_SUCCESS':
+		case 'SAVE_STORIES_ERROR':
+			return {
+				...state,
+				savingStories: false,
+				loadingStory: {
+					...state.loadingStory,
+					...action.payload.ids.reduce( ( acc, id ) => {
+						acc[ id ] = false;
+						return acc;
+					}, {} ),
+				},
+			};
 		case 'FETCH_BUDGETS_START':
 			return {
 				...state,
