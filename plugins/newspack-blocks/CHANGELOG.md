@@ -1,3 +1,10 @@
+## [4.14.4](https://github.com/Automattic/newspack-blocks/compare/v4.14.3...v4.14.4) (2025-07-14)
+
+
+### Bug Fixes
+
+* make sure RTL styles are loaded ([#2164](https://github.com/Automattic/newspack-blocks/issues/2164)) ([c4387f5](https://github.com/Automattic/newspack-blocks/commit/c4387f530c46c924d6181bab5962b59d0700ed6d))
+
 ## [4.14.3](https://github.com/Automattic/newspack-blocks/compare/v4.14.2...v4.14.3) (2025-07-08)
 
 
