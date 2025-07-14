@@ -1,3 +1,27 @@
+# [6.12.0](https://github.com/Automattic/newspack-plugin/compare/v6.11.3...v6.12.0) (2025-07-14)
+
+
+### Bug Fixes
+
+* **menu:** don't hide sponsors menu if the user can't see the newspack dashboard ([#4041](https://github.com/Automattic/newspack-plugin/issues/4041)) ([f988bd2](https://github.com/Automattic/newspack-plugin/commit/f988bd2a56f51f84260cccbe269501ee209c6cdc))
+* saving name when registering user ([#4050](https://github.com/Automattic/newspack-plugin/issues/4050)) ([498028e](https://github.com/Automattic/newspack-plugin/commit/498028efb139ec1eef771e908cd009c236646bba))
+* **woocommerce-memberships:** prevent membership expiry if there's another active subscription ([#4009](https://github.com/Automattic/newspack-plugin/issues/4009)) ([6b42cbd](https://github.com/Automattic/newspack-plugin/commit/6b42cbdf44a19f5ebf10afadecb7444e78324c70))
+
+
+### Features
+
+* **capabilities:** add caps for RSS Feeds ([#3908](https://github.com/Automattic/newspack-plugin/issues/3908)) ([2620c54](https://github.com/Automattic/newspack-plugin/commit/2620c5492e940b4c052dc22da76934ac68a06843))
+* **collections:** add hierarchical fields ([#4051](https://github.com/Automattic/newspack-plugin/issues/4051)) ([3f5a704](https://github.com/Automattic/newspack-plugin/commit/3f5a704286733836d763407db89d0f7632be1be3))
+* **collections:** allow overriding "collection" names and slugs ([#4033](https://github.com/Automattic/newspack-plugin/issues/4033)) ([f5523b0](https://github.com/Automattic/newspack-plugin/commit/f5523b0a0196f15fbde2052286d581f2d0483d99))
+* **collections:** support multiple CTAs in collections meta ([#4049](https://github.com/Automattic/newspack-plugin/issues/4049)) ([d445444](https://github.com/Automattic/newspack-plugin/commit/d445444def17b777fceb36442aea9ab5480cc1e1))
+* modal checkout for My Account's reorders ([#3988](https://github.com/Automattic/newspack-plugin/issues/3988)) ([fd347bc](https://github.com/Automattic/newspack-plugin/commit/fd347bc25ff88d113ebc2159b89f8e1370365cf0))
+* **my-account:** subscription payment notice ([#4029](https://github.com/Automattic/newspack-plugin/issues/4029)) ([4b78d7f](https://github.com/Automattic/newspack-plugin/commit/4b78d7fa92606d0da60839f7477f2741c67fed55))
+* **rss:** Custom Tracking snippet ([#4047](https://github.com/Automattic/newspack-plugin/issues/4047)) ([2e682c5](https://github.com/Automattic/newspack-plugin/commit/2e682c5bf5cafd70c45950811348f7536b14e324))
+* **rss:** Hooks extending RSS ([#4055](https://github.com/Automattic/newspack-plugin/issues/4055)) ([da97ff4](https://github.com/Automattic/newspack-plugin/commit/da97ff4c21bf7ffbe9bf773ba6c5703de224c66d))
+* **rss:** Skip non-distributable images ([#4052](https://github.com/Automattic/newspack-plugin/issues/4052)) ([9fdfe78](https://github.com/Automattic/newspack-plugin/commit/9fdfe780448eacfc334177cf0624a8beadb552ea))
+* show "deleted" label on segments if list, subscription, or plan was deleted [NPPM-2031] ([#4021](https://github.com/Automattic/newspack-plugin/issues/4021)) ([4dec8bb](https://github.com/Automattic/newspack-plugin/commit/4dec8bb37d2a221bbdaa3155ca1e5a35ac95d9b8))
+* **woocommerce:** rename WooCommerce Payments to WooPay ([#4048](https://github.com/Automattic/newspack-plugin/issues/4048)) ([1528cad](https://github.com/Automattic/newspack-plugin/commit/1528cadb8eba826c52e4c28db2b0d5fbb05cb743))
+
 ## [6.11.3](https://github.com/Automattic/newspack-plugin/compare/v6.11.2...v6.11.3) (2025-07-07)
 
 
