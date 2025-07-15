@@ -3,6 +3,7 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
+import { applyFilters } from '@wordpress/hooks';
 import {
 	__experimentalVStack as VStack,
 	__experimentalHStack as HStack,
@@ -77,6 +78,18 @@ export default ( {
 
 	if ( ! field ) {
 		return null;
+	}
+
+	const customRender = applyFilters(
+		'newspack-story-budget.story-field',
+		null,
+		displayValue,
+		field,
+		story,
+		allowEdit
+	);
+	if ( customRender ) {
+		return customRender;
 	}
 
 	if ( ! canEdit ) {

@@ -113,12 +113,17 @@ export const useStoryFields = ( { allowEdit } ) => {
 									isPrimary: field.is_filterable === 'always',
 							  }
 							: undefined,
-					render: value => (
-						<TableRowField
-							story={ value.item }
-							field={ field }
-							allowEdit={ allowEdit }
-						/>
+					render: applyFilters(
+						'newspack-story-budget.table-row-field',
+						value => (
+							<TableRowField
+								story={ value.item }
+								field={ field }
+								allowEdit={ allowEdit }
+							/>
+						),
+						field,
+						allowEdit
 					),
 				} ) ),
 		[ fields, allowEdit ]
