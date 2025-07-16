@@ -1,3 +1,11 @@
+## [6.12.3](https://github.com/Automattic/newspack-plugin/compare/v6.12.2...v6.12.3) (2025-07-16)
+
+
+### Bug Fixes
+
+* ensure my-account is working w/out woocommerce ([#4065](https://github.com/Automattic/newspack-plugin/issues/4065)) ([1ae57a3](https://github.com/Automattic/newspack-plugin/commit/1ae57a354f461c0612d34af6766e1458b5a60bff))
+* **sitekit-logger:** prevent logging if not connected to prod manager ([cb51633](https://github.com/Automattic/newspack-plugin/commit/cb51633f8f6303f3028a38d358f7788b34fa0801))
+
 ## [6.12.2](https://github.com/Automattic/newspack-plugin/compare/v6.12.1...v6.12.2) (2025-07-16)
 
 
