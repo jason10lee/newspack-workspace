@@ -54,6 +54,8 @@ class Budgets {
 					'singular_name' => __( 'Story Budget', 'newspack-story-budget' ),
 					'edit_item'     => __( 'Edit Story Budget', 'newspack-story-budget' ),
 					'add_new_item'  => __( 'Add New Story Budget', 'newspack-story-budget' ),
+					'all_items'     => __( 'All Budgets', 'newspack-story-budget' ),
+					'no_items'      => __( 'No Budgets', 'newspack-story-budget' ),
 				],
 				'public' => false,
 			]

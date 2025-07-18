@@ -30,8 +30,11 @@ class Admin {
 		add_action( 'save_post', [ __CLASS__, 'save_budgets_quick_bulk_edit' ], 10, 2 );
 		add_action( 'bulk_edit_posts', [ __CLASS__, 'save_budgets_bulk_edit' ], 10, 2 );
 
+		// Add Budgets dropdown to the posts list table.
+		add_action( 'restrict_manage_posts', [ __CLASS__, 'add_budgets_dropdown' ] );
 		add_filter( 'manage_post_posts_columns', [ __CLASS__, 'add_budgets_column' ] );
 		add_action( 'manage_post_posts_custom_column', [ __CLASS__, 'render_budgets_column' ], 10, 2 );
+		add_action( 'pre_get_posts', [ __CLASS__, 'filter_posts_by_budgets' ] );
 	}
 
 	/**
@@ -283,6 +286,47 @@ class Admin {
 	}
 
 	/**
+	 * Adds a dropdown to filter posts by budget.
+	 *
+	 * @param string $post_type The post type of the current list.
+	 * @return void
+	 */
+	public static function add_budgets_dropdown( $post_type ) {
+		if ( ! in_array( $post_type, Budgets::get_post_types(), true ) ) {
+			return;
+		}
+
+		$num_posts_with_budget = wp_count_terms(
+			[
+				'taxonomy'   => Budgets::TAXONOMY,
+				'hide_empty' => false,
+			]
+		);
+
+		// If we have no budgets or no posts with a budget, then don't show the dropdown.
+		if ( is_wp_error( $num_posts_with_budget ) || (int) $num_posts_with_budget < 1 ) {
+			return;
+		}
+
+		$taxonomy_object = get_taxonomy( Budgets::TAXONOMY );
+		$selected        = isset( $_GET[ Budgets::TAXONOMY ] ) ? sanitize_text_field( wp_unslash( $_GET[ Budgets::TAXONOMY ] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		wp_dropdown_categories(
+			array(
+				'show_option_all'  => $taxonomy_object->labels->all_items,
+				'show_option_none' => $taxonomy_object->labels->no_items,
+				'taxonomy'         => Budgets::TAXONOMY,
+				'name'             => Budgets::TAXONOMY,
+				'orderby'          => 'name',
+				'value_field'      => 'slug',
+				'selected'         => $selected,
+				'hierarchical'     => false,
+				'hide_empty'       => false,
+			)
+		);
+	}
+
+	/**
 	 * Add Budgets column to the posts list table.
 	 *
 	 * @param array $columns The existing columns.
@@ -338,5 +382,42 @@ class Admin {
 				wp_set_object_terms( $post_id, (int) $budget_id, Budgets::TAXONOMY );
 			}
 		}
+	}
+
+	/**
+	 * Filter posts by budgets.
+	 *
+	 * @param WP_Query $query The query object.
+	 */
+	public static function filter_posts_by_budgets( $query ) {
+		if ( ! is_admin() || ! $query->is_main_query() ) {
+			return;
+		}
+
+		$taxonomy = Budgets::TAXONOMY;
+
+		if ( ! isset( $_GET[ $taxonomy ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
+		}
+
+		$terms = sanitize_text_field( wp_unslash( $_GET[ $taxonomy ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		if ( $terms === '0' ) {
+			return;
+		}
+
+		$tax_query = [
+			'taxonomy' => $taxonomy,
+			'field'    => 'slug',
+		];
+
+		if ( $terms === '-1' ) {
+			$tax_query['operator'] = 'NOT EXISTS';
+		} else {
+			$tax_query['terms'] = $terms;
+		}
+
+		$query->set( $taxonomy, '' );
+		$query->set( 'tax_query', [ $tax_query ] );
 	}
 }
