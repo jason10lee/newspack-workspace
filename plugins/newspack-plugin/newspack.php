@@ -16,7 +16,6 @@ defined( 'ABSPATH' ) || exit;
 
 define( 'NEWSPACK_PLUGIN_VERSION', '6.13.1' );
 
-
 // Define NEWSPACK_PLUGIN_FILE.
 if ( ! defined( 'NEWSPACK_PLUGIN_FILE' ) ) {
 	define( 'NEWSPACK_PLUGIN_FILE', __FILE__ );
