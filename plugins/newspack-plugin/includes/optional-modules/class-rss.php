@@ -471,7 +471,29 @@ class RSS {
 		?>
 		<p><strong>Note:</strong> These settings are for modifying a feed to make it compatible with various integrations (SmartNews, Pugpig, etc.). They should only be used if a specific integration requires a non-standard RSS feed. Consult the integration's documentation or support for information about which elements are required.</p>
 
-		<table>
+		<style>
+			.newspack-rss-technical-settings {
+				width: 100%;
+				table-layout: auto;
+			}
+			.newspack-rss-technical-settings th {
+				vertical-align: top;
+				padding-right: 20px;
+				padding-bottom: 10px;
+				word-wrap: break-word;
+				max-width: 600px;
+			}
+			.newspack-rss-technical-settings td {
+				vertical-align: top;
+				padding-bottom: 10px;
+			}
+			.newspack-rss-technical-settings textarea {
+				width: 100%;
+				max-width: 400px;
+				box-sizing: border-box;
+			}
+		</style>
+		<table class="newspack-rss-technical-settings">
 			<tr>
 				<th><?php esc_html_e( 'Add post featured images in <image> tags', 'newspack-plugin' ); ?></th>
 				<td>
@@ -524,7 +546,11 @@ class RSS {
 			<tr>
 				<th>
 					<?php esc_html_e( 'Custom tracking snippet', 'newspack-plugin' ); ?>
-					<p class="description"><?php echo esc_html_x( 'Tracking snippet that will be appended to the end of each post in the feed. You can use {{post-id}} and {{post-url}} as dynamic variables.', 'help text for custom tracking snippet', 'newspack-plugin' ); ?></p>
+					<p class="description">
+						<?php echo esc_html_x( 'Tracking snippet that will be appended to the end of each post in the feed. You can use {{post-id}} and {{post-url}} as dynamic variables.', 'help text for custom tracking snippet', 'newspack-plugin' ); ?>
+						<br>
+						<?php echo esc_html_x( 'Allowed HTML: script, img, iframe, noscript, div, span with safe attributes only.', 'help text for allowed HTML in tracking snippet', 'newspack-plugin' ); ?>
+					</p>
 				</th>
 				<td>
 					<textarea name="custom_tracking_snippet" rows="4" cols="50"><?php echo esc_textarea( $settings['custom_tracking_snippet'] ); ?></textarea>
@@ -631,8 +657,40 @@ class RSS {
 		$cdata_titles             = filter_input( INPUT_POST, 'cdata_titles', FILTER_SANITIZE_NUMBER_INT );
 		$settings['cdata_titles'] = (bool) $cdata_titles;
 
-		$custom_tracking_snippet = filter_input( INPUT_POST, 'custom_tracking_snippet', FILTER_DEFAULT ); // phpcs:ignore WordPressVIPMinimum.Security.PHPFilterFunctions.RestrictedFilter
-		$settings['custom_tracking_snippet'] = wp_kses_post( $custom_tracking_snippet );
+		$custom_tracking_snippet             = filter_input( INPUT_POST, 'custom_tracking_snippet', FILTER_DEFAULT ); // phpcs:ignore WordPressVIPMinimum.Security.PHPFilterFunctions.RestrictedFilter
+		$settings['custom_tracking_snippet'] = wp_kses(
+			$custom_tracking_snippet,
+			[
+				'script'   => [
+					'id'    => true,
+					'src'   => true,
+					'type'  => true,
+					'async' => true,
+					'defer' => true,
+					'class' => true,
+				],
+				'img'      => [
+					'id'     => true,
+					'style'  => true,
+					'src'    => true,
+					'alt'    => true,
+					'class'  => true,
+					'width'  => true,
+					'height' => true,
+				],
+				'iframe'   => [
+					'id'     => true,
+					'style'  => true,
+					'src'    => true,
+					'class'  => true,
+					'width'  => true,
+					'height' => true,
+				],
+				'noscript' => true,
+				'div'      => true,
+				'span'     => true,
+			]
+		);
 
 		$category_settings = filter_input_array(
 			INPUT_POST,
