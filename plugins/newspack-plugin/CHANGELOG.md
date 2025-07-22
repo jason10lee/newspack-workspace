@@ -1,3 +1,10 @@
+## [6.13.1](https://github.com/Automattic/newspack-plugin/compare/v6.13.0...v6.13.1) (2025-07-22)
+
+
+### Bug Fixes
+
+* **google-oauth:** race conditions and cross-site issues ([#4095](https://github.com/Automattic/newspack-plugin/issues/4095)) ([f18e64a](https://github.com/Automattic/newspack-plugin/commit/f18e64a82205553413f68be47052f1389de0aed9))
+
 # [6.13.0](https://github.com/Automattic/newspack-plugin/compare/v6.12.3...v6.13.0) (2025-07-17)
 
 
