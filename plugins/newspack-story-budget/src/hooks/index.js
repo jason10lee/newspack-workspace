@@ -5,7 +5,7 @@ import { __ } from '@wordpress/i18n';
 import { useMemo } from '@wordpress/element';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { Icon } from '@wordpress/components';
-import { seen, update, edit } from '@wordpress/icons';
+import { seen, update, edit, external } from '@wordpress/icons';
 import { applyFilters } from '@wordpress/hooks';
 
 /**
@@ -154,8 +154,8 @@ export const useStoryActions = () => {
 					},
 				},
 				{
-					id: 'edit-story',
-					label: __( 'Edit Story', 'newspack-story-budget' ),
+					id: 'edit-fields',
+					label: __( 'Edit Fields', 'newspack-story-budget' ),
 					isPrimary: true,
 					supportsBulk: true,
 					icon: <Icon icon={ edit } />,
@@ -165,7 +165,7 @@ export const useStoryActions = () => {
 				{
 					id: 'refresh',
 					label: __( 'Refresh', 'newspack-story-budget' ),
-					isPrimary: false,
+					isPrimary: true,
 					supportsBulk: true,
 					icon: <Icon icon={ update } />,
 					callback: items => {
@@ -180,7 +180,7 @@ export const useStoryActions = () => {
 					label: __( 'Edit Post', 'newspack-story-budget' ),
 					isEligible: item => canManage && !! item.metadata?.edit_url,
 					isPrimary: false,
-					icon: <Icon icon={ edit } />,
+					icon: <Icon icon={ external } />,
 					callback: items => {
 						if ( items[ 0 ].metadata?.edit_url ) {
 							window.open( items[ 0 ].metadata.edit_url );
