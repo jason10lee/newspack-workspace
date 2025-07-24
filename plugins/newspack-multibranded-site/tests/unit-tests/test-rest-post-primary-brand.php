@@ -15,6 +15,13 @@ class Test_Rest_Post_Primary_Brand extends Newspack_Multibranded_Rest_Testcase {
 	protected $post;
 
 	/**
+	 * A testing post by author.
+	 *
+	 * @var WP_Post
+	 */
+	protected $post_by_author;
+
+	/**
 	 * Setting up the test.
 	 *
 	 * @before

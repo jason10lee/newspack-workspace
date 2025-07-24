@@ -9,7 +9,7 @@
 		"dealerdirect/phpcodesniffer-composer-installer": "*",
 		"phpcompatibility/phpcompatibility-wp": "*",
 		"yoast/phpunit-polyfills": "^2.0",
-		"phpunit/phpunit": "^7.0 || ^9.5"
+		"phpunit/phpunit": "^9.5"
 	},
 	"autoload": {
 		"classmap": [
@@ -18,7 +18,7 @@
 	},
 	"config": {
 		"platform": {
-			"php": "8.0"
+			"php": "8.3"
 		},
 		"allow-plugins": {
 			"composer/installers": true,

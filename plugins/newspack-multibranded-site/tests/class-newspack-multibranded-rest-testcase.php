@@ -36,6 +36,27 @@ class Newspack_Multibranded_Rest_Testcase extends WP_UnitTestCase {
 	protected $term1;
 
 	/**
+	 * A testing brand term.
+	 *
+	 * @var WP_Term
+	 */
+	protected $term2;
+
+	/**
+	 * An author user.
+	 *
+	 * @var WP_User
+	 */
+	protected $author;
+
+	/**
+	 * A subscriber user.
+	 *
+	 * @var WP_User
+	 */
+	protected $subscriber;
+
+	/**
 	 * Setting up the test.
 	 *
 	 * @before
