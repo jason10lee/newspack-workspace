@@ -1,3 +1,11 @@
+## [4.14.6](https://github.com/Automattic/newspack-blocks/compare/v4.14.5...v4.14.6) (2025-07-28)
+
+
+### Bug Fixes
+
+* Fix/author list roles and exclusion ([#2166](https://github.com/Automattic/newspack-blocks/issues/2166)) ([f2dfe4d](https://github.com/Automattic/newspack-blocks/commit/f2dfe4d1297740d483e25ef680f4cf5735ba2a28))
+* remove current page deduplication from logic when deduplication is disabled ([#2169](https://github.com/Automattic/newspack-blocks/issues/2169)) ([4000d85](https://github.com/Automattic/newspack-blocks/commit/4000d858b6931137d883e06b2b6c1200a420dfa7))
+
 ## [4.14.5](https://github.com/Automattic/newspack-blocks/compare/v4.14.4...v4.14.5) (2025-07-14)
 
 
