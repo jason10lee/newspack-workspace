@@ -8,8 +8,8 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import metadata from './block.json';
-import { corrections as icon } from '../../icons';
-import colors from '../../shared/scss/_colors.module.scss';
+import { corrections as icon } from '../../../packages/icons';
+import colors from '../../../packages/colors/colors.module.scss';
 import './style.scss';
 
 export const title = __( 'Correction Item', 'newspack-plugin' );
