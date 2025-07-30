@@ -1,3 +1,10 @@
+## [6.14.1](https://github.com/Automattic/newspack-plugin/compare/v6.14.0...v6.14.1) (2025-07-30)
+
+
+### Bug Fixes
+
+* **rss:** enhance allowed attributes ([#4115](https://github.com/Automattic/newspack-plugin/issues/4115)) ([feead1b](https://github.com/Automattic/newspack-plugin/commit/feead1b5bc88d845d2c5d08a2ced614cc937f6b8))
+
 # [6.14.0](https://github.com/Automattic/newspack-plugin/compare/v6.13.1...v6.14.0) (2025-07-28)
 
 
