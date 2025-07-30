@@ -1,3 +1,10 @@
+## [6.14.2](https://github.com/Automattic/newspack-plugin/compare/v6.14.1...v6.14.2) (2025-07-30)
+
+
+### Bug Fixes
+
+* revert image tag encoding changes ([#4116](https://github.com/Automattic/newspack-plugin/issues/4116)) ([cbb4efa](https://github.com/Automattic/newspack-plugin/commit/cbb4efaa3d5b84acca22f45d6cf10074fc94d2f5))
+
 ## [6.14.1](https://github.com/Automattic/newspack-plugin/compare/v6.14.0...v6.14.1) (2025-07-30)
 
 
