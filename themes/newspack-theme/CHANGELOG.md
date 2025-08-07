@@ -1,3 +1,10 @@
+## [2.11.1](https://github.com/Automattic/newspack-theme/compare/v2.11.0...v2.11.1) (2025-08-07)
+
+
+### Bug Fixes
+
+* prevent archive grid from spreading out ([#2530](https://github.com/Automattic/newspack-theme/issues/2530)) ([91d750a](https://github.com/Automattic/newspack-theme/commit/91d750a74d5b6a37ac6faf820f05b4a315d9cc8d))
+
 # [2.11.0](https://github.com/Automattic/newspack-theme/compare/v2.10.0...v2.11.0) (2025-06-30)
 
 
