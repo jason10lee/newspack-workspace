@@ -122,15 +122,10 @@ class Test_API extends \WP_UnitTestCase {
 		// Get current timestamp.
 		$current_time = time();
 
-		sleep( 1 );
+		sleep( 3 );
 
 		// Create a new story after the timestamp.
-		$new_story = self::factory()->post->create(
-			[
-				'post_type' => 'post',
-				'post_date' => gmdate( 'Y-m-d H:i:s', $current_time + 1 ),
-			]
-		);
+		$new_story = self::factory()->post->create();
 		$story = new Story( $new_story );
 		$story->update_budgets( [ self::$budgets[0] ] );
 
@@ -144,10 +139,10 @@ class Test_API extends \WP_UnitTestCase {
 
 		$data = $response->get_data();
 
-		// Should only get the new story we created.
-		$this->assertCount( 1, $data['stories'], 'Should only get the new story we created.' );
-		$this->assertEquals( 1, $data['total'], 'Should only get the new story we created.' );
-		$this->assertEquals( $new_story, $data['stories'][0]['id'], 'Should only get the new story we created.' );
+		// Should only get the new story.
+		$this->assertCount( 1, $data['stories'], 'Should only get the new story.' );
+		$this->assertEquals( 1, $data['total'], 'Should only get the new story.' );
+		$this->assertEquals( $new_story, $data['stories'][0]['id'], 'Should only get the new story.' );
 		$this->assertArrayHasKey( 'metadata', $data['stories'][0], 'Should get metadata.' );
 	}
 
