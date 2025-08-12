@@ -1,3 +1,10 @@
+## [3.6.1](https://github.com/Automattic/newspack-ads/compare/v3.6.0...v3.6.1) (2025-08-12)
+
+
+### Bug Fixes
+
+* **placements:** fix side rail main element ([#983](https://github.com/Automattic/newspack-ads/issues/983)) ([5094654](https://github.com/Automattic/newspack-ads/commit/5094654a6625dc089661e092ec74ec782128d5f7))
+
 # [3.6.0](https://github.com/Automattic/newspack-ads/compare/v3.5.5...v3.6.0) (2025-08-11)
 
 
