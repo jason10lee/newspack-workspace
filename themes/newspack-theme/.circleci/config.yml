@@ -91,6 +91,10 @@ workflows:
       - newspack/i18n:
           requires:
             - build
+          filters:
+            branches:
+              only:
+                - trunk
       - lint:
           requires:
             - build
