@@ -1,3 +1,17 @@
+# [2.12.0](https://github.com/Automattic/newspack-theme/compare/v2.11.1...v2.12.0) (2025-08-12)
+
+
+### Bug Fixes
+
+* force release ([51cf56c](https://github.com/Automattic/newspack-theme/commit/51cf56c42ba990afe779ac15cdc32cafb1c56cfc))
+* force release ([a6dcdaf](https://github.com/Automattic/newspack-theme/commit/a6dcdaf5e55adcbe1f3f81cea18da2af69e23e29))
+
+
+### Features
+
+* add an option to show subtitles on archive pages (NPMIG-1106) ([#2528](https://github.com/Automattic/newspack-theme/issues/2528)) ([7a904e5](https://github.com/Automattic/newspack-theme/commit/7a904e53c75795ece0830ab80e4e6e26d4531036))
+* update translation files; add i18n on CI ([#2525](https://github.com/Automattic/newspack-theme/issues/2525)) ([0c2389b](https://github.com/Automattic/newspack-theme/commit/0c2389b4fb9b3d4caea62207a38fdc0decfd5bc8))
+
 # [2.12.0-alpha.1](https://github.com/Automattic/newspack-theme/compare/v2.11.1...v2.12.0-alpha.1) (2025-08-07)
 
 
