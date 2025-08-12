@@ -64,7 +64,9 @@ const StoryBudgetPanel = () => {
 				},
 				{ id: editedStory.id }
 			);
-			saveStory( postId, filteredStory );
+			if ( Object.keys( filteredStory ).length > 1 ) {
+				saveStory( postId, filteredStory );
+			}
 		}
 	}, [ isSavingPost, isDeletingPost ] );
 
