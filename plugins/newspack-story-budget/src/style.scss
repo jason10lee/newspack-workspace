@@ -67,7 +67,21 @@ body.toplevel_page_newspack-story-budget {
 				position: sticky;
 				right: 0;
 				background: transparent;
-				vertical-align: middle;
+				vertical-align: bottom;
+				pointer-events: none;
+				padding-bottom: 0 !important;
+				> div {
+					pointer-events: auto;
+					.components-button.has-icon {
+						min-width: 28px;
+						width: 28px;
+						height: 28px;
+						svg {
+							width: 20px;
+							height: 20px;
+						}
+					}
+				}
 				.dataviews-view-table-header {
 					display: none;
 				}
@@ -81,14 +95,17 @@ body.toplevel_page_newspack-story-budget {
 		tr:hover {
 			.dataviews-view-table__actions-column {
 				> div {
-					box-shadow:
-						0 0 0 1px wp-colors.$gray-300,
-						0 2px 3px rgba(0, 0, 0, 0.05),
-						0 4px 5px rgba(0, 0, 0, 0.04),
-						0 12px 12px rgba(0, 0, 0, 0.03),
-						0 16px 16px rgba(0, 0, 0, 0.02);
+					border-top: 1px solid wp-colors.$gray-300;
+					border-left: 1px solid wp-colors.$gray-300;
+					border-right: 1px solid wp-colors.$gray-300;
+					// box-shadow:
+					// 	0 0 0 1px wp-colors.$gray-300,
+					// 	0 2px 3px rgba(0, 0, 0, 0.05),
+					// 	0 4px 5px rgba(0, 0, 0, 0.04),
+					// 	0 12px 12px rgba(0, 0, 0, 0.03),
+					// 	0 16px 16px rgba(0, 0, 0, 0.02);
 					background: #fff;
-					border-radius: 4px;
+					border-radius: 4px 4px 0 0;
 				}
 				button {
 					opacity: 1;
