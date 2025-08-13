@@ -21,6 +21,8 @@ const collisionElements = [
 	'.newspack_global_ad.sticky',
 ];
 
+window.googletag = window.googletag || { cmd: [] };
+
 /**
  * Initialize a side rail placement.
  *
@@ -53,12 +55,9 @@ function initPlacement(selector, side, elements) {
 
 	// Prepend a reference div to the element.
 	const refDiv = document.createElement('div');
+	refDiv.style.width = (ad._size ? ad._size[0] : ad.offsetWidth) + 'px';
+	refDiv.style.height = (ad._size ? ad._size[1] : ad.offsetHeight) + 'px';
 	refDiv.style.position = 'absolute';
-	refDiv.style.top = '0';
-	refDiv.style.left = '0';
-	refDiv.style.width = '100%';
-	refDiv.style.height = '100%';
-	refDiv.style.zIndex = '9999';
 	refDiv.style.pointerEvents = 'none';
 	element.prepend(refDiv);
 
@@ -69,6 +68,7 @@ function initPlacement(selector, side, elements) {
 	const showAd = () => {
 		ad.classList.remove('ad-hidden');
 		ad.classList.add('ad-visible');
+		ad.style.removeProperty('display');
 	};
 
 	const handleCollision = () => {
@@ -106,7 +106,24 @@ function initPlacement(selector, side, elements) {
 		element.style.width = `${newWidth}px`;
 	};
 
+	const handleStickyAd = () => {
+		const stickyAd = document.querySelector('.newspack_global_ad.sticky');
+		const stickyAdClose = document.querySelector(
+			'.newspack_sticky_ad__close'
+		);
+		if (stickyAd) {
+			element.style.bottom = `${stickyAd.offsetHeight}px`;
+		}
+		if (stickyAdClose) {
+			stickyAdClose.addEventListener('click', () => {
+				element.style.removeProperty('bottom');
+				handlePlacement();
+			});
+		}
+	};
+
 	const handlePlacement = () => {
+		handleStickyAd();
 		updateDimensions();
 		handleCollision();
 	};
@@ -122,7 +139,8 @@ function initPlacement(selector, side, elements) {
 				if (ad.id !== event.slot.getSlotElementId()) {
 					return;
 				}
-				ad.style.width = event.size[0] + 'px';
+				refDiv.style.width = event.size[0] + 'px';
+				refDiv.style.height = event.size[1] + 'px';
 				handlePlacement();
 			});
 	});

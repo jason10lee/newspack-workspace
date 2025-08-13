@@ -1,3 +1,10 @@
+## [3.6.2](https://github.com/Automattic/newspack-ads/compare/v3.6.1...v3.6.2) (2025-08-13)
+
+
+### Bug Fixes
+
+* **placements:** side rail placement dimension race condition ([#984](https://github.com/Automattic/newspack-ads/issues/984)) ([304a9f3](https://github.com/Automattic/newspack-ads/commit/304a9f3163943379bc3887ae4f22fda241151cc7))
+
 ## [3.6.1](https://github.com/Automattic/newspack-ads/compare/v3.6.0...v3.6.1) (2025-08-12)
 
 
