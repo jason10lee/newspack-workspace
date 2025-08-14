@@ -1,3 +1,10 @@
+## [4.14.8](https://github.com/Automattic/newspack-blocks/compare/v4.14.7...v4.14.8) (2025-08-12)
+
+
+### Bug Fixes
+
+* **modal-checkout:** account for signup fee in price summary ([#2183](https://github.com/Automattic/newspack-blocks/issues/2183)) ([9ba0a6a](https://github.com/Automattic/newspack-blocks/commit/9ba0a6a84fd727e42bec3db2813b2530cab0dbfa))
+
 ## [4.14.7](https://github.com/Automattic/newspack-blocks/compare/v4.14.6...v4.14.7) (2025-08-12)
 
 

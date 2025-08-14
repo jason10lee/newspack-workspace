@@ -2,14 +2,16 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Newspack Blocks 1.0.0-alpha.20\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/project\n"
-"POT-Creation-Date: 2025-08-12T07:13:38+00:00\n"
-"PO-Revision-Date: 2024-08-30 08:45-0700\n"
+"POT-Creation-Date: 2025-08-14T20:07:22+00:00\n"
+"PO-Revision-Date: 2025-08-12T14:56:45+00:00\n"
 "Last-Translator: \n"
 "Language-Team: \n"
 "Language: es\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+"2025-08-12T07: 26:20+00:00\n"
+"2025-08-11T19: 44:30+00:00release2024-08-30 08:45-0700\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "X-Generator: Poedit 3.5\n"
 "X-Domain: newspack-blocks\n"
@@ -128,7 +130,7 @@ msgstr ""
 #. translators: 1: Checkout button confirmation text. 2: Order total.
 #. translators: 1 is the name of the item. 2 is the price of the item.
 #: includes/class-modal-checkout.php:1630
-#: includes/modal-checkout/class-checkout-data.php:64
+#: includes/modal-checkout/class-checkout-data.php:67
 #, php-format
 msgid "%1$s: %2$s"
 msgstr ""
@@ -288,7 +290,7 @@ msgstr ""
 msgid " per "
 msgstr ""
 
-#: includes/modal-checkout/class-checkout-data.php:242 dist/editor.js:35
+#: includes/modal-checkout/class-checkout-data.php:255 dist/editor.js:35
 #: src/blocks/donate/index.js:25
 msgid "Donate"
 msgstr ""

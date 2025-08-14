@@ -30,13 +30,15 @@ final class Checkout_Data {
 			if ( $frequency && $frequency !== 'once' ) {
 				// Get additional subscription details if product_id is provided.
 				$subscription_interval = 1;
-				$trial_length = 0;
-				$trial_period = '';
+				$trial_length          = 0;
+				$trial_period          = '';
+				$initial_amount        = 0;
 
 				if ( $product_id ) {
 					$subscription_interval = get_post_meta( $product_id, '_subscription_period_interval', true );
 					$trial_length = get_post_meta( $product_id, '_subscription_trial_length', true );
 					$trial_period = get_post_meta( $product_id, '_subscription_trial_period', true );
+					$initial_amount = get_post_meta( $product_id, '_subscription_sign_up_fee', true );
 
 					if ( empty( $subscription_interval ) ) {
 						$subscription_interval = 1;
@@ -52,6 +54,7 @@ final class Checkout_Data {
 							'use_per_slash'         => true,
 							'trial_length'          => $trial_length,
 							'trial_period'          => $trial_period,
+							'initial_amount'        => $initial_amount,
 						]
 					)
 				);
@@ -61,7 +64,17 @@ final class Checkout_Data {
 		}
 
 		// translators: 1 is the name of the item. 2 is the price of the item.
-		return sprintf( __( '%1$s: %2$s', 'newspack-blocks' ), $name, $price );
+		$price_summary = sprintf( __( '%1$s: %2$s', 'newspack-blocks' ), $name, $price );
+
+		/**
+		 * Filters the price summary string that appears in modal checkout.
+		 *
+		 * @param string $price_summary The formatted price summary string.
+		 * @param string $product_id    The product ID, if available.
+		 *
+		 * @return string The filtered price summary string.
+		 */
+		return apply_filters( 'newspack_modal_checkout_price_summary', $price_summary, $product_id );
 	}
 
 	/**
