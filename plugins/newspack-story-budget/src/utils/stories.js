@@ -9,6 +9,7 @@ export const filter = ( stories, fields, view ) => {
 		if (
 			value === null ||
 			value === undefined ||
+			value === '' ||
 			( Array.isArray( value ) && ! value.length )
 		) {
 			continue;

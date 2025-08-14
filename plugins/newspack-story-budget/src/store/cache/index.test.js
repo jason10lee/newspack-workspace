@@ -1,9 +1,17 @@
-import { encode, decode, getCache, setCache, deleteCache } from '.';
+import { encode, decode, getCache, setCache, deleteCache, STORAGE_KEYS } from '.';
 
 describe( 'Cache functionality', () => {
 	beforeEach( () => {
 		// Clear sessionStorage before each test
 		sessionStorage.clear();
+
+		// Add test key to STORAGE_KEYS for testing
+		STORAGE_KEYS.testCache = {};
+	} );
+
+	afterEach( () => {
+		// Clean up after tests
+		delete STORAGE_KEYS.testCache;
 	} );
 
 	describe( 'encode and decode', () => {
@@ -57,7 +65,7 @@ describe( 'Cache functionality', () => {
 		it( 'should store data with timestamp', () => {
 			const testData = { test: 'value' };
 			setCache( 'testCache', testData );
-			const stored = JSON.parse( sessionStorage.getItem( 'testCache' ) );
+			const stored = getCache( 'testCache' );
 			expect( stored.data ).toEqual( testData );
 			expect( stored.timestamp ).toBeDefined();
 		} );
