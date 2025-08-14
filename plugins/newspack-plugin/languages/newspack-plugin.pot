@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2025-08-11T18:32:19+00:00\n"
+"POT-Creation-Date: 2025-08-14T17:55:07+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-plugin\n"
@@ -1591,7 +1591,7 @@ msgstr ""
 #: includes/lite-site/class-lite-site.php:90
 #: includes/wizards/advertising/class-advertising-sponsors.php:94
 #: includes/wizards/class-listings-wizard.php:119
-#: includes/wizards/class-network-wizard.php:325
+#: includes/wizards/class-network-wizard.php:314
 #: includes/wizards/class-newsletters-wizard.php:304
 #: includes/wizards/newspack/class-newspack-dashboard.php:101
 #: includes/wizards/newspack/class-newspack-dashboard.php:166
@@ -4495,31 +4495,30 @@ msgid "Network / Subscriptions"
 msgstr ""
 
 #: includes/wizards/class-network-wizard.php:191
-#: includes/wizards/class-network-wizard.php:324
+#: includes/wizards/class-network-wizard.php:313
 msgid "Site Role"
 msgstr ""
 
 #: includes/wizards/class-network-wizard.php:198
-#: includes/wizards/class-network-wizard.php:303
-#: includes/wizards/class-network-wizard.php:307
+#: includes/wizards/class-network-wizard.php:292
+#: includes/wizards/class-network-wizard.php:296
 msgid "Node Settings"
 msgstr ""
 
-#: includes/wizards/class-network-wizard.php:207
-#: includes/wizards/class-network-wizard.php:336
-#: includes/wizards/class-network-wizard.php:340
-msgid "Distributor Settings"
-msgstr ""
-
-#: includes/wizards/class-network-wizard.php:214
-#: includes/wizards/class-network-wizard.php:354
-#: includes/wizards/class-network-wizard.php:358
+#: includes/wizards/class-network-wizard.php:204
+#: includes/wizards/class-network-wizard.php:341
+#: includes/wizards/class-network-wizard.php:345
 msgid "Content Distribution"
 msgstr ""
 
-#: includes/wizards/class-network-wizard.php:292
+#: includes/wizards/class-network-wizard.php:281
 #: includes/wizards/newspack/class-newspack-dashboard.php:177
 msgid "Network"
+msgstr ""
+
+#: includes/wizards/class-network-wizard.php:325
+#: includes/wizards/class-network-wizard.php:329
+msgid "Distributor Settings"
 msgstr ""
 
 #: includes/wizards/class-newsletters-wizard.php:72
