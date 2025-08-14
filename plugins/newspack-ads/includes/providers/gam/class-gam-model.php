@@ -33,6 +33,8 @@ final class GAM_Model {
 
 	const OPTION_NAME_PARENT_AD_UNIT = '_newspack_ads_gam_parent_ad_unit';
 
+	const OPTION_NAME_PARENT_NETWORK_CODE = '_newspack_ads_gam_parent_network_code';
+
 	/**
 	 * GAM Api
 	 *
@@ -439,12 +441,21 @@ final class GAM_Model {
 	}
 
 	/**
+	 * Get parent network code.
+	 *
+	 * @return string Parent network code or empty string if not set.
+	 */
+	public static function get_parent_network_code() {
+		return get_option( self::OPTION_NAME_PARENT_NETWORK_CODE, '' );
+	}
+
+	/**
 	 * Get parent ad unit id.
 	 *
-	 * @return int|false Parent ad unit id or false if not set.
+	 * @return string Parent ad unit id or empty string if not set.
 	 */
 	public static function get_parent_ad_unit_id() {
-		return get_option( self::OPTION_NAME_PARENT_AD_UNIT, false );
+		return get_option( self::OPTION_NAME_PARENT_AD_UNIT, '' );
 	}
 
 	/**
