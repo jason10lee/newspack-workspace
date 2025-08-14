@@ -1,3 +1,10 @@
+## [6.15.2](https://github.com/Automattic/newspack-plugin/compare/v6.15.1...v6.15.2) (2025-08-14)
+
+
+### Bug Fixes
+
+* coerce number strings on segment criteria save ([#4143](https://github.com/Automattic/newspack-plugin/issues/4143)) ([9645633](https://github.com/Automattic/newspack-plugin/commit/9645633e9b6a31c616a3ff29c32ca54a640102c4))
+
 ## [6.15.1](https://github.com/Automattic/newspack-plugin/compare/v6.15.0...v6.15.1) (2025-08-11)
 
 
