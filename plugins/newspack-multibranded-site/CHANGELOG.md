@@ -1,3 +1,15 @@
+# [2.1.0](https://github.com/Automattic/newspack-multibranded-site/compare/v2.0.6...v2.1.0) (2025-08-25)
+
+
+### Bug Fixes
+
+* phpunit tests compat with php 8.3 ([#80](https://github.com/Automattic/newspack-multibranded-site/issues/80)) ([ac2076d](https://github.com/Automattic/newspack-multibranded-site/commit/ac2076d9cad38353bb67ba72a19d43d67d826016))
+
+
+### Features
+
+* add i18n ([#81](https://github.com/Automattic/newspack-multibranded-site/issues/81)) ([2e9bf9c](https://github.com/Automattic/newspack-multibranded-site/commit/2e9bf9ca5cb87c113f3a27f40198a9c47da9e951))
+
 ## [2.0.6](https://github.com/Automattic/newspack-multibranded-site/compare/v2.0.5...v2.0.6) (2025-06-02)
 
 
