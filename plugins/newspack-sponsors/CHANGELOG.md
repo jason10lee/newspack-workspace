@@ -1,3 +1,10 @@
+# [2.1.0](https://github.com/Automattic/newspack-sponsors/compare/v2.0.2...v2.1.0) (2025-08-25)
+
+
+### Features
+
+* add i18n ([#361](https://github.com/Automattic/newspack-sponsors/issues/361)) ([00e7450](https://github.com/Automattic/newspack-sponsors/commit/00e745089f10dd74ff02fbaa12025bc43d4cf867))
+
 ## [2.0.2](https://github.com/Automattic/newspack-sponsors/compare/v2.0.1...v2.0.2) (2025-05-14)
 
 
