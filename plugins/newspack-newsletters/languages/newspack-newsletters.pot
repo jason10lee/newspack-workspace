@@ -343,35 +343,35 @@ msgstr[1] ""
 msgid "Not supported for this provider"
 msgstr ""
 
-#: includes/class-newspack-newsletters-editor.php:233
+#: includes/class-newspack-newsletters-editor.php:239
 msgctxt "font size name"
 msgid "Small"
 msgstr ""
 
-#: includes/class-newspack-newsletters-editor.php:238
+#: includes/class-newspack-newsletters-editor.php:244
 msgctxt "font size name"
 msgid "Medium"
 msgstr ""
 
-#: includes/class-newspack-newsletters-editor.php:243
+#: includes/class-newspack-newsletters-editor.php:249
 msgctxt "font size name"
 msgid "Large"
 msgstr ""
 
-#: includes/class-newspack-newsletters-editor.php:248
+#: includes/class-newspack-newsletters-editor.php:254
 msgctxt "font size name"
 msgid "Extra Large"
 msgstr ""
 
-#: includes/class-newspack-newsletters-editor.php:339
+#: includes/class-newspack-newsletters-editor.php:351
 msgid "Continue reading…"
 msgstr ""
 
-#: includes/class-newspack-newsletters-editor.php:340
+#: includes/class-newspack-newsletters-editor.php:352
 msgid "By "
 msgstr ""
 
-#: includes/class-newspack-newsletters-editor.php:341
+#: includes/class-newspack-newsletters-editor.php:353
 msgid "and "
 msgstr ""
 
