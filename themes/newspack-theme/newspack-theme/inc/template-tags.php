@@ -15,7 +15,7 @@ if ( ! function_exists( 'newspack_posted_on' ) ) :
 		}
 
 		$time_string = '<time class="entry-date published updated" datetime="%1$s">%2$s</time>';
-		if ( get_the_time( 'U' ) !== get_the_modified_time( 'U' ) ) {
+		if ( get_the_time( 'U' ) < get_the_modified_time( 'U' ) ) {
 			$time_string = '<time class="entry-date published" datetime="%1$s">%2$s</time>%3$s<time class="updated" datetime="%4$s">%5$s</time>';
 		}
 
@@ -164,7 +164,7 @@ if ( ! function_exists( 'newspack_post_subtitle' ) ) :
 	 * Prints the post subtitle.
 	 */
 	function newspack_post_subtitle() {
-		$subtitle = get_post_meta( get_the_ID(), 'newspack_post_subtitle', true );
+		$subtitle              = get_post_meta( get_the_ID(), 'newspack_post_subtitle', true );
 		$subtitle_allowed_tags = array(
 			'b'      => true,
 			'strong' => true,
