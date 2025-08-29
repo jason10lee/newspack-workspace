@@ -1,3 +1,10 @@
+## [6.16.2](https://github.com/Automattic/newspack-plugin/compare/v6.16.1...v6.16.2) (2025-08-29)
+
+
+### Bug Fixes
+
+* update markup around Collections header ([#4157](https://github.com/Automattic/newspack-plugin/issues/4157)) ([aa88c76](https://github.com/Automattic/newspack-plugin/commit/aa88c76392b160b0385d3629323ed5655583f498))
+
 ## [6.16.1](https://github.com/Automattic/newspack-plugin/compare/v6.16.0...v6.16.1) (2025-08-26)
 
 
