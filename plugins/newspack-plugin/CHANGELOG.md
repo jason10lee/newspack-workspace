@@ -1,3 +1,10 @@
+## [6.16.3](https://github.com/Automattic/newspack-plugin/compare/v6.16.2...v6.16.3) (2025-09-01)
+
+
+### Bug Fixes
+
+* **indesign:** exporter formatting fixes ([#4158](https://github.com/Automattic/newspack-plugin/issues/4158)) ([a680c21](https://github.com/Automattic/newspack-plugin/commit/a680c21964ccec5facab4ebedcdb718d711cd94d))
+
 ## [6.16.2](https://github.com/Automattic/newspack-plugin/compare/v6.16.1...v6.16.2) (2025-08-29)
 
 
