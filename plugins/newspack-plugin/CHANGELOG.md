@@ -1,3 +1,10 @@
+## [6.16.4](https://github.com/Automattic/newspack-plugin/compare/v6.16.3...v6.16.4) (2025-09-02)
+
+
+### Bug Fixes
+
+* **collections:** make filter params unique ([#4153](https://github.com/Automattic/newspack-plugin/issues/4153)) ([87bb14c](https://github.com/Automattic/newspack-plugin/commit/87bb14c22ab97ac3fccfc3a5b823be1cc057f266))
+
 ## [6.16.3](https://github.com/Automattic/newspack-plugin/compare/v6.16.2...v6.16.3) (2025-09-01)
 
 
