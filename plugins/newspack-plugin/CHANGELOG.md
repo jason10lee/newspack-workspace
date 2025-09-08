@@ -1,3 +1,10 @@
+## [6.17.1](https://github.com/Automattic/newspack-plugin/compare/v6.17.0...v6.17.1) (2025-09-08)
+
+
+### Bug Fixes
+
+* make sure settingsTabs exists before checking for setup wizard ([#4170](https://github.com/Automattic/newspack-plugin/issues/4170)) ([7a5db33](https://github.com/Automattic/newspack-plugin/commit/7a5db339634f3c5ba4ab1a434c533093765f7671))
+
 # [6.17.0](https://github.com/Automattic/newspack-plugin/compare/v6.16.5...v6.17.0) (2025-09-08)
 
 
