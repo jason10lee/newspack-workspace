@@ -1,3 +1,43 @@
+# [2.14.0](https://github.com/Automattic/newspack-theme/compare/v2.13.0...v2.14.0) (2025-09-08)
+
+
+### Bug Fixes
+
+* **collections:** hide author on collection category archives and add a guard for empty authors ([#2548](https://github.com/Automattic/newspack-theme/issues/2548)) ([618e514](https://github.com/Automattic/newspack-theme/commit/618e514437256f0b772894a6464a2a52e2b7658a))
+* do not apply link colors to buttons ([#2536](https://github.com/Automattic/newspack-theme/issues/2536)) ([bf3c5dd](https://github.com/Automattic/newspack-theme/commit/bf3c5dd72186878fe2e226ddd2ba293ab8af655b))
+* ensure full width figure captions are centered ([#2541](https://github.com/Automattic/newspack-theme/issues/2541)) ([86b87c7](https://github.com/Automattic/newspack-theme/commit/86b87c7a7f2c6ce8d93140f57fa53d865b176969))
+* show updated date if later than published ([#2545](https://github.com/Automattic/newspack-theme/issues/2545)) ([5070320](https://github.com/Automattic/newspack-theme/commit/50703209baf9d14baf6afcc8436971ee086977df))
+
+
+### Features
+
+* add Issuu to the Social Links menu ([#2540](https://github.com/Automattic/newspack-theme/issues/2540)) ([0843313](https://github.com/Automattic/newspack-theme/commit/0843313b3181b34b9e252b0ecc0d688b79eed482))
+* add last updated threshold to customizer ([#2535](https://github.com/Automattic/newspack-theme/issues/2535)) ([0b88c0d](https://github.com/Automattic/newspack-theme/commit/0b88c0d55b9b2aecc989090c2c2941a4b87c7ae7))
+* add republication tracker tool style ([#2539](https://github.com/Automattic/newspack-theme/issues/2539)) ([41dacb7](https://github.com/Automattic/newspack-theme/commit/41dacb79b46861f7140e97088a13afa156c7d789))
+
+# [2.14.0-alpha.2](https://github.com/Automattic/newspack-theme/compare/v2.14.0-alpha.1...v2.14.0-alpha.2) (2025-09-08)
+
+
+### Bug Fixes
+
+* **collections:** hide author on collection category archives and add a guard for empty authors ([#2548](https://github.com/Automattic/newspack-theme/issues/2548)) ([618e514](https://github.com/Automattic/newspack-theme/commit/618e514437256f0b772894a6464a2a52e2b7658a))
+
+# [2.14.0-alpha.1](https://github.com/Automattic/newspack-theme/compare/v2.13.0...v2.14.0-alpha.1) (2025-08-28)
+
+
+### Bug Fixes
+
+* do not apply link colors to buttons ([#2536](https://github.com/Automattic/newspack-theme/issues/2536)) ([bf3c5dd](https://github.com/Automattic/newspack-theme/commit/bf3c5dd72186878fe2e226ddd2ba293ab8af655b))
+* ensure full width figure captions are centered ([#2541](https://github.com/Automattic/newspack-theme/issues/2541)) ([86b87c7](https://github.com/Automattic/newspack-theme/commit/86b87c7a7f2c6ce8d93140f57fa53d865b176969))
+* show updated date if later than published ([#2545](https://github.com/Automattic/newspack-theme/issues/2545)) ([5070320](https://github.com/Automattic/newspack-theme/commit/50703209baf9d14baf6afcc8436971ee086977df))
+
+
+### Features
+
+* add Issuu to the Social Links menu ([#2540](https://github.com/Automattic/newspack-theme/issues/2540)) ([0843313](https://github.com/Automattic/newspack-theme/commit/0843313b3181b34b9e252b0ecc0d688b79eed482))
+* add last updated threshold to customizer ([#2535](https://github.com/Automattic/newspack-theme/issues/2535)) ([0b88c0d](https://github.com/Automattic/newspack-theme/commit/0b88c0d55b9b2aecc989090c2c2941a4b87c7ae7))
+* add republication tracker tool style ([#2539](https://github.com/Automattic/newspack-theme/issues/2539)) ([41dacb7](https://github.com/Automattic/newspack-theme/commit/41dacb79b46861f7140e97088a13afa156c7d789))
+
 # [2.13.0](https://github.com/Automattic/newspack-theme/compare/v2.12.0...v2.13.0) (2025-08-25)
 
 
