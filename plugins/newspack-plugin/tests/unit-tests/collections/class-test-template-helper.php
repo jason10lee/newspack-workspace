@@ -104,7 +104,7 @@ class Test_Template_Helper extends \WP_UnitTestCase {
 		global $wp_query;
 
 		// Test category filtering.
-		$_GET['np_collections_category'] = 'test-category';
+		$_GET[ Settings::CATEGORY_QUERY_PARAM ] = 'test-category';
 		Template_Helper::archive_filters( $wp_query );
 		$tax_query = $wp_query->get( 'tax_query' );
 		$this->assertIsArray( $tax_query, 'Tax query should be an array.' );
@@ -112,7 +112,7 @@ class Test_Template_Helper extends \WP_UnitTestCase {
 		$this->assertEquals( 'test-category', $tax_query[0]['terms'], 'Terms should match.' );
 
 		// Test year filtering.
-		$_GET['np_collections_year'] = '2023';
+		$_GET[ Settings::YEAR_QUERY_PARAM ] = '2023';
 		Template_Helper::archive_filters( $wp_query );
 		$date_query = $wp_query->get( 'date_query' );
 		$this->assertIsArray( $date_query, 'Date query should be an array.' );
@@ -123,30 +123,7 @@ class Test_Template_Helper extends \WP_UnitTestCase {
 		$this->assertGreaterThan( 0, $posts_per_page, 'Posts per page should be greater than 0.' );
 
 		// Clean up.
-		unset( $_GET['np_collections_category'], $_GET['np_collections_year'] );
-	}
-
-	/**
-	 * Test prevent_year_redirect prevents redirects on collection archives.
-	 *
-	 * @covers \Newspack\Collections\Template_Helper::prevent_year_redirect
-	 */
-	public function test_prevent_year_redirect() {
-		$year_url = 'http://example.com/2023';
-		// Test on collection archive with year parameter.
-		$this->go_to( get_post_type_archive_link( Post_Type::get_post_type() ) );
-		$_GET['year'] = '2023';
-
-		$result = Template_Helper::prevent_year_redirect( $year_url );
-		$this->assertFalse( $result, 'Redirect should be prevented.' );
-
-		// Test on regular page.
-		$this->go_to( home_url() );
-		$result = Template_Helper::prevent_year_redirect( $year_url );
-		$this->assertEquals( $year_url, $result, 'Redirect should not be prevented.' );
-
-		// Clean up.
-		unset( $_GET['year'] );
+		unset( $_GET[ Settings::CATEGORY_QUERY_PARAM ], $_GET[ Settings::YEAR_QUERY_PARAM ] );
 	}
 
 	/**

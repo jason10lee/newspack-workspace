@@ -29,7 +29,6 @@ class Template_Helper {
 		add_action( 'get_template_part', [ __CLASS__, 'load_template_part' ], 10, 4 );
 		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_assets' ], 5 );
 		add_action( 'pre_get_posts', [ __CLASS__, 'archive_filters' ] );
-		add_filter( 'redirect_canonical', [ __CLASS__, 'prevent_year_redirect' ] );
 		add_filter( 'jetpack_relatedposts_filter_enabled_for_request', [ __CLASS__, 'disable_jetpack_related_posts' ] );
 		add_filter( 'document_title_parts', [ __CLASS__, 'update_document_title' ] );
 	}
@@ -153,7 +152,7 @@ class Template_Helper {
 		$query->set( 'posts_per_page', $posts_per_page );
 
 		// Handle category filtering.
-		$category = isset( $_GET['np_collections_category'] ) ? sanitize_text_field( $_GET['np_collections_category'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$category = isset( $_GET[ Settings::CATEGORY_QUERY_PARAM ] ) ? sanitize_text_field( $_GET[ Settings::CATEGORY_QUERY_PARAM ] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if ( ! empty( $category ) ) {
 			$tax_query = [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
 				[
@@ -166,7 +165,7 @@ class Template_Helper {
 		}
 
 		// Handle year filtering.
-		$year = isset( $_GET['np_collections_year'] ) ? sanitize_text_field( $_GET['np_collections_year'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$year = isset( $_GET[ Settings::YEAR_QUERY_PARAM ] ) ? sanitize_text_field( $_GET[ Settings::YEAR_QUERY_PARAM ] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if ( ! empty( $year ) ) {
 			$query->set(
 				'date_query',
@@ -177,21 +176,6 @@ class Template_Helper {
 				]
 			);
 		}
-	}
-
-	/**
-	 * Prevent year archive redirects on collection archive pages.
-	 *
-	 * @param string $redirect_url The redirect URL.
-	 * @return string|false The redirect URL or false to prevent redirect.
-	 */
-	public static function prevent_year_redirect( $redirect_url ) {
-		// Check if we're on a collection archive page with year parameter.
-		if ( is_post_type_archive( Post_Type::get_post_type() ) && isset( $_GET['year'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			return false;
-		}
-
-		return $redirect_url;
 	}
 
 	/**
