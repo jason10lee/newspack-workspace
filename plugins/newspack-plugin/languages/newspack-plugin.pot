@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2025-09-12T17:45:28+00:00\n"
+"POT-Creation-Date: 2025-09-15T21:03:00+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-plugin\n"
@@ -1026,7 +1026,7 @@ msgstr ""
 #: includes/collections/class-post-meta.php:37
 #: includes/collections/class-post-type.php:72
 #: includes/collections/class-query-helper.php:205
-#: src/blocks/collections/class-collections-block.php:382
+#: src/blocks/collections/class-collections-block.php:385
 #: dist/blocks.js:4
 #: src/blocks/collections/components/CollectionItem.jsx:61
 msgid "Order"
@@ -1169,7 +1169,7 @@ msgstr ""
 #: includes/collections/class-collection-taxonomy.php:228
 #: includes/wizards/newspack/class-newspack-settings.php:110
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:88
+#: src/blocks/collections/components/InspectorPanel.jsx:86
 #: src/blocks/collections/index.js:15
 msgid "Collections"
 msgstr ""
@@ -1237,7 +1237,7 @@ msgid "View Collections"
 msgstr ""
 
 #: includes/collections/class-post-type.php:103
-#: src/blocks/collections/class-collections-block.php:118
+#: src/blocks/collections/class-collections-block.php:110
 msgid "No collections found."
 msgstr ""
 
@@ -1266,7 +1266,7 @@ msgid "Collection Details"
 msgstr ""
 
 #: includes/collections/class-query-helper.php:204
-#: src/blocks/collections/class-collections-block.php:378
+#: src/blocks/collections/class-collections-block.php:381
 #: dist/blocks.js:4
 #: src/blocks/collections/components/CollectionItem.jsx:57
 msgid "Subscribe"
@@ -1274,7 +1274,7 @@ msgstr ""
 
 #. translators: %s is the volume number of a collection
 #: includes/collections/class-template-helper.php:253
-#: src/blocks/collections/class-collections-block.php:333
+#: src/blocks/collections/class-collections-block.php:336
 #, php-format
 msgctxt "collection volume number"
 msgid "Vol. %s"
@@ -1282,7 +1282,7 @@ msgstr ""
 
 #. translators: %s is the issue number of a collection
 #: includes/collections/class-template-helper.php:258
-#: src/blocks/collections/class-collections-block.php:341
+#: src/blocks/collections/class-collections-block.php:344
 #, php-format
 msgctxt "collection issue number"
 msgid "No. %s"
@@ -1638,7 +1638,7 @@ msgstr ""
 #: dist/setup.js:7
 #: dist/wizards.js:1
 #: src/blocks/avatar/edit.jsx:23
-#: src/blocks/collections/components/InspectorPanel.jsx:65
+#: src/blocks/collections/components/InspectorPanel.jsx:63
 #: src/memberships-gate/editor.js:182
 #: src/other-scripts/emails/index.js:106
 #: src/wizards/advertising/index.js:154
@@ -3526,12 +3526,6 @@ msgid "Sign in by entering the code we sent to %s, or clicking the magic link in
 msgstr ""
 
 #: includes/reader-activation/class-reader-activation.php:1680
-#: src/blocks/collections/class-collections-block.php:147
-#: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:147
-#: src/blocks/collections/components/InspectorPanel.jsx:149
-#: src/blocks/collections/edit.jsx:141
-#: src/blocks/collections/edit.jsx:146
 msgid "See all"
 msgstr ""
 
@@ -4065,7 +4059,7 @@ msgstr ""
 
 #: includes/templates/collections/single-newspack-collection.php:86
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:78
+#: src/blocks/collections/components/InspectorPanel.jsx:76
 msgid "Recent"
 msgstr ""
 
@@ -5265,7 +5259,7 @@ msgstr ""
 #: dist/billboard.js:12
 #: dist/blocks.js:4
 #: dist/memberships-gate-editor.js:34
-#: src/blocks/collections/components/InspectorPanel.jsx:203
+#: src/blocks/collections/components/InspectorPanel.jsx:182
 #: src/memberships-gate/editor.js:162
 #: src/wizards/advertising/components/ad-unit-size-control/index.js:66
 #: src/wizards/advertising/views/ad-unit/index.js:117
@@ -7255,130 +7249,120 @@ msgid "Logged in message…"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:67
+#: src/blocks/collections/components/InspectorPanel.jsx:65
 msgid "Mode"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:73
+#: src/blocks/collections/components/InspectorPanel.jsx:71
 msgid "The block will display the most recent collection(s)."
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:74
+#: src/blocks/collections/components/InspectorPanel.jsx:72
 msgid "The block will display only the specifically selected collection(s)."
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:79
+#: src/blocks/collections/components/InspectorPanel.jsx:77
 msgid "Static"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:89
+#: src/blocks/collections/components/InspectorPanel.jsx:87
 msgid "Begin typing any word in a collection title. Click on an autocomplete result to select it."
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:97
+#: src/blocks/collections/components/InspectorPanel.jsx:95
 msgid "Number of collections"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:106
+#: src/blocks/collections/components/InspectorPanel.jsx:104
 msgid "Offset"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:111
+#: src/blocks/collections/components/InspectorPanel.jsx:109
 msgid "Number of collections to skip from the beginning"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:120
+#: src/blocks/collections/components/InspectorPanel.jsx:118
 msgid "Included categories"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:130
+#: src/blocks/collections/components/InspectorPanel.jsx:128
 msgid "Excluded categories"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:138
-msgid "Show \"See all\" link"
-msgstr ""
-
-#: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:144
-msgid "\"See all\" link text"
-msgstr ""
-
-#: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:158
+#: src/blocks/collections/components/InspectorPanel.jsx:137
 msgid "Grid"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:160
+#: src/blocks/collections/components/InspectorPanel.jsx:139
 msgid "Columns"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:170
+#: src/blocks/collections/components/InspectorPanel.jsx:149
 msgid "Featured Image"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:172
+#: src/blocks/collections/components/InspectorPanel.jsx:151
 msgid "Show featured image"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:179
+#: src/blocks/collections/components/InspectorPanel.jsx:158
 msgid "Alignment"
 msgstr ""
 
 #. translators: Overlay Position
 #: dist/blocks.js:4
 #: dist/memberships-gate-editor.js:3
-#: src/blocks/collections/components/InspectorPanel.jsx:186
+#: src/blocks/collections/components/InspectorPanel.jsx:165
 #: src/components/src/position-control/index.js:27
 msgid "Top"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:188
-#: src/blocks/collections/edit.jsx:44
+#: src/blocks/collections/components/InspectorPanel.jsx:167
+#: src/blocks/collections/edit.jsx:41
 msgid "Show image on top"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:191
+#: src/blocks/collections/components/InspectorPanel.jsx:170
 msgid "Left"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:193
-#: src/blocks/collections/edit.jsx:50
+#: src/blocks/collections/components/InspectorPanel.jsx:172
+#: src/blocks/collections/edit.jsx:47
 msgid "Show image on left"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:196
+#: src/blocks/collections/components/InspectorPanel.jsx:175
 msgid "Right"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:198
-#: src/blocks/collections/edit.jsx:56
+#: src/blocks/collections/components/InspectorPanel.jsx:177
+#: src/blocks/collections/edit.jsx:53
 msgid "Show image on right"
 msgstr ""
 
 #: dist/blocks.js:4
 #: dist/newspack-wizards.ccef7f3383dcb0735b9a.js:30
 #: dist/setup.js:7
-#: src/blocks/collections/components/InspectorPanel.jsx:210
+#: src/blocks/collections/components/InspectorPanel.jsx:189
 msgid "S"
 msgstr ""
 
@@ -7386,7 +7370,7 @@ msgstr ""
 #: dist/componentsDemo.js:1
 #: dist/memberships-gate-editor.js:25
 #: dist/newspack-wizards.ccef7f3383dcb0735b9a.js:30
-#: src/blocks/collections/components/InspectorPanel.jsx:212
+#: src/blocks/collections/components/InspectorPanel.jsx:191
 #: src/memberships-gate/editor.js:30
 #: src/wizards/componentsDemo/index.js:510
 #: src/wizards/componentsDemo/index.js:584
@@ -7396,13 +7380,13 @@ msgstr ""
 #: dist/blocks.js:4
 #: dist/newspack-wizards.ccef7f3383dcb0735b9a.js:30
 #: dist/setup.js:7
-#: src/blocks/collections/components/InspectorPanel.jsx:215
+#: src/blocks/collections/components/InspectorPanel.jsx:194
 msgid "M"
 msgstr ""
 
 #: dist/blocks.js:4
 #: dist/memberships-gate-editor.js:25
-#: src/blocks/collections/components/InspectorPanel.jsx:217
+#: src/blocks/collections/components/InspectorPanel.jsx:196
 #: src/memberships-gate/editor.js:31
 msgid "Medium"
 msgstr ""
@@ -7410,85 +7394,85 @@ msgstr ""
 #: dist/blocks.js:4
 #: dist/newspack-wizards.ccef7f3383dcb0735b9a.js:30
 #: dist/setup.js:7
-#: src/blocks/collections/components/InspectorPanel.jsx:220
+#: src/blocks/collections/components/InspectorPanel.jsx:199
 msgid "L"
 msgstr ""
 
 #: dist/blocks.js:4
 #: dist/memberships-gate-editor.js:25
 #: dist/newspack-wizards.ccef7f3383dcb0735b9a.js:30
-#: src/blocks/collections/components/InspectorPanel.jsx:222
+#: src/blocks/collections/components/InspectorPanel.jsx:201
 #: src/memberships-gate/editor.js:32
 msgid "Large"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:229
+#: src/blocks/collections/components/InspectorPanel.jsx:208
 msgid "Collection Meta"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:231
+#: src/blocks/collections/components/InspectorPanel.jsx:210
 msgid "Show title"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:237
+#: src/blocks/collections/components/InspectorPanel.jsx:216
 msgid "Show category"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:243
+#: src/blocks/collections/components/InspectorPanel.jsx:222
 msgid "Show excerpt"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:249
+#: src/blocks/collections/components/InspectorPanel.jsx:228
 msgid "Show period"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:255
+#: src/blocks/collections/components/InspectorPanel.jsx:234
 msgid "Show volume"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:261
+#: src/blocks/collections/components/InspectorPanel.jsx:240
 msgid "Show number"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:267
+#: src/blocks/collections/components/InspectorPanel.jsx:246
 msgid "Show CTAs"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:275
+#: src/blocks/collections/components/InspectorPanel.jsx:254
 msgid "Number of CTAs"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:280
+#: src/blocks/collections/components/InspectorPanel.jsx:259
 msgid "Maximum number of CTAs to display"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:285
+#: src/blocks/collections/components/InspectorPanel.jsx:264
 msgid "Show subscription URL"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:291
+#: src/blocks/collections/components/InspectorPanel.jsx:270
 msgid "Show order URL"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:298
+#: src/blocks/collections/components/InspectorPanel.jsx:277
 msgid "Specific CTAs (comma-separated)"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/components/InspectorPanel.jsx:299
+#: src/blocks/collections/components/InspectorPanel.jsx:278
 msgid "Enter specific CTA to show, e.g. \"Digital Edition\" (should match existing CTA label). Leave empty to show first available CTAs."
 msgstr ""
 
@@ -7533,22 +7517,22 @@ msgid "An advanced block that allows displaying collections based on different p
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/edit.jsx:26
+#: src/blocks/collections/edit.jsx:23
 msgid "List view"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/edit.jsx:32
+#: src/blocks/collections/edit.jsx:29
 msgid "Grid view"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/edit.jsx:116
+#: src/blocks/collections/edit.jsx:113
 msgid "Loading collections…"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/collections/edit.jsx:123
+#: src/blocks/collections/edit.jsx:120
 msgid "No collections found"
 msgstr ""
 
