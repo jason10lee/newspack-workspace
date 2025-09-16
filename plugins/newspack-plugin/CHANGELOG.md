@@ -1,3 +1,10 @@
+## [6.18.1](https://github.com/Automattic/newspack-plugin/compare/v6.18.0...v6.18.1) (2025-09-16)
+
+
+### Bug Fixes
+
+* **bylines:** display inline name for missing users ([#4190](https://github.com/Automattic/newspack-plugin/issues/4190)) ([0b2b5e3](https://github.com/Automattic/newspack-plugin/commit/0b2b5e39a21e3797d2749ef142f633734b32c35c))
+
 # [6.18.0](https://github.com/Automattic/newspack-plugin/compare/v6.17.1...v6.18.0) (2025-09-08)
 
 
