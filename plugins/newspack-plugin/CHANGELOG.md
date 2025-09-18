@@ -1,3 +1,10 @@
+## [6.18.2](https://github.com/Automattic/newspack-plugin/compare/v6.18.1...v6.18.2) (2025-09-18)
+
+
+### Bug Fixes
+
+* change sitekit check cadence ([5b2cd55](https://github.com/Automattic/newspack-plugin/commit/5b2cd552cf225d18bea2128979459c8ef6d8ebdc))
+
 ## [6.18.1](https://github.com/Automattic/newspack-plugin/compare/v6.18.0...v6.18.1) (2025-09-16)
 
 
