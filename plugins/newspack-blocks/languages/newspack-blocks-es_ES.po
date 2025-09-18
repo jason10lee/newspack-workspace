@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Newspack Blocks 1.0.0-alpha.20\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/project\n"
-"POT-Creation-Date: 2025-09-17T15:40:53+00:00\n"
+"POT-Creation-Date: 2025-09-18T12:44:42+00:00\n"
 "PO-Revision-Date: 2025-08-12T14:56:45+00:00\n"
 "Last-Translator: \n"
 "Language-Team: \n"
@@ -37,177 +37,177 @@ msgstr ""
 msgid "Automattic"
 msgstr ""
 
-#: includes/class-modal-checkout.php:447
+#: includes/class-modal-checkout.php:450
 msgid "Invalid nonce."
 msgstr ""
 
-#: includes/class-modal-checkout.php:457
+#: includes/class-modal-checkout.php:460
 msgid "Cart has been emptied."
 msgstr ""
 
 #. Translators: %s is the maximum price.
-#: includes/class-modal-checkout.php:537
+#: includes/class-modal-checkout.php:540
 #, php-format
 msgid "Adjusted price must be less than the maximum of %s."
 msgstr ""
 
 #. Translators: %s is the name-your-price custom price.
-#: includes/class-modal-checkout.php:561
+#: includes/class-modal-checkout.php:564
 #, php-format
 msgid "Adjusted price must be greater than base price of %s."
 msgstr ""
 
-#: includes/class-modal-checkout.php:613 includes/class-modal-checkout.php:697
+#: includes/class-modal-checkout.php:616 includes/class-modal-checkout.php:700
 msgid "Close"
 msgstr ""
 
-#: includes/class-modal-checkout.php:639
+#: includes/class-modal-checkout.php:642
 msgid "per"
 msgstr ""
 
-#: includes/class-modal-checkout.php:753
+#: includes/class-modal-checkout.php:756
 msgid "Or"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1023
+#: includes/class-modal-checkout.php:1026
 msgid ""
 "We're sorry, there was an unexpected error. Please try again in a few "
 "minutes."
 msgstr ""
 
-#: includes/class-modal-checkout.php:1035
+#: includes/class-modal-checkout.php:1038
 msgid "Go back"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1125
+#: includes/class-modal-checkout.php:1128
 msgid "Password mismatch"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1126
+#: includes/class-modal-checkout.php:1129
 msgid "Password strength: Very weak"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1127
+#: includes/class-modal-checkout.php:1130
 msgid "Password strength: Weak"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1128
+#: includes/class-modal-checkout.php:1131
 msgid "Password strength: Medium"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1129
+#: includes/class-modal-checkout.php:1132
 msgid "Password strength: Strong"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1310
+#: includes/class-modal-checkout.php:1313
 msgid "Please enter someone else' email address to receive this gift."
 msgstr ""
 
-#: includes/class-modal-checkout.php:1311
+#: includes/class-modal-checkout.php:1314
 msgid "Please enter a valid email address to receive this gift."
 msgstr ""
 
-#: includes/class-modal-checkout.php:1397
+#: includes/class-modal-checkout.php:1403
 msgid "Close window"
 msgstr ""
 
 #. translators: %s: Site name.
-#: includes/class-modal-checkout.php:1475
+#: includes/class-modal-checkout.php:1481
 #, php-format
 msgid ""
 "You're already a subscriber! You can only have one active subscription at a "
 "time. Thank you for supporting %s."
 msgstr ""
 
-#: includes/class-modal-checkout.php:1509
+#: includes/class-modal-checkout.php:1515
 msgid "Could not complete this transaction. Please contact us for assistance."
 msgstr ""
 
 #. translators: 1: Checkout button confirmation text. 2: Order total.
 #. translators: 1 is the name of the item. 2 is the price of the item.
-#: includes/class-modal-checkout.php:1590
+#: includes/class-modal-checkout.php:1601
 #: includes/modal-checkout/class-checkout-data.php:67
 #, php-format
 msgid "%1$s: %2$s"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1949
+#: includes/class-modal-checkout.php:1960
 msgid "Billing details"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1950
+#: includes/class-modal-checkout.php:1961
 msgid "Shipping details"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1951
+#: includes/class-modal-checkout.php:1962
 msgid "Gift recipient"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1952
-#: includes/class-modal-checkout.php:1953
-#: includes/class-modal-checkout.php:1954
+#: includes/class-modal-checkout.php:1963
+#: includes/class-modal-checkout.php:1964
+#: includes/class-modal-checkout.php:1965
 msgid "Complete your transaction"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1955
+#: includes/class-modal-checkout.php:1966
 msgctxt "Login modal title when logged out user attempts to checkout."
 msgid "Sign in to complete transaction"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1960
+#: includes/class-modal-checkout.php:1971
 msgctxt "Login modal title when unregistered user attempts to checkout"
 msgid "Register to complete transaction"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1965
+#: includes/class-modal-checkout.php:1976
 msgid "Continue browsing"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1966
+#: includes/class-modal-checkout.php:1977
 msgid "This donation is a gift"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1971
+#: includes/class-modal-checkout.php:1982
 msgid "This purchase is a gift"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1973
+#: includes/class-modal-checkout.php:1984
 msgid "Complete transaction"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1974
+#: includes/class-modal-checkout.php:1985
 msgid "Purchase"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1975
+#: includes/class-modal-checkout.php:1986
 msgid "Back"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1976
+#: includes/class-modal-checkout.php:1987
 msgid "Transaction successful"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1977
+#: includes/class-modal-checkout.php:1988
 msgid ""
 "Your contribution directly funds our work. If you're moved to do so, you can "
 "opt to pay more than the standard rate."
 msgstr ""
 
-#: includes/class-modal-checkout.php:1978
+#: includes/class-modal-checkout.php:1989
 msgid "Thank you for your generosity! We couldn't do this without you!"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1979
+#: includes/class-modal-checkout.php:1990
 msgid "Increase your support"
 msgstr ""
 
-#: includes/class-modal-checkout.php:1980
+#: includes/class-modal-checkout.php:1991
 #: src/modal-checkout/templates/form-coupon.php:20
 msgid "Apply"
 msgstr ""
 
 #. Translators: %s is the site name.
-#: includes/class-modal-checkout.php:2115
+#: includes/class-modal-checkout.php:2126
 #, php-format
 msgid ""
 "Thank you for supporting %s. Your transaction was completed successfully."
@@ -286,7 +286,7 @@ msgstr ""
 msgid " per "
 msgstr ""
 
-#: includes/modal-checkout/class-checkout-data.php:255 dist/editor.js:35
+#: includes/modal-checkout/class-checkout-data.php:259 dist/editor.js:35
 #: src/blocks/donate/index.js:25
 msgid "Donate"
 msgstr ""
