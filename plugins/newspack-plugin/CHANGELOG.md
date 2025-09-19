@@ -1,3 +1,10 @@
+## [6.18.3](https://github.com/Automattic/newspack-plugin/compare/v6.18.2...v6.18.3) (2025-09-19)
+
+
+### Bug Fixes
+
+* keep statuses when saving linked memberships ([#4194](https://github.com/Automattic/newspack-plugin/issues/4194)) ([f5417ac](https://github.com/Automattic/newspack-plugin/commit/f5417acbac3210ec51cc0630d698fe5cbf25d532))
+
 ## [6.18.2](https://github.com/Automattic/newspack-plugin/compare/v6.18.1...v6.18.2) (2025-09-18)
 
 
