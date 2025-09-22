@@ -1,3 +1,10 @@
+## [2.14.1](https://github.com/Automattic/newspack-theme/compare/v2.14.0...v2.14.1) (2025-09-22)
+
+
+### Bug Fixes
+
+* **collections:** hide author on collection category archives and add a guard for empty authors ([#2548](https://github.com/Automattic/newspack-theme/issues/2548)) ([70ba17d](https://github.com/Automattic/newspack-theme/commit/70ba17deb31a905f388ad3cf7e634c80670d0b7f))
+
 ## [2.14.1-alpha.1](https://github.com/Automattic/newspack-theme/compare/v2.14.0...v2.14.1-alpha.1) (2025-09-11)
 
 
