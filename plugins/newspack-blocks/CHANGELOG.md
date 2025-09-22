@@ -1,3 +1,11 @@
+## [4.15.2](https://github.com/Automattic/newspack-blocks/compare/v4.15.1...v4.15.2) (2025-09-22)
+
+
+### Bug Fixes
+
+* **checkout-button:** editor width settings ([#2196](https://github.com/Automattic/newspack-blocks/issues/2196)) ([4862c37](https://github.com/Automattic/newspack-blocks/commit/4862c3796d0b5197c56f2ab004d83ac8bf919ea6))
+* **donate:** modern style variation wrong border-radius ([#2195](https://github.com/Automattic/newspack-blocks/issues/2195)) ([b756404](https://github.com/Automattic/newspack-blocks/commit/b756404ce53e430583c30a79650ee611a5082720))
+
 ## [4.15.1](https://github.com/Automattic/newspack-blocks/compare/v4.15.0...v4.15.1) (2025-09-08)
 
 
