@@ -16,6 +16,7 @@ export function getSites() {
  */
 function getSuccessUrl() {
 	const url = new URL( window.location.href );
+	url.searchParams.delete( 'budget_id' ); // Remove budget_id from URL.
 	url.searchParams.set( 'application_password', 1 );
 	url.hash = '';
 	return url.toString();
