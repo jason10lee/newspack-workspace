@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2025-09-30T20:19:49+00:00\n"
+"POT-Creation-Date: 2025-10-02T14:48:14+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-plugin\n"
@@ -333,7 +333,7 @@ msgid "Site Kit is is a one-stop solution for WordPress users to use everything 
 msgstr ""
 
 #: includes/class-plugin-manager.php:62
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: dist/newspack-wizards.a99eeaa7b341a18eee4b.js:5
 msgid "Google"
 msgstr ""
@@ -2484,7 +2484,7 @@ msgstr ""
 #: dist/audience-wizards.c76845edf1a317c1a2e2.js:16
 #: dist/billboard.js:1
 #: dist/billboard.js:12
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: dist/newspack-wizards.a99eeaa7b341a18eee4b.js:5
 #: dist/newspack-wizards.a99eeaa7b341a18eee4b.js:26
 #: dist/newspack-wizards.a99eeaa7b341a18eee4b.js:30
@@ -2625,7 +2625,7 @@ msgid "Customer %1$s made multiple orders of %2$s on %3$s. Orders: %4$s."
 msgstr ""
 
 #: includes/plugins/woocommerce/class-woocommerce-duplicate-orders.php:212
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: dist/componentsDemo.js:1
 #: dist/handoff-banner.js:1
 #: src/components/src/handoff/index.js:58
@@ -4186,7 +4186,7 @@ msgstr ""
 
 #: includes/templates/collections/archive-newspack-collection.php:59
 #: includes/templates/collections/archive-newspack-collection.php:74
-#: dist/commons.js:4
+#: dist/commons.js:6
 #: src/blocks/correction-box/edit.jsx:68
 msgid "All"
 msgstr ""
@@ -4987,22 +4987,13 @@ msgid "Stacked"
 msgstr ""
 
 #. translators: 1: current number of metered views, 2: total metered views.
-#: src/blocks/content-gate-countdown/class-content-gate-countdown-block.php:76
-#: dist/blocks.js:5
+#: src/blocks/content-gate/countdown/class-content-gate-countdown-block.php:76
+#: dist/blocks.js:4
 #: dist/content-gate-countdown-block.js:1
-#: src/blocks/content-gate-countdown/edit.jsx:100
-#: src/blocks/content-gate-countdown/view.js:33
+#: src/blocks/content-gate/countdown/edit.jsx:28
+#: src/blocks/content-gate/countdown/view.js:32
 #, php-format,js-format
 msgid "%1$d/%2$d"
-msgstr ""
-
-#. translators: %s - metered content period (week, month, etc.
-#. translators: %s is the metered period, e.g. "month" or "week".
-#: src/blocks/content-gate-countdown/class-content-gate-countdown-block.php:84
-#: dist/blocks.js:5
-#: src/blocks/content-gate-countdown/edit.jsx:55
-#, php-format,js-format
-msgid "free articles this %s"
 msgstr ""
 
 #. Translators: %s is a link to My Account.
@@ -5094,7 +5085,7 @@ msgid "Delete permanently"
 msgstr ""
 
 #: dist/audience-wizards.c76845edf1a317c1a2e2.js:1
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/web-preview/index.js:169
 #: src/wizards/audience/components/prompt-popovers/primary.js:61
 msgid "Preview"
@@ -5106,7 +5097,7 @@ msgid "Deactivate"
 msgstr ""
 
 #: dist/audience-wizards.c76845edf1a317c1a2e2.js:1
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/plugin-installer/index.js:169
 #: src/components/src/plugin-installer/index.js:214
 #: src/wizards/audience/components/prompt-popovers/primary.js:76
@@ -5479,7 +5470,7 @@ msgid " copy"
 msgstr ""
 
 #: dist/audience-wizards.c76845edf1a317c1a2e2.js:10
-#: dist/commons.js:4
+#: dist/commons.js:6
 #: src/components/src/autocomplete-with-suggestions/index.js:99
 #: src/components/src/autocomplete-with-suggestions/index.js:133
 #: src/wizards/audience/components/prompt-action-card/index.js:58
@@ -6123,7 +6114,7 @@ msgid "Checked by default"
 msgstr ""
 
 #: dist/audience-wizards.c76845edf1a317c1a2e2.js:32
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: dist/newspack-wizards.a99eeaa7b341a18eee4b.js:14
 #: src/components/src/image-upload/index.js:98
 #: src/components/src/sortable-newsletter-list-control/index.js:59
@@ -6425,7 +6416,7 @@ msgstr ""
 #: dist/audience-wizards.c76845edf1a317c1a2e2.js:38
 #: dist/audience-wizards.c76845edf1a317c1a2e2.js:41
 #: dist/billboard.js:1
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: dist/componentsDemo.js:1
 #: dist/newspack-wizards.a99eeaa7b341a18eee4b.js:11
 #: dist/newspack-wizards.a99eeaa7b341a18eee4b.js:14
@@ -6477,7 +6468,7 @@ msgstr ""
 
 #: dist/audience-wizards.c76845edf1a317c1a2e2.js:38
 #: dist/audience-wizards.c76845edf1a317c1a2e2.js:41
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: dist/newspack-wizards.a99eeaa7b341a18eee4b.js:5
 #: dist/newspack-wizards.a99eeaa7b341a18eee4b.js:8
 #: dist/newspack-wizards.a99eeaa7b341a18eee4b.js:11
@@ -6519,7 +6510,7 @@ msgstr ""
 
 #: dist/audience-wizards.c76845edf1a317c1a2e2.js:38
 #: dist/audience-wizards.c76845edf1a317c1a2e2.js:41
-#: dist/commons.js:16
+#: dist/commons.js:18
 #: dist/newspack-wizards.a99eeaa7b341a18eee4b.js:8
 #: dist/newspack-wizards.a99eeaa7b341a18eee4b.js:30
 #: src/wizards/audience/components/payment-methods/payment-gateway.js:42
@@ -6530,7 +6521,7 @@ msgstr ""
 
 #: dist/audience-wizards.c76845edf1a317c1a2e2.js:38
 #: dist/audience-wizards.c76845edf1a317c1a2e2.js:41
-#: dist/commons.js:16
+#: dist/commons.js:18
 #: dist/newspack-wizards.a99eeaa7b341a18eee4b.js:8
 #: dist/newspack-wizards.a99eeaa7b341a18eee4b.js:30
 #: src/wizards/audience/components/payment-methods/payment-gateway.js:89
@@ -7220,6 +7211,60 @@ msgid "Edit Ad Unit"
 msgstr ""
 
 #: dist/blocks.js:1
+#: dist/commons.js:6
+#: dist/content-gate-countdown-box-block.js:1
+#: src/blocks/content-gate/countdown-box/edit.jsx:147
+#: src/blocks/content-gate/countdown-box/index.js:15
+msgid "Content Gate Countdown"
+msgstr ""
+
+#: dist/blocks.js:1
+#: dist/blocks.js:4
+#: dist/content-gate-countdown-box-block.js:1
+#: src/blocks/content-gate/countdown-box/index.js:28
+#: src/blocks/content-gate/countdown/index.js:27
+msgid "countdown"
+msgstr ""
+
+#: dist/blocks.js:1
+#: dist/blocks.js:4
+#: dist/content-gate-countdown-box-block.js:1
+#: src/blocks/content-gate/countdown-box/index.js:29
+#: src/blocks/content-gate/countdown/index.js:28
+msgid "content gate"
+msgstr ""
+
+#: dist/blocks.js:1
+#: dist/blocks.js:4
+#: dist/content-gate-countdown-box-block.js:1
+#: src/blocks/content-gate/countdown-box/index.js:30
+#: src/blocks/content-gate/countdown/index.js:29
+msgid "metered"
+msgstr ""
+
+#: dist/blocks.js:1
+#: dist/blocks.js:4
+#: dist/content-gate-countdown-box-block.js:1
+#: src/blocks/content-gate/countdown-box/index.js:31
+#: src/blocks/content-gate/countdown/index.js:30
+msgid "paywall"
+msgstr ""
+
+#: dist/blocks.js:1
+#: dist/blocks.js:4
+#: dist/content-gate-countdown-box-block.js:1
+#: src/blocks/content-gate/countdown-box/index.js:32
+#: src/blocks/content-gate/countdown/index.js:31
+msgid "tracking"
+msgstr ""
+
+#: dist/blocks.js:1
+#: dist/content-gate-countdown-box-block.js:1
+#: src/blocks/content-gate/countdown-box/index.js:34
+msgid "Displays how many free articles remain before the paywall, helping users track access with a real-time countdown."
+msgstr ""
+
+#: dist/blocks.js:1
 #: dist/correction-box-block.js:1
 #: src/blocks/correction-box/index.js:15
 msgid "Corrections"
@@ -7676,53 +7721,13 @@ msgid "No collections found"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/content-gate-countdown/index.js:16
-msgid "Content Gate Countdown"
+#: src/blocks/content-gate/countdown/index.js:14
+msgid "Article Counter"
 msgstr ""
 
 #: dist/blocks.js:4
-#: src/blocks/content-gate-countdown/index.js:28
-msgid "countdown"
-msgstr ""
-
-#: dist/blocks.js:4
-#: src/blocks/content-gate-countdown/index.js:28
-msgid "content gate"
-msgstr ""
-
-#: dist/blocks.js:4
-#: src/blocks/content-gate-countdown/index.js:29
-msgid "A countdown for content gate metering functionality."
-msgstr ""
-
-#: dist/blocks.js:4
-#: src/blocks/content-gate-countdown/edit.jsx:28
-msgid "Get unlimited access."
-msgstr ""
-
-#: dist/blocks.js:4
-#: src/blocks/content-gate-countdown/edit.jsx:35
-msgid "Subscribe now"
-msgstr ""
-
-#: dist/blocks.js:5
-#: src/blocks/content-gate-countdown/edit.jsx:84
-msgid "Countdown Settings"
-msgstr ""
-
-#: dist/blocks.js:5
-#: src/blocks/content-gate-countdown/edit.jsx:86
-msgid "Countdown text"
-msgstr ""
-
-#: dist/blocks.js:5
-#: src/blocks/content-gate-countdown/edit.jsx:88
-msgid "The text that appears next to the countdown."
-msgstr ""
-
-#: dist/blocks.js:5
-#: src/blocks/content-gate-countdown/edit.jsx:71
-msgid "The content gate countdown block will only display in restricted content when metering is enabled."
+#: src/blocks/content-gate/countdown/index.js:33
+msgid "Displays the current free article count."
 msgstr ""
 
 #: dist/bylines.js:1
@@ -7848,184 +7853,218 @@ msgstr ""
 msgid "Loading avatar…"
 msgstr ""
 
-#: dist/commons.js:4
+#. translators: %s is the metered period, e.g. "month" or "week".
+#: dist/commons.js:5
+#: src/blocks/content-gate/countdown-box/edit.jsx:91
+#, js-format
+msgid "free articles this %s"
+msgstr ""
+
+#. translators: %1$s is subscribe message, %2$s is sign in link
+#: dist/commons.js:6
+#: src/blocks/content-gate/countdown-box/edit.jsx:111
+#, js-format
+msgid "%1$s %2$s"
+msgstr ""
+
+#: dist/commons.js:6
+#: src/blocks/content-gate/countdown-box/edit.jsx:112
+msgid "Subscribe now and get unlimited access."
+msgstr ""
+
+#: dist/commons.js:6
+#: src/blocks/content-gate/countdown-box/edit.jsx:113
+msgid "Sign in to an existing account."
+msgstr ""
+
+#: dist/commons.js:6
+#: src/blocks/content-gate/countdown-box/edit.jsx:133
+msgid "Subscribe now"
+msgstr ""
+
+#: dist/commons.js:6
+#: src/blocks/content-gate/countdown-box/edit.jsx:150
+msgid "The content gate countdown block will only display in restricted content when metering is enabled."
+msgstr ""
+
+#: dist/commons.js:6
 #: src/blocks/correction-box/edit.jsx:38
 msgid "This is the Corrections block, it will display all the corrections and clarifications."
 msgstr ""
 
-#: dist/commons.js:4
+#: dist/commons.js:6
 #: src/blocks/correction-box/edit.jsx:39
 msgid "If there are no corrections or clarifications, this block will not be displayed."
 msgstr ""
 
-#: dist/commons.js:4
+#: dist/commons.js:6
 #: src/blocks/correction-box/edit.jsx:59
 msgid "Correction Box Settings"
 msgstr ""
 
-#: dist/commons.js:4
+#: dist/commons.js:6
 #: src/blocks/correction-box/edit.jsx:62
 msgid "Corrections by Priority"
 msgstr ""
 
-#: dist/commons.js:4
+#: dist/commons.js:6
 #: src/blocks/correction-box/edit.jsx:63
 msgid "Filter corrections by their priority."
 msgstr ""
 
-#: dist/commons.js:4
+#: dist/commons.js:6
 #: dist/other-scripts/corrections-modal.js:1
 #: src/blocks/correction-box/edit.jsx:66
 #: src/other-scripts/corrections-modal/index.js:36
 msgid "High"
 msgstr ""
 
-#: dist/commons.js:4
+#: dist/commons.js:6
 #: dist/other-scripts/corrections-modal.js:1
 #: src/blocks/correction-box/edit.jsx:67
 #: src/other-scripts/corrections-modal/index.js:37
 msgid "Low"
 msgstr ""
 
-#: dist/commons.js:4
+#: dist/commons.js:6
 #: src/blocks/correction-box/edit.jsx:88
 msgid "Refresh"
 msgstr ""
 
-#: dist/commons.js:4
+#: dist/commons.js:6
 #: src/components/src/autocomplete-with-suggestions/index.js:20
 msgid "Begin typing search term, click autocomplete result to select."
 msgstr ""
 
-#: dist/commons.js:4
+#: dist/commons.js:6
 #: src/components/src/autocomplete-with-suggestions/index.js:22
 msgid "Search"
 msgstr ""
 
-#: dist/commons.js:4
+#: dist/commons.js:6
 #: src/components/src/autocomplete-with-suggestions/index.js:28
 msgid "item"
 msgstr ""
 
-#: dist/commons.js:4
+#: dist/commons.js:6
 #: src/components/src/autocomplete-with-suggestions/index.js:29
 msgid "items"
 msgstr ""
 
 #. Translators: %1: the length of selections. %2: the selection leabel.
-#: dist/commons.js:7
+#: dist/commons.js:9
 #: src/components/src/autocomplete-with-suggestions/index.js:178
 #, js-format
 msgid "%1$s %2$s selected"
 msgstr ""
 
 #. Translators: %s: The label for the selection.
-#: dist/commons.js:10
+#: dist/commons.js:12
 #: src/components/src/autocomplete-with-suggestions/index.js:184
 #, js-format
 msgid "Selected %s"
 msgstr ""
 
-#: dist/commons.js:10
+#: dist/commons.js:12
 #: src/components/src/autocomplete-with-suggestions/index.js:192
 msgctxt "separator character"
 msgid " – "
 msgstr ""
 
-#: dist/commons.js:10
+#: dist/commons.js:12
 #: src/components/src/autocomplete-with-suggestions/index.js:195
 msgid "Clear all"
 msgstr ""
 
 #. Translators: %s: The name of the type.
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/autocomplete-with-suggestions/index.js:221
 #, js-format
 msgid "%s type"
 msgstr ""
 
 #. Translators: %s: the name of a post type.
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/autocomplete-with-suggestions/index.js:279
 #, js-format
 msgid "Or, select a recent %s:"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/autocomplete-with-suggestions/index.js:289
 msgid "Load more"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/footer/index.js:34
 msgid "About"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/footer/index.js:39
 msgid "Documentation"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: dist/componentsDemo.js:1
 #: src/components/src/footer/index.js:46
 #: src/wizards/componentsDemo/index.js:94
 msgid "Components Demo"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/footer/index.js:52
 msgid "Setup Wizard"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/footer/index.js:58
 msgid "Reset Newspack"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/footer/index.js:64
 msgid "Remove Starter Content"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/footer/index.js:70
 msgid "Contact Support"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/handoff/index.js:55
 #: src/components/src/handoff/index.js:56
 #: src/components/src/handoff/index.js:57
 msgid "Manage"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/handoff/index.js:115
 msgid " not installed"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/handoff/index.js:126
 msgid "Retrieving Plugin Info"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/image-upload/index.js:91
 msgid "Image preview"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/image-upload/index.js:94
 msgid "Replace"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/image-upload/index.js:104
 msgid "Upload"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: dist/componentsDemo.js:1
 #: src/components/src/plugin-installer/index.js:169
 #: src/wizards/componentsDemo/index.js:266
@@ -8038,37 +8077,37 @@ msgstr ""
 msgid "Install"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/plugin-installer/index.js:181
 msgid "Retrieving plugin information…"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/plugin-installer/index.js:221
 msgid "Installed"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/plugin-installer/index.js:199
 msgid "Contact Newspack support to install"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/plugin-installer/index.js:200
 msgid "Plugin must be installed manually"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/plugin-settings/index.js:201
 msgid "General Settings"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/plugin-toggle/index.js:68
 msgid "There was an error managing this plugin."
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: dist/componentsDemo.js:1
 #: dist/newspack-wizards.a99eeaa7b341a18eee4b.js:1
 #: src/components/src/plugin-toggle/index.js:149
@@ -8076,73 +8115,73 @@ msgstr ""
 msgid "Installing…"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/plugin-toggle/index.js:156
 msgid "Deactivating…"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/select-control/GroupedSelectControl.js:47
 msgid "-- Select --"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/settings/MinMaxSetting.js:16
 msgid "Min"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/settings/MinMaxSetting.js:29
 msgid "Max"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/style-card/index.js:36
 msgid "Thumbnail"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/style-card/index.js:40
 msgid "Selected"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: dist/newspack-wizards.a99eeaa7b341a18eee4b.js:30
 #: src/components/src/style-card/index.js:45
 #: src/components/src/style-card/index.js:48
 msgid "Select"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/style-card/index.js:51
 msgid "View Demo"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 msgid "(required)"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/web-preview/index.js:84
 msgid "Preview Desktop Size"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/web-preview/index.js:90
 msgid "Preview Tablet Size"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/web-preview/index.js:96
 msgid "Preview Phone Size"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/web-preview/index.js:107
 msgid "Close Preview"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: dist/componentsDemo.js:1
 #: src/components/src/with-wizard-screen/index.js:69
 #: src/components/src/with-wizard/index.js:104
@@ -8153,98 +8192,98 @@ msgstr ""
 msgid "Return to Dashboard"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/with-wizard/index.js:228
 #: src/components/src/wizard/index.js:72
 msgid "Required plugins"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/with-wizard/index.js:229
 #: src/components/src/wizard/index.js:72
 msgid "Required plugin"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/components/src/with-wizard/index.js:260
 msgid "OK"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/wizards/advertising/components/onboarding/index.js:63
 msgid "Authenticate with Google in order to connect your Google Ad Manager account:"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/wizards/advertising/components/onboarding/index.js:71
 msgid "We're all set here!"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/wizards/advertising/components/onboarding/index.js:75
 msgid "Enter your Google Ad Manager network code and service account credentials for a full integration:"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/wizards/advertising/components/onboarding/index.js:84
 msgid "Network code"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/wizards/advertising/components/onboarding/index.js:91
 msgid "Upload credentials"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/wizards/advertising/components/onboarding/index.js:93
 msgid "Upload your Service Account credentials file to connect your GAM account."
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/wizards/advertising/components/onboarding/index.js:100
 msgid "How to get a service account user for API access"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/wizards/advertising/components/utils/index.js:21
 msgid "Invalid JSON file"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: src/wizards/advertising/components/utils/index.js:26
 msgid "Unable to read file"
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: dist/newspack-wizards.a99eeaa7b341a18eee4b.js:1
 msgid "Invalid Mailchimp API Key."
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: dist/newspack-wizards.a99eeaa7b341a18eee4b.js:1
 msgid "Missing Google refresh token. Please re-authenticate site."
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: dist/newspack-wizards.a99eeaa7b341a18eee4b.js:1
 msgid "Popup blocked by browser. Disable any popup blocking settings and try again."
 msgstr ""
 
-#: dist/commons.js:13
+#: dist/commons.js:15
 #: dist/newspack-wizards.a99eeaa7b341a18eee4b.js:1
 msgid "URL is invalid. Please try again or contact support if the issue persists."
 msgstr ""
 
 #. Translators: connected user's email address.
 #. translators: %s: username
-#: dist/commons.js:16
+#: dist/commons.js:18
 #: dist/newspack-wizards.a99eeaa7b341a18eee4b.js:8
 #: dist/newspack-wizards.a99eeaa7b341a18eee4b.js:30
 #, js-format
 msgid "Connected as %s"
 msgstr ""
 
-#: dist/commons.js:16
+#: dist/commons.js:18
 #: dist/componentsDemo.js:1
 #: dist/newspack-wizards.a99eeaa7b341a18eee4b.js:8
 #: dist/newspack-wizards.a99eeaa7b341a18eee4b.js:30
