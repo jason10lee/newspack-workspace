@@ -9,7 +9,7 @@
 	"devDependencies": {
 		"@rushstack/eslint-patch": "^1.13.0",
 		"@types/react": "^18.3.25",
-		"@wordpress/browserslist-config": "^6.31.0",
+		"@wordpress/browserslist-config": "^6.32.0",
 		"eslint": "^8.57.0",
 		"lint-staged": "^16.2.3",
 		"newspack-components": "^3.1.0",
