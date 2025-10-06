@@ -1,3 +1,10 @@
+## [2.14.3](https://github.com/Automattic/newspack-theme/compare/v2.14.2...v2.14.3) (2025-10-06)
+
+
+### Bug Fixes
+
+* correct another case of archive grid messing with collections ([#2562](https://github.com/Automattic/newspack-theme/issues/2562)) ([36b6fbb](https://github.com/Automattic/newspack-theme/commit/36b6fbbf249f03bcaf1c893af5c9f2158e74b3b8))
+
 ## [2.14.2](https://github.com/Automattic/newspack-theme/compare/v2.14.1...v2.14.2) (2025-09-24)
 
 
