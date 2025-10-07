@@ -1,3 +1,10 @@
+## [3.23.3](https://github.com/Automattic/newspack-newsletters/compare/v3.23.2...v3.23.3) (2025-10-07)
+
+
+### Bug Fixes
+
+* **activecampaign:** add required sdate param ([#1940](https://github.com/Automattic/newspack-newsletters/issues/1940)) ([bb9fd09](https://github.com/Automattic/newspack-newsletters/commit/bb9fd0991a9c6425f535b4a92d68d15189320c7c))
+
 ## [3.23.2](https://github.com/Automattic/newspack-newsletters/compare/v3.23.1...v3.23.2) (2025-10-06)
 
 

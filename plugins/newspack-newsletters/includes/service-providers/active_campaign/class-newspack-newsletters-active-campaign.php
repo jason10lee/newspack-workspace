@@ -215,6 +215,13 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			]
 		);
 
+		if ( ! $body ) {
+			return new \WP_Error(
+				'newspack_newsletters_active_campaign_api_error',
+				! empty( $response['response']['message'] ) ? $response['response']['message'] : __( 'An error occurred while communicating with ActiveCampaign.', 'newspack-newsletters' )
+			);
+		}
+
 		if ( 1 !== $body['result_code'] ) {
 			$message = ! empty( $body['result_message'] ) ? $body['result_message'] : __( 'An error occurred while communicating with ActiveCampaign.', 'newspack-newsletters' );
 			return new \WP_Error(
@@ -1256,6 +1263,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		}
 		update_post_meta( $post_id, 'ac_campaign_id', $campaign['id'] );
 		$campaign_id = $campaign['id'];
+		// See https://www.activecampaign.com/api/example.php?call=campaign_status.
 		$send_result = $this->api_v1_request(
 			'campaign_status',
 			'GET',
@@ -1263,6 +1271,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 				'query' => [
 					'id'     => $campaign_id,
 					'status' => 1, // 0 = draft, 1 = scheduled, 2 = sending, 3 = paused, 4 = stopped, 5 = completed.
+					'sdate'  => '', // Empty means send immediately.
 				],
 			]
 		);
