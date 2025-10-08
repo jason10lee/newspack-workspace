@@ -1,3 +1,10 @@
+## [6.20.1](https://github.com/Automattic/newspack-plugin/compare/v6.20.0...v6.20.1) (2025-10-08)
+
+
+### Bug Fixes
+
+* **collections:** quick edit hotfix ([#4225](https://github.com/Automattic/newspack-plugin/issues/4225)) ([e8423de](https://github.com/Automattic/newspack-plugin/commit/e8423de00d7f2d54bc92c5c8e42316e056bfd22a))
+
 # [6.20.0](https://github.com/Automattic/newspack-plugin/compare/v6.19.0...v6.20.0) (2025-10-06)
 
 
