@@ -1,3 +1,10 @@
+## [3.23.5](https://github.com/Automattic/newspack-newsletters/compare/v3.23.4...v3.23.5) (2025-10-08)
+
+
+### Bug Fixes
+
+* **mailchimp:** strip protocol strings from link-based merge tags ([#1934](https://github.com/Automattic/newspack-newsletters/issues/1934)) ([dbd4e19](https://github.com/Automattic/newspack-newsletters/commit/dbd4e1960699908f2a975030d1b820abe689596b))
+
 ## [3.23.4](https://github.com/Automattic/newspack-newsletters/compare/v3.23.3...v3.23.4) (2025-10-07)
 
 
