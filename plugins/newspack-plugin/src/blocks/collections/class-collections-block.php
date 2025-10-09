@@ -54,8 +54,6 @@ final class Collections_Block {
 		'showCTAs'            => true,
 		'numberOfCTAs'        => 1,
 		'specificCTAs'        => '',
-		'showSeeAllLink'      => true,
-		'seeAllLinkText'      => '',
 		'headingText'         => '',
 		'noPermalinks'        => false,
 	];
@@ -91,14 +89,8 @@ final class Collections_Block {
 	 * @return string The block HTML.
 	 */
 	public static function render_block( array $attributes ) {
-
-		$attributes = wp_parse_args( $attributes, self::DEFAULT_ATTRIBUTES );
-
-		// Sanitize and normalize attributes that are used in queries/output.
-		$attributes['numberOfItems'] = max( 1, absint( $attributes['numberOfItems'] ) );
-		$attributes['offset']        = max( 0, absint( $attributes['offset'] ) );
-		$attributes['columns']       = max( 1, absint( $attributes['columns'] ) );
-		$attributes['numberOfCTAs']  = ( -1 === (int) $attributes['numberOfCTAs'] ) ? -1 : max( 1, absint( $attributes['numberOfCTAs'] ) );
+		// Sanitize and normalize attributes.
+		$attributes = self::sanitize_attributes( wp_parse_args( $attributes, self::DEFAULT_ATTRIBUTES ) );
 
 		// Normalize selectedCollections to determine if we have post objects or IDs.
 		$normalized_posts = Template_Helper::normalize_post_list( (array) $attributes['selectedCollections'] );
@@ -136,23 +128,34 @@ final class Collections_Block {
 		?>
 		<div <?php echo $wrapper_attributes; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
 			<?php self::render_collections( $collections, $attributes ); ?>
-
-			<?php if ( $attributes['showSeeAllLink'] ) : ?>
-				<div class="wp-block-newspack-collections__see-all">
-					<a class="wp-block-button__link" href="<?php echo esc_url( get_post_type_archive_link( Post_Type::get_post_type() ) ); ?>">
-						<?php
-						if ( ! empty( $attributes['seeAllLinkText'] ) ) {
-							echo esc_html( $attributes['seeAllLinkText'] );
-						} else {
-							esc_html_e( 'See all', 'newspack-plugin' );
-						}
-						?>
-					</a>
-				</div>
-			<?php endif; ?>
 		</div>
 		<?php
 		return ob_get_clean();
+	}
+
+	/**
+	 * Sanitize and normalize attributes that are used in queries/output.
+	 *
+	 * @param array $attributes The block attributes.
+	 * @return array Sanitized attributes.
+	 */
+	public static function sanitize_attributes( array $attributes ) {
+		foreach ( [ 'numberOfItems', 'offset', 'columns', 'numberOfCTAs' ] as $attr ) {
+			if ( ! isset( $attributes[ $attr ] ) ) {
+				continue;
+			}
+
+			if ( 'numberOfCTAs' === $attr && -1 === (int) $attributes[ $attr ] ) {
+				$attributes[ $attr ] = -1;
+			} else {
+				$value               = absint( $attributes[ $attr ] );
+				$attributes[ $attr ] = $value > 0
+					? $value
+					: self::DEFAULT_ATTRIBUTES[ $attr ];
+			}
+		}
+
+		return $attributes;
 	}
 
 	/**
@@ -204,14 +207,10 @@ final class Collections_Block {
 		<article class="wp-block-newspack-collections__item">
 			<?php if ( $attributes['showFeaturedImage'] ) : ?>
 				<div class="wp-block-newspack-collections__image">
-					<?php if ( has_post_thumbnail( $collection ) ) : ?>
-						<?php
-						$image_permalink = $attributes['noPermalinks'] ? false : $collection_url;
-						echo wp_kses_post( Template_Helper::render_image( $collection->ID, $image_permalink, $image_size ) );
-						?>
-					<?php else : ?>
-						<div class="wp-block-newspack-collections__placeholder" aria-hidden="true"></div>
-					<?php endif; ?>
+					<?php
+					$image_permalink = $attributes['noPermalinks'] ? false : $collection_url;
+					echo wp_kses_post( Template_Helper::render_image( $collection->ID, $image_permalink, $image_size ) );
+					?>
 				</div>
 			<?php endif; ?>
 
@@ -319,7 +318,7 @@ final class Collections_Block {
 		if ( $attributes['showPeriod'] ) {
 			$period = Collection_Meta::get( $collection->ID, 'period' );
 			if ( $period ) {
-				$meta_parts[] = esc_html( $period );
+				$meta_parts[] = '<span class="wp-block-newspack-collections__period">' . esc_html( $period ) . '</span>';
 			}
 		}
 
@@ -329,27 +328,37 @@ final class Collections_Block {
 		if ( $attributes['showVolume'] ) {
 			$volume = Collection_Meta::get( $collection->ID, 'volume' );
 			if ( $volume ) {
-				/* translators: %s is the volume number of a collection */
-				$vol_number[] = sprintf( _x( 'Vol. %s', 'collection volume number', 'newspack-plugin' ), esc_html( $volume ) );
+				$vol_number[] = '<span class="wp-block-newspack-collections__volume">' .
+					sprintf(
+						/* translators: %s is the volume number of a collection */
+						_x( 'Vol. %s', 'collection volume number', 'newspack-plugin' ),
+						esc_html( $volume )
+					) .
+					'</span>';
 			}
 		}
 
 		if ( $attributes['showNumber'] ) {
 			$number = Collection_Meta::get( $collection->ID, 'number' );
 			if ( $number ) {
-				/* translators: %s is the issue number of a collection */
-				$vol_number[] = sprintf( _x( 'No. %s', 'collection issue number', 'newspack-plugin' ), esc_html( $number ) );
+				$vol_number[] = '<span class="wp-block-newspack-collections__number">' .
+					sprintf(
+						/* translators: %s is the issue number of a collection */
+						_x( 'No. %s', 'collection issue number', 'newspack-plugin' ),
+						esc_html( $number )
+					) .
+					'</span>';
 			}
 		}
 
 		if ( $vol_number ) {
-			$meta_parts[] = implode( ' / ', $vol_number );
+			$meta_parts[] = implode( ' <span class="wp-block-newspack-collections__divider">/</span> ', $vol_number );
 		}
 
 		// Render meta text.
 		if ( ! empty( $meta_parts ) ) {
 			// Use different separator based on layout.
-			$separator = 'list' === $attributes['layout'] ? ' / ' : '<br>';
+			$separator = 'list' === $attributes['layout'] ? ' <span class="wp-block-newspack-collections__divider">/</span> ' : '<br>';
 			$meta_text = implode( $separator, $meta_parts );
 			?>
 			<div class="wp-block-newspack-collections__meta has-medium-gray-color has-text-color has-small-font-size">
