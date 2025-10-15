@@ -1,3 +1,10 @@
+# [6.21.0](https://github.com/Automattic/newspack-plugin/compare/v6.20.2...v6.21.0) (2025-10-15)
+
+
+### Features
+
+* **InDesign:** inline image caption, horizontal rule, headings and blockquotes ([#4201](https://github.com/Automattic/newspack-plugin/issues/4201)) ([#4228](https://github.com/Automattic/newspack-plugin/issues/4228)) ([ff7af5c](https://github.com/Automattic/newspack-plugin/commit/ff7af5c83e91f093113abf192fb82ede8a4b2528))
+
 ## [6.20.2](https://github.com/Automattic/newspack-plugin/compare/v6.20.1...v6.20.2) (2025-10-14)
 
 
