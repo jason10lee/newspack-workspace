@@ -1,3 +1,10 @@
+## [6.21.2](https://github.com/Automattic/newspack-plugin/compare/v6.21.1...v6.21.2) (2025-10-16)
+
+
+### Bug Fixes
+
+* don’t add overlays to ras store if locked via front-end emtering ([#4230](https://github.com/Automattic/newspack-plugin/issues/4230)) ([de89d33](https://github.com/Automattic/newspack-plugin/commit/de89d337be471eb786290f885edaa342178aabe9))
+
 ## [6.21.1](https://github.com/Automattic/newspack-plugin/compare/v6.21.0...v6.21.1) (2025-10-15)
 
 
