@@ -1,3 +1,15 @@
+# [2.15.0-alpha.1](https://github.com/Automattic/newspack-theme/compare/v2.14.3...v2.15.0-alpha.1) (2025-10-17)
+
+
+### Bug Fixes
+
+* correct some clashes between the theme styles and Everlit spans ([#2564](https://github.com/Automattic/newspack-theme/issues/2564)) ([980cf96](https://github.com/Automattic/newspack-theme/commit/980cf967e7b7067314f011feff728adb6a7717ed))
+
+
+### Features
+
+* add Nextdoor SVG icon ([ae1a74e](https://github.com/Automattic/newspack-theme/commit/ae1a74e9754c81032031cf440e24c1c3d90b14db))
+
 ## [2.14.3](https://github.com/Automattic/newspack-theme/compare/v2.14.2...v2.14.3) (2025-10-06)
 
 
