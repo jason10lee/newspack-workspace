@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2025-10-17T12:48:38+00:00\n"
+"POT-Creation-Date: 2025-10-17T16:31:17+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-plugin\n"
@@ -255,15 +255,15 @@ msgstr ""
 
 #: includes/class-newspack-ui.php:116
 #: includes/class-newspack-ui.php:213
-#: includes/class-newspack-ui.php:896
-#: includes/class-newspack-ui.php:919
-#: includes/class-newspack-ui.php:958
-#: includes/class-newspack-ui.php:993
-#: includes/class-newspack-ui.php:1025
-#: includes/class-newspack-ui.php:1073
-#: includes/class-newspack-ui.php:1110
-#: includes/class-newspack-ui.php:1164
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:593
+#: includes/class-newspack-ui.php:921
+#: includes/class-newspack-ui.php:944
+#: includes/class-newspack-ui.php:983
+#: includes/class-newspack-ui.php:1018
+#: includes/class-newspack-ui.php:1050
+#: includes/class-newspack-ui.php:1098
+#: includes/class-newspack-ui.php:1135
+#: includes/class-newspack-ui.php:1189
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:682
 #: includes/reader-activation/class-reader-activation.php:1599
 #: includes/reader-activation/class-reader-activation.php:1714
 #: dist/audience-wizards.4d5671450dcb2e11a37d.js:16
@@ -271,15 +271,15 @@ msgstr ""
 msgid "Close"
 msgstr ""
 
-#: includes/class-newspack-ui.php:847
-#: includes/class-newspack-ui.php:851
-#: includes/class-newspack-ui.php:855
-#: includes/class-newspack-ui.php:859
-#: includes/class-newspack-ui.php:863
-#: includes/class-newspack-ui.php:867
-#: includes/class-newspack-ui.php:871
-#: includes/class-newspack-ui.php:878
-#: includes/class-newspack-ui.php:883
+#: includes/class-newspack-ui.php:872
+#: includes/class-newspack-ui.php:876
+#: includes/class-newspack-ui.php:880
+#: includes/class-newspack-ui.php:884
+#: includes/class-newspack-ui.php:888
+#: includes/class-newspack-ui.php:892
+#: includes/class-newspack-ui.php:896
+#: includes/class-newspack-ui.php:903
+#: includes/class-newspack-ui.php:908
 msgid "Open Menu"
 msgstr ""
 
@@ -2436,44 +2436,68 @@ msgstr ""
 msgid "You must agree to the Terms & Conditions before proceeding."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:55
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:515
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:516
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:585
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:614
-#: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:106
-msgid "Change Subscription"
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:60
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:134
+msgid "Edit donation"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:358
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:62
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:132
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:706
+msgid "Change subscription"
+msgstr ""
+
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:135
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:704
+msgid "Confirm donation"
+msgstr ""
+
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:399
 msgid "Current"
 msgstr ""
 
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:440
+msgid "Amount"
+msgstr ""
+
 #. translators: %s: subscription product name
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:380
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:462
 #, php-format
 msgid "You already have %s active."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:386
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:468
 msgid "View Subscription"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:387
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:469
 #: dist/newspack-wizards.c3d1793f3024d686145b.js:29
 msgid "View"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:515
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:585
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:524
+#: dist/audience-wizards.4d5671450dcb2e11a37d.js:7
+#: src/wizards/audience/components/settings-modal/index.js:56
+msgid "Frequency"
+msgstr ""
+
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:598
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:599
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:674
+#: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:106
+msgid "Change Subscription"
+msgstr ""
+
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:598
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:674
 msgid "Complete your transaction"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:516
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:599
 msgid "Purchase"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:566
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:655
 #: includes/plugins/woocommerce/my-account/class-my-account-ui-v1-passwords.php:239
 #: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:311
 #: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:397
@@ -5400,11 +5424,6 @@ msgstr ""
 #: dist/audience-wizards.4d5671450dcb2e11a37d.js:7
 #: src/wizards/audience/components/settings-modal/index.js:49
 msgid "When and how should the prompt be displayed"
-msgstr ""
-
-#: dist/audience-wizards.4d5671450dcb2e11a37d.js:7
-#: src/wizards/audience/components/settings-modal/index.js:56
-msgid "Frequency"
 msgstr ""
 
 #: dist/audience-wizards.4d5671450dcb2e11a37d.js:7
