@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Newspack Blocks 1.0.0-alpha.20\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/project\n"
-"POT-Creation-Date: 2025-10-13T20:05:26+00:00\n"
+"POT-Creation-Date: 2025-10-17T12:49:09+00:00\n"
 "PO-Revision-Date: 2024-08-30 08:46-0700\n"
 "Last-Translator: \n"
 "Language-Team: \n"
@@ -185,34 +185,39 @@ msgid "Purchase"
 msgstr ""
 
 #: includes/class-modal-checkout.php:2001
-msgid "Back"
-msgstr "Tilbake"
+msgid "Edit billing information"
+msgstr ""
 
-#: includes/class-modal-checkout.php:2002
-msgid "Transaction successful"
+#: includes/class-modal-checkout.php:2002 dist/editor.js:29
+#: src/blocks/checkout-button/edit.js:209
+msgid "Cancel"
 msgstr ""
 
 #: includes/class-modal-checkout.php:2003
+msgid "Transaction successful"
+msgstr ""
+
+#: includes/class-modal-checkout.php:2004
 msgid ""
 "Your contribution directly funds our work. If you're moved to do so, you can "
 "opt to pay more than the standard rate."
 msgstr ""
 
-#: includes/class-modal-checkout.php:2004
+#: includes/class-modal-checkout.php:2005
 msgid "Thank you for your generosity! We couldn't do this without you!"
 msgstr ""
 
-#: includes/class-modal-checkout.php:2005
+#: includes/class-modal-checkout.php:2006
 msgid "Increase your support"
 msgstr ""
 
-#: includes/class-modal-checkout.php:2006
+#: includes/class-modal-checkout.php:2007
 #: src/modal-checkout/templates/form-coupon.php:20
 msgid "Apply"
 msgstr ""
 
 #. Translators: %s is the site name.
-#: includes/class-modal-checkout.php:2143
+#: includes/class-modal-checkout.php:2144
 #, php-format
 msgid ""
 "Thank you for supporting %s. Your transaction was completed successfully."
@@ -1365,10 +1370,6 @@ msgstr ""
 
 #: dist/editor.js:29 src/blocks/checkout-button/edit.js:193
 msgid "Type to search for a product…"
-msgstr ""
-
-#: dist/editor.js:29 src/blocks/checkout-button/edit.js:209
-msgid "Cancel"
 msgstr ""
 
 #: dist/editor.js:29 src/blocks/checkout-button/edit.js:327
