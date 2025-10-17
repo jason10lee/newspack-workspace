@@ -417,12 +417,15 @@
 				margin-top: var(--newspack-ui-spacer-2, 12px);
 			}
 
-			&:first-child:last-child {
+			&:only-child {
 				> span.newspack-ui__input-card {
 					grid-template-columns: 0;
 					gap: 0;
+					border: none;
+					padding: 0;
+					background-color: transparent;
 
-					> label::before {
+					> label {
 						display: none;
 					}
 				}
@@ -451,14 +454,15 @@
 						}
 
 						label {
-							font-size: var(--newspack-ui-font-size-xs, 14px);
+							font-size: var(--newspack-ui-font-size-s, 16px);
 							font-weight: normal;
-							line-height: inherit;
+							line-height: var(--newspack-ui-line-height-s, 1.5);
 							margin: 0;
 						}
 
 						input {
 							margin-right: var(--newspack-ui-spacer-base, 8px);
+							margin-top: calc((var(--newspack-ui-font-size-s, 16px) * var(--newspack-ui-line-height-s, 1.5) - 20px) / 2);
 						}
 					}
 				}
@@ -496,8 +500,8 @@
 				.newspack-cover-fees,
 				.woocommerce-SavedPaymentMethods-saveNew {
 					label {
-						font-size: var(--newspack-ui-font-size-xs, 14px);
-						line-height: var(--newspack-ui-line-height-xs, 1.4286);
+						font-size: var(--newspack-ui-font-size-s, 16px);
+						line-height: var(--newspack-ui-line-height-s, 1.5);
 					}
 
 					&::before {
@@ -522,17 +526,17 @@
 			line-height: var(--newspack-ui-line-height-s, 1.5);
 			margin-bottom: var(--newspack-ui-spacer-5);
 			margin-top: calc(var(--newspack-ui-spacer-2) * -1);
-			padding: var(--newspack-ui-spacer-3, 16px) !important;
+			padding: var(--newspack-ui-spacer-3, 16px);
 			transition: background-color 125ms ease-in-out, border-color 125ms ease-in-out;
 
 			&:has(> input) {
-				background: var(--newspack-ui-color-neutral-0, #fff) !important;
-				border-color: var(--newspack-ui-color-border, #ddd) !important;
+				background: var(--newspack-ui-color-neutral-0, #fff);
+				border-color: var(--newspack-ui-color-border, #ddd);
 			}
 
 			&:has(> input:checked) {
-				background: var(--newspack-ui-color-neutral-5, #f7f7f7) !important;
-				border-color: var(--newspack-ui-color-neutral-90, #1e1e1e) !important;
+				background: var(--newspack-ui-color-neutral-5, #f7f7f7);
+				border-color: var(--newspack-ui-color-neutral-90, #1e1e1e);
 			}
 
 			// For labels containing radio, checkbox inputs:
@@ -936,8 +940,14 @@
 	}
 
 	// stylelint-disable-next-line selector-id-pattern
-	#checkout_back {
+	#checkout_edit_billing {
 		margin-top: 0;
+	}
+
+	// stylelint-disable-next-line selector-id-pattern
+	#checkout_cancel {
+		margin-top: var(--newspack-ui-spacer-2);
+		margin-bottom: 0;
 	}
 
 	// stylelint-disable-next-line selector-id-pattern
@@ -989,21 +999,30 @@
 	 * Change Payment Method form.
 	 */
 	/* stylelint-disable-next-line selector-id-pattern */
-	#order_review {
-		.wc_payment_methods {
-			.wc_payment_method:only-child {
-				> label {
-					background: transparent;
-					border-color: transparent;
-					padding: 0;
-				}
-			}
+	.woocommerce-info:has(+ #order_review.change-payment-method) {
+		background: transparent;
+		font-size: var(--newspack-ui-font-size-s, 16px);
+		line-height: var(--newspack-ui-line-height-s, 1.5);
+		padding: 0;
+	}
+	/* stylelint-disable-next-line selector-id-pattern */
+	#order_review.change-payment-method {
+		.payment_box ul.wc-saved-payment-methods {
+			margin-top: 0;
 		}
+
 		.update-all-subscriptions-payment-method-wrap {
 			label {
 				font-weight: normal;
-				font-size: var(--newspack-ui-font-size-xs, 14px);
+				font-size: var(--newspack-ui-font-size-s, 16px);
+				line-height: var(--newspack-ui-line-height-s, 1.5);
 			}
+		}
+	}
+	/* stylelint-disable-next-line selector-id-pattern */
+	#update_all_subscriptions_payment_method_field {
+		label {
+			margin-bottom: 0;
 		}
 	}
 }
