@@ -91,6 +91,7 @@ declare global {
 						};
 						dependencies: Record< string, boolean >;
 						postType: string;
+						isEmailEnhancementsActive: boolean;
 					};
 				};
 			};
