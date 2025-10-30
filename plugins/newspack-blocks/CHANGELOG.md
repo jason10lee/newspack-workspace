@@ -1,3 +1,10 @@
+## [4.16.1](https://github.com/Automattic/newspack-blocks/compare/v4.16.0...v4.16.1) (2025-10-27)
+
+
+### Bug Fixes
+
+* update subscriptions gifting method ([#2232](https://github.com/Automattic/newspack-blocks/issues/2232)) ([6b5e665](https://github.com/Automattic/newspack-blocks/commit/6b5e665c6797cb26228613fb7cdc96c8889455c5))
+
 # [4.16.0](https://github.com/Automattic/newspack-blocks/compare/v4.15.4...v4.16.0) (2025-10-06)
 
 
