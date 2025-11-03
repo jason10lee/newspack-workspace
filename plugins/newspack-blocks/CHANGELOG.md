@@ -1,3 +1,10 @@
+## [4.17.1](https://github.com/Automattic/newspack-blocks/compare/v4.17.0...v4.17.1) (2025-11-03)
+
+
+### Bug Fixes
+
+* render modal checkout with filtered supported gateways ([#2240](https://github.com/Automattic/newspack-blocks/issues/2240)) ([ba74667](https://github.com/Automattic/newspack-blocks/commit/ba74667f28f674eb028dd1dc613e6b3c90206efa))
+
 # [4.17.0](https://github.com/Automattic/newspack-blocks/compare/v4.16.1...v4.17.0) (2025-10-30)
 
 
