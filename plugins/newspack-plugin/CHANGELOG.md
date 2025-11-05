@@ -1,3 +1,10 @@
+## [6.22.1](https://github.com/Automattic/newspack-plugin/compare/v6.22.0...v6.22.1) (2025-11-05)
+
+
+### Bug Fixes
+
+* **my-account:** filter the My Account version ([025c3bb](https://github.com/Automattic/newspack-plugin/commit/025c3bb2594e26cfd5a64aa59ae046ac24bc1149))
+
 # [6.22.0](https://github.com/Automattic/newspack-plugin/compare/v6.21.4...v6.22.0) (2025-10-30)
 
 
