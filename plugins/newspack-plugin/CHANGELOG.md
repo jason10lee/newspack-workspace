@@ -1,3 +1,10 @@
+## [6.22.3](https://github.com/Automattic/newspack-plugin/compare/v6.22.2...v6.22.3) (2025-11-05)
+
+
+### Bug Fixes
+
+* **ga4:** always send reader-related custom params ([#4282](https://github.com/Automattic/newspack-plugin/issues/4282)) ([efb08eb](https://github.com/Automattic/newspack-plugin/commit/efb08eb391f5b2a3f2655f8f4117d5073492c0ea))
+
 ## [6.22.2](https://github.com/Automattic/newspack-plugin/compare/v6.22.1...v6.22.2) (2025-11-05)
 
 
