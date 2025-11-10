@@ -1,3 +1,10 @@
+## [6.24.1](https://github.com/Automattic/newspack-plugin/compare/v6.24.0...v6.24.1) (2025-11-10)
+
+
+### Bug Fixes
+
+* **memberships-gate:** incorrect ternery operator fails to get stored gate ID ([#4299](https://github.com/Automattic/newspack-plugin/issues/4299)) ([3873aa1](https://github.com/Automattic/newspack-plugin/commit/3873aa1b91518d90b35db88efbe7965602b9cd17))
+
 # [6.24.0](https://github.com/Automattic/newspack-plugin/compare/v6.23.0...v6.24.0) (2025-11-10)
 
 
