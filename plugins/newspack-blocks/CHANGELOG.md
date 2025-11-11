@@ -1,3 +1,10 @@
+## [4.17.3](https://github.com/Automattic/newspack-blocks/compare/v4.17.2...v4.17.3) (2025-11-11)
+
+
+### Bug Fixes
+
+* content loop load more for custom taxs ([#2244](https://github.com/Automattic/newspack-blocks/issues/2244)) ([a2c5040](https://github.com/Automattic/newspack-blocks/commit/a2c5040cc27fc4a0adb6826505eda736edee5552))
+
 ## [4.17.2](https://github.com/Automattic/newspack-blocks/compare/v4.17.1...v4.17.2) (2025-11-03)
 
 
