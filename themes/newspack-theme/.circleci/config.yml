@@ -13,7 +13,7 @@ commands:
 jobs:
   build:
     docker:
-      - image: circleci/node:latest
+      - image: cimg/node:lts
     steps:
       - checkout_code
       - run:
@@ -27,7 +27,7 @@ jobs:
   # Build distributable ZIP files.
   build_distributables:
     docker:
-      - image: circleci/node:latest
+      - image: cimg/node:lts
     steps:
       - checkout_code
       - run:
@@ -49,7 +49,7 @@ jobs:
   # Linting
   lint:
     docker:
-      - image: circleci/node:latest
+      - image: cimg/node:lts
     steps:
       - checkout_code
       - run:
@@ -59,7 +59,7 @@ jobs:
   # Release job
   release:
     docker:
-      - image: circleci/node:latest
+      - image: cimg/node:lts
     steps:
       - checkout_code
       - run:
@@ -73,7 +73,7 @@ jobs:
   # Reset alpha branch after a release and publish child themes' releases
   post_release:
     docker:
-      - image: circleci/node:latest
+      - image: cimg/node:lts
     steps:
       - checkout_code
       - run:
