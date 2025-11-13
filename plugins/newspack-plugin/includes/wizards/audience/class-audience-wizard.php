@@ -120,13 +120,11 @@ class Audience_Wizard extends Wizard {
 	 * Add Audience top-level and Configuration subpage to the /wp-admin menu.
 	 */
 	public function add_page() {
-		// svg source - https://wphelpers.dev/icons/people
-		// SVG generated via https://boxy-svg.com/ with path width/height 20px.
-		$icon = 'data:image/svg+xml;base64,' . base64_encode(
-			'<svg viewBox="20 20 24 24" xmlns="http://www.w3.org/2000/svg">
-  <path fill="none" stroke="none" d="M 36.242 29.578 C 37.176 29.578 37.759 28.568 37.292 27.76 C 37.075 27.385 36.675 27.154 36.242 27.154 C 35.309 27.154 34.726 28.164 35.193 28.972 C 35.41 29.347 35.81 29.578 36.242 29.578 Z M 36.242 31.396 C 38.576 31.396 40.033 28.872 38.867 26.851 C 38.325 25.913 37.325 25.336 36.242 25.336 C 33.909 25.336 32.452 27.861 33.618 29.881 C 34.16 30.819 35.16 31.396 36.242 31.396 Z M 33.515 38.669 L 33.515 36.245 C 33.515 34.404 32.023 32.912 30.182 32.912 L 25.333 32.912 C 23.492 32.912 22 34.404 22 36.245 L 22 38.669 L 23.818 38.669 L 23.818 36.245 C 23.818 35.409 24.497 34.73 25.333 34.73 L 30.182 34.73 C 31.018 34.73 31.697 35.409 31.697 36.245 L 31.697 38.669 L 33.515 38.669 Z M 42 36.245 L 42 38.669 L 40.182 38.669 L 40.182 36.245 C 40.182 35.409 39.503 34.73 38.667 34.73 L 35.636 34.73 L 35.636 32.912 L 38.667 32.912 C 40.508 32.912 42 34.404 42 36.245 Z M 28.97 28.366 C 28.97 29.299 27.96 29.882 27.152 29.416 C 26.777 29.199 26.545 28.799 26.545 28.366 C 26.545 27.433 27.555 26.85 28.364 27.316 C 28.738 27.533 28.97 27.933 28.97 28.366 Z M 30.788 28.366 C 30.788 30.699 28.263 32.156 26.242 30.99 C 25.304 30.448 24.727 29.448 24.727 28.366 C 24.727 26.033 27.252 24.576 29.273 25.742 C 30.211 26.284 30.788 27.284 30.788 28.366 Z"/>
-</svg>'
+		$icon = sprintf(
+			'data:image/svg+xml;base64,%s',
+			base64_encode( Newspack_UI_Icons::get_svg( 'people' ) )
 		);
+
 		add_menu_page(
 			$this->get_name(),
 			__( 'Audience', 'newspack-plugin' ),
@@ -369,6 +367,55 @@ class Audience_Wizard extends Wizard {
 				'methods'             => WP_REST_Server::EDITABLE,
 				'callback'            => [ $this, 'api_update_subscription_settings' ],
 				'permission_callback' => [ $this, 'api_permissions_check' ],
+			]
+		);
+
+		// Cover fees settings.
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/cover-fees',
+			[
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => [ $this, 'api_get_cover_fees_settings' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+			]
+		);
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/cover-fees',
+			[
+				'methods'             => WP_REST_Server::EDITABLE,
+				'callback'            => [ $this, 'api_update_cover_fees_settings' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'fee_multiplier'                     => [
+						'sanitize_callback' => 'Newspack\newspack_clean',
+						'validate_callback' => function ( $value ) {
+							if ( (float) $value > 10 ) {
+								return new WP_Error(
+									'newspack_invalid_param',
+									__( 'Fee multiplier must be smaller than 10.', 'newspack' )
+								);
+							}
+							return true;
+						},
+					],
+					'fee_static'                         => [
+						'sanitize_callback' => 'Newspack\newspack_clean',
+					],
+					'allow_covering_fees'                => [
+						'sanitize_callback' => 'Newspack\newspack_string_to_bool',
+					],
+					'allow_covering_fees_default'        => [
+						'sanitize_callback' => 'Newspack\newspack_string_to_bool',
+					],
+					'allow_covering_fees_label'          => [
+						'sanitize_callback' => 'Newspack\newspack_clean',
+					],
+					'allow_covering_fees_donations_only' => [
+						'sanitize_callback' => 'Newspack\newspack_string_to_bool',
+					],
+				],
 			]
 		);
 
@@ -918,5 +965,52 @@ class Audience_Wizard extends Wizard {
 		}
 
 		return $this->api_get_subscription_settings();
+	}
+
+	/**
+	 * Get cover fees settings.
+	 *
+	 * @return WP_REST_Response Response with the settings.
+	 */
+	public function api_get_cover_fees_settings() {
+		return rest_ensure_response(
+			[
+				'allow_covering_fees'                => boolval( get_option( 'newspack_donations_allow_covering_fees', true ) ),
+				'allow_covering_fees_default'        => boolval( get_option( 'newspack_donations_allow_covering_fees_default', false ) ),
+				'allow_covering_fees_label'          => get_option( 'newspack_donations_allow_covering_fees_label', '' ),
+				'allow_covering_fees_donations_only' => boolval( get_option( 'newspack_donations_allow_covering_fees_donations_only', true ) ),
+				'fee_multiplier'                     => get_option( 'newspack_blocks_donate_fee_multiplier', '2.9' ),
+				'fee_static'                         => get_option( 'newspack_blocks_donate_fee_static', '0.3' ),
+			]
+		);
+	}
+
+	/**
+	 * Update cover fees settings.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response Response with the updated settings.
+	 */
+	public function api_update_cover_fees_settings( $request ) {
+		$params = $request->get_params();
+		if ( isset( $params['allow_covering_fees'] ) ) {
+			update_option( 'newspack_donations_allow_covering_fees', intval( $params['allow_covering_fees'] ) );
+		}
+		if ( isset( $params['allow_covering_fees_default'] ) ) {
+			update_option( 'newspack_donations_allow_covering_fees_default', intval( $params['allow_covering_fees_default'] ) );
+		}
+		if ( isset( $params['allow_covering_fees_label'] ) ) {
+			update_option( 'newspack_donations_allow_covering_fees_label', sanitize_text_field( $params['allow_covering_fees_label'] ) );
+		}
+		if ( isset( $params['allow_covering_fees_donations_only'] ) ) {
+			update_option( 'newspack_donations_allow_covering_fees_donations_only', intval( $params['allow_covering_fees_donations_only'] ) );
+		}
+		if ( isset( $params['fee_multiplier'] ) ) {
+			update_option( 'newspack_blocks_donate_fee_multiplier', $params['fee_multiplier'] );
+		}
+		if ( isset( $params['fee_static'] ) ) {
+			update_option( 'newspack_blocks_donate_fee_static', $params['fee_static'] );
+		}
+		return $this->api_get_cover_fees_settings();
 	}
 }
