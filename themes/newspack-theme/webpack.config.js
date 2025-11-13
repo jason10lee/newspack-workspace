@@ -25,9 +25,7 @@ const entry = fs
 
 // Add all js/src/*/index.js scripts
 fs.readdirSync( path.join( __dirname, 'newspack-theme/js', 'src' ) )
-	.filter( script =>
-		fs.existsSync( path.join( __dirname, 'newspack-theme/js', 'src', script, 'index.js' ) )
-	)
+	.filter( script => fs.existsSync( path.join( __dirname, 'newspack-theme/js', 'src', script, 'index.js' ) ) )
 	.forEach( function ( script ) {
 		entry[ script ] = path.join( __dirname, 'newspack-theme/js', 'src', script, 'index.js' );
 	} );

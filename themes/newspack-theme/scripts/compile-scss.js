@@ -5,7 +5,7 @@ const postcss = require( 'postcss' );
 const sass = require( 'sass' );
 const cssnano = require('cssnano');
 const rtlcss = require( 'rtlcss' );
-const postcssFocusWithin = require( path.resolve( __dirname, '../node_modules/newspack-scripts/node_modules/postcss-focus-within' ) );
+const postcssFocusWithin = require( 'postcss-focus-within' );
 
 const isWatching = process.argv.some( arg => arg.startsWith( '--watch' ) )
 

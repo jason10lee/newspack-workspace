@@ -433,13 +433,27 @@ div[data-align="full"] {
 }
 
 /** === Group === */
-.wp-block[data-align="left"] > .wp-block-group,
-.wp-block[data-align="right"] > .wp-block-group {
-	max-width: 50%;
+html :where(.wp-block)[data-align="left"],
+html :where(.wp-block)[data-align="right"] {
+	&:has(.wp-block-group) {
+		@include utilities.media( mobileonly ) {
+			height: auto;
+		}
+	}
 
-	@include utilities.media( mobile ) {
-		iframe[style="width: 100%; height: 600px; max-width: 100%; max-height: 100%;"] {
-			width: 400px !important; // !important to override inline style.
+	& > .wp-block-group {
+		@include utilities.media( mobileonly ) {
+			float: none !important;
+			margin-left: 0 !important;
+			margin-right: 0 !important;
+		}
+
+		@include utilities.media( mobile ) {
+			max-width: 50%;
+
+			iframe[style="width: 100%; height: 600px; max-width: 100%; max-height: 100%;"] {
+				width: 400px !important; // !important to override inline style.
+			}
 		}
 	}
 }
