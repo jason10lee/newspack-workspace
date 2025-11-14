@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2025-11-14T16:54:11+00:00\n"
+"POT-Creation-Date: 2025-11-14T20:23:33+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-plugin\n"
@@ -1344,6 +1344,31 @@ msgstr ""
 
 #: includes/content-gate/class-access-rules.php:111
 msgid "Reader Data"
+msgstr ""
+
+#: includes/contribution-meter/class-contribution-meter.php:111
+msgid "Invalid date format. Expected YYYY-MM-DD."
+msgstr ""
+
+#: includes/contribution-meter/class-contribution-meter.php:117
+msgid "Invalid date. Please provide a valid date."
+msgstr ""
+
+#: includes/contribution-meter/class-contribution-meter.php:138
+msgid "End date must be after start date."
+msgstr ""
+
+#: includes/contribution-meter/class-contribution-meter.php:150
+msgid "End date exceeds the configured maximum date range."
+msgstr ""
+
+#: includes/contribution-meter/class-contribution-meter.php:246
+#: includes/wizards/audience/class-audience-subscriptions.php:77
+msgid "WooCommerce is not active."
+msgstr ""
+
+#: includes/contribution-meter/class-contribution-meter.php:254
+msgid "No donation products found."
 msgstr ""
 
 #: includes/corrections/class-corrections.php:143
@@ -4753,10 +4778,6 @@ msgstr ""
 msgid "Audience Management / Subscriptions"
 msgstr ""
 
-#: includes/wizards/audience/class-audience-subscriptions.php:77
-msgid "WooCommerce is not active."
-msgstr ""
-
 #: includes/wizards/audience/class-audience-wizard.php:71
 msgid "Audience Management / Configuration"
 msgstr ""
@@ -5179,6 +5200,65 @@ msgstr ""
 #: src/blocks/content-gate/countdown/view.js:32
 #, php-format,js-format
 msgid "%1$d/%2$d"
+msgstr ""
+
+#: src/blocks/contribution-meter/meters/class-circular-meter.php:56
+#: dist/contribution-meter-block.js:4
+#: src/blocks/contribution-meter/components/CircularMeter.jsx:77
+msgid "Contribution progress indicator"
+msgstr ""
+
+#: src/blocks/contribution-meter/meters/class-circular-meter.php:57
+#: dist/contribution-meter-block.js:4
+#: dist/contribution-meter-block.js:5
+#: src/blocks/contribution-meter/components/CircularMeter.jsx:79
+#: src/blocks/contribution-meter/index.js:16
+msgid "Contribution Meter"
+msgstr ""
+
+#. translators: 1: percentage, 2: formatted goal amount
+#: src/blocks/contribution-meter/meters/class-circular-meter.php:63
+#: dist/contribution-meter-block.js:5
+#: src/blocks/contribution-meter/components/CircularMeter.jsx:83
+#, php-format,js-format
+msgid "%1$s%% progress toward %2$s goal"
+msgstr ""
+
+#: src/blocks/contribution-meter/meters/class-circular-meter.php:106
+#: dist/contribution-meter-block.js:5
+#: src/blocks/contribution-meter/components/CircularMeter.jsx:120
+msgid "raised"
+msgstr ""
+
+#: src/blocks/contribution-meter/meters/class-circular-meter.php:111
+#: dist/contribution-meter-block.js:5
+#: src/blocks/contribution-meter/components/CircularMeter.jsx:131
+#: src/blocks/contribution-meter/index.js:33
+msgid "goal"
+msgstr ""
+
+#. translators: 1: amount raised, 2: goal amount
+#: src/blocks/contribution-meter/meters/class-linear-meter.php:62
+#: dist/contribution-meter-block.js:2
+#: src/blocks/contribution-meter/components/LinearMeter.jsx:56
+#, php-format,js-format
+msgid "%1$s raised of %2$s goal"
+msgstr ""
+
+#. translators: %s: amount raised
+#: src/blocks/contribution-meter/meters/class-linear-meter.php:78
+#: dist/contribution-meter-block.js:3
+#: src/blocks/contribution-meter/components/LinearMeter.jsx:68
+#, php-format,js-format
+msgid "%s raised"
+msgstr ""
+
+#. translators: %s: goal amount
+#: src/blocks/contribution-meter/meters/class-linear-meter.php:93
+#: dist/contribution-meter-block.js:4
+#: src/blocks/contribution-meter/components/LinearMeter.jsx:79
+#, php-format,js-format
+msgid "%s goal"
 msgstr ""
 
 #. Translators: %s is a link to My Account.
@@ -7098,8 +7178,10 @@ msgstr ""
 #: dist/avatar-block.js:1
 #: dist/blocks.js:1
 #: dist/blocks.js:4
+#: dist/contribution-meter-block.js:5
 #: src/blocks/avatar/index.js:31
 #: src/blocks/collections/index.js:36
+#: src/blocks/contribution-meter/index.js:37
 msgid "newspack"
 msgstr ""
 
@@ -7876,17 +7958,21 @@ msgid "Show image on right"
 msgstr ""
 
 #: dist/blocks.js:4
+#: dist/contribution-meter-block.js:1
 #: dist/newspack-wizards.b2aeff8e47243a0e49e2.js:23
 #: dist/setup.js:7
 #: src/blocks/collections/components/InspectorPanel.jsx:189
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:169
 msgid "S"
 msgstr ""
 
 #: dist/blocks.js:4
 #: dist/componentsDemo.js:1
 #: dist/content-gate-editor.js:25
+#: dist/contribution-meter-block.js:1
 #: dist/newspack-wizards.b2aeff8e47243a0e49e2.js:23
 #: src/blocks/collections/components/InspectorPanel.jsx:191
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:169
 #: src/content-gate/editor.js:30
 #: src/wizards/componentsDemo/index.js:531
 #: src/wizards/componentsDemo/index.js:605
@@ -7894,30 +7980,38 @@ msgid "Small"
 msgstr ""
 
 #: dist/blocks.js:4
+#: dist/contribution-meter-block.js:1
 #: dist/newspack-wizards.b2aeff8e47243a0e49e2.js:23
 #: dist/setup.js:7
 #: src/blocks/collections/components/InspectorPanel.jsx:194
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:170
 msgid "M"
 msgstr ""
 
 #: dist/blocks.js:4
 #: dist/content-gate-editor.js:25
+#: dist/contribution-meter-block.js:1
 #: src/blocks/collections/components/InspectorPanel.jsx:196
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:170
 #: src/content-gate/editor.js:31
 msgid "Medium"
 msgstr ""
 
 #: dist/blocks.js:4
+#: dist/contribution-meter-block.js:1
 #: dist/newspack-wizards.b2aeff8e47243a0e49e2.js:23
 #: dist/setup.js:7
 #: src/blocks/collections/components/InspectorPanel.jsx:199
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:171
 msgid "L"
 msgstr ""
 
 #: dist/blocks.js:4
 #: dist/content-gate-editor.js:25
+#: dist/contribution-meter-block.js:1
 #: dist/newspack-wizards.b2aeff8e47243a0e49e2.js:23
 #: src/blocks/collections/components/InspectorPanel.jsx:201
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:171
 #: src/content-gate/editor.js:32
 msgid "Large"
 msgstr ""
@@ -9089,6 +9183,9 @@ msgid "Image Uploader"
 msgstr ""
 
 #: dist/componentsDemo.js:1
+#: dist/contribution-meter-block.js:1
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:46
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:138
 #: src/wizards/componentsDemo/index.js:477
 msgid "Progress bar"
 msgstr ""
@@ -9473,6 +9570,8 @@ msgid "bottom"
 msgstr ""
 
 #: dist/content-gate-editor.js:25
+#: dist/contribution-meter-block.js:1
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:168
 #: src/content-gate/editor.js:29
 msgid "Extra Small"
 msgstr ""
@@ -9623,6 +9722,169 @@ msgstr ""
 #: dist/content-gate-editor.js:37
 #: src/content-gate/editor.js:239
 msgid "The time period during which the metering views will be counted. For example, if the metering period is set to a week, the metering views will be reset every week."
+msgstr ""
+
+#: dist/contribution-meter-block.js:1
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:41
+msgid "Color"
+msgstr ""
+
+#: dist/contribution-meter-block.js:1
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:51
+msgid "Contribution data"
+msgstr ""
+
+#: dist/contribution-meter-block.js:1
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:54
+msgid "Goal amount"
+msgstr ""
+
+#: dist/contribution-meter-block.js:1
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:55
+msgid "Set the total contribution goal."
+msgstr ""
+
+#: dist/contribution-meter-block.js:1
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:71
+msgid "Start date"
+msgstr ""
+
+#: dist/contribution-meter-block.js:1
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:72
+msgid "Contributions from this date are included in the total amount raised."
+msgstr ""
+
+#: dist/contribution-meter-block.js:1
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:91
+msgid "Set end date"
+msgstr ""
+
+#: dist/contribution-meter-block.js:1
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:103
+msgid "Enable this if the contribution meter should stop counting contributions after a specific date."
+msgstr ""
+
+#: dist/contribution-meter-block.js:1
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:112
+msgid "End date"
+msgstr ""
+
+#: dist/contribution-meter-block.js:1
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:113
+msgid "Contributions up to and including this date are counted in the total amount raised."
+msgstr ""
+
+#: dist/contribution-meter-block.js:1
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:140
+msgid "Show goal"
+msgstr ""
+
+#: dist/contribution-meter-block.js:1
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:143
+msgid "Display the total target amount next to the progress bar."
+msgstr ""
+
+#: dist/contribution-meter-block.js:1
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:147
+msgid "Show amount raised"
+msgstr ""
+
+#: dist/contribution-meter-block.js:1
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:150
+msgid "Display the total contributions received so far."
+msgstr ""
+
+#: dist/contribution-meter-block.js:1
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:154
+msgid "Show percentage"
+msgstr ""
+
+#: dist/contribution-meter-block.js:1
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:157
+msgid "Display progress as a percentage of the goal."
+msgstr ""
+
+#: dist/contribution-meter-block.js:1
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:161
+msgid "Thickness"
+msgstr ""
+
+#: dist/contribution-meter-block.js:1
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:165
+msgid "Adjust the visual weight of the progress bar."
+msgstr ""
+
+#: dist/contribution-meter-block.js:1
+#: dist/newspack-wizards.b2aeff8e47243a0e49e2.js:23
+#: dist/setup.js:7
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:168
+msgid "XS"
+msgstr ""
+
+#: dist/contribution-meter-block.js:5
+#: src/blocks/contribution-meter/index.js:29
+msgid "donations"
+msgstr ""
+
+#: dist/contribution-meter-block.js:5
+#: src/blocks/contribution-meter/index.js:30
+msgid "fundraising"
+msgstr ""
+
+#: dist/contribution-meter-block.js:5
+#: src/blocks/contribution-meter/index.js:31
+msgid "revenue"
+msgstr ""
+
+#: dist/contribution-meter-block.js:5
+#: src/blocks/contribution-meter/index.js:32
+msgid "progress"
+msgstr ""
+
+#: dist/contribution-meter-block.js:5
+#: src/blocks/contribution-meter/index.js:34
+msgid "campaign"
+msgstr ""
+
+#: dist/contribution-meter-block.js:5
+#: src/blocks/contribution-meter/index.js:35
+msgid "contribution"
+msgstr ""
+
+#: dist/contribution-meter-block.js:5
+#: src/blocks/contribution-meter/index.js:36
+msgid "meter"
+msgstr ""
+
+#: dist/contribution-meter-block.js:5
+#: src/blocks/contribution-meter/index.js:39
+msgid "Display progress toward your goal. Works seamlessly with the Donate block."
+msgstr ""
+
+#: dist/contribution-meter-block.js:5
+#: src/blocks/contribution-meter/edit.jsx:95
+msgid "Failed to load contribution data."
+msgstr ""
+
+#: dist/contribution-meter-block.js:5
+#: src/blocks/contribution-meter/edit.jsx:135
+msgid "Loading contribution data…"
+msgstr ""
+
+#: dist/contribution-meter-block.js:5
+#: dist/newspack-wizards.b2aeff8e47243a0e49e2.js:10
+#: src/blocks/contribution-meter/edit.jsx:142
+msgid "Error"
+msgstr ""
+
+#: dist/contribution-meter-block.js:5
+#: src/blocks/contribution-meter/index.js:48
+msgid "Linear"
+msgstr ""
+
+#: dist/contribution-meter-block.js:5
+#: src/blocks/contribution-meter/index.js:54
+msgid "Circular"
 msgstr ""
 
 #: dist/handoff-banner.js:1
@@ -10336,10 +10598,6 @@ msgstr ""
 msgid "Most recent requests for %s"
 msgstr ""
 
-#: dist/newspack-wizards.b2aeff8e47243a0e49e2.js:10
-msgid "Error"
-msgstr ""
-
 #. translators: %s is a human-readable time difference.
 #: dist/newspack-wizards.b2aeff8e47243a0e49e2.js:13
 #, js-format
@@ -10864,11 +11122,6 @@ msgstr ""
 #: dist/newspack-wizards.b2aeff8e47243a0e49e2.js:23
 #: dist/setup.js:7
 msgid "Monospace"
-msgstr ""
-
-#: dist/newspack-wizards.b2aeff8e47243a0e49e2.js:23
-#: dist/setup.js:7
-msgid "XS"
 msgstr ""
 
 #: dist/newspack-wizards.b2aeff8e47243a0e49e2.js:23
@@ -11654,6 +11907,54 @@ msgstr ""
 #: src/blocks/collections/block.json
 msgctxt "block keyword"
 msgid "groups"
+msgstr ""
+
+#: dist/blocks/contribution-meter/block.json
+#: src/blocks/contribution-meter/block.json
+msgctxt "block title"
+msgid "Contribution Meter"
+msgstr ""
+
+#: dist/blocks/contribution-meter/block.json
+#: src/blocks/contribution-meter/block.json
+msgctxt "block description"
+msgid "Display progress toward your goal. Works seamlessly with the Donate block."
+msgstr ""
+
+#: dist/blocks/contribution-meter/block.json
+#: src/blocks/contribution-meter/block.json
+msgctxt "block keyword"
+msgid "donations"
+msgstr ""
+
+#: dist/blocks/contribution-meter/block.json
+#: src/blocks/contribution-meter/block.json
+msgctxt "block keyword"
+msgid "fundraising"
+msgstr ""
+
+#: dist/blocks/contribution-meter/block.json
+#: src/blocks/contribution-meter/block.json
+msgctxt "block keyword"
+msgid "revenue"
+msgstr ""
+
+#: dist/blocks/contribution-meter/block.json
+#: src/blocks/contribution-meter/block.json
+msgctxt "block keyword"
+msgid "progress"
+msgstr ""
+
+#: dist/blocks/contribution-meter/block.json
+#: src/blocks/contribution-meter/block.json
+msgctxt "block keyword"
+msgid "goal"
+msgstr ""
+
+#: dist/blocks/contribution-meter/block.json
+#: src/blocks/contribution-meter/block.json
+msgctxt "block keyword"
+msgid "campaign"
 msgstr ""
 
 #: dist/blocks/reader-registration/block.json
