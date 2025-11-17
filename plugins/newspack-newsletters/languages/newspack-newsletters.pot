@@ -2,14 +2,14 @@
 # This file is distributed under the GPL2.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Newsletters 3.24.0\n"
+"Project-Id-Version: Newspack Newsletters 3.24.1\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/project\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2025-11-03T18:31:32+00:00\n"
+"POT-Creation-Date: 2025-11-17T12:09:49+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-newsletters\n"
@@ -339,7 +339,7 @@ msgstr[1] ""
 
 #: includes/class-newspack-newsletters-contacts.php:318
 #: includes/class-newspack-newsletters-contacts.php:353
-#: includes/class-newspack-newsletters-subscription.php:617
+#: includes/class-newspack-newsletters-subscription.php:620
 msgid "Not supported for this provider"
 msgstr ""
 
@@ -511,9 +511,9 @@ msgstr ""
 
 #: includes/class-newspack-newsletters-settings.php:449
 #: includes/class-newspack-newsletters-settings.php:455
-#: includes/class-newspack-newsletters-subscription.php:768
-#: includes/class-newspack-newsletters-subscription.php:866
+#: includes/class-newspack-newsletters-subscription.php:771
 #: includes/class-newspack-newsletters-subscription.php:869
+#: includes/class-newspack-newsletters-subscription.php:872
 msgid "Invalid request."
 msgstr ""
 
@@ -536,68 +536,68 @@ msgid "Provider does not handle the contact-exists check."
 msgstr ""
 
 #. translators: %s: User display name.
-#: includes/class-newspack-newsletters-subscription.php:795
+#: includes/class-newspack-newsletters-subscription.php:798
 #, php-format
 msgid "Hello, %s!"
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:796
+#: includes/class-newspack-newsletters-subscription.php:799
 msgid "Verify your email address by visiting the following address:"
 msgstr ""
 
 #. translators: %s Site title.
-#: includes/class-newspack-newsletters-subscription.php:813
+#: includes/class-newspack-newsletters-subscription.php:816
 #, php-format
 msgid "[%s] Verify your email"
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:847
+#: includes/class-newspack-newsletters-subscription.php:850
 msgid "Check your email address for a verification link."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:861
+#: includes/class-newspack-newsletters-subscription.php:864
 msgid "You're not logged in."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:877
+#: includes/class-newspack-newsletters-subscription.php:880
 msgid "Your email has been verified."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:930
+#: includes/class-newspack-newsletters-subscription.php:933
 msgid "Newsletters"
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:948
+#: includes/class-newspack-newsletters-subscription.php:951
 msgid "Please verify your email address before managing your newsletters subscriptions."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:952
+#: includes/class-newspack-newsletters-subscription.php:955
 msgid "Verify Email"
 msgstr ""
 
 #. translators: %s: Error message.
-#: includes/class-newspack-newsletters-subscription.php:973
+#: includes/class-newspack-newsletters-subscription.php:976
 #, php-format
 msgid "Error while attempting to subscribe: %s"
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:981
+#: includes/class-newspack-newsletters-subscription.php:984
 msgid "Manage your newsletter preferences."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:1015
+#: includes/class-newspack-newsletters-subscription.php:1018
 msgid "Update subscriptions"
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:1033
+#: includes/class-newspack-newsletters-subscription.php:1036
 msgid "You must be logged in and verified to update your subscriptions."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:1051
+#: includes/class-newspack-newsletters-subscription.php:1054
 msgid "You must select newsletters to update."
 msgstr ""
 
-#: includes/class-newspack-newsletters-subscription.php:1053
+#: includes/class-newspack-newsletters-subscription.php:1056
 msgid "Your subscriptions were updated."
 msgstr ""
 
