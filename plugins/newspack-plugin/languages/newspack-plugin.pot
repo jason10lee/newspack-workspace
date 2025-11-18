@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2025-11-17T17:05:25+00:00\n"
+"POT-Creation-Date: 2025-11-18T17:59:23+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-plugin\n"
@@ -1505,6 +1505,65 @@ msgstr ""
 
 #: includes/content-gate/content-gifting/class-newspack-jetpack-gift-article.php:75
 msgid "Click to gift this article"
+msgstr ""
+
+#: includes/contribution-meter/block-patterns/contribution-1.php:10
+#: includes/contribution-meter/block-patterns/contribution-2.php:10
+#: includes/contribution-meter/block-patterns/contribution-3.php:10
+#: includes/contribution-meter/block-patterns/contribution-4.php:10
+#: includes/contribution-meter/block-patterns/contribution-5.php:10
+msgid "Contribution"
+msgstr ""
+
+#: includes/contribution-meter/block-patterns/contribution-1.php:39
+#: includes/contribution-meter/block-patterns/contribution-4.php:21
+#: includes/contribution-meter/block-patterns/contribution-5.php:15
+msgid "Support our publication"
+msgstr ""
+
+#: includes/contribution-meter/block-patterns/contribution-1.php:43
+#: includes/contribution-meter/block-patterns/contribution-3.php:29
+#: includes/contribution-meter/block-patterns/contribution-4.php:25
+#: includes/contribution-meter/block-patterns/contribution-5.php:19
+msgid "With the support of readers like you, we provide thoughtfully researched articles for a more informed and connected community. This is your chance to support credible, community-based, public-service journalism. Please join us!"
+msgstr ""
+
+#: includes/contribution-meter/block-patterns/contribution-2.php:23
+msgid "Donate Now"
+msgstr ""
+
+#: includes/contribution-meter/block-patterns/contribution-4.php:39
+#: includes/contribution-meter/block-patterns/contribution-5.php:37
+msgid "Edit and add to this content to tell your publication's story and explain the benefits of becoming a member. This is a good place to mention any special member privileges, let people know that donations are tax-deductible, or provide any legal information."
+msgstr ""
+
+#: includes/contribution-meter/class-block-patterns.php:41
+msgid "Two-column with cover image"
+msgstr ""
+
+#: includes/contribution-meter/class-block-patterns.php:42
+msgid "Cover image with circular meter overlay"
+msgstr ""
+
+#: includes/contribution-meter/class-block-patterns.php:43
+msgid "Vertical layout with image"
+msgstr ""
+
+#: includes/contribution-meter/class-block-patterns.php:44
+msgid "Grid with circular meter highlight"
+msgstr ""
+
+#: includes/contribution-meter/class-block-patterns.php:45
+msgid "Grid with image and thin meter"
+msgstr ""
+
+#: includes/contribution-meter/class-block-patterns.php:55
+msgid "Newspack Contribution Meter"
+msgstr ""
+
+#: includes/contribution-meter/class-block-patterns.php:69
+msgctxt "Block pattern description"
+msgid "A contribution meter pattern to showcase fundraising goals."
 msgstr ""
 
 #: includes/contribution-meter/class-contribution-meter.php:111
