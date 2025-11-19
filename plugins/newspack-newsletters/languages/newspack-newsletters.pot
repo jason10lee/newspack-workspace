@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2025-11-17T12:09:49+00:00\n"
+"POT-Creation-Date: 2025-11-19T23:22:18+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-newsletters\n"
@@ -2725,19 +2725,19 @@ msgstr ""
 msgid "Only visible in the sent email."
 msgstr ""
 
-#: src/editor/index.js:79
+#: src/editor/index.js:82
 msgid "Circle Black"
 msgstr ""
 
-#: src/editor/index.js:84
+#: src/editor/index.js:87
 msgid "Circle White"
 msgstr ""
 
-#: src/editor/index.js:89
+#: src/editor/index.js:92
 msgid "Black"
 msgstr ""
 
-#: src/editor/index.js:94
+#: src/editor/index.js:97
 msgid "White"
 msgstr ""
 
