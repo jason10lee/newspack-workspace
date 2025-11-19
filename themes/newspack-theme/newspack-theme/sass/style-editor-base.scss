@@ -433,6 +433,10 @@ div[data-align="full"] {
 }
 
 /** === Group === */
+.wp-block-group .is-layout-flex > * {
+	max-width: 100%;
+}
+
 html :where(.wp-block)[data-align="left"],
 html :where(.wp-block)[data-align="right"] {
 	&:has(.wp-block-group) {
