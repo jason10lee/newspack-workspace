@@ -1290,6 +1290,61 @@ hr {
 	}
 }
 
+//! Accordion block
+.wp-block-accordion {
+	.wp-block-accordion-item {
+		border: solid var(--newspack-theme-color-border);
+		border-width: 1px 0;
+		padding: 0.5rem;
+
+		+ .wp-block-accordion-item {
+			border-top: 0;
+		}
+	}
+
+	.wp-block-accordion-heading {
+		font-size: var(--newspack-theme-font-size-base);
+	}
+
+	.wp-block-accordion-heading__toggle:hover .wp-block-accordion-heading__toggle-title {
+		text-decoration: none;
+	}
+}
+
+//! Accordion Group Block (Woocommerce)
+.wp-block-woocommerce-accordion-group {
+	.wp-block-woocommerce-accordion-item {
+		border: solid var(--newspack-theme-color-border);
+		border-width: 1px 0;
+		padding: 0.5rem;
+
+		+ .wp-block-woocommerce-accordion-item {
+			border-top: 0;
+		}
+	}
+
+	.wp-block-woocommerce-accordion-header {
+		font-size: var(--newspack-theme-font-size-base);
+
+		.accordion-item__toggle {
+			&:hover,
+			&:active,
+			&:focus {
+				background: transparent !important;
+				color: var(--newspack-theme-color-text-main) !important;
+			}
+
+			&:focus {
+				outline: none;
+			}
+
+			&:focus-visible {
+				outline: thin dotted;
+			}
+		}
+	}
+}
+
 //! Footnote styles
 .wp-block-footnotes li:focus {
 	outline: thin dotted;
@@ -1540,7 +1595,8 @@ $colors: (
 	.is-style-outline .wp-block-button__link.has-#{$name}-color:not( :hover ), //legacy selector
 	.wp-block-button__link.is-style-outline.has-#{$name}-color:not( :hover ),
 	.wp-block-search__button.has-#{$name}-color,
-	.newspack-newsletters-subscribe input[type='submit'].has-#{$name}-color {
+	.newspack-newsletters-subscribe input[type='submit'].has-#{$name}-color,
+	.wp-block-woocommerce-accordion-item .accordion-item__heading.has-#{$name}-color {
 		color: $hex;
 	}
 
