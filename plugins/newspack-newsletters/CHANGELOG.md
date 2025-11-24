@@ -1,3 +1,10 @@
+## [3.24.2](https://github.com/Automattic/newspack-newsletters/compare/v3.24.1...v3.24.2) (2025-11-24)
+
+
+### Bug Fixes
+
+* allow updates to scheduled newsletter posts ([#1966](https://github.com/Automattic/newspack-newsletters/issues/1966)) ([3e165ff](https://github.com/Automattic/newspack-newsletters/commit/3e165ff0264cf4320a77174fe8a775338f70ded7))
+
 ## [3.24.1](https://github.com/Automattic/newspack-newsletters/compare/v3.24.0...v3.24.1) (2025-11-05)
 
 
