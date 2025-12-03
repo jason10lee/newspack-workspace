@@ -1,3 +1,10 @@
+## [6.26.1](https://github.com/Automattic/newspack-plugin/compare/v6.26.0...v6.26.1) (2025-12-03)
+
+
+### Bug Fixes
+
+* Hotfix/active subscription checks ([#4334](https://github.com/Automattic/newspack-plugin/issues/4334)) ([486a1e7](https://github.com/Automattic/newspack-plugin/commit/486a1e766f506d0103234a93e7a05c21df0da351))
+
 # [6.26.0](https://github.com/Automattic/newspack-plugin/compare/v6.25.1...v6.26.0) (2025-12-02)
 
 
