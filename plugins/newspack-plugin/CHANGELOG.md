@@ -1,3 +1,10 @@
+## [6.26.2](https://github.com/Automattic/newspack-plugin/compare/v6.26.1...v6.26.2) (2025-12-04)
+
+
+### Bug Fixes
+
+* hide block visibility from all blocks ([#4339](https://github.com/Automattic/newspack-plugin/issues/4339)) ([9cadf45](https://github.com/Automattic/newspack-plugin/commit/9cadf45d8b51df494f8f34b9191be5f9271a1fd1))
+
 ## [6.26.1](https://github.com/Automattic/newspack-plugin/compare/v6.26.0...v6.26.1) (2025-12-03)
 
 
