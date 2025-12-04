@@ -1,3 +1,17 @@
+## [6.26.4](https://github.com/Automattic/newspack-plugin/compare/v6.26.3...v6.26.4) (2025-12-04)
+
+
+### Bug Fixes
+
+* add thumbnail position to rss feeds ([#4336](https://github.com/Automattic/newspack-plugin/issues/4336)) ([cf4a668](https://github.com/Automattic/newspack-plugin/commit/cf4a668f7c502b0b4800f2d4da0c5610ab584652))
+
+## [6.26.3](https://github.com/Automattic/newspack-plugin/compare/v6.26.2...v6.26.3) (2025-12-04)
+
+
+### Bug Fixes
+
+* workaround issue and conflict with teams ([#4342](https://github.com/Automattic/newspack-plugin/issues/4342)) ([c9b3f5c](https://github.com/Automattic/newspack-plugin/commit/c9b3f5cca05fd1f9507fd551f17047712c6dd2d8))
+
 ## [6.26.2](https://github.com/Automattic/newspack-plugin/compare/v6.26.1...v6.26.2) (2025-12-04)
 
 
