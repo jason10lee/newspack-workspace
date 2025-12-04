@@ -1,5 +1,5 @@
-## [2.15.2-alpha.1](https://github.com/Automattic/newspack-theme/compare/v2.15.1...v2.15.2-alpha.1) (2025-11-27)
 
+## [2.15.2-alpha.1](https://github.com/Automattic/newspack-theme/compare/v2.15.1...v2.15.2-alpha.1) (2025-11-27)
 
 ### Bug Fixes
 
