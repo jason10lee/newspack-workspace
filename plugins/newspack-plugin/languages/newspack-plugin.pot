@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2025-12-04T18:27:33+00:00\n"
+"POT-Creation-Date: 2025-12-04T18:31:42+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-plugin\n"
@@ -260,7 +260,7 @@ msgstr ""
 #: includes/class-newspack-ui.php:1166
 #: includes/class-newspack-ui.php:1220
 #: includes/content-gate/content-gifting/class-content-gifting.php:581
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:704
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:708
 #: includes/reader-activation/class-reader-activation.php:1610
 #: includes/reader-activation/class-reader-activation.php:1725
 #: dist/audience-wizards.83dd332308811c2c4d51.js:16
@@ -1396,7 +1396,7 @@ msgstr ""
 
 #: includes/content-gate/class-metering-countdown.php:240
 #: includes/content-gate/content-gifting/class-content-gifting-cta.php:185
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:674
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:678
 #: includes/reader-activation/class-reader-activation.php:286
 #: src/blocks/reader-registration/index.php:114
 #: dist/audience-wizards.83dd332308811c2c4d51.js:42
@@ -2861,56 +2861,56 @@ msgstr ""
 
 #: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:62
 #: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:155
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:728
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:732
 msgid "Change subscription"
 msgstr ""
 
 #: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:158
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:726
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:730
 msgid "Confirm donation"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:423
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:427
 msgid "Current"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:467
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:471
 msgid "Amount"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:485
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:489
 msgid "View Subscription"
 msgstr ""
 
 #. translators: %s: subscription product name
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:492
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:496
 #, php-format
 msgid "You currently have an active subscription: %s. If you’d like to make changes, you can manage it from your subscription page."
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:526
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:530
 #: dist/audience-wizards.83dd332308811c2c4d51.js:7
 #: src/wizards/audience/components/settings-modal/index.js:56
 msgid "Frequency"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:600
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:601
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:696
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:604
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:605
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:700
 #: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:107
 msgid "Change Subscription"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:600
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:696
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:604
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:700
 msgid "Complete your transaction"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:601
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:605
 msgid "Purchase"
 msgstr ""
 
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:677
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:681
 #: includes/plugins/woocommerce/my-account/class-my-account-ui-v1-passwords.php:239
 #: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:314
 #: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:400
