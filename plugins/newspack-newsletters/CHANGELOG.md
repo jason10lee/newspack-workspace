@@ -1,3 +1,10 @@
+## [3.25.3](https://github.com/Automattic/newspack-newsletters/compare/v3.25.2...v3.25.3) (2025-12-08)
+
+
+### Bug Fixes
+
+* **my-account:** subscription button style ([#1978](https://github.com/Automattic/newspack-newsletters/issues/1978)) ([d92fe7e](https://github.com/Automattic/newspack-newsletters/commit/d92fe7e30e1e6edff40e28cc46f52f5842f71fb0))
+
 ## [3.25.2](https://github.com/Automattic/newspack-newsletters/compare/v3.25.1...v3.25.2) (2025-12-03)
 
 
