@@ -1,3 +1,10 @@
+## [6.27.1](https://github.com/Automattic/newspack-plugin/compare/v6.27.0...v6.27.1) (2025-12-08)
+
+
+### Bug Fixes
+
+* **subscriptions:** migrated subscription switch ([#4335](https://github.com/Automattic/newspack-plugin/issues/4335)) ([4438b9a](https://github.com/Automattic/newspack-plugin/commit/4438b9ab495d532783b102998a4d7b9e1ed20481))
+
 # [6.27.0](https://github.com/Automattic/newspack-plugin/compare/v6.26.4...v6.27.0) (2025-12-08)
 
 
