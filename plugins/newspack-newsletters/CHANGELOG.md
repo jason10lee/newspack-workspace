@@ -1,3 +1,10 @@
+## [3.25.4](https://github.com/Automattic/newspack-newsletters/compare/v3.25.3...v3.25.4) (2025-12-09)
+
+
+### Bug Fixes
+
+* make sure a log file always exists ([#1996](https://github.com/Automattic/newspack-newsletters/issues/1996)) ([f1976a0](https://github.com/Automattic/newspack-newsletters/commit/f1976a0cac4a643733d95358145e5339a8d7ce19))
+
 ## [3.25.3](https://github.com/Automattic/newspack-newsletters/compare/v3.25.2...v3.25.3) (2025-12-08)
 
 
