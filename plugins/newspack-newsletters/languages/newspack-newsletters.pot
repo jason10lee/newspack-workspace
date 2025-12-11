@@ -2,14 +2,14 @@
 # This file is distributed under the GPL2.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Newsletters 3.25.1\n"
+"Project-Id-Version: Newspack Newsletters 3.25.3\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/project\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2025-11-26T22:38:36+00:00\n"
+"POT-Creation-Date: 2025-12-09T17:55:50+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-newsletters\n"
@@ -394,76 +394,80 @@ msgid "Mailchimp API Key"
 msgstr ""
 
 #: includes/class-newspack-newsletters-settings.php:90
+msgid "Append recommended Mailchimp footer to layouts"
+msgstr ""
+
+#: includes/class-newspack-newsletters-settings.php:99
 msgid "Constant Contact API Key"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:97
+#: includes/class-newspack-newsletters-settings.php:106
 #: src/components/init-modal/screens/api-keys/index.js:152
 msgid "Constant Contact API Secret"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:104
+#: includes/class-newspack-newsletters-settings.php:113
 #: src/components/init-modal/screens/api-keys/index.js:204
 msgid "ActiveCampaign API URL"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:111
+#: includes/class-newspack-newsletters-settings.php:120
 #: src/components/init-modal/screens/api-keys/index.js:212
 msgid "ActiveCampaign API Key"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:119
+#: includes/class-newspack-newsletters-settings.php:128
 msgid "Public Newsletter Posts Slug"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:137
+#: includes/class-newspack-newsletters-settings.php:146
 msgid "Letterhead API Key"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:150
+#: includes/class-newspack-newsletters-settings.php:159
 msgid "Allow comments to be enabled for public Newsletters"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:160
+#: includes/class-newspack-newsletters-settings.php:169
 msgid "Disable Related Posts on public newsletter posts?"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:209
-#: includes/class-newspack-newsletters-settings.php:223
+#: includes/class-newspack-newsletters-settings.php:218
+#: includes/class-newspack-newsletters-settings.php:232
 msgid "Newsletters Settings"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:210
+#: includes/class-newspack-newsletters-settings.php:219
 msgid "Settings"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:226
+#: includes/class-newspack-newsletters-settings.php:235
 msgid "Campaign Monitor support will be deprecated"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:227
+#: includes/class-newspack-newsletters-settings.php:236
 msgid "Please connect a different service provider to ensure continued support."
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:257
+#: includes/class-newspack-newsletters-settings.php:266
 msgid "Authorize the application"
 msgstr ""
 
 #. translators: %s: email service provider name
-#: includes/class-newspack-newsletters-settings.php:262
+#: includes/class-newspack-newsletters-settings.php:271
 #, php-format
 msgid "Authorize %s to connect to Newspack."
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:267
+#: includes/class-newspack-newsletters-settings.php:276
 msgid "Authorize"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:280
+#: includes/class-newspack-newsletters-settings.php:289
 msgid "No list data found."
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:287
+#: includes/class-newspack-newsletters-settings.php:296
 #: includes/class-subscription-lists.php:122
 #: includes/class-subscription-lists.php:123
 #: includes/class-subscription-lists.php:124
@@ -474,43 +478,43 @@ msgstr ""
 msgid "Subscription Lists"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:289
+#: includes/class-newspack-newsletters-settings.php:298
 msgid "Add new"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:292
+#: includes/class-newspack-newsletters-settings.php:301
 msgid "Save changes to display the selected provider lists."
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:294
+#: includes/class-newspack-newsletters-settings.php:303
 msgid "Manage the lists available for subscription."
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:298
+#: includes/class-newspack-newsletters-settings.php:307
 msgid "List name"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:299
+#: includes/class-newspack-newsletters-settings.php:308
 msgid "List details"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:329
+#: includes/class-newspack-newsletters-settings.php:338
 #: dist/adsEditor.js:1
 #: src/components/ad-placements/index.js:78
 #: src/newsletter-editor/sidebar/autocomplete.js:55
 msgid "Edit"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:340
+#: includes/class-newspack-newsletters-settings.php:349
 msgid "List title"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:341
+#: includes/class-newspack-newsletters-settings.php:350
 msgid "List description"
 msgstr ""
 
-#: includes/class-newspack-newsletters-settings.php:449
-#: includes/class-newspack-newsletters-settings.php:455
+#: includes/class-newspack-newsletters-settings.php:458
+#: includes/class-newspack-newsletters-settings.php:464
 #: includes/class-newspack-newsletters-subscription.php:771
 #: includes/class-newspack-newsletters-subscription.php:869
 #: includes/class-newspack-newsletters-subscription.php:872
@@ -724,53 +728,53 @@ msgid "A link to a newsletter."
 msgstr ""
 
 #. translators: Relative time stamp of sent/published date
-#: includes/class-newspack-newsletters.php:712
+#: includes/class-newspack-newsletters.php:721
 #, php-format
 msgid "Sent %1$s ago"
 msgstr ""
 
 #. translators:  Absolute time stamp of sent/published date
-#: includes/class-newspack-newsletters.php:715
+#: includes/class-newspack-newsletters.php:724
 #, php-format
 msgid "Sent %1$s"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:730
+#: includes/class-newspack-newsletters.php:739
 msgid "Public page"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:745
+#: includes/class-newspack-newsletters.php:754
 msgid "No"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:745
+#: includes/class-newspack-newsletters.php:754
 msgid "Yes"
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:942
+#: includes/class-newspack-newsletters.php:951
 msgid "Please select a newsletter service provider."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:953
+#: includes/class-newspack-newsletters.php:962
 msgid "Please input credentials."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:1017
-#: includes/class-newspack-newsletters.php:1036
+#: includes/class-newspack-newsletters.php:1026
+#: includes/class-newspack-newsletters.php:1045
 msgid "You cannot use this resource."
 msgstr ""
 
 #. translators: urge users to input their API credentials on settings page.
-#: includes/class-newspack-newsletters.php:1138
+#: includes/class-newspack-newsletters.php:1147
 #, php-format
 msgid "Thank you for activating Newspack Newsletters. Please <a href=\"%s\">head to settings</a> to set up your API credentials."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:1279
+#: includes/class-newspack-newsletters.php:1288
 msgid "Lists not available while using manual configuration."
 msgstr ""
 
-#: includes/class-newspack-newsletters.php:1285
+#: includes/class-newspack-newsletters.php:1294
 msgid "Lists not available for the current Newsletters setup."
 msgstr ""
 
@@ -1260,6 +1264,22 @@ msgstr ""
 
 #: includes/service-providers/constant_contact/class-newspack-newsletters-constant-contact.php:1320
 msgid "Constant Contact Tag"
+msgstr ""
+
+#. Translators: %s is replaced with the *|EMAIL|* Mailchimp merge tag.
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp-default-footer.php:32
+#, php-format
+msgid "This email was sent to %s"
+msgstr ""
+
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp-default-footer.php:34
+msgid "Unsubscribe from this newsletter"
+msgstr ""
+
+#. Translators: %s is replaced with the *|LIST:COMPANY|* mailchimp merge tag.
+#: includes/service-providers/mailchimp/class-newspack-newsletters-mailchimp-default-footer.php:37
+#, php-format
+msgid "Opt out of all emails from %s"
 msgstr ""
 
 #. translators: 1: email address, 2: list IDs
@@ -2224,23 +2244,23 @@ msgstr ""
 msgid "Saved layouts"
 msgstr ""
 
-#: src/components/init-modal/screens/layout-picker/index.js:66
+#: src/components/init-modal/screens/layout-picker/index.js:72
 msgid "Choose a layout or start with a blank newsletter."
 msgstr ""
 
-#: src/components/init-modal/screens/layout-picker/index.js:104
+#: src/components/init-modal/screens/layout-picker/index.js:110
 msgid "You don’t have any saved layouts yet."
 msgstr ""
 
-#: src/components/init-modal/screens/layout-picker/index.js:107
+#: src/components/init-modal/screens/layout-picker/index.js:113
 msgid "Turn any newsletter to a layout via the \"Layout\" sidebar menu in the editor."
 msgstr ""
 
-#: src/components/init-modal/screens/layout-picker/index.js:120
+#: src/components/init-modal/screens/layout-picker/index.js:126
 msgid "Blank newsletter"
 msgstr ""
 
-#: src/components/init-modal/screens/layout-picker/index.js:123
+#: src/components/init-modal/screens/layout-picker/index.js:129
 msgid "Use selected layout"
 msgstr ""
 

@@ -38,10 +38,16 @@ export default function LayoutPicker() {
 	const { layouts, isFetchingLayouts, deleteLayoutPost } = useLayoutsState();
 
 	const insertLayout = layoutId => {
-		const { post_content, meta = {} } = find( layouts, { ID: layoutId } ) || {};
+		let { post_content = '', meta = {} } = find( layouts, { ID: layoutId } ) || {};
 		if ( meta.campaign_defaults && 'string' === typeof meta.campaign_defaults ) {
 			meta.stringifiedCampaignDefaults = meta.campaign_defaults;
 		}
+
+		// Append default Mailchimp footer if available. Only if "*|UNSUB|*" tag is not already present.
+		if ( post_content && ! post_content.includes( '*|UNSUB|*' ) ) {
+			post_content += window.newspack_newsletters_editor_data?.mailchimp_default_footer || '';
+		}
+
 		editPost( { meta: { template_id: layoutId, ...meta } } );
 		resetEditorBlocks( post_content ? parse( post_content ) : [] );
 	};
