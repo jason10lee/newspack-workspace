@@ -33,6 +33,13 @@ class Content_Gate {
 	private static $is_gated = false;
 
 	/**
+	 * Valid gate post statuses.
+	 *
+	 * @var array
+	 */
+	public static $valid_gate_post_statuses = [ 'publish', 'draft', 'pending', 'future', 'private', 'trash' ];
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function init() {
@@ -764,13 +771,13 @@ class Content_Gate {
 			return new \WP_Error( 'newspack_content_gate_not_found', __( 'Gate not found.', 'newspack' ) );
 		}
 
-		// Update title and description.
+		// Update title, priority, and status.
 		wp_update_post(
 			[
-				'ID'           => $id,
-				'post_title'   => $gate['title'],
-				'post_excerpt' => $gate['description'],
-				'meta_input'   => [
+				'ID'          => $id,
+				'post_title'  => $gate['title'],
+				'post_status' => isset( $gate['status'] ) ? $gate['status'] : $post->post_status,
+				'meta_input'  => [
 					'gate_priority' => $gate['priority'],
 				],
 			]
@@ -789,17 +796,32 @@ class Content_Gate {
 	}
 
 	/**
+	 * Get the valid gate post statuses.
+	 *
+	 * @return array
+	 */
+	public static function get_post_statuses() {
+		/**
+		 * Filters the valid post statuses for content gates.
+		 *
+		 * @param array $valid_post_statuses Valid gate post statuses.
+		 */
+		return apply_filters( 'newspack_content_gate_valid_post_statuses', self::$valid_gate_post_statuses );
+	}
+
+	/**
 	 * Get all gates.
 	 *
-	 * @param string $post_type Post type.
+	 * @param string          $post_type Post type.
+	 * @param string|string[] $post_status Post status or array of statuses to fetch.
 	 *
 	 * @return array Array of content gates.
 	 */
-	public static function get_gates( $post_type = self::GATE_CPT ) {
+	public static function get_gates( $post_type = self::GATE_CPT, $post_status = null ) {
 		$posts = get_posts(
 			[
 				'post_type'      => $post_type,
-				'post_status'    => [ 'publish', 'draft', 'trash', 'pending', 'future' ],
+				'post_status'    => $post_status ? $post_status : self::get_post_statuses(),
 				'posts_per_page' => -1,
 			]
 		);
