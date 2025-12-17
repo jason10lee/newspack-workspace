@@ -2,14 +2,14 @@
 # This file is distributed under the GPL2.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack 6.27.2\n"
+"Project-Id-Version: Newspack 6.27.4\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/project\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2025-12-16T12:57:54+00:00\n"
+"POT-Creation-Date: 2025-12-17T13:49:13+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-plugin\n"
@@ -70,8 +70,8 @@ msgstr ""
 #: includes/class-magic-link.php:343
 #: includes/class-magic-link.php:417
 #: includes/plugins/woocommerce/my-account/class-woocommerce-my-account.php:482
-#: includes/reader-activation/class-reader-activation.php:1254
-#: includes/reader-activation/class-reader-activation.php:2193
+#: includes/reader-activation/class-reader-activation.php:1259
+#: includes/reader-activation/class-reader-activation.php:2198
 msgid "Invalid user."
 msgstr ""
 
@@ -154,7 +154,7 @@ msgid "Unable to authenticate, try again."
 msgstr ""
 
 #: includes/class-magic-link.php:928
-#: includes/reader-activation/class-reader-activation.php:279
+#: includes/reader-activation/class-reader-activation.php:284
 msgid "Login successful!"
 msgstr ""
 
@@ -192,7 +192,7 @@ msgstr ""
 #: includes/class-magic-link.php:1086
 #: includes/plugins/woocommerce/my-account/class-woocommerce-my-account.php:549
 #: includes/plugins/woocommerce/my-account/class-woocommerce-my-account.php:569
-#: includes/reader-activation/class-reader-activation.php:2026
+#: includes/reader-activation/class-reader-activation.php:2031
 #: includes/reader-activation/sync/class-esp-sync-admin.php:157
 msgid "Invalid request."
 msgstr ""
@@ -261,8 +261,8 @@ msgstr ""
 #: includes/class-newspack-ui.php:1220
 #: includes/content-gate/content-gifting/class-content-gifting.php:581
 #: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:708
-#: includes/reader-activation/class-reader-activation.php:1610
-#: includes/reader-activation/class-reader-activation.php:1725
+#: includes/reader-activation/class-reader-activation.php:1615
+#: includes/reader-activation/class-reader-activation.php:1730
 #: dist/audience-wizards.9f2010336a37ada78748.js:16
 #: src/wizards/audience/components/prompt-action-card/index.js:137
 msgid "Close"
@@ -738,7 +738,7 @@ msgid "Please complete the challenge to continue."
 msgstr ""
 
 #. Translators: error message for reCaptcha.
-#: includes/class-recaptcha.php:430
+#: includes/class-recaptcha.php:456
 #, php-format
 msgid "Error: %s"
 msgstr ""
@@ -1386,9 +1386,9 @@ msgstr ""
 
 #: includes/content-gate/class-metering-countdown.php:238
 #: includes/content-gate/content-gifting/class-content-gifting-cta.php:183
-#: includes/reader-activation/class-reader-activation.php:275
-#: includes/reader-activation/class-reader-activation.php:285
-#: includes/reader-activation/class-reader-activation.php:291
+#: includes/reader-activation/class-reader-activation.php:280
+#: includes/reader-activation/class-reader-activation.php:290
+#: includes/reader-activation/class-reader-activation.php:296
 #: dist/audience-wizards.9f2010336a37ada78748.js:42
 #: src/wizards/audience/views/setup/content-gifting.js:148
 msgid "Create an account"
@@ -1397,7 +1397,7 @@ msgstr ""
 #: includes/content-gate/class-metering-countdown.php:240
 #: includes/content-gate/content-gifting/class-content-gifting-cta.php:185
 #: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:678
-#: includes/reader-activation/class-reader-activation.php:286
+#: includes/reader-activation/class-reader-activation.php:291
 #: src/blocks/reader-registration/index.php:114
 #: dist/audience-wizards.9f2010336a37ada78748.js:42
 #: dist/blocks.js:4
@@ -2991,7 +2991,7 @@ msgid "Transaction fee (%s)"
 msgstr ""
 
 #: includes/plugins/woocommerce/class-woocommerce-connection.php:212
-#: includes/reader-activation/class-reader-activation.php:2535
+#: includes/reader-activation/class-reader-activation.php:2533
 msgid "Please wait a moment before trying again."
 msgstr ""
 
@@ -3019,7 +3019,7 @@ msgid "Card"
 msgstr ""
 
 #: includes/plugins/woocommerce/class-woocommerce-connection.php:509
-#: includes/reader-activation/class-reader-activation.php:299
+#: includes/reader-activation/class-reader-activation.php:304
 #: src/blocks/reader-registration/index.php:106
 msgid "My Account"
 msgstr ""
@@ -3322,8 +3322,8 @@ msgid "We just sent instructions on how to delete your account to"
 msgstr ""
 
 #: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:346
-#: includes/reader-activation/class-reader-activation.php:280
-#: includes/reader-activation/class-reader-activation.php:308
+#: includes/reader-activation/class-reader-activation.php:285
+#: includes/reader-activation/class-reader-activation.php:313
 #: dist/audience-wizards.9f2010336a37ada78748.js:42
 #: src/wizards/audience/views/setup/campaign.js:86
 msgid "Continue"
@@ -3464,8 +3464,8 @@ msgstr ""
 #: includes/plugins/woocommerce/my-account/class-woocommerce-my-account.php:671
 #: includes/plugins/woocommerce/my-account/templates/v0/edit-account.php:68
 #: includes/plugins/woocommerce/my-account/templates/v1/account-settings.php:100
-#: includes/reader-activation/class-reader-activation.php:989
-#: includes/reader-activation/class-reader-activation.php:1540
+#: includes/reader-activation/class-reader-activation.php:994
+#: includes/reader-activation/class-reader-activation.php:1545
 msgid "Email address"
 msgstr ""
 
@@ -3478,8 +3478,8 @@ msgid "These memberships are active, but don't have an associated subscription. 
 msgstr ""
 
 #: includes/plugins/woocommerce/my-account/class-woocommerce-my-account.php:1036
-#: includes/reader-activation/class-reader-activation.php:269
-#: includes/reader-activation/class-reader-activation.php:2230
+#: includes/reader-activation/class-reader-activation.php:274
+#: includes/reader-activation/class-reader-activation.php:2235
 msgid "Please enter a valid email address."
 msgstr ""
 
@@ -3650,7 +3650,7 @@ msgid "Update password"
 msgstr ""
 
 #: includes/plugins/woocommerce/my-account/templates/v1/account-settings.php:253
-#: includes/reader-activation/class-reader-activation.php:284
+#: includes/reader-activation/class-reader-activation.php:289
 msgid "Forgot password"
 msgstr ""
 
@@ -3953,8 +3953,8 @@ msgstr ""
 msgid "This email will be sent to non-reader WP user accounts as a reminder to use standard WP login flows."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:268
-#: includes/reader-activation/class-reader-activation.php:277
+#: includes/reader-activation/class-reader-activation.php:273
+#: includes/reader-activation/class-reader-activation.php:282
 #: includes/templates/reader-activation-emails/magic-link.php:30
 #: includes/templates/reader-activation-emails/magic-link.php:103
 #: includes/templates/reader-activation-emails/magic-link.php:274
@@ -3970,80 +3970,80 @@ msgstr ""
 msgid "Sign in"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:270
+#: includes/reader-activation/class-reader-activation.php:275
 msgid "Please enter a password."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:271
+#: includes/reader-activation/class-reader-activation.php:276
 msgid "Display name cannot match your email address. Please choose a different display name."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:272
+#: includes/reader-activation/class-reader-activation.php:277
 msgid "The popup has been blocked. Allow popups for the site and try again."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:273
+#: includes/reader-activation/class-reader-activation.php:278
 msgid "Code sent! Check your inbox."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:274
+#: includes/reader-activation/class-reader-activation.php:279
 msgid "Code resent! Check your inbox."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:278
+#: includes/reader-activation/class-reader-activation.php:283
 msgid "Success! You’re signed in."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:281
+#: includes/reader-activation/class-reader-activation.php:286
 msgid "Resend code"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:282
+#: includes/reader-activation/class-reader-activation.php:287
 msgid "Email me a one-time code instead"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:283
+#: includes/reader-activation/class-reader-activation.php:288
 msgid "Enter the code sent to your email."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:287
+#: includes/reader-activation/class-reader-activation.php:292
 #: dist/other-scripts/corrections-modal.js:7
 #: src/other-scripts/corrections-modal/index.js:375
 msgid "Go back"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:288
+#: includes/reader-activation/class-reader-activation.php:293
 msgid "Set a password (optional)"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:292
+#: includes/reader-activation/class-reader-activation.php:297
 #: src/blocks/reader-registration/index.php:100
 #: dist/blocks.js:1
 #: src/blocks/reader-registration/edit.js:70
 msgid "Success! Your account was created and you’re signed in."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:293
+#: includes/reader-activation/class-reader-activation.php:298
 msgid "In the future, you’ll sign in with a magic link, or a code sent to your email. If you’d rather use a password, you can set one below."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:295
+#: includes/reader-activation/class-reader-activation.php:300
 msgid "Thank you for verifying your account!"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:296
+#: includes/reader-activation/class-reader-activation.php:301
 msgid "Please check your inbox for an authentication link."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:297
+#: includes/reader-activation/class-reader-activation.php:302
 msgid "Please wait a moment before requesting another password reset email."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:300
+#: includes/reader-activation/class-reader-activation.php:305
 msgid "Sign In"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:302
+#: includes/reader-activation/class-reader-activation.php:307
 #: src/blocks/reader-registration/index.php:113
 #: dist/blocks.js:4
 #: src/blocks/reader-registration/edit.js:270
@@ -4051,270 +4051,270 @@ msgid "Subscribe to our newsletter"
 msgstr ""
 
 #. Translators: %s is the site name.
-#: includes/reader-activation/class-reader-activation.php:305
+#: includes/reader-activation/class-reader-activation.php:310
 #, php-format
 msgid "Thanks for supporting %s."
 msgstr ""
 
 #. Translators: %s is the site name.
-#: includes/reader-activation/class-reader-activation.php:311
+#: includes/reader-activation/class-reader-activation.php:316
 #, php-format
 msgid "Get the best of %s directly in your email inbox."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:314
+#: includes/reader-activation/class-reader-activation.php:319
 msgid "Signup successful!"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:315
+#: includes/reader-activation/class-reader-activation.php:320
 msgid "Sign up for newsletters"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:318
+#: includes/reader-activation/class-reader-activation.php:323
 msgid "Sign in to upgrade"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:319
+#: includes/reader-activation/class-reader-activation.php:324
 msgid "Register to upgrade"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:476
+#: includes/reader-activation/class-reader-activation.php:481
 msgid "Newspack Campaigns plugin is required to activate Reader Activation features."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:854
+#: includes/reader-activation/class-reader-activation.php:859
 msgid "Legal Pages"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:855
+#: includes/reader-activation/class-reader-activation.php:860
 msgid "Displaying legal pages like Privacy Policy and Terms of Service on your site is recommended for allowing readers to register and access their account."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:857
+#: includes/reader-activation/class-reader-activation.php:862
 msgid "Privacy policies that tell users how you collect and use their data are essential for running a  trustworthy website. While rules and regulations can differ by country, certain legal pages might be required by law."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:860
+#: includes/reader-activation/class-reader-activation.php:865
 msgid "Legal Pages Disclaimer Text"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:861
+#: includes/reader-activation/class-reader-activation.php:866
 msgid "Legal pages disclaimer text to display on registration."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:864
+#: includes/reader-activation/class-reader-activation.php:869
 msgid "Legal Pages URL"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:865
+#: includes/reader-activation/class-reader-activation.php:870
 msgid "URL to the page containing the privacy policy or terms of service."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:876
+#: includes/reader-activation/class-reader-activation.php:881
 msgid "Email Service Provider (ESP)"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:877
+#: includes/reader-activation/class-reader-activation.php:882
 msgid "Connect to your ESP to register readers with their email addresses and send newsletters."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:878
+#: includes/reader-activation/class-reader-activation.php:883
 msgid "Connect to your email service provider (ESP) and enable at least one subscription list."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:885
+#: includes/reader-activation/class-reader-activation.php:890
 msgid "Transactional Emails"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:886
+#: includes/reader-activation/class-reader-activation.php:891
 msgid "Your sender name and email address determines how readers find emails related to their account in their inbox. To customize the content of these emails, visit Advanced Settings below."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:890
+#: includes/reader-activation/class-reader-activation.php:895
 msgid "Sender Name"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:891
+#: includes/reader-activation/class-reader-activation.php:896
 msgid "Name to use as the sender of transactional emails."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:894
+#: includes/reader-activation/class-reader-activation.php:899
 msgid "Sender Email Address"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:895
+#: includes/reader-activation/class-reader-activation.php:900
 msgid "Email address to use as the sender of transactional emails."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:898
+#: includes/reader-activation/class-reader-activation.php:903
 msgid "Contact Email Address"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:899
+#: includes/reader-activation/class-reader-activation.php:904
 msgid "This email will be used as \"Reply-To\" for transactional emails as well."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:905
+#: includes/reader-activation/class-reader-activation.php:910
 #: dist/newspack-wizards.d7ab6845226b8d96c24f.js:23
 msgid "reCAPTCHA"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:906
+#: includes/reader-activation/class-reader-activation.php:911
 msgid "Connecting to a Google reCAPTCHA account enables enhanced anti-spam for all Newspack sign-up blocks."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:907
+#: includes/reader-activation/class-reader-activation.php:912
 msgid "Enable reCAPTCHA and enter your account credentials."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:917
+#: includes/reader-activation/class-reader-activation.php:922
 #: dist/audience-wizards.9f2010336a37ada78748.js:16
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:222
 msgid "Reader Revenue"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:918
+#: includes/reader-activation/class-reader-activation.php:923
 msgid "Setting suggested donation amounts is required for enabling a streamlined donation experience."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:919
+#: includes/reader-activation/class-reader-activation.php:924
 msgid "Set platform to \"Newspack\" or \"News Revenue Hub\" and configure your default donation settings. If using News Revenue Hub, set an Organization ID and a Donor Landing Page in News Revenue Hub Settings."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:929
+#: includes/reader-activation/class-reader-activation.php:934
 msgid "Audience Management Campaign"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:930
+#: includes/reader-activation/class-reader-activation.php:935
 msgid "Building a set of prompts with default segments and settings allows for an improved experience optimized for audience management."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:934
+#: includes/reader-activation/class-reader-activation.php:939
 msgid "Audience Management campaign"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:935
+#: includes/reader-activation/class-reader-activation.php:940
 msgid "Waiting for all settings to be ready"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:1454
+#: includes/reader-activation/class-reader-activation.php:1459
 msgid "Enter your email address"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:1541
+#: includes/reader-activation/class-reader-activation.php:1546
 msgid "Your email address"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:1546
+#: includes/reader-activation/class-reader-activation.php:1551
 msgid "6-digit code"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:1549
+#: includes/reader-activation/class-reader-activation.php:1554
 msgid "Enter your password"
 msgstr ""
 
 #. Translators: %s is the email address.
-#: includes/reader-activation/class-reader-activation.php:1564
+#: includes/reader-activation/class-reader-activation.php:1569
 #, php-format
 msgid "Sign in by entering the code we sent to %s, or clicking the magic link in the email."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:1691
+#: includes/reader-activation/class-reader-activation.php:1696
 msgid "See all"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:1734
+#: includes/reader-activation/class-reader-activation.php:1739
 msgid "Sending to: "
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:1763
+#: includes/reader-activation/class-reader-activation.php:1768
 msgid "Invalid email address."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:1768
+#: includes/reader-activation/class-reader-activation.php:1773
 msgid "No lists selected."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:1945
+#: includes/reader-activation/class-reader-activation.php:1950
 #: dist/blocks.js:4
 #: src/blocks/reader-registration/edit.js:295
 msgid "Sign in with Google"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:1948
+#: includes/reader-activation/class-reader-activation.php:1953
 #: dist/blocks.js:4
 #: src/blocks/reader-registration/edit.js:297
 msgid "Or"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:2030
+#: includes/reader-activation/class-reader-activation.php:2035
 #: src/blocks/reader-registration/index.php:415
 msgid "You must enter a valid email address."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:2037
-#: includes/reader-activation/class-reader-activation.php:2041
+#: includes/reader-activation/class-reader-activation.php:2042
+#: includes/reader-activation/class-reader-activation.php:2046
 msgid "Account not found. <a data-set-action=\"register\" href=\"#register_modal\">Create an account</a> instead?"
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:2041
-#: includes/reader-activation/class-reader-activation.php:2107
+#: includes/reader-activation/class-reader-activation.php:2046
+#: includes/reader-activation/class-reader-activation.php:2112
 #: src/blocks/reader-registration/index.php:115
 msgid "An account was already registered with this email. Please check your inbox for an authentication link."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:2064
-#: includes/reader-activation/class-reader-activation.php:2088
+#: includes/reader-activation/class-reader-activation.php:2069
+#: includes/reader-activation/class-reader-activation.php:2093
 msgid "We encountered an error sending an authentication link. Please try again."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:2074
-#: includes/reader-activation/class-reader-activation.php:2078
+#: includes/reader-activation/class-reader-activation.php:2079
+#: includes/reader-activation/class-reader-activation.php:2083
 msgid "Password not recognized, try again."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:2107
+#: includes/reader-activation/class-reader-activation.php:2112
 msgid "An account was already registered with this email. Please sign in to continue."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:2112
+#: includes/reader-activation/class-reader-activation.php:2117
 msgid "Unable to register your account. Try a different email."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:2220
+#: includes/reader-activation/class-reader-activation.php:2225
 msgid "Registration is disabled."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:2224
+#: includes/reader-activation/class-reader-activation.php:2229
 msgid "Cannot register while logged in."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:2569
+#: includes/reader-activation/class-reader-activation.php:2567
 msgid "Please wait before requesting another verification email."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:2807
+#: includes/reader-activation/class-reader-activation.php:2805
 msgid "Your personal data will be used to process your order and create an account if one doesn't exist. This information will also support your experience throughout this website, and be used for other purposes described in our privacy policy."
 msgstr ""
 
 #. Translators: %s is the name of the site.
-#: includes/reader-activation/class-reader-activation.php:2824
+#: includes/reader-activation/class-reader-activation.php:2822
 #, php-format
 msgid "Thank you for supporting %s. Your transaction was completed successfully."
 msgstr ""
 
 #. Translators: %s is the name of the site.
-#: includes/reader-activation/class-reader-activation.php:2843
+#: includes/reader-activation/class-reader-activation.php:2841
 #, php-format
 msgid "Thank you for supporting %s. Your account has been created, and your transaction was completed successfully."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:2869
+#: includes/reader-activation/class-reader-activation.php:2867
 #: dist/audience-wizards.9f2010336a37ada78748.js:45
 msgid "I understand this is a recurring subscription and that I can cancel anytime through the My Account Page."
 msgstr ""
 
-#: includes/reader-activation/class-reader-activation.php:2893
+#: includes/reader-activation/class-reader-activation.php:2891
 #: dist/audience-wizards.9f2010336a37ada78748.js:45
 msgid "I have read and accept the {{Terms & Conditions}}."
 msgstr ""
