@@ -1,3 +1,10 @@
+# [2.16.0](https://github.com/Automattic/newspack-theme/compare/v2.15.3...v2.16.0) (2026-01-05)
+
+
+### Features
+
+* add an option to turn the homepage into a no-header no-footer splash page ([#2602](https://github.com/Automattic/newspack-theme/issues/2602)) ([3508b6d](https://github.com/Automattic/newspack-theme/commit/3508b6dd94ebe2467dba1586eb632df90a50f573))
+
 # [2.16.0-alpha.1](https://github.com/Automattic/newspack-theme/compare/v2.15.3...v2.16.0-alpha.1) (2025-12-11)
 
 
