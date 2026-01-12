@@ -1,3 +1,10 @@
+## [6.28.1](https://github.com/Automattic/newspack-plugin/compare/v6.28.0...v6.28.1) (2026-01-12)
+
+
+### Bug Fixes
+
+* return block markup when outputting corrections ([#4385](https://github.com/Automattic/newspack-plugin/issues/4385)) ([c542b6d](https://github.com/Automattic/newspack-plugin/commit/c542b6d43df7bee62831a3edc688e1405b59d115))
+
 # [6.28.0](https://github.com/Automattic/newspack-plugin/compare/v6.27.4...v6.28.0) (2026-01-05)
 
 
