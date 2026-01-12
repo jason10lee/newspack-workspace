@@ -16,7 +16,11 @@ defined( 'ABSPATH' ) || exit;
  */
 class Content_Gate {
 
+	use Content_Gate_Layout;
+
 	const GATE_CPT = 'np_content_gate';
+
+	const GATE_LAYOUT_CPT = 'np_gate_layout';
 
 	/**
 	 * Whether the gate has been rendered in this execution.
@@ -44,7 +48,6 @@ class Content_Gate {
 	 */
 	public static function init() {
 		add_action( 'init', [ __CLASS__, 'register_post_type' ] );
-		add_action( 'init', [ __CLASS__, 'register_meta' ] );
 		add_action( 'admin_init', [ __CLASS__, 'redirect_cpt' ] );
 		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_scripts' ] );
 		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_block_editor_assets' ] );
@@ -230,6 +233,7 @@ class Content_Gate {
 	 * Register post type for custom gate.
 	 */
 	public static function register_post_type() {
+		// Register the main gate post type.
 		\register_post_type(
 			self::GATE_CPT,
 			[
@@ -246,55 +250,11 @@ class Content_Gate {
 				'show_ui'      => true,
 				'show_in_menu' => false,
 				'show_in_rest' => true,
-				'supports'     => [ 'editor', 'custom-fields', 'revisions', 'title' ],
+				'supports'     => [ 'title', 'custom-fields', 'revisions' ],
 			]
 		);
-	}
-
-	/**
-	 * Register gate meta.
-	 */
-	public static function register_meta() {
-		$meta = [
-			'style'              => [
-				'type'    => 'string',
-				'default' => 'inline',
-			],
-			'inline_fade'        => [
-				'type'    => 'boolean',
-				'default' => true,
-			],
-			'use_more_tag'       => [
-				'type'    => 'boolean',
-				'default' => true,
-			],
-			'visible_paragraphs' => [
-				'type'    => 'integer',
-				'default' => 2,
-			],
-			'overlay_position'   => [
-				'type'    => 'string',
-				'default' => 'center',
-			],
-			'overlay_size'       => [
-				'type'    => 'string',
-				'default' => 'medium',
-			],
-		];
-
-		foreach ( $meta as $key => $config ) {
-			\register_meta(
-				'post',
-				$key,
-				[
-					'object_subtype' => self::GATE_CPT,
-					'show_in_rest'   => $config['show_in_rest'] ?? true,
-					'type'           => $config['type'],
-					'default'        => $config['default'],
-					'single'         => true,
-				]
-			);
-		}
+		// Register the layout post type.
+		self::register_layout_post_type( self::GATE_LAYOUT_CPT, __( 'Content Gate Layout', 'newspack' ) );
 	}
 
 	/**
@@ -451,7 +411,7 @@ class Content_Gate {
 	public static function is_metering_enabled( $post_type = self::GATE_CPT ) {
 		$gates = self::get_gates( $post_type );
 		foreach ( $gates as $gate ) {
-			if ( $gate['metering']['enabled'] ) {
+			if ( isset( $gate['metering'] ) && ! empty( $gate['metering']['enabled'] ) ) {
 				return true;
 			}
 		}
@@ -542,23 +502,7 @@ class Content_Gate {
 	 */
 	public static function get_inline_gate_content() {
 		$gate_post_id = self::get_gate_post_id();
-		$style        = \get_post_meta( $gate_post_id, 'style', true );
-		if ( 'inline' !== $style ) {
-			return '';
-		}
-		$gate = \get_the_content( null, false, \get_post( $gate_post_id ) );
-
-		// Add clearfix to the gate.
-		$gate = '<div style=\'content:"";clear:both;display:table;\'></div>' . $gate;
-
-		// Apply inline fade.
-		if ( \get_post_meta( $gate_post_id, 'inline_fade', true ) ) {
-			$gate = '<div style="pointer-events: none; height: 10em; margin-top: -10em; width: 100%; position: absolute; background: linear-gradient(180deg, rgba(255,255,255,0) 14%, rgba(255,255,255,1) 76%);"></div>' . $gate;
-		}
-
-		// Wrap gate in a div for styling.
-		$gate = '<div class="newspack-content-gate__gate newspack-content-gate__inline-gate">' . $gate . '</div>';
-		return $gate;
+		return self::get_inline_gate_content_for_post( $gate_post_id );
 	}
 
 	/**
@@ -581,30 +525,7 @@ class Content_Gate {
 		self::$is_gated = true;
 
 		$gate_post_id = self::get_gate_post_id();
-
-		$content = $post->post_content;
-
-		$style = \get_post_meta( $gate_post_id, 'style', true );
-
-		$use_more_tag = get_post_meta( $gate_post_id, 'use_more_tag', true );
-		// Use <!--more--> as threshold if it exists.
-		if ( $use_more_tag && strpos( $content, '<!--more-->' ) ) {
-			$content = apply_filters( 'newspack_gate_content', explode( '<!--more-->', $content )[0] );
-		} else {
-			$content = apply_filters( 'newspack_gate_content', $content );
-			$count   = max( 1, (int) get_post_meta( $gate_post_id, 'visible_paragraphs', true ) );
-			// Split into paragraphs.
-			$content = explode( '</p>', $content );
-			// Extract the first $x paragraphs only.
-			$content = array_slice( $content, 0, $count ?? 2 );
-			if ( 'overlay' === $style ) {
-				// Append ellipsis to the last paragraph.
-				$content[ count( $content ) - 1 ] .= ' [&hellip;]';
-			}
-			// Rejoin the paragraphs into a single string again.
-			$content = \force_balance_tags( \wp_kses_post( implode( '</p>', $content ) . '</p>' ) );
-		}
-		return $content;
+		return self::get_restricted_post_excerpt_for_gate( $post, $gate_post_id );
 	}
 
 	/**
@@ -643,17 +564,9 @@ class Content_Gate {
 		$_post = $post;
 		$post  = \get_post( $gate_post_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		setup_postdata( $post );
-		$position = \get_post_meta( $gate_post_id, 'overlay_position', true );
-		$size     = \get_post_meta( $gate_post_id, 'overlay_size', true );
-		?>
-		<div class="newspack-content-gate__gate newspack-content-gate__overlay-gate" style="display:none;" data-position="<?php echo \esc_attr( $position ); ?>" data-size="<?php echo \esc_attr( $size ); ?>">
-			<div class="newspack-content-gate__overlay-gate__container">
-				<div class="newspack-content-gate__overlay-gate__content">
-					<?php echo \apply_filters( 'newspack_gate_content', \get_the_content( null, null, $gate_post_id ) );  // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-				</div>
-			</div>
-		</div>
-		<?php
+
+		self::render_overlay_gate_html( $gate_post_id );
+
 		self::mark_gate_as_rendered();
 		wp_reset_postdata();
 		$post = $_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
@@ -691,6 +604,72 @@ class Content_Gate {
 	}
 
 	/**
+	 * Get registration settings for a gate.
+	 *
+	 * @param int $gate_id Gate ID.
+	 *
+	 * @return array Registration settings.
+	 */
+	public static function get_registration_settings( $gate_id ) {
+		$registration = \get_post_meta( $gate_id, 'registration', true );
+		if ( empty( $registration ) ) {
+			$registration = [];
+		}
+
+		return [
+			'active'               => isset( $registration['active'] ) ? (bool) $registration['active'] : false,
+			'metering'             => isset( $registration['metering'] ) ? $registration['metering'] : Metering::get_metering_settings( $gate_id ),
+			'require_verification' => isset( $registration['require_verification'] ) ? (bool) $registration['require_verification'] : false,
+			'gate_layout_id'       => isset( $registration['gate_layout_id'] ) ? (int) $registration['gate_layout_id'] : 0,
+		];
+	}
+
+	/**
+	 * Update registration settings for a gate.
+	 *
+	 * @param int   $gate_id  Gate ID.
+	 * @param array $settings Registration settings.
+	 *
+	 * @return void
+	 */
+	public static function update_registration_settings( $gate_id, $settings ) {
+		\update_post_meta( $gate_id, 'registration', $settings );
+	}
+
+	/**
+	 * Get custom access settings for a gate.
+	 *
+	 * @param int $gate_id Gate ID.
+	 *
+	 * @return array Custom access settings.
+	 */
+	public static function get_custom_access_settings( $gate_id ) {
+		$custom_access = \get_post_meta( $gate_id, 'custom_access', true );
+		if ( empty( $custom_access ) ) {
+			$custom_access = [];
+		}
+
+		return [
+			'active'         => isset( $custom_access['active'] ) ? (bool) $custom_access['active'] : false,
+			'metering'       => isset( $custom_access['metering'] ) ? $custom_access['metering'] : Metering::get_metering_settings( $gate_id ),
+			'access_rules'   => isset( $custom_access['access_rules'] ) ? $custom_access['access_rules'] : [],
+			'gate_layout_id' => isset( $custom_access['gate_layout_id'] ) ? (int) $custom_access['gate_layout_id'] : 0,
+		];
+	}
+
+	/**
+	 * Update custom access settings for a gate.
+	 *
+	 * @param int   $gate_id  Gate ID.
+	 * @param array $settings Custom access settings.
+	 *
+	 * @return void
+	 */
+	public static function update_custom_access_settings( $gate_id, $settings ) {
+		\update_post_meta( $gate_id, 'custom_access', $settings );
+	}
+
+	/**
 	 * Get gate.
 	 *
 	 * @param int $id Gate ID.
@@ -707,10 +686,10 @@ class Content_Gate {
 			'id'            => $post->ID,
 			'status'        => $post->post_status,
 			'title'         => $post->post_title,
-			'metering'      => Metering::get_metering_settings( $post->ID ),
 			'priority'      => (int) get_post_meta( $post->ID, 'gate_priority', true ),
-			'access_rules'  => Access_Rules::get_post_access_rules( $post->ID ),
 			'content_rules' => self::get_post_content_rules( $post->ID ),
+			'registration'  => self::get_registration_settings( $post->ID ),
+			'custom_access' => self::get_custom_access_settings( $post->ID ),
 		];
 	}
 
@@ -787,11 +766,14 @@ class Content_Gate {
 			$update['meta_input'] = [
 				'gate_priority' => (int) $value,
 			];
-		} elseif ( 'metering' === $key ) {
-			Metering::update_metering_settings( $id, $value );
+		} elseif ( 'content_rules' === $key ) {
+			self::update_post_content_rules( $id, $value );
 			return self::get_gate( $id );
-		} elseif ( 'access_rules' === $key ) {
-			Access_Rules::update_post_access_rules( $id, $value );
+		} elseif ( 'registration' === $key ) {
+			self::update_registration_settings( $id, $value );
+			return self::get_gate( $id );
+		} elseif ( 'custom_access' === $key ) {
+			self::update_custom_access_settings( $id, $value );
 			return self::get_gate( $id );
 		} else {
 			return new \WP_Error( 'newspack_content_gate_invalid_key', __( 'Invalid gate setting key.', 'newspack' ) );
@@ -836,14 +818,20 @@ class Content_Gate {
 			]
 		);
 
-		// Update metering settings.
-		Metering::update_metering_settings( $id, $gate['metering'] );
-
-		// Update access rules.
-		Access_Rules::update_post_access_rules( $id, $gate['access_rules'] );
-
 		// Update content rules.
-		self::update_post_content_rules( $id, $gate['content_rules'] );
+		if ( isset( $gate['content_rules'] ) ) {
+			self::update_post_content_rules( $id, $gate['content_rules'] );
+		}
+
+		// Update registration settings.
+		if ( isset( $gate['registration'] ) ) {
+			self::update_registration_settings( $id, $gate['registration'] );
+		}
+
+		// Update custom access settings.
+		if ( isset( $gate['custom_access'] ) ) {
+			self::update_custom_access_settings( $id, $gate['custom_access'] );
+		}
 
 		return self::get_gate( $id );
 	}
