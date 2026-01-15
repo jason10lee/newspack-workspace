@@ -1,3 +1,10 @@
+## [6.28.2](https://github.com/Automattic/newspack-plugin/compare/v6.28.1...v6.28.2) (2026-01-15)
+
+
+### Bug Fixes
+
+* **memberships:** restrict commenting to relevant statuses ([#4396](https://github.com/Automattic/newspack-plugin/issues/4396)) ([a712266](https://github.com/Automattic/newspack-plugin/commit/a71226604982fb794008183e6bc23be50deb4f7a))
+
 ## [6.28.1](https://github.com/Automattic/newspack-plugin/compare/v6.28.0...v6.28.1) (2026-01-12)
 
 
