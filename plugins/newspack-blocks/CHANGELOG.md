@@ -1,3 +1,16 @@
+# [4.21.0](https://github.com/Automattic/newspack-blocks/compare/v4.20.1...v4.21.0) (2026-01-19)
+
+
+### Bug Fixes
+
+* add Link to express payment array ([#2266](https://github.com/Automattic/newspack-blocks/issues/2266)) ([fdd6fd5](https://github.com/Automattic/newspack-blocks/commit/fdd6fd540538062be4161cd4968be7a73ffccd23))
+* add space to donate block label in editor ([#2270](https://github.com/Automattic/newspack-blocks/issues/2270)) ([d18cf42](https://github.com/Automattic/newspack-blocks/commit/d18cf4202a2ca484ac86a6e294da0654b5bd2e48))
+
+
+### Features
+
+* improve express checkout handling by surfacing errors ([#2273](https://github.com/Automattic/newspack-blocks/issues/2273)) ([1d98b9b](https://github.com/Automattic/newspack-blocks/commit/1d98b9b54dc5d200689674be2f185289ad93067a))
+
 ## [4.20.1](https://github.com/Automattic/newspack-blocks/compare/v4.20.0...v4.20.1) (2026-01-07)
 
 
