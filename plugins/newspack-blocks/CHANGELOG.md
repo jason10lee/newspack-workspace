@@ -1,3 +1,10 @@
+# [4.23.0](https://github.com/Automattic/newspack-blocks/compare/v4.22.0...v4.23.0) (2026-01-19)
+
+
+### Features
+
+* trigger release ([9124c04](https://github.com/Automattic/newspack-blocks/commit/9124c047c944f4bea016e5eae53060f86ff62a4a))
+
 # [4.22.0](https://github.com/Automattic/newspack-blocks/compare/v4.21.0...v4.22.0) (2026-01-19)
 
 
