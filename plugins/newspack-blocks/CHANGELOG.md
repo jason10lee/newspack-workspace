@@ -1,3 +1,10 @@
+# [4.22.0](https://github.com/Automattic/newspack-blocks/compare/v4.21.0...v4.22.0) (2026-01-19)
+
+
+### Features
+
+* update release process ([aa1048c](https://github.com/Automattic/newspack-blocks/commit/aa1048c971048363932db8e4bb7c31e69d523651))
+
 # [4.21.0](https://github.com/Automattic/newspack-blocks/compare/v4.20.1...v4.21.0) (2026-01-19)
 
 
