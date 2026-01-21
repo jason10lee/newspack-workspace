@@ -1,0 +1,71 @@
+/**
+ * Group Subscriptions admin CSS.
+ */
+
+.postbox#newspack-group-subscription {
+	.show_if_newspack_group_subscription_enabled {
+		display: none;
+	}
+	&.enabled {
+		.show_if_newspack_group_subscription_enabled {
+			display: block;
+		}
+	}
+	h3 {
+		font-size: 14px;
+	}
+	input[type="number"],
+	.select2-container {
+		display: block;
+		margin-top: 3px;
+	}
+	@media screen and ( min-width: 768px ) {
+		.newspack-group-subscription--container {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 24px;
+		}
+		.newspack-group-subscription--settings,
+		.newspack-group-subscription--members,
+		.newspack-group-subscription--add-member {
+			flex: 1;
+			min-width: 250px;
+		}
+	}
+	.newspack-group-subscription--members-list {
+		list-style: none;
+		max-height: 300px;
+		overflow-y: auto;
+		padding: 0;
+		margin-bottom: 16px;
+	}
+	a.newspack-group-subscription--remove-member {
+		color: #666;
+		display: inline-block;
+		font-size: 14px;
+		font-weight: 600;
+		padding: 4px;
+		text-decoration: none;
+		&:focus {
+			box-shadow: none;
+			outline: none;
+		}
+	}
+	.newspack-group-subscription--to-remove {
+		a.newspack-group-subscription--member-user-link {
+			color: #666;
+			pointer-events: none;
+			text-decoration: line-through;
+		}
+		.newspack-group-subscription--remove-member {
+			opacity: 0;
+		}
+	}
+	.error {
+		display: inline-block;
+		padding: 4px;
+		.dashicons {
+			margin-right: 2px;
+		}
+	}
+}
