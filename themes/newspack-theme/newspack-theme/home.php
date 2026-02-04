@@ -21,7 +21,7 @@ $show_excerpt        = get_theme_mod( 'archive_show_excerpt', false );
 				<span>
 					<h1 class="page-title">
 						<span class="page-description">
-							<?php echo get_the_title( get_option( 'page_for_posts' ) ); ?>
+							<?php echo esc_html( get_the_title( get_option( 'page_for_posts' ) ) ); ?>
 						</span>
 					</h1>
 					<?php do_action( 'newspack_theme_below_archive_title' ); ?>
@@ -39,7 +39,7 @@ $show_excerpt        = get_theme_mod( 'archive_show_excerpt', false );
 
 			// Start the Loop.
 			while ( have_posts() ) :
-				$post_count++;
+				++$post_count;
 				the_post();
 
 				// Check if you're on the first post of the first page and if it should be styled differently, or if excerpts are enabled.

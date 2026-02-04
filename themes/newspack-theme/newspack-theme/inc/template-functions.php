@@ -27,14 +27,14 @@ if ( ! function_exists( 'newspack_featured_image_position' ) ) :
 
 		// Get thumbnail
 		$thumbnail_info = wp_get_attachment_metadata( get_post_thumbnail_id() );
-		if ( $thumbnail_info === false ) {
+		if ( false === $thumbnail_info ) {
 			return $position;
 		}
 
 		$image_wide_width = 1200;
 		if ( (
 			'large' === $position && $image_wide_width > $thumbnail_info['width'] )
-			|| ! in_array( get_post_type(), newspack_get_featured_image_post_types() )
+			|| ! in_array( get_post_type(), newspack_get_featured_image_post_types(), true )
 		) {
 			$position = 'small';
 		}
@@ -189,7 +189,7 @@ function newspack_body_classes( $classes ) {
 	// Add a special class for the single post's primary category.
 	if ( is_single() && class_exists( 'WPSEO_Primary_Term' ) ) {
 		$primary_term = new WPSEO_Primary_Term( 'category', $page_id );
-		$category_id = $primary_term->get_primary_term();
+		$category_id  = $primary_term->get_primary_term();
 		if ( $category_id ) {
 			$category = get_term( $category_id );
 			if ( $category ) {
@@ -215,7 +215,7 @@ function newspack_body_classes( $classes ) {
 	}
 
 	// Adds a class if singular post has a large featured image
-	if ( in_array( newspack_featured_image_position(), array( 'large', 'behind', 'beside' ) ) ) {
+	if ( in_array( newspack_featured_image_position(), array( 'large', 'behind', 'beside' ), true ) ) {
 		$classes[] = 'has-large-featured-image';
 	}
 
@@ -285,13 +285,15 @@ add_filter( 'body_class', 'newspack_body_classes' );
 
 /**
  * Adds custom class to the array of posts classes.
+ *
+ * @param string[] $classes An array of post class names.
  */
-function newspack_post_classes( $classes, $class, $post_id ) {
+function newspack_post_classes( $classes ) {
 	$classes[] = 'entry';
 
 	return $classes;
 }
-add_filter( 'post_class', 'newspack_post_classes', 10, 3 );
+add_filter( 'post_class', 'newspack_post_classes' );
 
 /**
  * Gets the category and tag classes from the post.
@@ -476,7 +478,7 @@ function newspack_add_dropdown_icons( $output, $item, $depth, $args ) {
 	if ( in_array( 'menu-item-has-children', $item->classes, true ) ) {
 
 		// Add SVG icon to parent items.
-		$icon = newspack_get_icon_svg( 'keyboard_arrow_down', 24 );
+		$icon       = newspack_get_icon_svg( 'keyboard_arrow_down', 24 );
 		$menu_state = 'setState' . $item->ID;
 
 		$output .= sprintf(
@@ -490,7 +492,7 @@ function newspack_add_dropdown_icons( $output, $item, $depth, $args ) {
 		);
 	}
 
-	//tap:AMP.setState( { searchVisible: !searchVisible
+	// tap:AMP.setState( { searchVisible: !searchVisible
 
 	return $output;
 }
@@ -535,7 +537,7 @@ function newspack_adjust_brightness( $hex, $steps ) {
 	$steps = max( -255, min( 255, $steps ) );
 
 	$hex = str_replace( '#', '', $hex );
-	if ( 3 == strlen( $hex ) ) {
+	if ( 3 === strlen( $hex ) ) {
 		$hex = str_repeat( substr( $hex, 0, 1 ), 2 ) . str_repeat( substr( $hex, 1, 1 ), 2 ) . str_repeat( substr( $hex, 2, 1 ), 2 );
 	}
 
@@ -623,7 +625,7 @@ function newspack_the_custom_logo() {
 	$has_alternative_logo = ( '' !== get_theme_mod( 'newspack_alternative_logo', '' ) && 0 !== get_theme_mod( 'newspack_alternative_logo', '' ) );
 
 	// Check if we're currently on a page where the alternative logo should be used in the short header, if set:
-	if ( $simplified_header_subpages && $has_alternative_logo && in_array( newspack_featured_image_position(), array( 'behind', 'beside' ) ) ) :
+	if ( $simplified_header_subpages && $has_alternative_logo && in_array( newspack_featured_image_position(), array( 'behind', 'beside' ), true ) ) :
 		$use_alternative_logo = true;
 	endif;
 
@@ -762,9 +764,14 @@ function newspack_convert_to_time_ago( $post_time, $format, $post ) {
 	return $post_time;
 }
 add_filter( 'get_the_date', 'newspack_convert_to_time_ago', 10, 3 );
-add_filter( 'newspack_blocks_formatted_displayed_post_date', function($date_formatted, $post){
-	return newspack_math_to_time_ago( $date_formatted, '', $post, false );
-}, 10, 3 );
+add_filter(
+	'newspack_blocks_formatted_displayed_post_date',
+	function ( $date_formatted, $post ) {
+		return newspack_math_to_time_ago( $date_formatted, '', $post, false );
+	},
+	10,
+	2
+);
 
 /**
  * Apply time ago format to modified dates if enabled.
@@ -798,8 +805,8 @@ function newspack_should_display_updated_date() {
 
 	$show_updated_date_sitewide = get_theme_mod( 'post_updated_date', false );
 
-	$hide_updated_date_post     = get_post_meta( get_the_ID(), 'newspack_hide_updated_date', true );
-	$show_updated_date_post     = get_post_meta( get_the_ID(), 'newspack_show_updated_date', true ) && ! $show_updated_date_sitewide;
+	$hide_updated_date_post = get_post_meta( get_the_ID(), 'newspack_hide_updated_date', true );
+	$show_updated_date_post = get_post_meta( get_the_ID(), 'newspack_show_updated_date', true ) && ! $show_updated_date_sitewide;
 
 	if ( ( $show_updated_date_sitewide && ! $hide_updated_date_post ) || $show_updated_date_post ) {
 		$post          = get_post();
@@ -828,7 +835,7 @@ function newspack_should_display_updated_date() {
  */
 function newspack_search_id( $prefix = '' ) {
 	static $id_counter = 0;
-	return $prefix . ( string ) ++$id_counter;
+	return $prefix . (string) ++$id_counter;
 }
 
 /**
@@ -888,7 +895,7 @@ add_filter( 'the_content', 'newspack_inject_post_summary', 11 );
  *
  * @param WP_Query $query The WP_Query instance.
  */
-function newspack_corrections_per_page( $query ) {
+function newspack_corrections_per_page( $query ) { // phpcs:ignore WordPressVIPMinimum.Hooks.AlwaysReturnInFilter.VoidReturn -- This is an action callback, not a filter.
 	if (
 		! class_exists( 'Newspack\Corrections' )
 		|| is_admin()

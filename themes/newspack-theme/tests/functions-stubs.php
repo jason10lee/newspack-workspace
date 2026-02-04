@@ -5,8 +5,7 @@
  *
  * @return bool Whether AMP.
  */
-function newspack_is_amp()
-{
+function newspack_is_amp() {
 }
 /**
  * Sets up theme defaults and registers support for various WordPress features.
@@ -15,16 +14,14 @@ function newspack_is_amp()
  * runs before the init hook. The init hook is too late for some features, such
  * as indicating support for post thumbnails.
  */
-function newspack_setup()
-{
+function newspack_setup() {
 }
 /**
  * Register widget area.
  *
  * @link https://developer.wordpress.org/themes/functionality/sidebars/#registering-a-sidebar
  */
-function newspack_widgets_init()
-{
+function newspack_widgets_init() {
 }
 /**
  * Set the content width in pixels, based on the theme's design and stylesheet.
@@ -33,14 +30,12 @@ function newspack_widgets_init()
  *
  * @global int $content_width Content width.
  */
-function newspack_content_width()
-{
+function newspack_content_width() {
 }
 /**
  * Enqueue scripts and styles.
  */
-function newspack_scripts()
-{
+function newspack_scripts() {
 }
 /**
  * Fix skip link focus in IE11.
@@ -50,32 +45,27 @@ function newspack_scripts()
  *
  * @link https://git.io/vWdr2
  */
-function newspack_skip_link_focus_fix()
-{
+function newspack_skip_link_focus_fix() {
 }
 /**
  * Enqueue supplemental block editor styles.
  */
-function newspack_editor_customizer_styles()
-{
+function newspack_editor_customizer_styles() {
 }
 /**
  * Determine if current editor page is the static front page.
  */
-function newspack_is_static_front_page()
-{
+function newspack_is_static_front_page() {
 }
 /**
  * Add body class on editor pages if editing the static front page.
  */
-function newspack_filter_admin_body_class($classes)
-{
+function newspack_filter_admin_body_class( $classes ) {
 }
 /**
  * Enqueue CSS styles for the editor that use the <body> tag.
  */
-function newspack_enqueue_editor_override_assets($classes)
-{
+function newspack_enqueue_editor_override_assets( $classes ) {
 }
 /**
  * Use front-page.php when Front page displays is set to a static page.
@@ -84,24 +74,20 @@ function newspack_enqueue_editor_override_assets($classes)
  *
  * @return string The template to be used: blank if is_home() is true (defaults to index.php), else $template.
  */
-function newspack_front_page_template($template)
-{
+function newspack_front_page_template( $template ) {
 }
 /**
  * Display custom color CSS in customizer and on frontend.
  */
-function newspack_colors_css_wrap()
-{
+function newspack_colors_css_wrap() {
 }
 /**
  * Display custom font CSS in customizer and on frontend.
  */
-function newspack_typography_css_wrap()
-{
+function newspack_typography_css_wrap() {
 }
 /**
  * Returns an array of 'acceptable' SVG tags to use with wp_kses().
  */
-function newspack_sanitize_svgs()
-{
+function newspack_sanitize_svgs() {
 }
