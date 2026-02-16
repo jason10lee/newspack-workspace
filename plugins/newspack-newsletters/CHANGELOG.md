@@ -1,3 +1,15 @@
+# [3.28.0](https://github.com/Automattic/newspack-newsletters/compare/v3.27.1...v3.28.0) (2026-02-16)
+
+
+### Bug Fixes
+
+* restore newsletter rendering of RDB blocks using get_value() ([2815bea](https://github.com/Automattic/newspack-newsletters/commit/2815bea44a5edc44328ed2da1847bf11125a25d0))
+
+
+### Features
+
+* add mastodon and whatsapp to social link icons ([#2008](https://github.com/Automattic/newspack-newsletters/issues/2008)) ([69843cf](https://github.com/Automattic/newspack-newsletters/commit/69843cf76c14e6d0678ce3d474baf08d0af11a75))
+
 ## [3.27.1](https://github.com/Automattic/newspack-newsletters/compare/v3.27.0...v3.27.1) (2026-02-02)
 
 
