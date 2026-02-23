@@ -1680,12 +1680,12 @@ function newspack_sanitize_slideout_sidebar_side( $choice ) {
 /**
  * Sanitize the checkbox.
  *
- * @param boolean $input Value of checkbox.
+ * @param bool|int|string $input Value of checkbox.
  *
- * @return boolean true if is 1 or '1', false if anything else
+ * @return boolean true if is true, 1, or '1'; false otherwise
  */
 function newspack_sanitize_checkbox( $input ) {
-	if ( 1 === $input ) {
+	if ( is_scalar( $input ) && '1' === (string) $input ) {
 		return true;
 	} else {
 		return false;
