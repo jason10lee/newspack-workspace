@@ -1,3 +1,31 @@
+## [2.18.2](https://github.com/Automattic/newspack-theme/compare/v2.18.1...v2.18.2) (2026-02-24)
+
+
+### Bug Fixes
+
+* try bumping newspack-scripts ([#2638](https://github.com/Automattic/newspack-theme/issues/2638)) ([55c0c5e](https://github.com/Automattic/newspack-theme/commit/55c0c5ed2c8486d2b8810e3353426cb1ea6ea6fe))
+
+## [2.18.1](https://github.com/Automattic/newspack-theme/compare/v2.18.0...v2.18.1) (2026-02-23)
+
+
+### Bug Fixes
+
+* update customizer checkbox sanitization ([#2637](https://github.com/Automattic/newspack-theme/issues/2637)) ([3367a95](https://github.com/Automattic/newspack-theme/commit/3367a9527334a0bb79a7b41f940fea349ea622ef))
+
+# [2.18.0](https://github.com/Automattic/newspack-theme/compare/v2.17.0...v2.18.0) (2026-02-16)
+
+
+### Features
+
+* move some My Account button styles to the theme ([#2618](https://github.com/Automattic/newspack-theme/issues/2618)) ([537de07](https://github.com/Automattic/newspack-theme/commit/537de07c4c941111cd7d021473c543487efbc913))
+
+# [2.18.0-alpha.1](https://github.com/Automattic/newspack-theme/compare/v2.17.0...v2.18.0-alpha.1) (2026-02-05)
+
+
+### Features
+
+* move some My Account button styles to the theme ([#2618](https://github.com/Automattic/newspack-theme/issues/2618)) ([537de07](https://github.com/Automattic/newspack-theme/commit/537de07c4c941111cd7d021473c543487efbc913))
+
 # [2.17.0](https://github.com/Automattic/newspack-theme/compare/v2.16.0...v2.17.0) (2026-01-19)
 
 
