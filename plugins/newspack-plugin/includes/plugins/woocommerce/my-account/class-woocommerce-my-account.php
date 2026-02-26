@@ -1031,7 +1031,9 @@ class WooCommerce_My_Account {
 	 */
 	public static function remove_braintree_edit_actions( $item, $payment_token ) {
 		if ( str_starts_with( $payment_token->get_gateway_id(), 'braintree_' ) ) {
-			unset( $item['actions']['edit'], $item['actions']['save'] );
+			if ( ! empty( $item['actions']['edit'] ) || ! empty( $item['actions']['save'] ) ) {
+				unset( $item['actions']['edit'], $item['actions']['save'] );
+			}
 		}
 		return $item;
 	}
