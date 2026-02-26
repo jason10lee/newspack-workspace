@@ -429,7 +429,7 @@ add_action( 'template_redirect', 'newspack_content_width', 0 );
  * Return the list of custom fonts in use.
  */
 function newspack_get_used_custom_fonts(): array {
-	return array_filter( array( get_theme_mod( 'font_header', '' ), get_theme_mod( 'font_body', '' ) ) );
+	return array_values( array_filter( [ get_theme_mod( 'font_header', '' ), get_theme_mod( 'font_body', '' ) ] ) );
 }
 
 /**
