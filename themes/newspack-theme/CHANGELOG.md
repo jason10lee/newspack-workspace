@@ -1,3 +1,17 @@
+## [2.18.3](https://github.com/Automattic/newspack-theme/compare/v2.18.2...v2.18.3) (2026-03-02)
+
+
+### Bug Fixes
+
+* prevent Newspack Joseph border on new My Account pages ([#2631](https://github.com/Automattic/newspack-theme/issues/2631)) ([98b5f90](https://github.com/Automattic/newspack-theme/commit/98b5f9087ef31a9f202eece1f77887ec64b52626))
+
+## [2.18.3-alpha.1](https://github.com/Automattic/newspack-theme/compare/v2.18.2...v2.18.3-alpha.1) (2026-02-24)
+
+
+### Bug Fixes
+
+* prevent Newspack Joseph border on new My Account pages ([#2631](https://github.com/Automattic/newspack-theme/issues/2631)) ([98b5f90](https://github.com/Automattic/newspack-theme/commit/98b5f9087ef31a9f202eece1f77887ec64b52626))
+
 ## [2.18.2](https://github.com/Automattic/newspack-theme/compare/v2.18.1...v2.18.2) (2026-02-24)
 
 
