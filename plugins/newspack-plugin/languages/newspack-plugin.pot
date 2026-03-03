@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-03-03T16:35:31+00:00\n"
+"POT-Creation-Date: 2026-03-03T22:39:04+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-plugin\n"
@@ -1392,21 +1392,21 @@ msgstr ""
 msgid "Set custom conditions based on reader data key/value pairs."
 msgstr ""
 
-#: includes/content-gate/class-content-gate.php:1015
+#: includes/content-gate/class-content-gate.php:1033
 #: dist/billboard.js:12
 #: src/wizards/advertising/components/suppression/index.js:78
 msgid "Post types"
 msgstr ""
 
-#: includes/content-gate/class-content-gate.php:1018
+#: includes/content-gate/class-content-gate.php:1036
 msgid "Content types like posts, pages, or listings."
 msgstr ""
 
-#: includes/content-gate/class-content-restriction-control.php:87
+#: includes/content-gate/class-content-restriction-control.php:95
 msgid "Content within specific categories."
 msgstr ""
 
-#: includes/content-gate/class-content-restriction-control.php:92
+#: includes/content-gate/class-content-restriction-control.php:100
 msgid "Content labeled with certain tags."
 msgstr ""
 
@@ -11163,6 +11163,26 @@ msgstr ""
 #: dist/content-gate-editor.js:28
 #: src/content-gate/editor/editor.js:122
 msgid "Override the default paragraph count on pages where a “More” block has been placed."
+msgstr ""
+
+#: dist/content-gate-post-settings.js:1
+#: src/content-gate/editor/post-settings.js:19
+msgid "Access control settings"
+msgstr ""
+
+#: dist/content-gate-post-settings.js:1
+#: src/content-gate/editor/post-settings.js:21
+msgid "Disable access control restrictions for this post"
+msgstr ""
+
+#: dist/content-gate-post-settings.js:1
+#: src/content-gate/editor/post-settings.js:24
+msgid "If enabled, this post will be accessible to all readers regardless of content restriction rules."
+msgstr ""
+
+#: dist/content-gate-post-settings.js:1
+#: src/content-gate/editor/post-settings.js:29
+msgid "Manage access control"
 msgstr ""
 
 #: dist/contribution-meter-block.js:1
