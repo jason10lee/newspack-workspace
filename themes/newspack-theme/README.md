@@ -26,6 +26,67 @@ The Newspack theme repository contains the Newspack parent theme in a subdirecto
 - Run `npm start` to compile the SCSS and JS files, and start file watcher.
 - Run `npm run build` to perform a single compilation run.
 
+### Repository Structure
+
+The repository contains the base theme and five child themes:
+
+- `newspack-theme/` — Base theme. All child themes extend this.
+- `newspack-joseph/`, `newspack-katharine/`, `newspack-nelson/`, `newspack-sacha/`, `newspack-scott/` — Child themes. Cosmetic variants only (colors, typography accents); identical in features.
+
+The build tooling at the repo root compiles assets for all six themes in a single pass. There is no per-theme build command.
+
+### PHP Structure
+
+Key files in `newspack-theme/inc/`:
+
+| File | Purpose |
+|------|---------|
+| `customizer.php` | All Customizer settings: colors, typography, header/footer layout |
+| `template-functions.php` | Template hooks, body class additions, content filters |
+| `template-tags.php` | Template tag functions for post meta, author info, dates, reading time |
+| `color-patterns.php` | Converts Customizer color settings into inline CSS |
+| `typography.php` | Font loading and custom typography CSS generation |
+| `icon-functions.php` | SVG icon helpers |
+
+Plugin integrations (WooCommerce, Jetpack, Yoast, etc.) each have their own file in `inc/` and are only loaded when the relevant plugin is active.
+
+### SCSS Structure
+
+Source SCSS lives in `newspack-theme/sass/` and is compiled by a custom Node script (`scripts/compile-scss.js`) that handles all themes, RTL generation, and minification.
+
+Key subdirectories:
+
+| Directory | Contents |
+|-----------|----------|
+| `blocks/` | Gutenberg block styles |
+| `elements/` | Lists, tables, and basic HTML elements |
+| `layout/` | Grid and layout utilities |
+| `mixins/` | SCSS mixins |
+| `modules/` | Component modules (cards, bylines, etc.) |
+| `navigation/` | Menu and nav styles |
+| `plugins/` | Integration styles (WooCommerce, Newsletters, Sponsors, etc.) |
+| `site/` | Header, footer, sidebar styles |
+
+Child themes have their own `sass/` directories with override files compiled alongside the base theme.
+
+### Child Themes
+
+The child themes share the base theme's features entirely — differences are purely cosmetic. To switch between child themes, use **Appearance > Themes** in wp-admin. Switching via the Customizer does not reliably transfer settings between themes.
+
+Each child theme follows the same structure:
+
+```
+newspack-<name>/
+├── functions.php         # Enqueues child styles, hooks color/typography CSS
+├── style.css             # Theme header + generated CSS
+├── style-editor.css      # Generated editor styles
+├── style-rtl.css         # Generated RTL styles
+├── inc/
+│   ├── child-color-patterns.php  # Child-specific color CSS generation
+│   └── child-typography.php     # Child-specific typography CSS generation
+└── sass/                 # SCSS overrides compiled alongside the base theme
+```
+
 ## Support or Questions
 
 This repository is not suitable for support or general questions about Newspack. Please only use our issue trackers for bug reports and feature requests, following [the contribution guidelines](https://github.com/Automattic/newspack-theme/blob/trunk/.github/CONTRIBUTING.md).

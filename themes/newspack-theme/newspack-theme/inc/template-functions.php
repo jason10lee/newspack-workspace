@@ -905,6 +905,17 @@ function newspack_corrections_per_page( $query ) { // phpcs:ignore WordPressVIPM
 		return;
 	}
 
+	/**
+	 * Sets the number of corrections to display per page on the corrections
+	 * archive page. Must be an integer value.
+	 *
+	 * @constant NEWSPACK_CORRECTIONS_ARCHIVE_PER_PAGE
+	 * @type     int
+	 * @default  20 items per page
+	 * @status   draft
+	 *
+	 * @example define( 'NEWSPACK_CORRECTIONS_ARCHIVE_PER_PAGE', 50 );
+	 */
 	$per_page = defined( 'NEWSPACK_CORRECTIONS_ARCHIVE_PER_PAGE' ) && is_int( NEWSPACK_CORRECTIONS_ARCHIVE_PER_PAGE ) ? NEWSPACK_CORRECTIONS_ARCHIVE_PER_PAGE : 20;
 
 	$query->set( 'posts_per_page', $per_page );

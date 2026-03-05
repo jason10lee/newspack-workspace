@@ -221,7 +221,14 @@ if ( isWatching ) {
 	console.log( `watching the scss files…
 ` );
 
-	chokidar.watch( 'newspack-theme/sass/**/*.scss' ).on( 'change', path => {
+	chokidar.watch( [
+		'newspack-theme/sass/**/*.scss',
+		'newspack-sacha/sass/**/*.scss',
+		'newspack-scott/sass/**/*.scss',
+		'newspack-nelson/sass/**/*.scss',
+		'newspack-katharine/sass/**/*.scss',
+		'newspack-joseph/sass/**/*.scss',
+	] ).on( 'change', path => {
 		console.log( `updated: ${ path }
 ` );
 
