@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-03-09T19:45:36+00:00\n"
+"POT-Creation-Date: 2026-03-09T20:29:36+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-plugin\n"
@@ -1373,6 +1373,64 @@ msgstr ""
 msgid "Error activating %s gateway."
 msgstr ""
 
+#: includes/content-gate/block-patterns/pay-wall-one-tier-metering.php:13
+msgid "Wall"
+msgstr ""
+
+#: includes/content-gate/block-patterns/pay-wall-one-tier-metering.php:18
+#: includes/content-gate/block-patterns/registration-wall.php:18
+msgid "Continue reading for free"
+msgstr ""
+
+#: includes/content-gate/block-patterns/pay-wall-one-tier-metering.php:22
+#: dist/audience-wizards.714aa3a637886a875795.js:37
+#: dist/audience-wizards.714aa3a637886a875795.js:40
+#: dist/audience-wizards.714aa3a637886a875795.js:60
+#: dist/audience-wizards.714aa3a637886a875795.js:63
+msgid "Content"
+msgstr ""
+
+#: includes/content-gate/block-patterns/pay-wall-one-tier-metering.php:29
+msgid "Register now and get<br><strong>3 free articles every week.</strong>"
+msgstr ""
+
+#: includes/content-gate/block-patterns/pay-wall-one-tier-metering.php:38
+msgid "Register for free"
+msgstr ""
+
+#: includes/content-gate/block-patterns/pay-wall-one-tier-metering.php:51
+msgid "Unlimited access to our<br><strong>daily content and archives</strong>."
+msgstr ""
+
+#: includes/content-gate/block-patterns/pay-wall-one-tier-metering.php:55
+msgid "Subscribe for $5/month"
+msgstr ""
+
+#: includes/content-gate/block-patterns/pay-wall-one-tier-metering.php:67
+#: includes/content-gate/class-metering-countdown.php:268
+#: includes/content-gate/content-gifting/class-content-gifting-cta.php:240
+#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:691
+#: includes/reader-activation/class-reader-activation.php:293
+#: dist/audience-wizards.714aa3a637886a875795.js:70
+#: dist/audience-wizards.714aa3a637886a875795.js:73
+#: dist/audience-wizards.714aa3a637886a875795.js:92
+#: src/wizards/audience/views/setup/content-gifting.js:174
+#: src/wizards/audience/views/setup/countdown-banner.js:113
+msgid "Sign in to an existing account"
+msgstr ""
+
+#: includes/content-gate/block-patterns/registration-wall.php:24
+msgid "Get unlimited access to this article and our full collection."
+msgstr ""
+
+#: includes/content-gate/block-patterns/registration-wall.php:25
+msgid "A free account unlocks everything."
+msgstr ""
+
+#: includes/content-gate/block-patterns/registration-wall.php:32
+msgid "Thank you for registering."
+msgstr ""
+
 #: includes/content-gate/class-access-rules.php:89
 msgid "Active subscription"
 msgstr ""
@@ -1401,14 +1459,88 @@ msgstr ""
 msgid "Set custom conditions based on reader data key/value pairs."
 msgstr ""
 
-#: includes/content-gate/class-content-gate.php:1084
+#: includes/content-gate/class-content-gate.php:351
+#: includes/plugins/wc-memberships/class-memberships.php:148
+#: dist/audience-wizards.714aa3a637886a875795.js:92
+#: src/wizards/audience/views/setup/content-gating.js:73
+msgid "Content Gate"
+msgstr ""
+
+#: includes/content-gate/class-content-gate.php:353
+msgid "Content Gate published."
+msgstr ""
+
+#: includes/content-gate/class-content-gate.php:354
+msgid "Content Gate reverted to draft."
+msgstr ""
+
+#: includes/content-gate/class-content-gate.php:355
+msgid "Content Gate updated."
+msgstr ""
+
+#: includes/content-gate/class-content-gate.php:356
+msgid "New Content Gate"
+msgstr ""
+
+#: includes/content-gate/class-content-gate.php:357
+msgid "Edit Content Gate"
+msgstr ""
+
+#: includes/content-gate/class-content-gate.php:358
+msgid "View Content Gate"
+msgstr ""
+
+#: includes/content-gate/class-content-gate.php:368
+#: includes/content-gate/class-content-gate.php:694
+#: includes/content-gate/class-content-gate.php:817
+msgid "Content Gate Layout"
+msgstr ""
+
+#: includes/content-gate/class-content-gate.php:633
+#: includes/content-gate/class-content-gate.php:821
+msgid "Registration Access Layout"
+msgstr ""
+
+#: includes/content-gate/class-content-gate.php:645
+#: includes/content-gate/class-content-gate.php:824
+msgid "Paid Access Layout"
+msgstr ""
+
+#: includes/content-gate/class-content-gate.php:764
+msgid "This article is only available to members."
+msgstr ""
+
+#: includes/content-gate/class-content-gate.php:803
+msgid "Gate ID is required."
+msgstr ""
+
+#: includes/content-gate/class-content-gate.php:808
+msgid "Gate mode is required."
+msgstr ""
+
+#: includes/content-gate/class-content-gate.php:813
+#: includes/content-gate/class-content-gate.php:1099
+#: includes/content-gate/class-content-gate.php:1175
+#: includes/content-gate/class-content-gate.php:1225
+msgid "Gate not found."
+msgstr ""
+
+#: includes/content-gate/class-content-gate.php:826
+msgid "Invalid gate mode."
+msgstr ""
+
+#: includes/content-gate/class-content-gate.php:1121
 #: dist/billboard.js:12
 #: src/wizards/advertising/components/suppression/index.js:78
 msgid "Post types"
 msgstr ""
 
-#: includes/content-gate/class-content-gate.php:1087
+#: includes/content-gate/class-content-gate.php:1124
 msgid "Content types like posts, pages, or listings."
+msgstr ""
+
+#: includes/content-gate/class-content-gate.php:1198
+msgid "Invalid gate setting key."
 msgstr ""
 
 #: includes/content-gate/class-content-restriction-control.php:95
@@ -1463,18 +1595,6 @@ msgstr ""
 #: dist/audience-wizards.714aa3a637886a875795.js:92
 #: src/wizards/audience/views/setup/content-gifting.js:172
 msgid "Create an account"
-msgstr ""
-
-#: includes/content-gate/class-metering-countdown.php:268
-#: includes/content-gate/content-gifting/class-content-gifting-cta.php:240
-#: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:691
-#: includes/reader-activation/class-reader-activation.php:293
-#: dist/audience-wizards.714aa3a637886a875795.js:70
-#: dist/audience-wizards.714aa3a637886a875795.js:73
-#: dist/audience-wizards.714aa3a637886a875795.js:92
-#: src/wizards/audience/views/setup/content-gifting.js:174
-#: src/wizards/audience/views/setup/countdown-banner.js:113
-msgid "Sign in to an existing account"
 msgstr ""
 
 #: includes/content-gate/class-user-gate-access.php:119
@@ -2932,6 +3052,28 @@ msgstr ""
 #: includes/plugins/wc-memberships/class-membership-expiry.php:54
 #, php-format
 msgid "Another active subscription for this product was found (Subscription ID: %s). Expiry prevented."
+msgstr ""
+
+#: includes/plugins/wc-memberships/class-memberships.php:82
+msgid "Memberships Gate"
+msgstr ""
+
+#: includes/plugins/wc-memberships/class-memberships.php:134
+msgid "Invalid gate post ID."
+msgstr ""
+
+#: includes/plugins/wc-memberships/class-memberships.php:261
+msgid "Plan ID is required."
+msgstr ""
+
+#: includes/plugins/wc-memberships/class-memberships.php:278
+msgid "Plan not found."
+msgstr ""
+
+#. Translators: %s is the plan name.
+#: includes/plugins/wc-memberships/class-memberships.php:282
+#, php-format
+msgid "%s Gate"
 msgstr ""
 
 #: includes/plugins/wc-memberships/class-memberships.php:764
@@ -7293,13 +7435,6 @@ msgstr ""
 msgid "%1$s gate %2$s."
 msgstr ""
 
-#: dist/audience-wizards.714aa3a637886a875795.js:37
-#: dist/audience-wizards.714aa3a637886a875795.js:40
-#: dist/audience-wizards.714aa3a637886a875795.js:60
-#: dist/audience-wizards.714aa3a637886a875795.js:63
-msgid "Content"
-msgstr ""
-
 #. translators: %s is the gate title, or "Content" if we can't determine the deleted gate title.
 #: dist/audience-wizards.714aa3a637886a875795.js:40
 #, js-format
@@ -8292,11 +8427,6 @@ msgstr ""
 #: dist/audience-wizards.714aa3a637886a875795.js:92
 #: src/wizards/audience/views/setup/content-gating.js:64
 msgid "WooCommerce Memberships integration to improve the reader experience with content gating. "
-msgstr ""
-
-#: dist/audience-wizards.714aa3a637886a875795.js:92
-#: src/wizards/audience/views/setup/content-gating.js:73
-msgid "Content Gate"
 msgstr ""
 
 #: dist/audience-wizards.714aa3a637886a875795.js:92
