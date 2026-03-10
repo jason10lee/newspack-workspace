@@ -2,8 +2,16 @@
  * WordPress dependencies
  */
 import apiFetch from '@wordpress/api-fetch';
-import { BlockControls, InnerBlocks, InspectorControls, useBlockProps } from '@wordpress/block-editor';
-import { createBlocksFromInnerBlocksTemplate, getBlockType, registerBlockBindingsSource } from '@wordpress/blocks';
+import {
+	BlockControls,
+	InnerBlocks,
+	InspectorControls,
+	useBlockProps,
+	store as blockEditorStore,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalBlockVariationPicker as BlockVariationPicker,
+} from '@wordpress/block-editor';
+import { createBlocksFromInnerBlocksTemplate, getBlockType, registerBlockBindingsSource, store as blocksStore } from '@wordpress/blocks';
 import {
 	Button,
 	Card,
@@ -15,9 +23,6 @@ import {
 	Spinner,
 	ToggleControl,
 	Toolbar,
-	ToolbarButton,
-	ToolbarGroup,
-	Tooltip,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalUnitControl as UnitControl,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
@@ -172,151 +177,42 @@ export const avatarSizeOptions = [
 	},
 ];
 
-// Helper to create a bound paragraph block with custom list view name.
-// If wrapInLink is true, the content will be wrapped in an anchor tag for editor preview.
-const createBoundParagraph = ( key, className, name, placeholder, wrapInLink = false ) => {
-	const attributes = {
-		metadata: {
-			name, // Custom name shown in list view.
-			bindings: {
-				content: {
-					source: 'newspack-blocks/author',
-					args: { key },
-				},
-			},
+/**
+ * Variation picker shown when the block has no inner blocks.
+ * Follows the same pattern as the core Columns block.
+ */
+function VariationPlaceholder( { clientId, name, setAttributes } ) {
+	const { blockType, defaultVariation, variations } = useSelect(
+		select => {
+			const { getBlockVariations, getBlockType: _getBlockType, getDefaultBlockVariation } = select( blocksStore );
+			return {
+				blockType: _getBlockType( name ),
+				defaultVariation: getDefaultBlockVariation( name, 'block' ),
+				variations: getBlockVariations( name, 'block' ),
+			};
 		},
-		className,
-		placeholder: placeholder || name,
-	};
+		[ name ]
+	);
+	const { replaceInnerBlocks } = useDispatch( blockEditorStore );
+	const blockProps = useBlockProps();
 
-	// If wrapInLink is true, set initial content with link wrapper for editor preview.
-	if ( wrapInLink ) {
-		const linkText = placeholder || name;
-		attributes.content = `<a href="#" class="no-op">${ linkText }</a>`;
-	}
-
-	return [ 'core/paragraph', attributes ];
-};
-
-// Template for nested inner blocks.
-// Each author field is a separate block that can be reordered or removed.
-// Block bindings connect core block attributes to author data via 'newspack-blocks/author' source.
-const NESTED_TEMPLATE = [
-	[
-		'core/columns',
-		{ isStackedOnMobile: true, className: 'author-profile-columns', templateLock: 'insert' },
-		[
-			[
-				'core/column',
-				{
-					className: 'author-profile-avatar-column',
-					templateLock: 'insert',
-					allowedBlocks: [ 'newspack/avatar' ],
-				},
-				[ [ 'newspack/avatar', { size: 128 } ] ],
-			],
-			[
-				'core/column',
-				{
-					className: 'author-profile-content-column',
-					templateLock: false,
-					allowedBlocks: [ 'core/heading', 'core/paragraph', 'core/separator', 'core/spacer', 'newspack/author-profile-social' ],
-					style: {
-						spacing: {
-							blockGap: 'var:preset|spacing|20',
-						},
-						elements: {
-							link: {
-								color: {
-									text: 'var:preset|color|contrast-3',
-								},
-							},
-						},
-					},
-					textColor: 'contrast-3',
-					fontSize: 'small',
-				},
-				[
-					[
-						'core/heading',
-						{
-							level: 3,
-							metadata: {
-								name: __( 'Author Name', 'newspack-blocks' ),
-								bindings: {
-									content: {
-										source: 'newspack-blocks/author',
-										args: { key: 'name' },
-									},
-								},
-							},
-							className: 'author-name',
-							placeholder: __( 'Author Name', 'newspack-blocks' ),
-							textColor: 'contrast',
-							fontSize: 'large',
-						},
-					],
-					[
-						'core/paragraph',
-						{
-							metadata: {
-								name: __( 'Job Title', 'newspack-blocks' ),
-								bindings: {
-									content: {
-										source: 'newspack-blocks/author',
-										args: { key: 'newspack_job_title' },
-									},
-								},
-							},
-							className: 'author-job-title',
-							placeholder: __( 'Job Title', 'newspack-blocks' ),
-							style: {
-								typography: {
-									fontStyle: 'normal',
-									fontWeight: '600',
-								},
-								elements: {
-									link: {
-										color: {
-											text: 'var:preset|color|contrast',
-										},
-									},
-								},
-							},
-							textColor: 'contrast',
-						},
-					],
-					createBoundParagraph( 'newspack_role', 'author-role', __( 'Role', 'newspack-blocks' ) ),
-					createBoundParagraph( 'newspack_employer', 'author-employer', __( 'Employer', 'newspack-blocks' ) ),
-					createBoundParagraph( 'bio', 'author-bio', __( 'Biography', 'newspack-blocks' ) ),
-					createBoundParagraph(
-						'archive_link_text',
-						'author-archive-link',
-						sprintf(
-							/* translators: %s: author name. */
-							__( 'More by %s', 'newspack-blocks' ),
-							__( 'Author Name', 'newspack-blocks' )
-						),
-						undefined,
-						true
-					),
-					[
-						'newspack/author-profile-social',
-						{
-							style: {
-								spacing: {
-									padding: {
-										top: 'var:preset|spacing|20',
-									},
-								},
-							},
-						},
-					],
-				],
-			],
-		],
-	],
-];
+	return (
+		<div { ...blockProps }>
+			<BlockVariationPicker
+				icon={ blockType?.icon?.src }
+				label={ blockType?.title }
+				variations={ variations }
+				instructions={ __( 'Select a layout to start with:', 'newspack-blocks' ) }
+				onSelect={ ( nextVariation = defaultVariation ) => {
+					setAttributes( { ...nextVariation.attributes, variation: nextVariation.name } );
+					if ( nextVariation.innerBlocks ) {
+						replaceInnerBlocks( clientId, createBlocksFromInnerBlocksTemplate( nextVariation.innerBlocks ), true );
+					}
+				} }
+			/>
+		</div>
+	);
+}
 
 // Module-level cache for social icon SVGs so multiple block instances share one fetch.
 let socialIconSvgsCache = null;
@@ -360,7 +256,7 @@ const getPlaceholderAuthor = ( socialIconSvgs = {} ) => {
 };
 
 const AuthorProfile = ( { attributes, setAttributes, context, clientId } ) => {
-	const { replaceInnerBlocks } = useDispatch( 'core/block-editor' );
+	const { replaceInnerBlocks } = useDispatch( blockEditorStore );
 
 	// ALL HOOKS MUST BE CALLED UNCONDITIONALLY (React rules of hooks)
 	const [ author, setAuthor ] = useState( null );
@@ -387,6 +283,7 @@ const AuthorProfile = ( { attributes, setAttributes, context, clientId } ) => {
 		avatarSize,
 		avatarHideDefault,
 		showEmptyBio,
+		variation,
 	} = attributes;
 	const blockProps = useBlockProps();
 
@@ -435,6 +332,17 @@ const AuthorProfile = ( { attributes, setAttributes, context, clientId } ) => {
 		return ( theme?.is_block_theme ?? false ) && !! getBlockType( 'newspack/avatar' ) && !! getBlockType( 'newspack/author-profile-social' );
 	}, [] );
 
+	// Check for inner blocks (pattern picker shows when empty).
+	const hasInnerBlocks = useSelect( select => !! select( blockEditorStore ).getBlocks( clientId ).length, [ clientId ] );
+
+	// Look up the active variation's template from the store.
+	const blockVariations = useSelect( select => select( blocksStore ).getBlockVariations( 'newspack-blocks/author-profile', 'block' ), [] );
+	const defaultVariation = useMemo( () => blockVariations?.find( v => v.isDefault ), [ blockVariations ] );
+	const activeVariationTemplate = useMemo( () => {
+		const match = blockVariations?.find( v => v.name === variation );
+		return match?.innerBlocks || defaultVariation?.innerBlocks;
+	}, [ blockVariations, variation, defaultVariation ] );
+
 	// Set layoutVersion to 2 for brand new blocks in block themes.
 	// This persists the mode choice and enables InnerBlocks-based layout.
 	// Only converts unconfigured blocks to preserve existing blocks created in classic themes.
@@ -444,6 +352,17 @@ const AuthorProfile = ( { attributes, setAttributes, context, clientId } ) => {
 			setAttributes( { layoutVersion: 2 } );
 		}
 	}, [ isNestedMode, layoutVersion, isUnconfiguredBlock, setAttributes ] );
+
+	// Auto-populate inner blocks from variation attribute on mount (e.g., when inserted from a pattern).
+	// Only runs once; subsequent empty states show the variation picker instead of auto-repopulating.
+	// Initialized with hasInnerBlocks so existing blocks (after page reload) don't re-populate.
+	const [ didAutoPopulate, setDidAutoPopulate ] = useState( hasInnerBlocks );
+	useEffect( () => {
+		if ( ! didAutoPopulate && variation && ! hasInnerBlocks && activeVariationTemplate ) {
+			replaceInnerBlocks( clientId, createBlocksFromInnerBlocksTemplate( activeVariationTemplate ), true );
+			setDidAutoPopulate( true );
+		}
+	}, [ didAutoPopulate, variation, hasInnerBlocks, activeVariationTemplate, clientId, replaceInnerBlocks ] );
 
 	// Fetch author for specific mode
 	useEffect( () => {
@@ -631,10 +550,6 @@ const AuthorProfile = ( { attributes, setAttributes, context, clientId } ) => {
 	// In nested mode, hide field toggles since publishers control display by adding/removing blocks.
 	const isNestedLayout = layoutVersion === 2;
 
-	const resetLayout = () => {
-		replaceInnerBlocks( clientId, createBlocksFromInnerBlocksTemplate( NESTED_TEMPLATE ), false );
-	};
-
 	// Inspector controls for display settings
 	const inspectorControls = (
 		<InspectorControls>
@@ -761,15 +676,6 @@ const AuthorProfile = ( { attributes, setAttributes, context, clientId } ) => {
 					] }
 				/>
 			) }
-			{ isNestedLayout && (
-				<ToolbarGroup>
-					<Tooltip text={ __( 'Reset layout', 'newspack-blocks' ) }>
-						<ToolbarButton label={ __( 'Reset layout', 'newspack-blocks' ) } onClick={ resetLayout }>
-							{ __( 'Reset', 'newspack-blocks' ) }
-						</ToolbarButton>
-					</Tooltip>
-				</ToolbarGroup>
-			) }
 		</BlockControls>
 	);
 
@@ -781,7 +687,7 @@ const AuthorProfile = ( { attributes, setAttributes, context, clientId } ) => {
 				className="newspack-blocks-author-profile"
 				icon={ postAuthor }
 				label={ __( 'Author Profile', 'newspack-blocks' ) }
-				instructions={ __( 'Select a type to start with.', 'newspack-blocks' ) }
+				instructions={ __( 'Select a type:', 'newspack-blocks' ) }
 			>
 				<Button variant="primary" onClick={ () => setAttributes( { isContextual: true } ) }>
 					{ __( 'Contextual', 'newspack-blocks' ) }
@@ -811,6 +717,11 @@ const AuthorProfile = ( { attributes, setAttributes, context, clientId } ) => {
 					</Placeholder>
 				</div>
 			);
+		}
+
+		// Variation picker: shown when block has no inner blocks.
+		if ( ! hasInnerBlocks ) {
+			return <VariationPlaceholder clientId={ clientId } name="newspack-blocks/author-profile" setAttributes={ setAttributes } />;
 		}
 
 		// Mode selection for new blocks in nested mode
@@ -958,9 +869,9 @@ const AuthorProfile = ( { attributes, setAttributes, context, clientId } ) => {
 					{ /* Key forces re-render when author changes, which re-evaluates bindings */ }
 					<InnerBlocks
 						key={ `author-${ previewAuthor?.id || 'none' }` }
-						template={ NESTED_TEMPLATE }
+						template={ activeVariationTemplate }
 						templateLock="insert"
-						allowedBlocks={ [ 'core/columns' ] }
+						allowedBlocks={ [ 'core/columns', 'core/group' ] }
 					/>
 				</div>
 			</AuthorContext.Provider>
