@@ -1,3 +1,20 @@
+# [2.19.0](https://github.com/Automattic/newspack-theme/compare/v2.18.3...v2.19.0) (2026-03-16)
+
+
+### Bug Fixes
+
+* fix watch for scss build ([#2640](https://github.com/Automattic/newspack-theme/issues/2640)) ([88d50af](https://github.com/Automattic/newspack-theme/commit/88d50afa9ff9e7f31ff37d67d45d1d4c2d754b68))
+* follow Copilot suggestion to wrap in double quotes and escape same in font names too ([71af6d5](https://github.com/Automattic/newspack-theme/commit/71af6d5b4251d5e0731ecded5002cf29f4db66e0))
+* force array output to ensure window.newspackFontLoading() doesn't emit unexpected JS objects ([68614c4](https://github.com/Automattic/newspack-theme/commit/68614c4ff150de703c54c17cedc6f8790da22213))
+* quote font names ([2585e72](https://github.com/Automattic/newspack-theme/commit/2585e727ad24334e289475814622e77ad1032bdd))
+* quote font names ([b6ab9f9](https://github.com/Automattic/newspack-theme/commit/b6ab9f91d916aefaa101531466690acf06a31f4a))
+* remove unnecessary character class, capture group; suggested by Claude ([5e44728](https://github.com/Automattic/newspack-theme/commit/5e4472820b9036a8dea935d3e978bd38dab34862))
+
+
+### Features
+
+* add agents, claude MD and update readme ([#2639](https://github.com/Automattic/newspack-theme/issues/2639)) ([8920552](https://github.com/Automattic/newspack-theme/commit/89205524a86b72080d36f36b9cd6587a735050f1))
+
 # [2.19.0-alpha.1](https://github.com/Automattic/newspack-theme/compare/v2.18.3...v2.19.0-alpha.1) (2026-03-05)
 
 
