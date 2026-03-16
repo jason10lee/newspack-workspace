@@ -37,6 +37,13 @@ class Content_Gate {
 	private static $is_gated = false;
 
 	/**
+	 * Whether the post is being shown via metering.
+	 *
+	 * @var boolean
+	 */
+	private static $is_metered = false;
+
+	/**
 	 * Valid gate post statuses.
 	 *
 	 * @var array
@@ -58,6 +65,7 @@ class Content_Gate {
 		add_action( 'admin_init', [ __CLASS__, 'redirect_cpt' ] );
 		add_action( 'admin_init', [ __CLASS__, 'handle_edit_gate_layout' ] );
 		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_scripts' ] );
+		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_block_editor_assets' ] );
 		add_action( 'wp_footer', [ __CLASS__, 'render_overlay_gate' ], 1 );
 		add_action( 'before_delete_post', [ __CLASS__, 'delete_gate_layouts' ], 10, 2 );
 		add_filter( 'newspack_popups_assess_has_disabled_popups', [ __CLASS__, 'disable_popups' ] );
@@ -65,6 +73,9 @@ class Content_Gate {
 
 		add_action( 'the_post', [ __CLASS__, 'restrict_post' ], 10, 2 );
 		add_filter( 'the_content', [ __CLASS__, 'handle_restricted_content' ], PHP_INT_MAX );
+		add_filter( 'comments_open', [ __CLASS__, 'filter_comments_open' ], 10, 2 );
+		add_filter( 'comments_array', [ __CLASS__, 'filter_comments_array' ], 10, 2 );
+		add_filter( 'get_comments_number', [ __CLASS__, 'filter_comments_number' ], 10, 2 );
 
 		/** Add gate content filters to mimic 'the_content'. See 'wp-includes/default-filters.php' for reference. */
 		add_filter( 'newspack_gate_content', 'capital_P_dangit', 11 );
@@ -85,6 +96,7 @@ class Content_Gate {
 		include __DIR__ . '/class-metering-countdown.php';
 		include __DIR__ . '/content-gifting/class-content-gifting.php';
 		include __DIR__ . '/class-ip-access-rule.php';
+		include __DIR__ . '/class-user-gate-access.php';
 	}
 
 	/**
@@ -93,6 +105,17 @@ class Content_Gate {
 	 * @return bool
 	 */
 	public static function is_newspack_feature_enabled() {
+		/**
+		 * Enables the content gating feature which allows restricting
+		 * content access based on membership, donations, or other criteria.
+		 *
+		 * @constant NEWSPACK_CONTENT_GATES
+		 * @type     bool
+		 * @default  Content gates disabled
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_CONTENT_GATES', true );
+		 */
 		return defined( 'NEWSPACK_CONTENT_GATES' ) && NEWSPACK_CONTENT_GATES;
 	}
 
@@ -160,6 +183,9 @@ class Content_Gate {
 			 */
 			! apply_filters( 'newspack_content_gate_restrict_post', true, $post->ID )
 		) {
+			// Content is accessible via metering — show comments but prevent commenting.
+			self::$is_metered        = true;
+			$post->comment_status    = 'closed';
 			return;
 		}
 
@@ -198,6 +224,57 @@ class Content_Gate {
 	 */
 	public static function is_gated() {
 		return self::$is_gated;
+	}
+
+	/**
+	 * Filter whether comments are open.
+	 *
+	 * Close comments on gated and metered posts.
+	 *
+	 * @param bool $open    Whether comments are open.
+	 * @param int  $post_id Post ID.
+	 *
+	 * @return bool
+	 */
+	public static function filter_comments_open( $open, $post_id ) {
+		if ( ( self::$is_gated || self::$is_metered ) && (int) $post_id === (int) get_queried_object_id() ) {
+			return false;
+		}
+		return $open;
+	}
+
+	/**
+	 * Filter comments array.
+	 *
+	 * Hide all comments on fully gated posts.
+	 *
+	 * @param array $comments Array of comments.
+	 * @param int   $post_id  Post ID.
+	 *
+	 * @return array
+	 */
+	public static function filter_comments_array( $comments, $post_id ) {
+		if ( self::$is_gated && (int) $post_id === (int) get_queried_object_id() ) {
+			return [];
+		}
+		return $comments;
+	}
+
+	/**
+	 * Filter the comment count.
+	 *
+	 * Return 0 on fully gated posts.
+	 *
+	 * @param int $count   Comment count.
+	 * @param int $post_id Post ID.
+	 *
+	 * @return int
+	 */
+	public static function filter_comments_number( $count, $post_id ) {
+		if ( self::$is_gated && (int) $post_id === (int) get_queried_object_id() ) {
+			return 0;
+		}
+		return $count;
 	}
 
 	/**
@@ -313,6 +390,23 @@ class Content_Gate {
 			wp_enqueue_script( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.js', $asset['dependencies'], NEWSPACK_PLUGIN_VERSION, true );
 			wp_enqueue_style( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.css', [], NEWSPACK_PLUGIN_VERSION );
 		}
+	}
+
+	/**
+	 * Enqueue block editor assets.
+	 */
+	public static function enqueue_block_editor_assets() {
+		if ( ! in_array( get_post_type(), array_column( Content_Restriction_Control::get_available_post_types(), 'value' ), true ) ) {
+			return;
+		}
+		if ( ! current_user_can( 'edit_others_posts' ) ) {
+			return;
+		}
+		if ( 0 === count( self::get_gates() ) ) {
+			return;
+		}
+		$asset = require dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/content-gate-post-settings.asset.php';
+		wp_enqueue_script( 'newspack-content-gate-post-settings', Newspack::plugin_url() . '/dist/content-gate-post-settings.js', $asset['dependencies'], $asset['version'], true );
 	}
 
 	/**
@@ -502,7 +596,7 @@ class Content_Gate {
 			[
 				'post_title'   => $gate['title'],
 				'post_type'    => $post_type,
-				'post_status'  => $gate['status'] ?? 'draft',
+				'post_status'  => 'publish',
 				'post_content' => '',
 				'meta_input'   => [
 					'gate_priority' => count( $all_gates ),
@@ -710,22 +804,6 @@ class Content_Gate {
 	}
 
 	/**
-	 * Get the inline gate content.
-	 */
-	public static function get_inline_gate_content() {
-		return self::get_inline_gate_content_for_post( self::get_gate_layout_id() );
-	}
-
-	/**
-	 * Get the inline gate HTML for rendering.
-	 *
-	 * @return string
-	 */
-	public static function get_inline_gate_html() {
-		return apply_filters( 'newspack_gate_content', self::get_inline_gate_content() );
-	}
-
-	/**
 	 * Get the post excerpt to be displayed in the gate.
 	 *
 	 * @param \WP_Post $post Post object.
@@ -849,6 +927,9 @@ class Content_Gate {
 	public static function requires_account_verification( $gate_id = null ) {
 		if ( ! $gate_id ) {
 			$gate_id = self::get_gate_post_id();
+			if ( ! $gate_id ) {
+				return false;
+			}
 		}
 		$registration = self::get_registration_settings( $gate_id );
 		return $registration['require_verification'];

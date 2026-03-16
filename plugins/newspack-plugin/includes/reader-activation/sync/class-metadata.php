@@ -178,6 +178,21 @@ class Metadata {
 	}
 
 	/**
+	 * Get all "prefixed" metadata keys.
+	 *
+	 * @return string[] List of prefixed metadata keys.
+	 */
+	public static function get_all_prefixed_keys() {
+		$prefixed_keys = [];
+
+		foreach ( self::get_keys() as $raw_key => $field_name ) {
+			$prefixed_keys[] = self::get_key( $raw_key );
+		}
+
+		return array_unique( $prefixed_keys );
+	}
+
+	/**
 	 * Given a field name, prepend it with the metadata field prefix.
 	 *
 	 * @param string $key Metadata field to fetch.
@@ -337,6 +352,11 @@ class Metadata {
 		$registration_method = self::has_key( 'registration_method', $metadata ) ? self::get_key_value( 'registration_method', $metadata ) : \get_user_meta( $user->ID, Reader_Activation::REGISTRATION_METHOD, true );
 		if ( ! empty( $registration_method ) ) {
 			$metadata['registration_method'] = $registration_method;
+		}
+
+		$registration_page = self::has_key( 'registration_page', $metadata ) ? self::get_key_value( 'registration_page', $metadata ) : \get_user_meta( $user->ID, Reader_Activation::REGISTRATION_PAGE, true );
+		if ( ! empty( $registration_page ) ) {
+			$metadata['registration_page'] = $registration_page;
 		}
 
 		$connected_account = self::has_key( 'connected_account', $metadata ) ? self::get_key_value( 'connected_account', $metadata ) : \get_user_meta( $user->ID, Reader_Activation::CONNECTED_ACCOUNT, true );
