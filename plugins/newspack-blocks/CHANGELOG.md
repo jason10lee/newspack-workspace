@@ -1,3 +1,10 @@
+## [4.25.1](https://github.com/Automattic/newspack-blocks/compare/v4.25.0...v4.25.1) (2026-03-17)
+
+
+### Bug Fixes
+
+* reinstate enqueue block editor assets for the blocks ([#2314](https://github.com/Automattic/newspack-blocks/issues/2314)) ([3695d09](https://github.com/Automattic/newspack-blocks/commit/3695d09465fe07d626da39b4d0a1eb454d21722b))
+
 # [4.25.0](https://github.com/Automattic/newspack-blocks/compare/v4.24.1...v4.25.0) (2026-03-16)
 
 
