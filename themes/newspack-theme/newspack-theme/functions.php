@@ -777,8 +777,12 @@ function newspack_is_sticky_animated_header() {
  * Enqueue supplemental block editor styles.
  */
 function newspack_editor_customizer_styles() {
+	// In the iframe editor, canvas styles are loaded via block assets.
+	if ( ! is_admin() ) {
+		return;
+	}
 
-	wp_enqueue_style( 'newspack-editor-customizer-styles', get_theme_file_uri( '/styles/style-editor-customizer.css' ), false, '1.1', 'all' );
+	wp_enqueue_style( 'newspack-editor-customizer-styles', get_theme_file_uri( '/styles/style-editor-customizer.css' ), false, wp_get_theme()->get( 'Version' ), 'all' );
 
 	// Check for color or font customizations.
 	$theme_customizations = '';
@@ -805,7 +809,7 @@ function newspack_editor_customizer_styles() {
 		wp_enqueue_style( 'newspack-font-alternative-import', newspack_custom_typography_link( 'custom_font_import_code_alternate' ), array(), null ); // phpcs:ignore WordPress.WP.EnqueuedResourceParameters.MissingVersion
 	}
 }
-add_action( 'enqueue_block_editor_assets', 'newspack_editor_customizer_styles' );
+add_action( 'enqueue_block_assets', 'newspack_editor_customizer_styles' );
 
 /**
  * Determine if current editor page is the static front page.
@@ -829,26 +833,39 @@ function newspack_check_current_template() {
 
 /**
  * Add body class on editor pages if editing the static front page.
+ *
+ * The 'admin-color-' prefix is used to make sure the classes get moved to the <body> tag in the iframed editor as a work-around.
+ * See https://github.com/WordPress/gutenberg/issues/28538 for more details.
  */
 function newspack_filter_admin_body_class( $classes ) {
+	if ( ! function_exists( 'get_current_screen' ) ) {
+		return $classes;
+	}
+
+	$current_screen = get_current_screen();
+	if ( ! $current_screen || ! method_exists( $current_screen, 'is_block_editor' ) || ! $current_screen->is_block_editor() ) {
+		return $classes;
+	}
+
+	global $post;
+	if ( ! ( $post && isset( $post->ID ) ) ) {
+		return $classes;
+	}
 
 	if ( newspack_is_static_front_page() ) {
-		$classes .= ' newspack-static-front-page';
+		$classes .= ' admin-color-newspack-static-front-page';
 	}
 
-	if ( ! is_active_sidebar( 'sidebar-1' ) ) {
-		$classes .= ' no-sidebar';
-	}
-
+	$template = newspack_check_current_template();
 	if (
-		'single-feature.php' === newspack_check_current_template()
-		|| 'no-header-footer.php' === newspack_check_current_template()
+		'single-feature.php' === $template
+		|| 'no-header-footer.php' === $template
 	) {
-		$classes .= ' newspack-single-column-template';
-	} elseif ( 'single-wide.php' === newspack_check_current_template() ) {
-		$classes .= ' newspack-single-wide-template';
+		$classes .= ' admin-color-newspack-single-column-template';
+	} elseif ( 'single-wide.php' === $template ) {
+		$classes .= ' admin-color-newspack-single-wide-template';
 	} else {
-		$classes .= ' newspack-default-template';
+		$classes .= ' admin-color-newspack-default-template';
 	}
 
 	return $classes;
@@ -860,9 +877,14 @@ add_filter( 'admin_body_class', 'newspack_filter_admin_body_class', 10, 1 );
  * Enqueue CSS styles for the editor that use the <body> tag.
  */
 function newspack_enqueue_editor_override_assets() {
-	wp_enqueue_style( 'newspack-editor-overrides', get_theme_file_uri( '/styles/style-editor-overrides.css' ), false, '1.1', 'all' );
+	// In the iframe editor, canvas styles are loaded via block assets.
+	if ( ! is_admin() ) {
+		return;
+	}
+
+	wp_enqueue_style( 'newspack-editor-overrides', get_theme_file_uri( '/styles/style-editor-overrides.css' ), false, wp_get_theme()->get( 'Version' ), 'all' );
 }
-add_action( 'enqueue_block_editor_assets', 'newspack_enqueue_editor_override_assets' );
+add_action( 'enqueue_block_assets', 'newspack_enqueue_editor_override_assets' );
 
 /**
  * Use front-page.php when Front page displays is set to a static page.

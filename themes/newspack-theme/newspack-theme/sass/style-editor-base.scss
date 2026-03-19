@@ -15,6 +15,7 @@ body {
 /** === Content Width === */
 
 .wp-block {
+	box-sizing: border-box;
 	max-width: 810px; // 780px + 30px to offset padding
 }
 
