@@ -15,6 +15,7 @@ body {
 /** === Content Width === */
 
 .wp-block {
+	box-sizing: border-box;
 	max-width: 810px; // 780px + 30px to offset padding
 }
 
@@ -638,10 +639,6 @@ html :where(.wp-block)[data-align="right"] {
 	.wp-block-pullquote {
 		max-width: 50%;
 		width: 50%;
-
-		@include utilities.media( tablet ) {
-			border-bottom: 0;
-		}
 
 		&:not(.is-style-solid-color) {
 			padding: 0;

@@ -12,13 +12,17 @@ export const META_FIELD_NAME = 'newspack_post_subtitle';
  * @param {string} subtitle Subtitle text
  */
 export const appendSubtitleToTitleDOMElement = subtitle => {
-	const titleEl = document.querySelector( '.edit-post-visual-editor__post-title-wrapper' );
+	// In WordPress 7.0+ the editor is always iframed; use the canvas document.
+	// TODO: Remove `document` fallback once WordPress 7.0 is released and the non-iframed editor is no longer supported.
+	const editorCanvas = document.querySelector( 'iframe[name="editor-canvas"]' );
+	const doc = ( editorCanvas && editorCanvas.contentDocument ) || document;
+	const titleEl = doc.querySelector( '.edit-post-visual-editor__post-title-wrapper' );
 
 	if ( titleEl && typeof subtitle === 'string' ) {
-		let subtitleEl = document.getElementById( SUBTITLE_ID );
+		let subtitleEl = doc.getElementById( SUBTITLE_ID );
 		const titleParent = titleEl.parentNode;
 		if ( ! subtitleEl ) {
-			subtitleEl = document.createElement( 'div' );
+			subtitleEl = doc.createElement( 'div' );
 			subtitleEl.id = SUBTITLE_ID;
 			titleParent.insertBefore( subtitleEl, titleEl.nextSibling );
 		}

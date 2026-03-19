@@ -823,6 +823,29 @@ function newspack_customize_register( $wp_customize ) {
 		)
 	);
 
+	// Shared avatar image size for author archive and author bio templates.
+	$wp_customize->add_setting(
+		'author_avatar_size',
+		array(
+			'default'           => 120,
+			'sanitize_callback' => 'newspack_sanitize_author_avatar_size',
+		)
+	);
+	$wp_customize->add_control(
+		'author_avatar_size',
+		array(
+			'type'        => 'number',
+			'label'       => esc_html__( 'Author Avatar Size', 'newspack-theme' ),
+			'description' => esc_html__( 'One shared setting for author archive and author bio avatars. Values are saved in the 32-512px range. This controls the requested image size, but the final on-screen size is still controlled by CSS -- both will need to be changed to change the visual size of the avatar.', 'newspack-theme' ),
+			'input_attrs' => array(
+				'min'  => 32,
+				'max'  => 512,
+				'step' => 1,
+			),
+			'section'     => 'author_bio_options',
+		)
+	);
+
 	/**
 	 * Template Settings
 	 */
@@ -1690,6 +1713,27 @@ function newspack_sanitize_checkbox( $input ) {
 	} else {
 		return false;
 	}
+}
+
+/**
+ * Sanitize author avatar image size.
+ *
+ * @param int|string $input Requested avatar size.
+ *
+ * @return int Clamped avatar size.
+ */
+function newspack_sanitize_author_avatar_size( $input ) {
+	$size = absint( $input );
+
+	if ( $size < 32 ) {
+		return 32;
+	}
+
+	if ( $size > 512 ) {
+		return 512;
+	}
+
+	return $size;
 }
 
 /**

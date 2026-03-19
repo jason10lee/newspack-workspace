@@ -631,6 +631,13 @@ p.has-background {
 	}
 }
 
+// Override Gutenberg's default pullquote border color for themes that don't have a pullquote border defined.
+body:not(.wp-child-theme-newspack-joseph):not(.wp-child-theme-newspack-nelson) .wp-block-pullquote {
+	&.wp-block-pullquote:not([style*='border']) {
+		border-color: transparent !important;
+	}
+}
+
 //! Latest Comments
 .wp-block-latest-comments {
 	padding-left: 0;
