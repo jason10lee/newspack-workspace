@@ -45,7 +45,7 @@ const components: Record< string, any > = {
 		component: lazy( () => import( /* webpackChunkName: "audience-wizards" */ './audience/views/campaigns' ) ),
 	},
 	'newspack-audience-access-control': {
-		label: __( 'Access Control', 'newspack-plugin' ),
+		label: __( 'Access control', 'newspack-plugin' ),
 		component: lazy( () => import( /* webpackChunkName: "audience-wizards" */ './audience/views/content-gates' ) ),
 	},
 	'newspack-audience-donations': {
@@ -57,6 +57,14 @@ const components: Record< string, any > = {
 		component: lazy( () => import( /* webpackChunkName: "audience-wizards" */ './audience/views/subscriptions' ) ),
 	},
 } as const;
+
+// Conditionally add the Audience Integrations page if the feature is enabled.
+if ( window.newspackAudienceIntegrations?.integrations_settings_enabled ) {
+	components[ 'newspack-audience-integrations' ] = {
+		label: __( 'Audience Integrations', 'newspack-plugin' ),
+		component: lazy( () => import( /* webpackChunkName: "audience-wizards" */ './audience/views/integrations' ) ),
+	};
+}
 
 const AdminPageLoader = ( { label }: { label: string } ) => {
 	return (

@@ -58,15 +58,23 @@ class Content_Gate {
 	private static $restricted_content = [];
 
 	/**
+	 * Whether the overlay gate markup has been output in this execution.
+	 *
+	 * @var boolean
+	 */
+	private static $overlay_gate_output = false;
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function init() {
 		add_action( 'init', [ __CLASS__, 'register_post_type' ] );
 		add_action( 'admin_init', [ __CLASS__, 'redirect_cpt' ] );
+		add_filter( 'get_edit_post_link', [ __CLASS__, 'filter_edit_post_link' ], 10, 2 );
 		add_action( 'admin_init', [ __CLASS__, 'handle_edit_gate_layout' ] );
 		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_scripts' ] );
 		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_block_editor_assets' ] );
-		add_action( 'wp_footer', [ __CLASS__, 'render_overlay_gate' ], 1 );
+		add_action( 'after_setup_theme', [ __CLASS__, 'register_overlay_gate_hooks' ] );
 		add_action( 'before_delete_post', [ __CLASS__, 'delete_gate_layouts' ], 10, 2 );
 		add_filter( 'newspack_popups_assess_has_disabled_popups', [ __CLASS__, 'disable_popups' ] );
 		add_filter( 'newspack_reader_activity_article_view', [ __CLASS__, 'suppress_article_view_activity' ], 100 );
@@ -341,14 +349,14 @@ class Content_Gate {
 		\register_post_type(
 			self::GATE_CPT,
 			[
-				'label'        => __( 'Content Gate', 'newspack' ),
+				'label'        => __( 'Content Gate', 'newspack-plugin' ),
 				'labels'       => [
-					'item_published'         => __( 'Content Gate published.', 'newspack' ),
-					'item_reverted_to_draft' => __( 'Content Gate reverted to draft.', 'newspack' ),
-					'item_updated'           => __( 'Content Gate updated.', 'newspack' ),
-					'new_item'               => __( 'New Content Gate', 'newspack' ),
-					'edit_item'              => __( 'Edit Content Gate', 'newspack' ),
-					'view_item'              => __( 'View Content Gate', 'newspack' ),
+					'item_published'         => __( 'Content Gate published.', 'newspack-plugin' ),
+					'item_reverted_to_draft' => __( 'Content Gate reverted to draft.', 'newspack-plugin' ),
+					'item_updated'           => __( 'Content Gate updated.', 'newspack-plugin' ),
+					'new_item'               => __( 'New Content Gate', 'newspack-plugin' ),
+					'edit_item'              => __( 'Edit Content Gate', 'newspack-plugin' ),
+					'view_item'              => __( 'View Content Gate', 'newspack-plugin' ),
 				],
 				'public'       => false,
 				'show_ui'      => true,
@@ -358,7 +366,22 @@ class Content_Gate {
 			]
 		);
 		// Register the layout post type.
-		self::register_layout_post_type( self::GATE_LAYOUT_CPT, __( 'Content Gate Layout', 'newspack' ) );
+		self::register_layout_post_type( self::GATE_LAYOUT_CPT, __( 'Content Gate Layout', 'newspack-plugin' ) );
+	}
+
+	/**
+	 * Filter the edit post link for gate CPTs to point to the access control wizard.
+	 *
+	 * @param string $link    The edit link.
+	 * @param int    $post_id Post ID.
+	 *
+	 * @return string Filtered edit link.
+	 */
+	public static function filter_edit_post_link( $link, $post_id ) {
+		if ( get_post_type( $post_id ) === self::GATE_CPT ) {
+			return admin_url( 'admin.php?page=newspack-audience-access-control#/edit/' . $post_id );
+		}
+		return $link;
 	}
 
 	/**
@@ -407,6 +430,44 @@ class Content_Gate {
 		}
 		$asset = require dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/content-gate-post-settings.asset.php';
 		wp_enqueue_script( 'newspack-content-gate-post-settings', Newspack::plugin_url() . '/dist/content-gate-post-settings.js', $asset['dependencies'], $asset['version'], true );
+
+		// Localize active gates data for reactive matching in the editor.
+		$gates      = self::get_gates( self::GATE_CPT, 'publish' );
+		$gates_data = [];
+		foreach ( $gates as $gate ) {
+			if ( empty( $gate['registration']['active'] ) && empty( $gate['custom_access']['active'] ) ) {
+				continue;
+			}
+			if ( empty( $gate['content_rules'] ) ) {
+				continue;
+			}
+			$gates_data[] = [
+				'id'            => $gate['id'],
+				'title'         => $gate['title'],
+				'edit_url'      => get_edit_post_link( $gate['id'], 'raw' ),
+				'content_rules' => $gate['content_rules'],
+			];
+		}
+
+		// Build taxonomy slug to REST attribute name map.
+		$taxonomy_map = [];
+		foreach ( Content_Restriction_Control::get_available_taxonomies() as $tax ) {
+			$taxonomy_obj = get_taxonomy( $tax['slug'] );
+			if ( $taxonomy_obj && $taxonomy_obj->show_in_rest ) {
+				$rest_base                    = ! empty( $taxonomy_obj->rest_base ) ? $taxonomy_obj->rest_base : $taxonomy_obj->name;
+				$taxonomy_map[ $tax['slug'] ] = $rest_base;
+			}
+		}
+
+		wp_localize_script(
+			'newspack-content-gate-post-settings',
+			'newspackContentGates',
+			[
+				'gates'        => $gates_data,
+				'taxonomyMap'  => $taxonomy_map,
+				'canEditGates' => current_user_can( 'manage_options' ),
+			]
+		);
 	}
 
 	/**
@@ -617,10 +678,13 @@ class Content_Gate {
 		// Create default layouts for registration and custom_access modes.
 		$registration_settings  = $gate['registration'] ?? [];
 		$registration_layout_id = $registration_settings['gate_layout_id'] ?? 0;
+		$custom_access_settings  = $gate['custom_access'] ?? [];
+		$custom_access_layout_id = $custom_access_settings['gate_layout_id'] ?? 0;
+
 		if ( ! $registration_layout_id ) {
-			$registration_content   = self::get_block_pattern_content( 'registration-card' );
+			$registration_content   = self::get_layout_default_content( $gate_id, 'registration', $registration_settings, $custom_access_settings );
 			$registration_layout_id = self::create_gate_layout(
-				__( 'Registration Access Layout', 'newspack' ),
+				__( 'Registration Access Layout', 'newspack-plugin' ),
 				$registration_content
 			);
 		}
@@ -629,11 +693,11 @@ class Content_Gate {
 		}
 		self::update_registration_settings( $gate_id, $registration_settings );
 
-		$custom_access_settings  = $gate['custom_access'] ?? [];
-		$custom_access_layout_id = $custom_access_settings['gate_layout_id'] ?? 0;
 		if ( ! $custom_access_layout_id ) {
+			$custom_access_content   = self::get_layout_default_content( $gate_id, 'custom_access', $registration_settings, $custom_access_settings );
 			$custom_access_layout_id = self::create_gate_layout(
-				__( 'Paid Access Layout', 'newspack' )
+				__( 'Paid Access Layout', 'newspack-plugin' ),
+				$custom_access_content
 			);
 			if ( ! is_wp_error( $custom_access_layout_id ) ) {
 				$custom_access_settings['gate_layout_id'] = $custom_access_layout_id;
@@ -681,7 +745,7 @@ class Content_Gate {
 	 */
 	public static function create_gate_layout( $title = '', $content = '' ) {
 		if ( empty( $title ) ) {
-			$title = __( 'Content Gate Layout', 'newspack' );
+			$title = __( 'Content Gate Layout', 'newspack-plugin' );
 		}
 		if ( empty( $content ) ) {
 			$content = self::get_default_gate_content();
@@ -704,7 +768,7 @@ class Content_Gate {
 	 *
 	 * @return string The pattern content, or empty string if not found.
 	 */
-	public static function get_block_pattern_content( $pattern_slug ) {
+	private static function get_block_pattern_content( $pattern_slug ) {
 		$patterns_dir = realpath( __DIR__ . '/block-patterns' );
 		if ( ! $patterns_dir ) {
 			return '';
@@ -720,6 +784,40 @@ class Content_Gate {
 		ob_start();
 		require $path;
 		return ob_get_clean();
+	}
+
+	/**
+	 * Get the block pattern content for a gate layout.
+	 *
+	 * @param int    $gate_id                Gate ID.
+	 * @param string $gate_mode              Gate mode.
+	 * @param array  $registration_settings  Registration settings.
+	 * @param array  $custom_access_settings Custom access settings.
+	 *
+	 * @return string
+	 */
+	private static function get_layout_default_content( $gate_id, $gate_mode, $registration_settings = [], $custom_access_settings = [] ) {
+		if ( empty( $registration_settings ) ) {
+			$registration_settings = self::get_registration_settings( $gate_id );
+		}
+		if ( empty( $custom_access_settings ) ) {
+			$custom_access_settings = self::get_custom_access_settings( $gate_id );
+		}
+
+		$pattern_slug = '';
+		if ( 'registration' === $gate_mode ) {
+			$pattern_slug = 'registration-wall';
+			if ( ! empty( $custom_access_settings['active'] ) ) {
+				$pattern_slug = 'pay-wall-one-tier-metering';
+			}
+		} elseif ( 'custom_access' === $gate_mode ) {
+			$pattern_slug = 'pay-wall-one-tier';
+		}
+
+		if ( empty( $pattern_slug ) ) {
+			return '<p>' . esc_html( __( 'This article is only available to members.', 'newspack-plugin' ) ) . '</p>';
+		}
+		return self::get_block_pattern_content( $pattern_slug );
 	}
 
 	/**
@@ -756,30 +854,30 @@ class Content_Gate {
 
 		$gate_id = isset( $_GET['gate_id'] ) ? \absint( $_GET['gate_id'] ) : false;
 		if ( ! $gate_id ) {
-			\wp_die( esc_html( __( 'Gate ID is required.', 'newspack' ) ) );
+			\wp_die( esc_html( __( 'Gate ID is required.', 'newspack-plugin' ) ) );
 		}
 
 		$gate_mode = isset( $_GET['gate_mode'] ) ? \sanitize_text_field( $_GET['gate_mode'] ) : false;
 		if ( ! $gate_mode ) {
-			\wp_die( esc_html( __( 'Gate mode is required.', 'newspack' ) ) );
+			\wp_die( esc_html( __( 'Gate mode is required.', 'newspack-plugin' ) ) );
 		}
 
 		$gate = self::get_gate( $gate_id );
 		if ( ! $gate ) {
-			\wp_die( esc_html( __( 'Gate not found.', 'newspack' ) ) );
+			\wp_die( esc_html( __( 'Gate not found.', 'newspack-plugin' ) ) );
 		}
 
 		$gate_layout_id            = 0;
-		$gate_layout_default_title = __( 'Content Gate Layout', 'newspack' );
+		$gate_layout_default_title = __( 'Content Gate Layout', 'newspack-plugin' );
 
 		if ( 'registration' === $gate_mode ) {
 			$gate_layout_id = $gate['registration']['gate_layout_id'];
-			$gate_layout_default_title = __( 'Registration Access Layout', 'newspack' );
+			$gate_layout_default_title = __( 'Registration Access Layout', 'newspack-plugin' );
 		} elseif ( 'custom_access' === $gate_mode ) {
 			$gate_layout_id = $gate['custom_access']['gate_layout_id'];
-			$gate_layout_default_title = __( 'Paid Access Layout', 'newspack' );
+			$gate_layout_default_title = __( 'Paid Access Layout', 'newspack-plugin' );
 		} else {
-			\wp_die( esc_html( __( 'Invalid gate mode.', 'newspack' ) ) );
+			\wp_die( esc_html( __( 'Invalid gate mode.', 'newspack-plugin' ) ) );
 		}
 
 		$gate_layout = get_post( $gate_layout_id );
@@ -791,7 +889,7 @@ class Content_Gate {
 			exit;
 		} else {
 			// Use registration pattern for registration mode, default content for custom_access.
-			$gate_layout_content = 'registration' === $gate_mode ? self::get_block_pattern_content( 'registration-card' ) : '';
+			$gate_layout_content = self::get_layout_default_content( $gate_id, $gate_mode, $gate['registration'], $gate['custom_access'] );
 			$gate_layout_id      = self::create_gate_layout( $gate_layout_default_title, $gate_layout_content );
 			if ( is_wp_error( $gate_layout_id ) ) {
 				\wp_die( esc_html( $gate_layout_id->get_error_message() ) );
@@ -851,12 +949,55 @@ class Content_Gate {
 		$_post = $post;
 		$post  = \get_post( $gate_layout_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		setup_postdata( $post );
-
 		self::render_overlay_gate_html( $gate_layout_id );
+		self::$overlay_gate_output = true;
 
 		self::mark_gate_as_rendered();
 		wp_reset_postdata();
 		$post = $_post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+	}
+
+	/**
+	 * Register overlay gate hooks after the theme has been set up.
+	 *
+	 * Deferred to after_setup_theme so that wp_is_block_theme() can be called safely,
+	 * after theme directories have been registered.
+	 */
+	public static function register_overlay_gate_hooks() {
+		if ( self::is_block_theme() ) {
+			add_filter( 'render_block', [ __CLASS__, 'inject_overlay_gate_after_post_content_block' ], 10, 2 );
+		} else {
+			add_action( 'get_footer', [ __CLASS__, 'render_overlay_gate' ], 1 );
+		}
+	}
+
+	/**
+	 * Inject overlay gate markup right after the post content block.
+	 *
+	 * Used for block themes where there aren't hooks to use in time to get do_blocks() to run.
+	 *
+	 * @param string $block_content Block content.
+	 * @param array  $block         Parsed block.
+	 *
+	 * @return string
+	 */
+	public static function inject_overlay_gate_after_post_content_block( $block_content, $block ) {
+		static $injected = false;
+
+		// $injected prevents re-entry even if render_overlay_gate() bails early (e.g. gate style is not "overlay").
+		// $overlay_gate_output is only set when HTML is actually rendered. Both guards are needed.
+		if ( $injected || self::$overlay_gate_output || ! is_singular() ) {
+			return $block_content;
+		}
+
+		if ( 'core/post-content' !== ( $block['blockName'] ?? '' ) ) {
+			return $block_content;
+		}
+
+		$injected = true;
+		ob_start();
+		self::render_overlay_gate();
+		return $block_content . ob_get_clean();
 	}
 
 	/**
@@ -1009,7 +1150,7 @@ class Content_Gate {
 	public static function get_gate( $id ) {
 		$post = get_post( $id );
 		if ( ! $post ) {
-			return new \WP_Error( 'newspack_content_gate_not_found', __( 'Gate not found.', 'newspack' ) );
+			return new \WP_Error( 'newspack_content_gate_not_found', __( 'Gate not found.', 'newspack-plugin' ) );
 		}
 
 		return [
@@ -1085,7 +1226,7 @@ class Content_Gate {
 	public static function update_gate_setting( $id, $key, $value ) {
 		$post = get_post( $id );
 		if ( ! $post ) {
-			return new \WP_Error( 'newspack_content_gate_not_found', __( 'Gate not found.', 'newspack' ) );
+			return new \WP_Error( 'newspack_content_gate_not_found', __( 'Gate not found.', 'newspack-plugin' ) );
 		}
 
 		$update = [];
@@ -1108,7 +1249,7 @@ class Content_Gate {
 			self::update_custom_access_settings( $id, $value );
 			return self::get_gate( $id );
 		} else {
-			return new \WP_Error( 'newspack_content_gate_invalid_key', __( 'Invalid gate setting key.', 'newspack' ) );
+			return new \WP_Error( 'newspack_content_gate_invalid_key', __( 'Invalid gate setting key.', 'newspack-plugin' ) );
 		}
 
 		// Update title and description.
@@ -1135,7 +1276,7 @@ class Content_Gate {
 	public static function update_gate_settings( $id, $gate ) {
 		$post = get_post( $id );
 		if ( ! $post ) {
-			return new \WP_Error( 'newspack_content_gate_not_found', __( 'Gate not found.', 'newspack' ) );
+			return new \WP_Error( 'newspack_content_gate_not_found', __( 'Gate not found.', 'newspack-plugin' ) );
 		}
 
 		// Update title, priority, and status.
