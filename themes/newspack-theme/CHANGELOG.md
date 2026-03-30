@@ -1,3 +1,33 @@
+# [2.20.0](https://github.com/Automattic/newspack-theme/compare/v2.19.0...v2.20.0) (2026-03-30)
+
+
+### Bug Fixes
+
+* **block-theme:** migrate newspack-theme modal checkout fixes ([#2648](https://github.com/Automattic/newspack-theme/issues/2648)) ([e4f9d91](https://github.com/Automattic/newspack-theme/commit/e4f9d91ab162a272cee9e33e58bfbf476473bb0a))
+* default pullquote borders ([#2630](https://github.com/Automattic/newspack-theme/issues/2630)) ([5eb0b76](https://github.com/Automattic/newspack-theme/commit/5eb0b76723e11439f5edd921c94d55188db2a217))
+* ensure editor fonts and widths are loaded in iframed editor ([#2649](https://github.com/Automattic/newspack-theme/issues/2649)) ([f49912e](https://github.com/Automattic/newspack-theme/commit/f49912e032be333813fd6cb9a364a55e6c7650f4))
+* tweak subtitle to work with iframe editor ([#2650](https://github.com/Automattic/newspack-theme/issues/2650)) ([86d4193](https://github.com/Automattic/newspack-theme/commit/86d4193d16075a469dcc46d221154ab82b3bdf85))
+
+
+### Features
+
+* add an avatar size control for author bios ([#2647](https://github.com/Automattic/newspack-theme/issues/2647)) ([ccfb6b4](https://github.com/Automattic/newspack-theme/commit/ccfb6b4edf2adb393ad1f00a0ac6e0a5797841ce))
+
+# [2.20.0-alpha.1](https://github.com/Automattic/newspack-theme/compare/v2.19.0...v2.20.0-alpha.1) (2026-03-19)
+
+
+### Bug Fixes
+
+* **block-theme:** migrate newspack-theme modal checkout fixes ([#2648](https://github.com/Automattic/newspack-theme/issues/2648)) ([e4f9d91](https://github.com/Automattic/newspack-theme/commit/e4f9d91ab162a272cee9e33e58bfbf476473bb0a))
+* default pullquote borders ([#2630](https://github.com/Automattic/newspack-theme/issues/2630)) ([5eb0b76](https://github.com/Automattic/newspack-theme/commit/5eb0b76723e11439f5edd921c94d55188db2a217))
+* ensure editor fonts and widths are loaded in iframed editor ([#2649](https://github.com/Automattic/newspack-theme/issues/2649)) ([f49912e](https://github.com/Automattic/newspack-theme/commit/f49912e032be333813fd6cb9a364a55e6c7650f4))
+* tweak subtitle to work with iframe editor ([#2650](https://github.com/Automattic/newspack-theme/issues/2650)) ([86d4193](https://github.com/Automattic/newspack-theme/commit/86d4193d16075a469dcc46d221154ab82b3bdf85))
+
+
+### Features
+
+* add an avatar size control for author bios ([#2647](https://github.com/Automattic/newspack-theme/issues/2647)) ([ccfb6b4](https://github.com/Automattic/newspack-theme/commit/ccfb6b4edf2adb393ad1f00a0ac6e0a5797841ce))
+
 # [2.19.0](https://github.com/Automattic/newspack-theme/compare/v2.18.3...v2.19.0) (2026-03-16)
 
 
