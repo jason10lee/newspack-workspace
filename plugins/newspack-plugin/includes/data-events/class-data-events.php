@@ -314,6 +314,7 @@ final class Data_Events {
 				call_user_func( $handler, $action_name, $timestamp, $data, $client_id );
 			} catch ( \Throwable $e ) {
 				self::log( $e->getMessage(), 'error' );
+				self::fire_handler_failed( $handler, $action_name, $data, $e );
 				self::schedule_handler_retry( $handler, $action_name, $timestamp, $data, $client_id, true, 0, $e );
 			}
 		}
@@ -326,6 +327,7 @@ final class Data_Events {
 				call_user_func( $handler, $timestamp, $data, $client_id );
 			} catch ( \Throwable $e ) {
 				self::log( $e->getMessage(), 'error' );
+				self::fire_handler_failed( $handler, $action_name, $data, $e );
 				self::schedule_handler_retry( $handler, $action_name, $timestamp, $data, $client_id, false, 0, $e );
 			}
 		}
@@ -696,6 +698,40 @@ final class Data_Events {
 	}
 
 	/**
+	 * Fire the handler failed action for the original failure (before retries).
+	 *
+	 * @param callable   $handler     The handler that failed.
+	 * @param string     $action_name Action name.
+	 * @param array      $data        Event data.
+	 * @param \Throwable $error       The error that caused the failure.
+	 */
+	private static function fire_handler_failed( $handler, $action_name, $data, $error ) {
+		/**
+		 * Fires when a data event handler fails on the original attempt (before retries).
+		 *
+		 * Used by Alert_Manager to record failures for early pattern detection.
+		 *
+		 * @param array $failure_data {
+		 *     Failure data.
+		 *
+		 *     @type callable $handler     The handler that failed.
+		 *     @type string   $action_name The data event action name.
+		 *     @type array    $data        The event data.
+		 *     @type string   $reason      The error message.
+		 * }
+		 */
+		do_action(
+			'newspack_data_event_handler_failed',
+			[
+				'handler'     => $handler,
+				'action_name' => $action_name,
+				'data'        => $data,
+				'reason'      => $error->getMessage(),
+			]
+		);
+	}
+
+	/**
 	 * Schedule a retry for a failed handler via ActionScheduler.
 	 *
 	 * @param callable   $handler     The handler that failed.
@@ -734,6 +770,29 @@ final class Data_Events {
 					sprintf( 'Max retries exhausted. Final error: %s', $error->getMessage() )
 				);
 			}
+			/**
+			 * Fires when a Data Events handler has exhausted all retry attempts.
+			 *
+			 * @param array $alert_data {
+			 *     Alert data.
+			 *
+			 *     @type array  $handler       The handler callable.
+			 *     @type string $action_name   The data event action name.
+			 *     @type array  $data          The event data.
+			 *     @type int    $retry_count   Total retries attempted.
+			 *     @type string $reason        The final error message.
+			 * }
+			 */
+			do_action(
+				'newspack_data_event_retry_exhausted',
+				[
+					'handler'     => $handler,
+					'action_name' => $action_name,
+					'data'        => $data,
+					'retry_count' => self::MAX_HANDLER_RETRIES,
+					'reason'      => $error->getMessage(),
+				]
+			);
 			return;
 		}
 
