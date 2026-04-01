@@ -125,14 +125,25 @@ start() {
             fi
         done
         if [[ ${#missing_aliases[@]} -gt 0 || ${#missing_hosts[@]} -gt 0 ]]; then
-            echo ""
-            echo "Setting up networking for isolated environments (requires sudo)..."
-            for ip in "${missing_aliases[@]}"; do
-                sudo ifconfig lo0 alias "$ip"
-            done
-            for entry in "${missing_hosts[@]}"; do
-                echo "$entry" | sudo tee -a /etc/hosts > /dev/null
-            done
+            # Use the wrapper script if installed (passwordless sudo), otherwise fall back to raw sudo.
+            if command -v newspack-manage-host >/dev/null 2>&1; then
+                for ip in "${missing_aliases[@]}"; do
+                    sudo newspack-manage-host alias-add "$ip"
+                done
+                for entry in "${missing_hosts[@]}"; do
+                    read -r ip domain <<< "$entry"
+                    sudo newspack-manage-host host-add "$ip" "$domain"
+                done
+            else
+                echo ""
+                echo "Setting up networking for isolated environments (requires sudo)..."
+                for ip in "${missing_aliases[@]}"; do
+                    sudo ifconfig lo0 alias "$ip"
+                done
+                for entry in "${missing_hosts[@]}"; do
+                    echo "$entry" | sudo tee -a /etc/hosts > /dev/null
+                done
+            fi
             echo "Ready: loopback aliases 127.0.0.2–10, $(( ${#missing_hosts[@]} )) hosts entries."
         fi
     fi

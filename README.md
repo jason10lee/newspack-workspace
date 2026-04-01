@@ -312,6 +312,20 @@ n env destroy my-feature
 n worktree remove newspack-plugin fix/my-feature
 ```
 
+### Passwordless networking setup (macOS)
+
+Isolated environments need loopback IP aliases and `/etc/hosts` entries, both of which require `sudo`. This is a problem for non-interactive processes (e.g. AI agents) that can't enter a password.
+
+Run the one-time setup script to allow these specific operations without a password:
+
+```BASH
+./bin/setup-networking.sh
+```
+
+This installs a locked-down wrapper script (`newspack-manage-host`) that only allows adding/removing `127.0.0.*` loopback aliases and `*.local` hosts entries, and creates a sudoers rule so your user can run it without a password. After this, `n start`, `n env create`, `n env up`, and `n env destroy` will manage networking automatically -- no password prompts, even from non-interactive terminals.
+
+To undo: `sudo rm /etc/sudoers.d/newspack-manage-host /usr/local/bin/newspack-manage-host`
+
 ## Newspack Manager
 
 This Docker environment will launch two sites by default. One is the site you will be working on to develop all plugins, and the other is the one that will run the Newspack Manager Client.

@@ -154,11 +154,18 @@ YAML
         echo "Created $compose_file (db: $db_name, domain: $domain, ip: $ip)"
         # Check networking prerequisites (macOS only — Linux routes all 127.x.x.x by default).
         if [[ "$(uname)" == "Darwin" ]] && ! ifconfig lo0 2>/dev/null | grep -q "$ip"; then
-            echo "Note: loopback alias for $ip is missing. Run 'n start' or: sudo ifconfig lo0 alias $ip"
+            if command -v newspack-manage-host >/dev/null 2>&1; then
+                sudo newspack-manage-host alias-add "$ip"
+            else
+                echo "Note: loopback alias for $ip is missing. Run 'n start' or: sudo ifconfig lo0 alias $ip"
+            fi
         fi
         # Custom domains (not IP-based) need a /etc/hosts entry.
         if [[ "$domain" != "$ip" ]] && ! grep -q "[[:space:]]${domain}" /etc/hosts 2>/dev/null; then
-            if [ -t 0 ] && [ -t 1 ]; then
+            if command -v newspack-manage-host >/dev/null 2>&1; then
+                sudo newspack-manage-host host-add "$ip" "$domain"
+                echo "Added $domain to /etc/hosts"
+            elif [ -t 0 ] && [ -t 1 ]; then
                 read -p "Add $domain to /etc/hosts? (Y/n): " choice
                 choice=$(echo "$choice" | tr '[:upper:]' '[:lower:]')
                 if [[ "$choice" != "n" ]]; then
@@ -239,13 +246,20 @@ MIGRATE
         domain=$(domain_for_env "$compose_file")
         # Ensure loopback alias exists (macOS only — Linux routes all 127.x.x.x by default).
         if [[ "$(uname)" == "Darwin" && -n "$ip" && "$ip" != "127.0.0.1" ]] && ! ifconfig lo0 | grep -q "$ip"; then
-            echo "Error: loopback alias for $ip is not set up."
-            echo "Run 'n start' to set up networking, or manually: sudo ifconfig lo0 alias $ip"
-            exit 1
+            if command -v newspack-manage-host >/dev/null 2>&1; then
+                sudo newspack-manage-host alias-add "$ip"
+            else
+                echo "Error: loopback alias for $ip is not set up."
+                echo "Run 'n start' to set up networking, or manually: sudo ifconfig lo0 alias $ip"
+                exit 1
+            fi
         fi
         # Custom domains (not IP-based) need a /etc/hosts entry.
         if [[ -n "$domain" && "$domain" != "$ip" ]] && ! grep -q "[[:space:]]${domain}" /etc/hosts 2>/dev/null; then
-            if [ -t 0 ] && [ -t 1 ]; then
+            if command -v newspack-manage-host >/dev/null 2>&1; then
+                sudo newspack-manage-host host-add "$ip" "$domain"
+                echo "Added $domain to /etc/hosts"
+            elif [ -t 0 ] && [ -t 1 ]; then
                 echo "Adding $domain to /etc/hosts (requires sudo)..."
                 echo "$ip $domain" | sudo tee -a /etc/hosts > /dev/null
                 echo "Added $domain to /etc/hosts"
@@ -400,9 +414,13 @@ MIGRATE
         fi
         # Remove /etc/hosts entry (only for custom domains, not IP-based).
         if [[ -n "$domain" && "$domain" != "$ip" ]] && grep -q "$domain" /etc/hosts 2>/dev/null; then
-            escaped_domain="${domain//./\\.}"
-            { sudo sed -i '' "/[[:space:]]${escaped_domain}$/d" /etc/hosts 2>/dev/null || \
-              sudo sed -i "/[[:space:]]${escaped_domain}$/d" /etc/hosts; }
+            if command -v newspack-manage-host >/dev/null 2>&1; then
+                sudo newspack-manage-host host-remove "$domain"
+            else
+                escaped_domain="${domain//./\\.}"
+                { sudo sed -i '' "/[[:space:]]${escaped_domain}$/d" /etc/hosts 2>/dev/null || \
+                  sudo sed -i "/[[:space:]]${escaped_domain}$/d" /etc/hosts; }
+            fi
             echo "Removed $domain from /etc/hosts"
         fi
         # Remove compose file before worktrees so worktree.sh doesn't see them as env-bound.
