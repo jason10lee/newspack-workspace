@@ -162,7 +162,7 @@ YAML
         fi
         # Custom domains (not IP-based) need a /etc/hosts entry.
         if [[ "$domain" != "$ip" ]] && ! grep -q "[[:space:]]${domain}" /etc/hosts 2>/dev/null; then
-            if command -v newspack-manage-host >/dev/null 2>&1; then
+            if command -v newspack-manage-host >/dev/null 2>&1 && [[ "$domain" == *.local ]]; then
                 sudo newspack-manage-host host-add "$ip" "$domain"
                 echo "Added $domain to /etc/hosts"
             elif [ -t 0 ] && [ -t 1 ]; then
@@ -256,7 +256,7 @@ MIGRATE
         fi
         # Custom domains (not IP-based) need a /etc/hosts entry.
         if [[ -n "$domain" && "$domain" != "$ip" ]] && ! grep -q "[[:space:]]${domain}" /etc/hosts 2>/dev/null; then
-            if command -v newspack-manage-host >/dev/null 2>&1; then
+            if command -v newspack-manage-host >/dev/null 2>&1 && [[ "$domain" == *.local ]]; then
                 sudo newspack-manage-host host-add "$ip" "$domain"
                 echo "Added $domain to /etc/hosts"
             elif [ -t 0 ] && [ -t 1 ]; then
@@ -414,7 +414,7 @@ MIGRATE
         fi
         # Remove /etc/hosts entry (only for custom domains, not IP-based).
         if [[ -n "$domain" && "$domain" != "$ip" ]] && grep -q "$domain" /etc/hosts 2>/dev/null; then
-            if command -v newspack-manage-host >/dev/null 2>&1; then
+            if command -v newspack-manage-host >/dev/null 2>&1 && [[ "$domain" == *.local ]]; then
                 sudo newspack-manage-host host-remove "$domain"
             else
                 escaped_domain="${domain//./\\.}"

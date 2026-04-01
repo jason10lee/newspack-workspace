@@ -132,7 +132,11 @@ start() {
                 done
                 for entry in "${missing_hosts[@]}"; do
                     read -r ip domain <<< "$entry"
-                    sudo newspack-manage-host host-add "$ip" "$domain"
+                    if [[ "$domain" == *.local ]]; then
+                        sudo newspack-manage-host host-add "$ip" "$domain"
+                    else
+                        echo "$ip $domain" | sudo tee -a /etc/hosts > /dev/null
+                    fi
                 done
             else
                 echo ""
