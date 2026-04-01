@@ -350,9 +350,14 @@ function pushActivities() {
  * Store the referrer.
  */
 function setReferrer() {
-	const referrer = document.referrer ? new URL( document.referrer ).hostname : '';
-	if ( referrer && referrer !== window.location.hostname ) {
-		store.set( 'referrer', referrer.replace( 'www.', '' ).trim().toLowerCase() );
+	const normalize = hostname =>
+		hostname
+			.trim()
+			.toLowerCase()
+			.replace( /^www\./, '' );
+	const referrer = document.referrer ? normalize( new URL( document.referrer ).hostname ) : '';
+	if ( referrer && referrer !== normalize( window.location.hostname ) ) {
+		store.set( 'referrer', referrer );
 	} else {
 		store.set( 'referrer', '' );
 	}
