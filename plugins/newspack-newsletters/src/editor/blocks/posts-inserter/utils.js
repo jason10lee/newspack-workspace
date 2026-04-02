@@ -10,8 +10,7 @@ import { omit } from 'lodash';
  */
 import { _x } from '@wordpress/i18n';
 import { createBlock, getBlockContent } from '@wordpress/blocks';
-// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
-import { dateI18n, __experimentalGetSettings } from '@wordpress/date';
+import { dateI18n, getSettings } from '@wordpress/date';
 
 /**
  * Internal dependencies
@@ -36,7 +35,7 @@ const getHeadingBlockTemplate = ( post, { headingFontSize, headingColor } ) => [
 ];
 
 const getDateBlockTemplate = ( post, { textFontSize, textColor } ) => {
-	const dateFormat = __experimentalGetSettings().formats.date;
+	const dateFormat = getSettings().formats.date;
 	return [
 		'core/paragraph',
 		assignFontSize( textFontSize, {
@@ -228,19 +227,24 @@ const createBlockTemplatesForSinglePost = ( post, attributes ) => {
 		postContentBlocks.push( getContinueReadingLinkBlockTemplate( post, attributes ) );
 	}
 
-	const hasFeaturedImage = post.featuredImageLargeURL || post.featuredImageMediumURL;
+	const hasFeaturedImage = post.featured_media_info?.large_url || post.featured_media_info?.medium_url ? true : false;
 
-	if ( attributes.displayFeaturedImage && hasFeaturedImage ) {
+	if ( attributes.displayFeaturedImage ) {
 		const featuredImageId = post.featured_media;
-		const getImageBlock = ( alignCenter = false ) => [
-			'core/image',
-			{
-				id: featuredImageId,
-				url: alignCenter ? post.featuredImageLargeURL : post.featuredImageMediumURL,
-				href: post.link,
-				...( alignCenter ? { align: 'center' } : {} ),
-			},
-		];
+		const getImageBlock = ( alignCenter = false ) =>
+			featuredImageId && hasFeaturedImage
+				? [
+						[
+							'core/image',
+							{
+								id: featuredImageId,
+								url: alignCenter ? post.featured_media_info?.large_url : post.featured_media_info?.medium_url,
+								href: post.link,
+								...( alignCenter ? { align: 'center' } : {} ),
+							},
+						],
+				  ]
+				: [];
 
 		let imageColumnBlockSize = '50%';
 		let postContentColumnBlockSize = '50%';
@@ -258,7 +262,7 @@ const createBlockTemplatesForSinglePost = ( post, attributes ) => {
 			}
 		}
 
-		const imageColumnBlock = [ 'core/column', { width: imageColumnBlockSize }, [ getImageBlock() ] ];
+		const imageColumnBlock = [ 'core/column', { width: imageColumnBlockSize }, [ ...getImageBlock() ] ];
 		const postContentColumnBlock = [ 'core/column', { width: postContentColumnBlockSize }, postContentBlocks ];
 
 		switch ( attributes.featuredImageAlignment ) {
@@ -267,7 +271,7 @@ const createBlockTemplatesForSinglePost = ( post, attributes ) => {
 			case 'right':
 				return [ [ 'core/columns', {}, [ postContentColumnBlock, imageColumnBlock ] ] ];
 			case 'top':
-				return [ getImageBlock( true ), ...postContentBlocks ];
+				return [ ...getImageBlock( true ), ...postContentBlocks ];
 		}
 	}
 	return postContentBlocks;
@@ -297,10 +301,12 @@ export const convertBlockSerializationFormat = block => ( {
 	innerBlocks: block.innerBlocks.map( convertBlockSerializationFormat ),
 } );
 
-// In some cases, the Posts Inserter block should not handle deduplication.
-// Previews might be displayed next to each other or next to a post, which results in multiple block lists.
-// The deduplication store relies on the assumption that a post has a single blocks list, which
-// is not true when there are block previews used.
+/**
+ * In some cases, the Posts Inserter block should not handle deduplication.
+ * Previews might be displayed next to each other or next to a post, which results in multiple block lists.
+ * The deduplication store relies on the assumption that a post has a single blocks list, which
+ * is not true when there are block previews used.
+ */
 export const setPreventDeduplicationForPostsInserter = blocks =>
 	blocks.map( block => {
 		if ( block.name === POSTS_INSERTER_BLOCK_NAME ) {

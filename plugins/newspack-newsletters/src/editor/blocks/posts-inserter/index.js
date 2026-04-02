@@ -1,7 +1,7 @@
 /**
  * External dependencies
  */
-import { isUndefined, find, pickBy, get } from 'lodash';
+import { isUndefined, find, pickBy } from 'lodash';
 import classnames from 'classnames';
 
 /**
@@ -12,20 +12,26 @@ import { __ } from '@wordpress/i18n';
 import { withSelect, withDispatch } from '@wordpress/data';
 import { compose } from '@wordpress/compose';
 import {
-	RangeControl,
+	BaseControl,
 	Button,
-	ToggleControl,
 	FontSizePicker,
-	ColorPicker,
-	PanelBody,
 	MenuItem,
 	MenuGroup,
+	PanelBody,
+	RangeControl,
+	ToggleControl,
 	Toolbar,
 	ToolbarDropdownMenu,
 } from '@wordpress/components';
-import { InnerBlocks, InspectorControls, BlockControls, useBlockProps } from '@wordpress/block-editor';
+import {
+	BlockControls,
+	InnerBlocks,
+	InspectorControls,
+	useBlockProps,
+	__experimentalPanelColorGradientSettings as PanelColorGradientSettings, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+} from '@wordpress/block-editor';
 import { Fragment, useEffect, useMemo, useState } from '@wordpress/element';
-import { Icon, check, pages } from '@wordpress/icons';
+import { Icon, check, verse } from '@wordpress/icons';
 
 /**
  * Internal dependencies
@@ -58,8 +64,16 @@ const PostsInserterBlock = ( {
 
 	// Stringify added to minimize flicker.
 	const templateBlocks = useMemo( () => getTemplateBlocks( postList, attributes ), [ stringifiedPostList, attributes ] );
-
 	const stringifiedTemplateBlocks = JSON.stringify( templateBlocks );
+	const subtitleColorSettings = [];
+
+	if ( attributes.displayPostSubtitle ) {
+		subtitleColorSettings.push( {
+			colorValue: attributes.subHeadingColor,
+			onColorChange: value => setAttributes( { subHeadingColor: value } ),
+			label: __( 'Subtitle', 'newspack-newsletters' ),
+		} );
+	}
 
 	useEffect( () => {
 		const { isDisplayingSpecificPosts, specificPosts } = attributes;
@@ -80,8 +94,12 @@ const PostsInserterBlock = ( {
 		// If we have a post to show, check for featured image blocks.
 		if ( 0 < postList.length ) {
 			// Find all the featured images.
-			const images = [];
-			postList.map( post => post.featured_media && images.push( post.featured_media ) );
+			const images = postList.reduce( ( all, post ) => {
+				if ( post.featured_media && ( post.featured_media_info?.large_url || post.featured_media_info?.medium_url ) ) {
+					all.push( post.featured_media );
+				}
+				return all;
+			}, [] );
 
 			// If no posts have featured media, skip loading state.
 			if ( 0 === images.length ) {
@@ -92,7 +110,7 @@ const PostsInserterBlock = ( {
 			const imageBlocks = stringifiedTemplateBlocks.match( /\"name\":\"core\/image\"/g ) || [];
 
 			// Preview is ready once all image blocks are accounted for.
-			if ( imageBlocks.length === images.length ) {
+			if ( imageBlocks.length >= images.length ) {
 				setIsReady( true );
 			}
 		}
@@ -158,7 +176,7 @@ const PostsInserterBlock = ( {
 	return attributes.areBlocksInserted ? null : (
 		<Fragment>
 			<InspectorControls>
-				<PanelBody title={ __( 'Post content settings', 'newspack-newsletters' ) }>
+				<PanelBody title={ __( 'Post Content', 'newspack-newsletters' ) }>
 					<ToggleControl
 						label={ __( 'Post subtitle', 'newspack-newsletters' ) }
 						checked={ attributes.displayPostSubtitle }
@@ -199,46 +217,69 @@ const PostsInserterBlock = ( {
 						onChange={ value => setAttributes( { displayContinueReading: value } ) }
 					/>
 				</PanelBody>
-				<PanelBody title={ __( 'Sorting and filtering', 'newspack-newsletters' ) }>
+				<PanelBody title={ __( 'Sorting & Filtering', 'newspack-newsletters' ) }>
 					<QueryControlsSettings attributes={ attributes } setAttributes={ setAttributes } />
 				</PanelBody>
-				<PanelBody title={ __( 'Text style', 'newspack-newsletters' ) }>
-					<FontSizePicker
-						fontSizes={ blockEditorSettings.fontSizes }
-						value={ attributes.textFontSize }
-						onChange={ value => {
-							return setAttributes( { textFontSize: value } );
-						} }
-					/>
-					<ColorPicker
-						color={ attributes.textColor || '' }
-						onChangeComplete={ value => setAttributes( { textColor: value.hex } ) }
-						disableAlpha
-					/>
-				</PanelBody>
-				<PanelBody title={ __( 'Heading style', 'newspack-newsletters' ) }>
-					<FontSizePicker
-						fontSizes={ blockEditorSettings.fontSizes }
-						value={ attributes.headingFontSize }
-						onChange={ value => setAttributes( { headingFontSize: value } ) }
-					/>
-					<ColorPicker
-						color={ attributes.headingColor || '' }
-						onChangeComplete={ value => setAttributes( { headingColor: value.hex } ) }
-						disableAlpha
-					/>
-				</PanelBody>
-				<PanelBody title={ __( 'Subtitle style', 'newspack-newsletters' ) }>
-					<FontSizePicker
-						fontSizes={ blockEditorSettings.fontSizes }
-						value={ attributes.subHeadingFontSize }
-						onChange={ value => setAttributes( { subHeadingFontSize: value } ) }
-					/>
-					<ColorPicker
-						color={ attributes.subHeadingColor || '' }
-						onChangeComplete={ value => setAttributes( { subHeadingColor: value.hex } ) }
-						disableAlpha
-					/>
+			</InspectorControls>
+			<InspectorControls group="styles">
+				<PanelColorGradientSettings
+					title={ __( 'Color', 'newspack-newsletters' ) }
+					gradients={ [] } // Pass empty array to disable gradients.
+					settings={ [
+						{
+							colorValue: attributes.headingColor,
+							onColorChange: value => setAttributes( { headingColor: value } ),
+							label: __( 'Heading', 'newspack-newsletters' ),
+						},
+						...subtitleColorSettings,
+						{
+							colorValue: attributes.textColor,
+							onColorChange: value => setAttributes( { textColor: value } ),
+							label: __( 'Text', 'newspack-newsletters' ),
+						},
+					] }
+				/>
+				<PanelBody title={ __( 'Typography', 'newspack-newsletters' ) }>
+					<BaseControl
+						className="newspack-posts-inserter__font-size-picker"
+						label={ __( 'Heading size', 'newspack-newsletters' ) }
+						id="heading-size"
+					>
+						<FontSizePicker
+							fontSizes={ blockEditorSettings.fontSizes }
+							value={ attributes.headingFontSize }
+							onChange={ value => setAttributes( { headingFontSize: value } ) }
+							__next40pxDefaultSize
+						/>
+					</BaseControl>
+					{ attributes.displayPostSubtitle && (
+						<BaseControl
+							className="newspack-posts-inserter__font-size-picker"
+							label={ __( 'Subtitle size', 'newspack-newsletters' ) }
+							id="subtitle-size"
+						>
+							<FontSizePicker
+								fontSizes={ blockEditorSettings.fontSizes }
+								value={ attributes.subHeadingFontSize }
+								onChange={ value => setAttributes( { subHeadingFontSize: value } ) }
+								__next40pxDefaultSize
+							/>
+						</BaseControl>
+					) }
+					<BaseControl
+						className="newspack-posts-inserter__font-size-picker"
+						label={ __( 'Text size', 'newspack-newsletters' ) }
+						id="text-size"
+					>
+						<FontSizePicker
+							fontSizes={ blockEditorSettings.fontSizes }
+							value={ attributes.textFontSize }
+							onChange={ value => {
+								return setAttributes( { textFontSize: value } );
+							} }
+							__next40pxDefaultSize
+						/>
+					</BaseControl>
 				</PanelBody>
 			</InspectorControls>
 
@@ -284,7 +325,7 @@ const PostsInserterBlock = ( {
 
 			<div { ...blockProps }>
 				<div className="newspack-posts-inserter__header">
-					<Icon icon={ pages } />
+					<Icon icon={ verse } />
 					<span>{ __( 'Posts Inserter', 'newspack-newsletters' ) }</span>
 				</div>
 				<PostsPreview
@@ -294,7 +335,7 @@ const PostsInserterBlock = ( {
 					className={ attributes.displayFeaturedImage ? 'image-' + attributes.featuredImageAlignment : null }
 				/>
 				<div className="newspack-posts-inserter__footer">
-					<Button isPrimary onClick={ () => setAttributes( { areBlocksInserted: true } ) }>
+					<Button variant="primary" onClick={ () => setAttributes( { areBlocksInserted: true } ) }>
 						{ __( 'Insert posts', 'newspack-newsletters' ) }
 					</Button>
 				</div>
@@ -320,7 +361,7 @@ const PostsInserterBlockWithSelect = compose( [
 			excerptLength,
 			displaySponsoredPosts,
 		} = props.attributes;
-		const { getEntityRecords, getMedia } = select( 'core' );
+		const { getEntityRecords } = select( 'core' );
 		const { getSelectedBlock, getBlocks, getSettings } = select( 'core/block-editor' );
 		const catIds = categories && categories.length > 0 ? categories.map( cat => cat.id ) : [];
 
@@ -363,16 +404,7 @@ const PostsInserterBlockWithSelect = compose( [
 			existingBlocks: getBlocks(),
 			blockEditorSettings: getSettings(),
 			selectedBlock: getSelectedBlock(),
-			postList: posts.map( post => {
-				if ( post.featured_media ) {
-					const image = getMedia( post.featured_media );
-					const fallbackImageURL = get( image, 'source_url', null );
-					const featuredImageMediumURL = get( image, [ 'media_details', 'sizes', 'medium', 'source_url' ], null ) || fallbackImageURL;
-					const featuredImageLargeURL = get( image, [ 'media_details', 'sizes', 'large', 'source_url' ], null ) || fallbackImageURL;
-					return { ...post, featuredImageMediumURL, featuredImageLargeURL };
-				}
-				return post;
-			} ),
+			postList: posts,
 		};
 	} ),
 	withDispatch( ( dispatch, props ) => {
@@ -392,8 +424,12 @@ const PostsInserterBlockWithSelect = compose( [
 export default () => {
 	registerBlockType( POSTS_INSERTER_BLOCK_NAME, {
 		...blockDefinition,
-		title: 'Posts Inserter',
-		icon: <Icon icon={ pages } />,
+		title: __( 'Posts Inserter', 'newspack-newsletters' ),
+		description: __( 'Lets you insert posts into your newsletter.', 'newspack-newsletters' ),
+		icon: {
+			src: verse,
+			foreground: '#406ebc',
+		},
 		edit: PostsInserterBlockWithSelect,
 		save: () => <InnerBlocks.Content />,
 	} );
