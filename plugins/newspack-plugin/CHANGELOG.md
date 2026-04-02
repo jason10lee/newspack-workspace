@@ -1,3 +1,10 @@
+## [6.36.1](https://github.com/Automattic/newspack-plugin/compare/v6.36.0...v6.36.1) (2026-04-02)
+
+
+### Bug Fixes
+
+* **jetpack:** disable Image Studio to restore Media Library custom fields ([#4616](https://github.com/Automattic/newspack-plugin/issues/4616)) ([3861d1f](https://github.com/Automattic/newspack-plugin/commit/3861d1faca270367712132b35537c019d3d9ef98))
+
 # [6.36.0](https://github.com/Automattic/newspack-plugin/compare/v6.35.2...v6.36.0) (2026-03-30)
 
 
