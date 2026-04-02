@@ -327,7 +327,7 @@ final class Reader_Activation {
 	 *
 	 * @return array<string, string> Map of integration ID => label.
 	 */
-	public static function get_frontend_registration_integrations() {
+	public static function get_frontend_registration_integrations(): array {
 		/**
 		 * Filters the list of integrations that can trigger frontend reader registration.
 		 *
@@ -347,7 +347,7 @@ final class Reader_Activation {
 	 * @param string $integration_id Integration identifier.
 	 * @return string HMAC-SHA256 hex string.
 	 */
-	public static function get_frontend_registration_key( $integration_id ) {
+	public static function get_frontend_registration_key( string $integration_id ): string {
 		return hash_hmac( 'sha256', $integration_id, \wp_salt( 'auth' ) );
 	}
 
@@ -356,7 +356,7 @@ final class Reader_Activation {
 	 *
 	 * @return bool|\WP_Error True if under limit, WP_Error if exceeded.
 	 */
-	private static function check_registration_rate_limit() {
+	private static function check_registration_rate_limit(): bool|\WP_Error {
 		$ip        = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '127.0.0.1'; // phpcs:ignore WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders,WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
 		$cache_key = 'newspack_reg_ip_' . md5( $ip );
 
@@ -406,7 +406,7 @@ final class Reader_Activation {
 	 * @param \WP_REST_Request $request Request object.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
-	public static function api_frontend_register_reader( $request ) {
+	public static function api_frontend_register_reader( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
 		// Step 1: Reject if caller is already logged in.
 		if ( \is_user_logged_in() ) {
 			return new \WP_Error(
