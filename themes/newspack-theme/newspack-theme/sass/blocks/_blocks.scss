@@ -1206,6 +1206,10 @@ hr {
 		}
 	}
 
+	&.has-background {
+		padding: 1.25em 2.375em;
+	}
+
 	@include utilities.media( mobile ) {
 		&.alignleft,
 		&.alignright {
