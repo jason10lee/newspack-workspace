@@ -1,3 +1,10 @@
+## [2.20.2](https://github.com/Automattic/newspack-theme/compare/v2.20.1...v2.20.2) (2026-04-02)
+
+
+### Bug Fixes
+
+* remove bullets from categories, archives blocks in editor ([#2665](https://github.com/Automattic/newspack-theme/issues/2665)) ([12021af](https://github.com/Automattic/newspack-theme/commit/12021af578c6bb89bbfd790b8ee3e58b9cc53124))
+
 ## [2.20.1](https://github.com/Automattic/newspack-theme/compare/v2.20.0...v2.20.1) (2026-04-02)
 
 

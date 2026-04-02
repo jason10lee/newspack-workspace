@@ -843,8 +843,11 @@ html :where(.wp-block)[data-align="right"] {
 .wp-block-archives,
 .wp-block-categories,
 .wp-block-latest-posts {
+	list-style-type: none;
+	margin-left: 0;
 	padding: 0;
 
+	// TODO: The whole UL selector can be removed after WP 7.0 is released.
 	ul {
 		padding: 0;
 		margin-left: 0;
