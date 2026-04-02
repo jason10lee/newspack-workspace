@@ -5,6 +5,14 @@
 	display: block;
 }
 
+.updated:not(.published) {
+	display: none;
+}
+
+.show-updated .entry-header .updated-label + .updated:not(.published) {
+	display: inline;
+}
+
 .page-links {
 	clear: both;
 	margin: 0 0 calc(1.5 * #{structure.$size__spacing-unit});
@@ -152,6 +160,9 @@ amp-script .cat-links {
 		}
 	}
 
+	.updated-label {
+		margin-left: 1em;
+	}
 }
 
 .entry-footer {

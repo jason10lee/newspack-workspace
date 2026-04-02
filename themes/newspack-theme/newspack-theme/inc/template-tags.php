@@ -14,42 +14,60 @@ if ( ! function_exists( 'newspack_posted_on' ) ) :
 			return;
 		}
 
-		$updated     = get_the_time( 'U' ) === get_the_modified_time( 'U' ) ? ' updated' : '';
+		$is_modified = get_the_time( 'U' ) !== get_the_modified_time( 'U' );
 		$time_string = sprintf(
 			'<time class="entry-date published%1$s" datetime="%2$s">%3$s</time>',
-			$updated,
+			$is_modified ? '' : ' updated',
 			esc_attr( get_the_date( DATE_W3C ) ),
 			esc_html( get_the_date() )
 		);
 
-		if ( is_single() ) {
-			printf(
-				'<span class="posted-on">%1$s</span>',
-				wp_kses(
-					$time_string,
-					array(
-						'time' => array(
-							'class'    => array(),
-							'datetime' => array(),
-						),
-					)
-				)
-			);
-		} else {
-			printf(
-				'<span class="posted-on"><a href="%1$s" rel="bookmark">%2$s</a></span>',
-				esc_url( get_permalink() ),
-				wp_kses(
-					$time_string,
-					array(
-						'time' => array(
-							'class'    => array(),
-							'datetime' => array(),
-						),
-					)
-				)
+		/**
+		 * Filters whether to include a hidden <time class="updated"> element.
+		 *
+		 * The theme outputs a hidden updated time for publishers who use
+		 * custom CSS to show it. Plugins that render their own updated
+		 * date can return false to suppress the duplicate.
+		 *
+		 * @param bool $include Whether to include the hidden updated time. Default true.
+		 */
+		$include_hidden_updated = apply_filters( 'newspack_theme_include_hidden_updated_time', true );
+
+		if ( $is_modified && $include_hidden_updated ) {
+			$time_string .= sprintf(
+				'<time class="updated" datetime="%1$s">%2$s</time>',
+				esc_attr( get_the_modified_date( DATE_W3C ) ),
+				esc_html( get_the_modified_date() )
 			);
 		}
+
+		$allowed_tags = array(
+			'time' => array(
+				'class'    => array(),
+				'datetime' => array(),
+			),
+		);
+		$time_string = wp_kses( $time_string, $allowed_tags );
+
+		if ( is_single() ) {
+			echo '<span class="posted-on">' . $time_string; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped via wp_kses above.
+		} else {
+			printf(
+				'<span class="posted-on"><a href="%1$s" rel="bookmark">%2$s</a>',
+				esc_url( get_permalink() ),
+				$time_string // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped via wp_kses above.
+			);
+		}
+
+		/**
+		 * Fires inside the .posted-on span, after the publish date.
+		 *
+		 * Used by newspack-plugin to render the "Updated" date
+		 * inside the same markup container as the publish date.
+		 */
+		do_action( 'newspack_theme_posted_on' );
+
+		echo '</span>';
 	}
 endif;
 
