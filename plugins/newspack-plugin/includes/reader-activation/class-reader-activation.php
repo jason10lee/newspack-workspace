@@ -453,6 +453,8 @@ final class Reader_Activation {
 		$honeypot = $request->get_param( 'email' );
 		if ( ! empty( $honeypot ) ) {
 			// Return fake success to avoid revealing the honeypot to bots.
+			// @todo Consider returning the npe value instead of the honeypot value to make
+			// the fake response indistinguishable from a real one.
 			return new \WP_REST_Response(
 				[
 					'success' => true,
