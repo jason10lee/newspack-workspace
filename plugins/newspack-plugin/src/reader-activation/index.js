@@ -427,6 +427,84 @@ function attachNewsletterFormListener() {
 	} );
 }
 
+/**
+ * Register a reader via a frontend integration.
+ *
+ * @param {string} email         Reader email address.
+ * @param {string} integrationId Registered integration ID.
+ * @param {Object} profileFields Optional profile fields: { first_name, last_name }.
+ * @return {Promise} Resolves with reader data on success, rejects with error on failure.
+ */
+function register( email, integrationId, profileFields = {} ) {
+	const config = newspack_ras_config?.frontend_registration_integrations || {};
+	const integration = config[ integrationId ];
+
+	if ( ! integration ) {
+		return Promise.reject( new Error( 'Unknown integration: ' + integrationId ) );
+	}
+
+	if ( ! email || ! /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test( email ) ) {
+		return Promise.reject( new Error( 'Invalid email address.' ) );
+	}
+
+	const body = {
+		npe: email,
+		integration_id: integrationId,
+		integration_key: integration.key,
+		first_name: profileFields.first_name || '',
+		last_name: profileFields.last_name || '',
+	};
+
+	// Acquire reCAPTCHA v3 token if configured, then POST.
+	const captchaPromise =
+		newspack_ras_config?.captcha_site_key && window.grecaptcha
+			? window.grecaptcha.execute( newspack_ras_config.captcha_site_key, {
+					action: 'integration_registration',
+			  } )
+			: Promise.resolve( '' );
+
+	return captchaPromise
+		.then( function ( token ) {
+			if ( token ) {
+				body[ 'g-recaptcha-response' ] = token;
+			}
+			return fetch( newspack_ras_config.frontend_registration_url, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'same-origin',
+				body: JSON.stringify( body ),
+			} );
+		} )
+		.then( function ( response ) {
+			return response.json().then( function ( data ) {
+				if ( ! response.ok ) {
+					const error = new Error( data.message || 'Registration failed.' );
+					error.code = data.code;
+					throw error;
+				}
+				return data;
+			} );
+		} )
+		.then( function ( data ) {
+			store.set( 'reader', { email, authenticated: true } );
+			emit( EVENTS.reader, { email, authenticated: true } );
+			dispatchActivity( 'reader_registered', {
+				email,
+				integration_id: integrationId,
+				status: 'created',
+			} );
+			return data;
+		} )
+		.catch( function ( error ) {
+			dispatchActivity( 'reader_registration_failed', {
+				email,
+				integration_id: integrationId,
+				error: error.code || 'network_error',
+			} );
+			throw error;
+		} );
+}
+
 const readerActivation = {
 	store,
 	overlays,
@@ -451,6 +529,7 @@ const readerActivation = {
 	setPendingCheckout,
 	getPendingCheckout,
 	debugLog,
+	register,
 	...( newspack_ras_config.is_ras_enabled && { openAuthModal } ),
 };
 
