@@ -1,3 +1,10 @@
+## [2.20.1](https://github.com/Automattic/newspack-theme/compare/v2.20.0...v2.20.1) (2026-04-02)
+
+
+### Bug Fixes
+
+* add default padding to theme ([#2664](https://github.com/Automattic/newspack-theme/issues/2664)) ([b680487](https://github.com/Automattic/newspack-theme/commit/b680487dc4826aa1ac1976ce1a9b8061c51e9855))
+
 # [2.20.0](https://github.com/Automattic/newspack-theme/compare/v2.19.0...v2.20.0) (2026-03-30)
 
 
