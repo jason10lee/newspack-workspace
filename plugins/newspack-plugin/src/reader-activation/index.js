@@ -442,28 +442,43 @@ function acquireV2InvisibleToken( siteKey ) {
 		container.style.display = 'none';
 		document.body.appendChild( container );
 
+		let settled = false;
+		const timeout = setTimeout( function () {
+			if ( ! settled ) {
+				settled = true;
+				container.remove();
+				reject( new Error( 'reCAPTCHA timed out.' ) );
+			}
+		}, 30000 );
+
+		function settle( fn, value ) {
+			if ( settled ) {
+				return;
+			}
+			settled = true;
+			clearTimeout( timeout );
+			container.remove();
+			fn( value );
+		}
+
 		try {
 			const widgetId = window.grecaptcha.render( container, {
 				sitekey: siteKey,
 				size: 'invisible',
 				isolated: true,
 				callback( token ) {
-					container.remove();
-					resolve( token );
+					settle( resolve, token );
 				},
 				'error-callback'() {
-					container.remove();
-					reject( new Error( 'reCAPTCHA challenge failed.' ) );
+					settle( reject, new Error( 'reCAPTCHA challenge failed.' ) );
 				},
 				'expired-callback'() {
-					container.remove();
-					reject( new Error( 'reCAPTCHA token expired.' ) );
+					settle( reject, new Error( 'reCAPTCHA token expired.' ) );
 				},
 			} );
 			window.grecaptcha.execute( widgetId );
 		} catch ( err ) {
-			container.remove();
-			reject( err );
+			settle( reject, err );
 		}
 	} );
 }
