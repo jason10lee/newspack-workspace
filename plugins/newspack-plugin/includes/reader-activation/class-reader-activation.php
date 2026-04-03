@@ -397,13 +397,13 @@ final class Reader_Activation {
 	 * REST API handler for frontend integration reader registration.
 	 *
 	 * Validation sequence:
-	 * 1. User is not logged in
+	 * 1. Already logged in — return current reader data
 	 * 2. Reader Activation is enabled
 	 * 3. Integration ID is registered
 	 * 4. Integration key matches HMAC
 	 * 5. Honeypot field is empty
-	 * 6. reCAPTCHA (when configured)
-	 * 7. Per-IP rate limit
+	 * 6. Per-IP rate limit
+	 * 7. reCAPTCHA (when configured)
 	 * 8. Email is valid
 	 *
 	 * @param \WP_REST_Request $request Request object.
@@ -474,7 +474,14 @@ final class Reader_Activation {
 			);
 		}
 
-		// Step 6: reCAPTCHA (when configured).
+		// Step 6: Per-IP rate limit. Checked before reCAPTCHA to avoid
+		// triggering external verification calls for rate-limited IPs.
+		$rate_check = self::check_registration_rate_limit();
+		if ( \is_wp_error( $rate_check ) ) {
+			return $rate_check;
+		}
+
+		// Step 7: reCAPTCHA (when configured).
 		$recaptcha_token = $request->get_param( 'g-recaptcha-response' );
 		$should_verify   = \apply_filters( 'newspack_recaptcha_verify_captcha', Recaptcha::can_use_captcha(), '', 'integration_registration' );
 		if ( $should_verify ) {
@@ -490,12 +497,6 @@ final class Reader_Activation {
 					[ 'status' => 403 ]
 				);
 			}
-		}
-
-		// Step 7: Per-IP rate limit.
-		$rate_check = self::check_registration_rate_limit();
-		if ( \is_wp_error( $rate_check ) ) {
-			return $rate_check;
 		}
 
 		// Step 8: Validate email.
