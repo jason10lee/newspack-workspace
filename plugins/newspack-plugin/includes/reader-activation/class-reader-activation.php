@@ -157,7 +157,9 @@ final class Reader_Activation {
 				];
 			}
 			$script_data['frontend_registration_integrations'] = $integrations_config;
-			$script_data['frontend_registration_url']           = \rest_url( NEWSPACK_API_NAMESPACE . '/reader-activation/register' );
+			if ( self::is_enabled() ) {
+				$script_data['frontend_registration_url'] = \rest_url( NEWSPACK_API_NAMESPACE . '/reader-activation/register' );
+			}
 		}
 
 		if ( Recaptcha::can_use_captcha() ) {
