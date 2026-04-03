@@ -165,9 +165,8 @@ final class Reader_Activation {
 		if ( Recaptcha::can_use_captcha() ) {
 			$recaptcha_version                = Recaptcha::get_setting( 'version' );
 			$script_dependencies[]            = Recaptcha::SCRIPT_HANDLE;
-			if ( 'v3' === $recaptcha_version ) {
-				$script_data['captcha_site_key'] = Recaptcha::get_site_key();
-			}
+			$script_data['captcha_site_key']  = Recaptcha::get_site_key();
+			$script_data['captcha_version']   = $recaptcha_version;
 		}
 
 		Newspack::load_common_assets();
