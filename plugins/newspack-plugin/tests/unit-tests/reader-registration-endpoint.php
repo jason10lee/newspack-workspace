@@ -85,6 +85,7 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 		global $wp_rest_server;
 		$wp_rest_server = null;
 		remove_filter( 'newspack_frontend_registration_integrations', [ __CLASS__, 'register_test_integration' ] );
+		remove_action( 'rest_api_init', [ Reader_Activation::class, 'register_routes' ] );
 		$user = get_user_by( 'email', self::$reader_email );
 		if ( $user ) {
 			wp_delete_user( $user->ID );
