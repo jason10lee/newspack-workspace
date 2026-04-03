@@ -412,12 +412,18 @@ final class Reader_Activation {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public static function api_frontend_register_reader( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
-		// Step 1: Reject if caller is already logged in.
+		// Step 1: If caller is already logged in, return current reader data.
+		// This makes the API idempotent — integrations don't need to check
+		// authentication state before calling register().
 		if ( \is_user_logged_in() ) {
-			return new \WP_Error(
-				'already_logged_in',
-				__( 'Registration is not available for logged-in users.', 'newspack-plugin' ),
-				[ 'status' => 403 ]
+			$current_user = \wp_get_current_user();
+			return new \WP_REST_Response(
+				[
+					'success' => true,
+					'status'  => 'existing',
+					'email'   => $current_user->user_email,
+				],
+				200
 			);
 		}
 

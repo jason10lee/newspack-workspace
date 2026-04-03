@@ -253,10 +253,15 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test logged-in user returns 403.
+	 * Test logged-in user returns current reader data.
 	 */
 	public function test_register_while_logged_in() {
-		$admin_id = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		$admin_id = self::factory()->user->create(
+			[
+				'role'       => 'administrator',
+				'user_email' => 'admin@test.com',
+			]
+		);
 		wp_set_current_user( $admin_id );
 
 		$response = $this->do_register_request(
@@ -266,9 +271,11 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 				'integration_key' => self::generate_key( self::$integration_id ),
 			]
 		);
-		$this->assertEquals( 403, $response->get_status() );
+		$this->assertEquals( 200, $response->get_status() );
 		$data = $response->get_data();
-		$this->assertEquals( 'already_logged_in', $data['code'] );
+		$this->assertTrue( $data['success'] );
+		$this->assertEquals( 'existing', $data['status'] );
+		$this->assertEquals( 'admin@test.com', $data['email'] );
 
 		wp_delete_user( $admin_id );
 	}
