@@ -442,9 +442,8 @@ function acquireV2InvisibleToken( siteKey ) {
 		container.style.display = 'none';
 		document.body.appendChild( container );
 
-		let widgetId;
 		try {
-			widgetId = window.grecaptcha.render( container, {
+			const widgetId = window.grecaptcha.render( container, {
 				sitekey: siteKey,
 				size: 'invisible',
 				callback( token ) {
@@ -460,13 +459,11 @@ function acquireV2InvisibleToken( siteKey ) {
 					reject( new Error( 'reCAPTCHA token expired.' ) );
 				},
 			} );
+			window.grecaptcha.execute( widgetId );
 		} catch ( err ) {
 			container.remove();
 			reject( err );
-			return;
 		}
-
-		window.grecaptcha.execute( widgetId );
 	} );
 }
 
