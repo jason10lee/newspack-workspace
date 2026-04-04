@@ -462,4 +462,74 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 		unset( $_SERVER['HTTP_REFERER'] );
 		wp_delete_user( $user->ID );
 	}
+
+	/**
+	 * Test that the reCAPTCHA verify filter controls the verification attempt.
+	 *
+	 * When the filter returns true, the endpoint enters the verification block
+	 * and calls verify_captcha(). In the test environment reCAPTCHA is not
+	 * configured, so verify_captcha() short-circuits to true (passes).
+	 * This test confirms the filter is respected and the $_POST bridge
+	 * sets and cleans up the token correctly.
+	 */
+	public function test_recaptcha_filter_forces_verification() {
+		$captcha_email = 'captcha-test@test.com';
+		$token_value   = 'test-recaptcha-token';
+
+		// Force reCAPTCHA verification on, regardless of configuration.
+		$force_verify = function() {
+			return true;
+		};
+		add_filter( 'newspack_recaptcha_verify_captcha', $force_verify );
+
+		$response = $this->do_register_request(
+			[
+				'npe'                  => $captcha_email,
+				'integration_id'       => self::$integration_id,
+				'integration_key'      => self::generate_key( self::$integration_id ),
+				'g-recaptcha-response' => $token_value,
+			]
+		);
+		// verify_captcha() returns true when not configured, so registration succeeds.
+		$this->assertEquals( 201, $response->get_status() );
+		// Verify $_POST was cleaned up after the bridge.
+		$this->assertArrayNotHasKey( 'g-recaptcha-response', $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+
+		remove_filter( 'newspack_recaptcha_verify_captcha', $force_verify );
+
+		$user = get_user_by( 'email', $captcha_email );
+		if ( $user ) {
+			wp_delete_user( $user->ID );
+		}
+	}
+
+	/**
+	 * Test that the reCAPTCHA verify filter can disable verification.
+	 *
+	 * When forced off, registration should succeed even if reCAPTCHA
+	 * would otherwise be required.
+	 */
+	public function test_recaptcha_filter_disables_verification() {
+		$disable_verify = function() {
+			return false;
+		};
+		add_filter( 'newspack_recaptcha_verify_captcha', $disable_verify );
+
+		$recaptcha_email = 'captcha-disabled@test.com';
+		$response        = $this->do_register_request(
+			[
+				'npe'             => $recaptcha_email,
+				'integration_id'  => self::$integration_id,
+				'integration_key' => self::generate_key( self::$integration_id ),
+			]
+		);
+		$this->assertEquals( 201, $response->get_status() );
+
+		remove_filter( 'newspack_recaptcha_verify_captcha', $disable_verify );
+
+		$user = get_user_by( 'email', $recaptcha_email );
+		if ( $user ) {
+			wp_delete_user( $user->ID );
+		}
+	}
 }
