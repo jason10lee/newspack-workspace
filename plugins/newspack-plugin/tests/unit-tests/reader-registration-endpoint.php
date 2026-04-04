@@ -555,4 +555,21 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 		// Re-add for tear_down consistency.
 		add_filter( 'newspack_frontend_registration_integrations', [ __CLASS__, 'register_test_integration' ] );
 	}
+
+	/**
+	 * Test that integration key generation is deterministic and unique per ID.
+	 */
+	public function test_integration_key_determinism_and_uniqueness() {
+		$key_a_first  = Reader_Activation::get_frontend_registration_key( 'integration-a' );
+		$key_a_second = Reader_Activation::get_frontend_registration_key( 'integration-a' );
+		$key_b        = Reader_Activation::get_frontend_registration_key( 'integration-b' );
+
+		// Same ID produces the same key.
+		$this->assertEquals( $key_a_first, $key_a_second );
+		// Different IDs produce different keys.
+		$this->assertNotEquals( $key_a_first, $key_b );
+		// Keys are 64-character hex strings (SHA-256).
+		$this->assertMatchesRegularExpression( '/^[a-f0-9]{64}$/', $key_a_first );
+		$this->assertMatchesRegularExpression( '/^[a-f0-9]{64}$/', $key_b );
+	}
 }
