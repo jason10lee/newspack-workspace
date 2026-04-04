@@ -532,4 +532,27 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 			wp_delete_user( $user->ID );
 		}
 	}
+
+	/**
+	 * Test that the integration registry returns filtered integrations.
+	 */
+	public function test_get_frontend_registration_integrations() {
+		// The test integration is registered via the filter in set_up().
+		$integrations = Reader_Activation::get_frontend_registration_integrations();
+		$this->assertArrayHasKey( self::$integration_id, $integrations );
+		$this->assertEquals( 'Test Integration', $integrations[ self::$integration_id ] );
+	}
+
+	/**
+	 * Test that the integration registry is empty without the filter.
+	 */
+	public function test_get_frontend_registration_integrations_empty_without_filter() {
+		remove_filter( 'newspack_frontend_registration_integrations', [ __CLASS__, 'register_test_integration' ] );
+
+		$integrations = Reader_Activation::get_frontend_registration_integrations();
+		$this->assertEmpty( $integrations );
+
+		// Re-add for tear_down consistency.
+		add_filter( 'newspack_frontend_registration_integrations', [ __CLASS__, 'register_test_integration' ] );
+	}
 }
