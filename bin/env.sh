@@ -458,23 +458,40 @@ MIGRATE
         echo "Destroyed environment '$env_name'"
         ;;
     list)
-        echo "Environments:"
+        porcelain=false
+        if [[ "$2" == "--porcelain" ]]; then
+            porcelain=true
+        fi
+        [[ "$porcelain" == false ]] && echo "Environments:"
         for f in "$NABSPATH"/docker-compose.env-*.yml; do
             [[ -f "$f" ]] || continue
             name=$(basename "$f" | sed 's/docker-compose\.env-//' | sed 's/\.yml//')
             container_name=$(echo "newspack_env_${name}" | tr '-' '_')
             domain=$(domain_for_env "$f")
             if status=$(docker inspect -f '{{.State.Status}}' "$container_name" 2>/dev/null); then
-                echo "  $name ($status) https://${domain}/"
+                :
             else
-                echo "  $name (stopped) https://${domain}/"
+                status="stopped"
             fi
-            # Show worktrees mounted by this environment.
-            grep 'worktrees/' "$f" 2>/dev/null | sed 's|.*/newspack-repos/||' | while read -r repo; do
+            # Collect worktrees as repo:branch pairs.
+            worktrees=""
+            while read -r repo; do
                 wt_path=$(grep "newspack-repos/$repo" "$f" | sed 's/^ *- //' | cut -d: -f1)
                 branch=$(echo "$wt_path" | sed "s|.*worktrees/${repo}/||")
-                echo "    └ $repo ($branch)"
-            done
+                [[ -n "$worktrees" ]] && worktrees="$worktrees,"
+                worktrees="${worktrees}${repo}:${branch}"
+            done < <(grep 'worktrees/' "$f" 2>/dev/null | sed 's|.*/newspack-repos/||')
+            if [[ "$porcelain" == true ]]; then
+                printf '%s\t%s\thttps://%s/\t%s\n' "$name" "$status" "$domain" "$worktrees"
+            else
+                echo "  $name ($status) https://${domain}/"
+                # Show worktrees mounted by this environment.
+                grep 'worktrees/' "$f" 2>/dev/null | sed 's|.*/newspack-repos/||' | while read -r repo; do
+                    wt_path=$(grep "newspack-repos/$repo" "$f" | sed 's/^ *- //' | cut -d: -f1)
+                    branch=$(echo "$wt_path" | sed "s|.*worktrees/${repo}/||")
+                    echo "    └ $repo ($branch)"
+                done
+            fi
         done
         ;;
     cleanup)
