@@ -230,9 +230,11 @@ n env create <name> [options]  # Create environment config
   --domain <domain>            #   Custom domain (default: <name>.local)
   --up                         #   Start the environment immediately after creation
 n env up <name> [--build]      # Start environment (creates DB, installs WP, sets up SSL)
+n env up --all [--build]       # Start all existing environments at once
 n env down <name>              # Stop environment
 n env destroy <name>           # Remove environment, DB, worktrees, and files
-n env list                     # List environments with status and URLs
+n env list                     # List environments with status, URLs, and worktrees
+n env list --porcelain         # Machine-readable tab-separated output (name, status, url, worktrees)
 n env cleanup                  # Interactive bulk cleanup of environments
 ```
 

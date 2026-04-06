@@ -108,9 +108,10 @@ start() {
     # These don't survive reboots, so this runs on every start.
     if [[ "$(uname)" == "Darwin" ]]; then
         missing_aliases=()
+        lo0_addrs=$(ifconfig lo0 2>/dev/null)
         for octet in $(seq 2 100); do
             ip="127.0.0.$octet"
-            if ! ifconfig lo0 2>/dev/null | grep -q "$ip"; then
+            if ! echo "$lo0_addrs" | grep -q "$ip"; then
                 missing_aliases+=("$ip")
             fi
         done
