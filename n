@@ -104,11 +104,11 @@ start() {
     fi
 
     # macOS: set up loopback aliases for isolated environments.
-    # Pre-allocate 127.0.0.2–10 so agents can create envs without sudo later.
+    # Pre-allocate 127.0.0.2–100 so agents can create envs without sudo later.
     # These don't survive reboots, so this runs on every start.
     if [[ "$(uname)" == "Darwin" ]]; then
         missing_aliases=()
-        for octet in $(seq 2 10); do
+        for octet in $(seq 2 100); do
             ip="127.0.0.$octet"
             if ! ifconfig lo0 2>/dev/null | grep -q "$ip"; then
                 missing_aliases+=("$ip")
@@ -148,7 +148,7 @@ start() {
                     echo "$entry" | sudo tee -a /etc/hosts > /dev/null
                 done
             fi
-            echo "Ready: loopback aliases 127.0.0.2–10, $(( ${#missing_hosts[@]} )) hosts entries."
+            echo "Ready: loopback aliases 127.0.0.2–100, $(( ${#missing_hosts[@]} )) hosts entries."
         fi
     fi
 }

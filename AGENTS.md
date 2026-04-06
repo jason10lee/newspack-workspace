@@ -263,7 +263,7 @@ n sh <name>                    # Shell into environment container
 ### How It Works
 - Each env binds to a unique loopback IP (127.0.0.2+) on ports 80/443 with HTTPS via mkcert
 - Domain defaults to the loopback IP, overridable with `--domain`
-- `n start` pre-creates loopback aliases (127.0.0.2–10) so agents can create envs without sudo. If `newspack-manage-host` is installed (via `./bin/setup-networking.sh`), networking is set up without password prompts -- otherwise `sudo` is required
+- `n start` pre-creates loopback aliases (127.0.0.2–100) so agents can create envs without sudo. If `newspack-manage-host` is installed (via `./bin/setup-networking.sh`), networking is set up without password prompts -- otherwise `sudo` is required
 - Each env mounts `envs/<name>/html/` as `/var/www/html` (isolated from `./html/`)
 - Each env gets its own database (`wordpress_<name>`) in the shared MariaDB server
 - Each env gets a unique `WP_CACHE_KEY_SALT` to prevent memcached key collisions
