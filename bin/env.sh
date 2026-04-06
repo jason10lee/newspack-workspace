@@ -469,6 +469,12 @@ MIGRATE
             else
                 echo "  $name (stopped) https://${domain}/"
             fi
+            # Show worktrees mounted by this environment.
+            grep 'worktrees/' "$f" 2>/dev/null | sed 's|.*/newspack-repos/||' | while read -r repo; do
+                wt_path=$(grep "newspack-repos/$repo" "$f" | sed 's/^ *- //' | cut -d: -f1)
+                branch=$(echo "$wt_path" | sed "s|.*worktrees/${repo}/||")
+                echo "    └ $repo ($branch)"
+            done
         done
         ;;
     cleanup)
