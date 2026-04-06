@@ -194,7 +194,32 @@ YAML
         env_name="$2"
         if [[ -z "$env_name" ]]; then
             echo "Usage: n env up <name> [--build]"
+            echo "       n env up --all [--build]"
             exit 1
+        fi
+        # --all: start all existing environments.
+        if [[ "$env_name" == "--all" ]]; then
+            shift 2
+            pass_args=()
+            while [[ $# -gt 0 ]]; do
+                pass_args+=("$1"); shift
+            done
+            started=0
+            failed=0
+            for f in "$NABSPATH"/docker-compose.env-*.yml; do
+                [[ -f "$f" ]] || continue
+                name=$(basename "$f" | sed 's/docker-compose\.env-//' | sed 's/\.yml//')
+                echo ""
+                echo "=== Starting $name ==="
+                if "$NABSPATH/bin/env.sh" up "$name" "${pass_args[@]}"; then
+                    started=$((started + 1))
+                else
+                    failed=$((failed + 1))
+                fi
+            done
+            echo ""
+            echo "Done: $started started, $failed failed."
+            exit 0
         fi
         validate_env_name "$env_name"
         shift 2
@@ -536,6 +561,8 @@ MIGRATE
         ;;
     *)
         echo "Usage: n env <create|up|down|destroy|list|cleanup>"
+        echo "  up <name> [--build]      Start an environment"
+        echo "  up --all [--build]       Start all environments"
         echo "  cleanup [--all] [--yes]  Remove environments (--all selects everything, --yes skips confirmation)"
         ;;
 esac
