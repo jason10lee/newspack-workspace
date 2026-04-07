@@ -17,10 +17,21 @@ use Newspack\Reader_Data;
 class Newspack_Test_Reader_Data_Read_Only_Keys extends WP_UnitTestCase {
 
 	/**
-	 * Tear down after each test — reset platform to default.
+	 * Filter callback registered during test_filter_can_add_custom_key.
+	 *
+	 * @var callable|null
+	 */
+	private $custom_key_filter = null;
+
+	/**
+	 * Tear down after each test.
 	 */
 	public function tear_down() {
 		Donations::set_platform_slug( 'wc' );
+		if ( $this->custom_key_filter ) {
+			remove_filter( 'newspack_reader_data_read_only_keys', $this->custom_key_filter );
+			$this->custom_key_filter = null;
+		}
 		parent::tear_down();
 	}
 
@@ -112,19 +123,17 @@ class Newspack_Test_Reader_Data_Read_Only_Keys extends WP_UnitTestCase {
 	 * Test that the newspack_reader_data_read_only_keys filter still works.
 	 */
 	public function test_filter_can_add_custom_key() {
-		$add_key = function ( $keys ) {
+		$this->custom_key_filter = function ( $keys ) {
 			$keys[] = 'custom_key';
 			return $keys;
 		};
-		add_filter( 'newspack_reader_data_read_only_keys', $add_key );
+		add_filter( 'newspack_reader_data_read_only_keys', $this->custom_key_filter );
 
 		self::assertContains(
 			'custom_key',
 			Reader_Data::get_read_only_keys(),
 			'Filter should be able to add custom read-only keys.'
 		);
-
-		remove_filter( 'newspack_reader_data_read_only_keys', $add_key );
 	}
 
 	/**
