@@ -170,6 +170,7 @@ YAML
                 choice=$(echo "$choice" | tr '[:upper:]' '[:lower:]')
                 if [[ "$choice" != "n" ]]; then
                     echo "$ip $domain" | sudo tee -a /etc/hosts > /dev/null
+                    echo "Added $domain to /etc/hosts"
                 fi
             else
                 echo "Note: add hosts entry before browser access: sudo sh -c 'echo \"$ip $domain\" >> /etc/hosts'"
