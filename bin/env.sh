@@ -162,15 +162,11 @@ YAML
         fi
         # Custom domains (not IP-based) need a /etc/hosts entry.
         if [[ "$domain" != "$ip" ]] && ! grep -q "[[:space:]]${domain}" /etc/hosts 2>/dev/null; then
-            if command -v newspack-manage-host >/dev/null 2>&1 && [[ "$domain" == *.local ]]; then
-                sudo newspack-manage-host host-add "$ip" "$domain"
-                echo "Added $domain to /etc/hosts"
-            elif [ -t 0 ] && [ -t 1 ]; then
+            if [ -t 0 ] && [ -t 1 ]; then
                 read -p "Add $domain to /etc/hosts? (Y/n): " choice
                 choice=$(echo "$choice" | tr '[:upper:]' '[:lower:]')
                 if [[ "$choice" != "n" ]]; then
                     echo "$ip $domain" | sudo tee -a /etc/hosts > /dev/null
-                    echo "Added $domain to /etc/hosts"
                 fi
             else
                 echo "Note: add hosts entry before browser access: sudo sh -c 'echo \"$ip $domain\" >> /etc/hosts'"
@@ -282,10 +278,7 @@ MIGRATE
         fi
         # Custom domains (not IP-based) need a /etc/hosts entry.
         if [[ -n "$domain" && "$domain" != "$ip" ]] && ! grep -q "[[:space:]]${domain}" /etc/hosts 2>/dev/null; then
-            if command -v newspack-manage-host >/dev/null 2>&1 && [[ "$domain" == *.local ]]; then
-                sudo newspack-manage-host host-add "$ip" "$domain"
-                echo "Added $domain to /etc/hosts"
-            elif [ -t 0 ] && [ -t 1 ]; then
+            if [ -t 0 ] && [ -t 1 ]; then
                 echo "Adding $domain to /etc/hosts (requires sudo)..."
                 echo "$ip $domain" | sudo tee -a /etc/hosts > /dev/null
                 echo "Added $domain to /etc/hosts"
