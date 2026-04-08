@@ -11,6 +11,13 @@
 
 * **yoast:** use shared primary category utility from newspack-plugin ([#2655](https://github.com/Automattic/newspack-theme/issues/2655)) ([21908d7](https://github.com/Automattic/newspack-theme/commit/21908d79802a999c7299ef87c1aae9677dd88895))
 
+## [2.20.3](https://github.com/Automattic/newspack-theme/compare/v2.20.2...v2.20.3) (2026-04-08)
+
+
+### Bug Fixes
+
+* remove colour from gallery lightbox buttons ([#2666](https://github.com/Automattic/newspack-theme/issues/2666)) ([cec9eee](https://github.com/Automattic/newspack-theme/commit/cec9eee88d57aeaee36eb86134e38467ec0101d1))
+
 ## [2.20.2](https://github.com/Automattic/newspack-theme/compare/v2.20.1...v2.20.2) (2026-04-02)
 
 

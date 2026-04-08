@@ -1025,6 +1025,16 @@ body:not(.wp-child-theme-newspack-joseph):not(.wp-child-theme-newspack-nelson) .
 	}
 }
 
+.wp-lightbox-navigation-button,
+.wp-lightbox-close-button {
+	&,
+	&:hover,
+	&:focus,
+	&:active {
+		color: unset !important
+	}
+}
+
 //! Separator
 .wp-block-separator,
 hr {
