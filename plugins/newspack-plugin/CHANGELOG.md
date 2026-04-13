@@ -1,3 +1,10 @@
+## [6.36.3](https://github.com/Automattic/newspack-plugin/compare/v6.36.2...v6.36.3) (2026-04-13)
+
+
+### Bug Fixes
+
+* hotfix release of privacy features ([#4653](https://github.com/Automattic/newspack-plugin/issues/4653)) ([22cc5d3](https://github.com/Automattic/newspack-plugin/commit/22cc5d3011782975f97df391d0baba40e46c9196))
+
 ## [6.36.2](https://github.com/Automattic/newspack-plugin/compare/v6.36.1...v6.36.2) (2026-04-06)
 
 
