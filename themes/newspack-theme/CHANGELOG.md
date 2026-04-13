@@ -1,3 +1,16 @@
+# [2.21.0](https://github.com/Automattic/newspack-theme/compare/v2.20.3...v2.21.0) (2026-04-13)
+
+
+### Bug Fixes
+
+* **layout:** prevent horizontal scrollbar on full-bleed image positions ([#2667](https://github.com/Automattic/newspack-theme/issues/2667)) ([c92383b](https://github.com/Automattic/newspack-theme/commit/c92383b10824c10c80a9e1e8fb906dd495a6c6af))
+* **post-date:** move hook inside posted_on for markup preservation ([#2658](https://github.com/Automattic/newspack-theme/issues/2658)) ([fe6725a](https://github.com/Automattic/newspack-theme/commit/fe6725ab3638244f5a410ec18f2ae85e55d99697))
+
+
+### Features
+
+* **yoast:** use shared primary category utility from newspack-plugin ([#2655](https://github.com/Automattic/newspack-theme/issues/2655)) ([21908d7](https://github.com/Automattic/newspack-theme/commit/21908d79802a999c7299ef87c1aae9677dd88895))
+
 # [2.21.0-alpha.2](https://github.com/Automattic/newspack-theme/compare/v2.21.0-alpha.1...v2.21.0-alpha.2) (2026-04-08)
 
 
