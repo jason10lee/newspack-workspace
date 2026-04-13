@@ -15,9 +15,6 @@ if ( version_compare( $GLOBALS['wp_version'], '4.7', '<' ) ) {
 	return;
 }
 
-// Default for the "time ago" date format. Dates older than this cutoff will be displayed as a full date.
-const NP_DEFAULT_POST_TIME_AGO_CUT_OFF_DAYS = 14;
-
 if ( ! function_exists( 'newspack_is_amp' ) ) {
 	/**
 	 * Determine whether it is an AMP response.
@@ -504,25 +501,6 @@ function newspack_scripts() {
 			'fonts' => newspack_get_used_custom_fonts(),
 		)
 	);
-
-	if ( get_theme_mod( 'post_time_ago' ) ) {
-		wp_register_script( 'newspack-relative-time', get_theme_file_uri( '/js/dist/relative-time.js' ), array(), wp_get_theme()->get( 'Version' ), true );
-
-		$cutoff_in_days = get_theme_mod( 'post_time_ago_cut_off', NP_DEFAULT_POST_TIME_AGO_CUT_OFF_DAYS );
-		if ( get_theme_mod( 'post_updated_date' ) ) {
-			// Switch cut off to 24 hours if we are also displaying the updated date.
-			$cutoff_in_days = 1;
-		}
-		wp_localize_script(
-			'newspack-relative-time',
-			'newspack_relative_time',
-			array(
-				'language_tag' => str_replace( '_', '-', get_locale() ), // The language tag in the format of 'en-US' for example.
-				'cutoff'       => $cutoff_in_days,
-			)
-		);
-		wp_enqueue_script( 'newspack-relative-time' );
-	}
 }
 add_action( 'wp_enqueue_scripts', 'newspack_scripts' );
 
@@ -969,30 +947,6 @@ function newspack_register_meta() {
 		)
 	);
 
-	$updated_date_post_types = newspack_get_updated_date_supported_post_types();
-
-	foreach ( $updated_date_post_types as $post_type ) {
-		register_post_meta(
-			$post_type,
-			'newspack_hide_updated_date',
-			array(
-				'show_in_rest' => true,
-				'single'       => true,
-				'type'         => 'boolean',
-			)
-		);
-
-		register_post_meta(
-			$post_type,
-			'newspack_show_updated_date',
-			array(
-				'show_in_rest' => true,
-				'single'       => true,
-				'type'         => 'boolean',
-			)
-		);
-	}
-
 	register_post_meta(
 		'page',
 		'newspack_hide_page_title',
@@ -1216,22 +1170,12 @@ function newspack_get_featured_image_post_types() {
 }
 
 /**
- * Get post types that support the hiding date and page title settings.
+ * Get post types that support the page title and share button toggle settings.
  *
  * @return array Array of post type slugs.
  */
 function newspack_get_post_toggle_post_types() {
-	$hide_date_post_types = array();
-	$show_date_post_types = array();
-	if ( true === get_theme_mod( 'post_updated_date', false ) ) {
-		$hide_date_post_types = newspack_get_updated_date_supported_post_types();
-	} else {
-		$show_date_post_types = newspack_get_updated_date_supported_post_types();
-	}
-
 	return array(
-		'hide_date'          => $hide_date_post_types,
-		'show_date'          => $show_date_post_types,
 		'hide_title'         => array( 'page' ),
 		'show_share_buttons' => function_exists( 'sharing_display' ) ? array( 'page' ) : array(),
 	);

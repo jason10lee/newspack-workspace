@@ -1,6 +1,6 @@
 {
 	"name": "newspack",
-	"version": "2.20.3",
+	"version": "2.21.0-alpha.2",
 	"description": "A theme for Newspack. https://newspack.com",
 	"bugs": {
 		"url": "https://github.com/Automattic/newspack-theme/issues"
@@ -45,10 +45,10 @@
 		"chokidar-cli": "^3.0.0",
 		"classnames": "^2.5.1",
 		"cssnano": "^7.1.2",
-		"fs-extra": "^11.3.3",
+		"fs-extra": "^11.3.4",
 		"newspack-scripts": "^5.9.5",
 		"npm-run-all": "^4.1.5",
 		"rtlcss": "^4.3.0",
-		"sass": "^1.97.3"
+		"sass": "^1.98.0"
 	}
 }
