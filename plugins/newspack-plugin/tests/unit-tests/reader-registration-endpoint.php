@@ -80,12 +80,13 @@ class Test_Custom_Key_Integration extends Integration {
 	}
 
 	/**
-	 * Validate the registration key using a different secret key.
+	 * Validate the registration request using a different secret key.
 	 *
-	 * @param string $key Key to validate.
+	 * @param string           $key     Key to validate.
+	 * @param \WP_REST_Request $request The registration request.
 	 * @return bool
 	 */
-	public function validate_registration_key( string $key ): bool {
+	public function validate_registration_request( string $key, $request ): bool {
 		return $key === 'custom-secret-key';
 	}
 
@@ -730,7 +731,7 @@ class Newspack_Test_Frontend_Registration_Endpoint extends WP_UnitTestCase {
 		$data = $response->get_data();
 		$this->assertEquals( 'invalid_integration_key', $data['code'] );
 
-		// The secret key should validate via the custom validate_registration_key().
+		// The secret key should validate via the custom validate_registration_request().
 		$response = $this->do_register_request(
 			[
 				'npe'             => 'custom@test.com',

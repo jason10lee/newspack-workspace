@@ -72,6 +72,11 @@ final class Reader_Registration {
 						'sanitize_callback' => 'sanitize_text_field',
 						'default'           => '',
 					],
+					'metadata'             => [
+						'type'              => 'object',
+						'default'           => [],
+						'sanitize_callback' => [ __CLASS__, 'sanitize_metadata' ],
+					],
 					'g-recaptcha-response' => [
 						'type'              => 'string',
 						'sanitize_callback' => 'sanitize_text_field',
@@ -80,6 +85,28 @@ final class Reader_Registration {
 				],
 			]
 		);
+	}
+
+	/**
+	 * Sanitize the metadata parameter.
+	 *
+	 * Ensures all keys and values are sanitized strings.
+	 *
+	 * @param array $metadata Raw metadata from the request.
+	 * @return array Sanitized metadata.
+	 */
+	public static function sanitize_metadata( $metadata ) {
+		if ( ! is_array( $metadata ) ) {
+			return [];
+		}
+		$sanitized = [];
+		foreach ( $metadata as $key => $value ) {
+			$key = sanitize_key( $key );
+			if ( ! empty( $key ) ) {
+				$sanitized[ $key ] = \sanitize_text_field( $value );
+			}
+		}
+		return $sanitized;
 	}
 
 	/**
@@ -257,7 +284,7 @@ final class Reader_Registration {
 		$integration_key      = $request->get_param( 'integration_key' );
 		$integration_instance = Integrations::get_integration( $integration_id );
 		if ( $integration_instance && $integration_instance->supports_frontend_registration() ) {
-			$key_valid = $integration_instance->validate_registration_key( $integration_key );
+			$key_valid = $integration_instance->validate_registration_request( $integration_key, $request );
 		} else {
 			// Fallback for filter-only registrations.
 			$expected_key = self::get_frontend_registration_key( $integration_id );
@@ -379,6 +406,14 @@ final class Reader_Registration {
 					'last_name'  => $last_name,
 				]
 			);
+		}
+
+		// Save arbitrary user metadata.
+		$user_metadata = $request->get_param( 'metadata' );
+		if ( ! empty( $user_metadata ) ) {
+			foreach ( $user_metadata as $meta_key => $meta_value ) {
+				\update_user_meta( $result, $meta_key, $meta_value );
+			}
 		}
 
 		return new \WP_REST_Response(

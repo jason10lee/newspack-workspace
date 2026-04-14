@@ -163,10 +163,15 @@ abstract class Integration {
 	 * that override this method to accept a different value must provide
 	 * their own client-side code to compute and submit the correct key.
 	 *
-	 * @param string $key The submitted key to validate.
-	 * @return bool Whether the key is valid.
+	 * The default implementation validates the HMAC key. Subclasses can override
+	 * this method to perform additional checks on the request (e.g. verifying
+	 * custom headers, validating metadata, or enforcing integration-specific rules).
+	 *
+	 * @param string           $key     The submitted key to validate.
+	 * @param \WP_REST_Request $request The full registration request.
+	 * @return bool Whether the registration request is valid.
 	 */
-	public function validate_registration_key( string $key ): bool {
+	public function validate_registration_request( string $key, $request ): bool {
 		return hash_equals( $this->get_registration_key(), $key );
 	}
 
@@ -794,7 +799,7 @@ abstract class Integration {
 	 * @param mixed $value The value to sanitize.
 	 * @return mixed The sanitized value.
 	 */
-	private function sanitize_settings_field_value( $field, $value ) {
+	protected function sanitize_settings_field_value( $field, $value ) {
 		$type = $field['type'] ?? 'text';
 		switch ( $type ) {
 			case 'checkbox':

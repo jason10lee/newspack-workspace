@@ -501,9 +501,10 @@ function acquireV2InvisibleToken( siteKey ) {
 /**
  * Register a reader via a frontend integration.
  *
- * @param {string} email         Reader email address.
- * @param {string} integrationId Registered integration ID.
- * @param {Object} profileFields Optional profile fields: { first_name, last_name }.
+ * @param {string} email                  Reader email address.
+ * @param {string} integrationId          Registered integration ID.
+ * @param {Object} profileFields          Optional profile fields: { first_name, last_name, metadata }.
+ * @param {Object} profileFields.metadata Optional arbitrary key-value pairs to store as user meta.
  * @return {Promise} Resolves with reader data on success, rejects with error on failure.
  */
 function register( email, integrationId, profileFields = {} ) {
@@ -528,6 +529,7 @@ function register( email, integrationId, profileFields = {} ) {
 		integration_key: integration.key,
 		first_name: profileFields.first_name || '',
 		last_name: profileFields.last_name || '',
+		metadata: profileFields.metadata || {},
 	};
 
 	// Acquire reCAPTCHA token if configured, using the appropriate version flow.
