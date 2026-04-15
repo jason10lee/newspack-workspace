@@ -1,0 +1,64 @@
+name: Sync Release
+
+on:
+  workflow_call:
+    inputs:
+      theme:
+        description: 'Theme name (e.g., newspack-joseph)'
+        required: true
+        type: string
+
+jobs:
+  sync-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync releases from newspack-theme
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Get last 5 releases (including pre-releases)
+          RELEASES=$(gh release list --repo Automattic/newspack-theme --limit 5 --json tagName,name,isPrerelease)
+
+          # Process each release (oldest first to maintain chronological order)
+          echo "$RELEASES" | jq -c 'reverse | .[]' | while read -r RELEASE; do
+            TAG=$(echo "$RELEASE" | jq -r '.tagName')
+            NAME=$(echo "$RELEASE" | jq -r '.name')
+            IS_PRERELEASE=$(echo "$RELEASE" | jq -r '.isPrerelease')
+
+            echo "Checking release: $TAG"
+
+            # Check if release already exists
+            if gh release view "$TAG" --repo ${{ github.repository }} > /dev/null 2>&1; then
+              echo "Release $TAG already exists, skipping..."
+              continue
+            fi
+
+            echo "Creating release: $TAG"
+
+            # Fetch release body
+            BODY=$(gh release view "$TAG" --repo Automattic/newspack-theme --json body -q '.body')
+
+            # Download theme ZIP
+            gh release download "$TAG" \
+              --repo Automattic/newspack-theme \
+              --pattern "${{ inputs.theme }}.zip" \
+              --dir .
+
+            # Create release
+            PRERELEASE_FLAG=""
+            if [ "$IS_PRERELEASE" = "true" ]; then
+              PRERELEASE_FLAG="--prerelease"
+            fi
+
+            gh release create "$TAG" \
+              --repo ${{ github.repository }} \
+              --title "$NAME" \
+              --notes "$BODY" \
+              $PRERELEASE_FLAG \
+              "${{ inputs.theme }}.zip"
+
+            # Clean up ZIP for next iteration
+            rm -f "${{ inputs.theme }}.zip"
+
+            echo "Release $TAG created successfully"
+          done
