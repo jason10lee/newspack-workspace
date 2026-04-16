@@ -48,6 +48,8 @@
 	},
 	"devDependencies": {
 		"classnames": "^2.5.1",
-		"newspack-scripts": "workspace:*"
+		"newspack-scripts": "workspace:*",
+		"lodash": "^4.17.0",
+		"prop-types": "^15.8.0"
 	}
 }

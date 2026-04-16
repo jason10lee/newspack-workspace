@@ -47,6 +47,7 @@
 		"qs": "^6.15.1"
 	},
 	"devDependencies": {
-		"newspack-scripts": "workspace:*"
+		"newspack-scripts": "workspace:*",
+		"lodash": "^4.17.0"
 	}
 }

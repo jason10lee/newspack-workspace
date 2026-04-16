@@ -54,7 +54,8 @@
 	"devDependencies": {
 		"@types/lodash": "^4.17.23",
 		"newspack-components": "workspace:*",
-		"newspack-scripts": "workspace:*"
+		"newspack-scripts": "workspace:*",
+		"lodash": "^4.17.0"
 	},
 	"overrides": {
 		"path-to-regexp": "1.7.0"

@@ -298,9 +298,15 @@ importers:
       classnames:
         specifier: ^2.5.1
         version: 2.5.1
+      lodash:
+        specifier: ^4.17.0
+        version: 4.18.1
       newspack-scripts:
         specifier: workspace:*
         version: link:../../packages/scripts
+      prop-types:
+        specifier: ^15.8.0
+        version: 15.8.1
 
   plugins/newspack-blocks:
     dependencies:
@@ -329,6 +335,9 @@ importers:
       '@types/lodash':
         specifier: ^4.17.23
         version: 4.17.24
+      lodash:
+        specifier: ^4.17.0
+        version: 4.18.1
       newspack-components:
         specifier: workspace:*
         version: link:../../packages/components
@@ -382,6 +391,9 @@ importers:
 
   plugins/newspack-network:
     devDependencies:
+      clsx:
+        specifier: ^2.1.0
+        version: 2.1.1
       newspack-scripts:
         specifier: workspace:*
         version: link:../../packages/scripts
@@ -401,6 +413,9 @@ importers:
         specifier: ^6.15.1
         version: 6.15.1
     devDependencies:
+      lodash:
+        specifier: ^4.17.0
+        version: 4.18.1
       newspack-scripts:
         specifier: workspace:*
         version: link:../../packages/scripts
@@ -438,9 +453,21 @@ importers:
         specifier: ^4.12.0
         version: 4.12.0
     devDependencies:
+      clsx:
+        specifier: ^2.1.0
+        version: 2.1.1
+      lodash:
+        specifier: ^4.17.0
+        version: 4.18.1
       newspack-scripts:
         specifier: workspace:*
         version: link:../../packages/scripts
+      prop-types:
+        specifier: ^15.8.0
+        version: 15.8.1
+      react:
+        specifier: ^18.0.0
+        version: 18.3.1
 
   plugins/newspack-popups:
     dependencies:
@@ -454,6 +481,9 @@ importers:
         specifier: workspace:*
         version: link:../../packages/components
     devDependencies:
+      lodash:
+        specifier: ^4.17.0
+        version: 4.18.1
       newspack-scripts:
         specifier: workspace:*
         version: link:../../packages/scripts
@@ -466,12 +496,30 @@ importers:
 
   plugins/newspack-story-budget:
     devDependencies:
+      classnames:
+        specifier: ^2.5.0
+        version: 2.5.1
+      clsx:
+        specifier: ^2.1.0
+        version: 2.1.1
+      lodash:
+        specifier: ^4.17.0
+        version: 4.18.1
       newspack-components:
         specifier: workspace:*
         version: link:../../packages/components
       newspack-scripts:
         specifier: workspace:*
         version: link:../../packages/scripts
+      react-dom:
+        specifier: ^18.0.0
+        version: 18.3.1(react@18.3.1)
+      react-router-dom:
+        specifier: ^6.0.0
+        version: 6.30.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      redux:
+        specifier: ^5.0.0
+        version: 5.0.1
 
   plugins/republication-tracker-tool:
     devDependencies:

@@ -42,6 +42,7 @@
 		"*.php": "npm run lint:php:staged"
 	},
 	"devDependencies": {
-		"newspack-scripts": "workspace:*"
+		"newspack-scripts": "workspace:*",
+		"clsx": "^2.1.0"
 	}
 }
