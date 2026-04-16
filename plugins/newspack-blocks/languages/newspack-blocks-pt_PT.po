@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Newspack Blocks 1.0.0-alpha.25\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-blocks\n"
-"POT-Creation-Date: 2026-04-01T18:21:48+00:00\n"
+"POT-Creation-Date: 2026-04-08T13:01:54+00:00\n"
 "PO-Revision-Date: 2024-08-30 08:46-0700\n"
 "Last-Translator: \n"
 "Language-Team: \n"
@@ -681,17 +681,17 @@ msgstr ""
 msgid "Recipient: "
 msgstr ""
 
-#: src/modal-checkout/templates/thankyou.php:78
+#: src/modal-checkout/templates/thankyou.php:85
 msgid ""
 "Unfortunately your order cannot be processed. Please attempt your purchase "
 "again."
 msgstr ""
 
-#: src/modal-checkout/templates/thankyou.php:81
+#: src/modal-checkout/templates/thankyou.php:88
 msgid "Pay"
 msgstr ""
 
-#: src/modal-checkout/templates/thankyou.php:83
+#: src/modal-checkout/templates/thankyou.php:90
 msgid "My account"
 msgstr ""
 
