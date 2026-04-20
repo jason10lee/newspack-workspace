@@ -296,7 +296,7 @@ MIGRATE
         docker compose -f "$NABSPATH/docker-compose.yml" up -d db
         echo "Creating database $db_name..."
         docker compose -f "$NABSPATH/docker-compose.yml" exec -T db \
-            mysql -h localhost -u root -p"${MYSQL_ROOT_PASSWORD}" \
+            mariadb -h localhost -u root -p"${MYSQL_ROOT_PASSWORD}" \
             -e "CREATE DATABASE IF NOT EXISTS \`${db_name}\`; GRANT ALL PRIVILEGES ON \`${db_name}\`.* TO '${MYSQL_USER}'@'%'; FLUSH PRIVILEGES;" 2>/dev/null
         # Start the env container.
         if ! docker compose -f "$NABSPATH/docker-compose.yml" -f "$compose_file" up -d "env-${env_name}"; then
@@ -418,7 +418,7 @@ MIGRATE
         set +a
         docker compose -f "$NABSPATH/docker-compose.yml" up -d db 2>/dev/null
         docker compose -f "$NABSPATH/docker-compose.yml" exec -T db \
-            mysql -h localhost -u root -p"${MYSQL_ROOT_PASSWORD}" \
+            mariadb -h localhost -u root -p"${MYSQL_ROOT_PASSWORD}" \
             -e "DROP DATABASE IF EXISTS \`${db_name}\`" 2>/dev/null
         echo "Dropped database $db_name"
         # Remove env html and certs directories.

@@ -191,7 +191,7 @@ n release                     # Switch all repos to release
 
 ### Docker Services
 - `wordpress` (container: `newspack_dev`) - Apache + PHP + WordPress
-- `db` - MariaDB 10.8.2
+- `db` - MariaDB 11.8.6
 - `mailhog` - Email capture at http://localhost:8025
 - `adminer` - Database UI at http://localhost:8088
 
