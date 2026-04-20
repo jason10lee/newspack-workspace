@@ -162,10 +162,7 @@ YAML
         fi
         # Custom domains (not IP-based) need a /etc/hosts entry.
         if [[ "$domain" != "$ip" ]] && ! grep -q "[[:space:]]${domain}" /etc/hosts 2>/dev/null; then
-            if command -v newspack-manage-host >/dev/null 2>&1 && [[ "$domain" == *.local ]]; then
-                sudo newspack-manage-host host-add "$ip" "$domain"
-                echo "Added $domain to /etc/hosts"
-            elif [ -t 0 ] && [ -t 1 ]; then
+            if [ -t 0 ] && [ -t 1 ]; then
                 read -p "Add $domain to /etc/hosts? (Y/n): " choice
                 choice=$(echo "$choice" | tr '[:upper:]' '[:lower:]')
                 if [[ "$choice" != "n" ]]; then
@@ -194,7 +191,32 @@ YAML
         env_name="$2"
         if [[ -z "$env_name" ]]; then
             echo "Usage: n env up <name> [--build]"
+            echo "       n env up --all [--build]"
             exit 1
+        fi
+        # --all: start all existing environments.
+        if [[ "$env_name" == "--all" ]]; then
+            shift 2
+            pass_args=()
+            while [[ $# -gt 0 ]]; do
+                pass_args+=("$1"); shift
+            done
+            started=0
+            failed=0
+            for f in "$NABSPATH"/docker-compose.env-*.yml; do
+                [[ -f "$f" ]] || continue
+                name=$(basename "$f" | sed 's/docker-compose\.env-//' | sed 's/\.yml//')
+                echo ""
+                echo "=== Starting $name ==="
+                if "$NABSPATH/bin/env.sh" up "$name" "${pass_args[@]}"; then
+                    started=$((started + 1))
+                else
+                    failed=$((failed + 1))
+                fi
+            done
+            echo ""
+            echo "Done: $started started, $failed failed."
+            exit 0
         fi
         validate_env_name "$env_name"
         shift 2
@@ -256,10 +278,7 @@ MIGRATE
         fi
         # Custom domains (not IP-based) need a /etc/hosts entry.
         if [[ -n "$domain" && "$domain" != "$ip" ]] && ! grep -q "[[:space:]]${domain}" /etc/hosts 2>/dev/null; then
-            if command -v newspack-manage-host >/dev/null 2>&1 && [[ "$domain" == *.local ]]; then
-                sudo newspack-manage-host host-add "$ip" "$domain"
-                echo "Added $domain to /etc/hosts"
-            elif [ -t 0 ] && [ -t 1 ]; then
+            if [ -t 0 ] && [ -t 1 ]; then
                 echo "Adding $domain to /etc/hosts (requires sudo)..."
                 echo "$ip $domain" | sudo tee -a /etc/hosts > /dev/null
                 echo "Added $domain to /etc/hosts"
@@ -433,16 +452,39 @@ MIGRATE
         echo "Destroyed environment '$env_name'"
         ;;
     list)
-        echo "Environments:"
+        porcelain=false
+        if [[ "$2" == "--porcelain" ]]; then
+            porcelain=true
+        fi
+        [[ "$porcelain" == false ]] && echo "Environments:"
         for f in "$NABSPATH"/docker-compose.env-*.yml; do
             [[ -f "$f" ]] || continue
             name=$(basename "$f" | sed 's/docker-compose\.env-//' | sed 's/\.yml//')
             container_name=$(echo "newspack_env_${name}" | tr '-' '_')
             domain=$(domain_for_env "$f")
             if status=$(docker inspect -f '{{.State.Status}}' "$container_name" 2>/dev/null); then
-                echo "  $name ($status) https://${domain}/"
+                :
             else
-                echo "  $name (stopped) https://${domain}/"
+                status="stopped"
+            fi
+            # Collect worktrees as repo:branch pairs.
+            worktrees=""
+            while read -r repo; do
+                wt_path=$(grep "newspack-repos/$repo" "$f" | sed 's/^ *- //' | cut -d: -f1)
+                branch=$(echo "$wt_path" | sed "s|.*worktrees/${repo}/||")
+                [[ -n "$worktrees" ]] && worktrees="$worktrees,"
+                worktrees="${worktrees}${repo}:${branch}"
+            done < <(grep 'worktrees/' "$f" 2>/dev/null | sed 's|.*/newspack-repos/||')
+            if [[ "$porcelain" == true ]]; then
+                printf '%s\t%s\thttps://%s/\t%s\n' "$name" "$status" "$domain" "$worktrees"
+            else
+                echo "  $name ($status) https://${domain}/"
+                # Show worktrees mounted by this environment.
+                grep 'worktrees/' "$f" 2>/dev/null | sed 's|.*/newspack-repos/||' | while read -r repo; do
+                    wt_path=$(grep "newspack-repos/$repo" "$f" | sed 's/^ *- //' | cut -d: -f1)
+                    branch=$(echo "$wt_path" | sed "s|.*worktrees/${repo}/||")
+                    echo "    └ $repo ($branch)"
+                done
             fi
         done
         ;;
@@ -536,6 +578,8 @@ MIGRATE
         ;;
     *)
         echo "Usage: n env <create|up|down|destroy|list|cleanup>"
+        echo "  up <name> [--build]      Start an environment"
+        echo "  up --all [--build]       Start all environments"
         echo "  cleanup [--all] [--yes]  Remove environments (--all selects everything, --yes skips confirmation)"
         ;;
 esac
