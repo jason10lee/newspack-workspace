@@ -54,6 +54,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+  post-release:
+    name: Post-release notifications
+    needs: release
+    uses: Automattic/newspack-scripts/.github/workflows/reusable-post-release.yml@trunk
+    secrets:
+      GIT_COMMITTER_TOKEN: ${{ secrets.GH_TOKEN }}
+      SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+      SLACK_AUTH_TOKEN: ${{ secrets.SLACK_AUTH_TOKEN }}
+
   # WP.org deploys are plugin-specific and only run on the release branch.
   release-wporg-newsletters:
     name: WP.org / newspack-newsletters
