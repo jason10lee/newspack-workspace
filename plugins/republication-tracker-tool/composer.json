@@ -4,8 +4,9 @@
 	"type": "wordpress-plugin",
 	"require-dev": {
 		"composer/installers": "~1.6",
-		"automattic/vipwpcs": "^2.0.0",
-		"wp-coding-standards/wpcs": "*",
+		"automattic/vipwpcs": "^3.0",
+		"wp-coding-standards/wpcs": "^3.0",
+		"brainmaestro/composer-git-hooks": "^2.6",
 		"dealerdirect/phpcodesniffer-composer-installer": "*",
 		"phpcompatibility/phpcompatibility-wp": "*",
 		"phpunit/phpunit": "^9.6",
@@ -13,11 +14,20 @@
 	},
 	"license": "GPL-2.0-or-later",
 	"scripts": {
+		"post-install-cmd": [
+			"vendor/bin/cghooks add --no-lock"
+		],
 		"post-update-cmd": [
 			"vendor/bin/cghooks update"
 		]
 	},
-	"extra": {},
+	"extra": {
+		"hooks": {
+			"commit-msg": [
+				"cat $1 | node_modules/.bin/newspack-scripts commitlint"
+			]
+		}
+	},
 	"config": {
 		"platform": {
 			"php": "8.3"

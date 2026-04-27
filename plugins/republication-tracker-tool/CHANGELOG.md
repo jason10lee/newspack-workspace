@@ -1,3 +1,60 @@
+## [2.8.1](https://github.com/Automattic/republication-tracker-tool/compare/v2.8.0...v2.8.1) (2026-03-30)
+
+
+### Bug Fixes
+
+* bump newspack-scripts version ([#314](https://github.com/Automattic/republication-tracker-tool/issues/314)) ([9a61262](https://github.com/Automattic/republication-tracker-tool/commit/9a61262768ad16508797b08be7ac6bccefe52f34))
+* force release ([e2adf96](https://github.com/Automattic/republication-tracker-tool/commit/e2adf965c8559f02a1e1ef0d89b13aced3ca2c80))
+
+# [2.8.0](https://github.com/Automattic/republication-tracker-tool/compare/v2.7.0...v2.8.0) (2025-11-24)
+
+
+### Features
+
+* Merge pull request [#287](https://github.com/Automattic/republication-tracker-tool/issues/287) from Automattic/trunk ([905b9c3](https://github.com/Automattic/republication-tracker-tool/commit/905b9c321d5cd94edfb19f34420d9ca4c3deadc3))
+
+# [2.7.0](https://github.com/Automattic/republication-tracker-tool/compare/v2.6.2...v2.7.0) (2025-10-06)
+
+
+### Bug Fixes
+
+* indentation ([dbc2b49](https://github.com/Automattic/republication-tracker-tool/commit/dbc2b49533acfafdc3c10b8d85bc419ec4dffb5c))
+* removing scripts and styles ([#282](https://github.com/Automattic/republication-tracker-tool/issues/282)) ([aa2b33d](https://github.com/Automattic/republication-tracker-tool/commit/aa2b33d0c0a09e924e31c75ba4abded2cc782cc3))
+* update download URL for db.php ([#280](https://github.com/Automattic/republication-tracker-tool/issues/280)) ([5f42bd1](https://github.com/Automattic/republication-tracker-tool/commit/5f42bd142a3f2d28423009ea03971f86f124247a))
+
+
+### Features
+
+* add filters for tracking markup snippets ([cffecb0](https://github.com/Automattic/republication-tracker-tool/commit/cffecb0dd60116508a2a40bc42ac4ecd8c9f6583))
+
+## [2.6.2](https://github.com/Automattic/republication-tracker-tool/compare/v2.6.1...v2.6.2) (2025-09-12)
+
+
+### Bug Fixes
+
+* add tracking snippets to the plain text share screen ([ae39058](https://github.com/Automattic/republication-tracker-tool/commit/ae39058a170fdf51bf93a7328b840a06d92a7362))
+
+## [2.6.1](https://github.com/Automattic/republication-tracker-tool/compare/v2.6.0...v2.6.1) (2025-09-11)
+
+
+### Bug Fixes
+
+* remove license statement from widget ([15aa1be](https://github.com/Automattic/republication-tracker-tool/commit/15aa1bed79a80e4122f94cda7a5f448c04c4321f))
+
+# [2.6.0](https://github.com/Automattic/republication-tracker-tool/compare/v2.5.2...v2.6.0) (2025-09-08)
+
+
+### Bug Fixes
+
+* displaying the values ([e4c83fd](https://github.com/Automattic/republication-tracker-tool/commit/e4c83fdbf28718b31e072a5ca94ce5f1c07a0543))
+* escaping ([76eb893](https://github.com/Automattic/republication-tracker-tool/commit/76eb8930080d0cf85e6a855c5905411efdecbdb2))
+
+
+### Features
+
+* Add plain text option ([#268](https://github.com/Automattic/republication-tracker-tool/issues/268)) ([b484c57](https://github.com/Automattic/republication-tracker-tool/commit/b484c57b47cf6436cc86b0d22fdbf8d1c8cd144b))
+* gracefully support no licenses ([#270](https://github.com/Automattic/republication-tracker-tool/issues/270)) ([733b088](https://github.com/Automattic/republication-tracker-tool/commit/733b08899c487c6d058c5c95755516b39cda1a6c))
+
 ## [2.5.2](https://github.com/Automattic/republication-tracker-tool/compare/v2.5.1...v2.5.2) (2025-07-30)
 
 

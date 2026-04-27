@@ -92,6 +92,11 @@ class Republication_Tracker_Tool_Settings {
 				'label'    => esc_html__( 'Hide republication widgets on posts by default', 'republication-tracker-tool' ),
 				'callback' => array( $this, 'republication_tracker_tool_default_post_distribution_callback' ),
 			],
+			[
+				'key'      => 'republication_tracker_tool_enable_plain_text',
+				'label'    => esc_html__( 'Enable plain text option', 'republication-tracker-tool' ),
+				'callback' => array( $this, 'republication_tracker_tool_enable_plain_text_callback' ),
+			],
 		];
 		foreach ( $settings as $setting ) {
 			add_settings_field(
@@ -109,9 +114,12 @@ class Republication_Tracker_Tool_Settings {
 		}
 	}
 
+	/**
+	 * Republication Tracker Tool section callback.
+	 */
 	public function republication_tracker_tool_section_callback() {
-		// if our republication_tracker_tool_analytics_id field has been set and is not empty, let's display
-		// a sample tracking code for users to manually input into articles
+		// If our republication_tracker_tool_analytics_id field has been set and is not empty, let's display
+		// a sample tracking code for users to manually input into articles.
 		if ( ! empty( get_option( 'republication_tracker_tool_analytics_ga4_id', false ) ) && ! empty( get_option( 'republication_tracker_tool_analytics_ga4_secret', false ) ) ) {
 			$pixel = Republication_Tracker_Tool::create_tracking_pixel_markup( 'YOUR-POST-ID' );
 			printf(
@@ -137,16 +145,19 @@ class Republication_Tracker_Tool_Settings {
 	 */
 	public function republication_tracker_additional_tracking_code_callback() {
 		$content = html_entity_decode( get_option( 'republication_tracker_additional_tracking_code' ) );
-		echo sprintf( '<p><em>%s</em></p>', wp_kses_post( __( 'Use placeholders: <strong>{{post-id}}</strong> will be replaced with the post ID, and <strong>{{post-url}}</strong> will be replaced with the post URL.', 'republication-tracker-tool' ) ) );
-		echo sprintf(
+		printf( '<p><em>%s</em></p>', wp_kses_post( __( 'Use placeholders: <strong>{{post-id}}</strong> will be replaced with the post ID, and <strong>{{post-url}}</strong> will be replaced with the post URL.', 'republication-tracker-tool' ) ) );
+		printf(
 			'<textarea name="%1$s" rows="5" cols="150">%2$s</textarea>',
 			'republication_tracker_additional_tracking_code',
 			esc_textarea( $content )
 		);
-		echo sprintf( '<p><em>%s</em></p>', wp_kses_post( __( 'The additional Tracking Code field is where you will be able to input your additional tracking code that will be appended to your copied content.', 'republication-tracker-tool' ) ) );
-		echo sprintf( '<p><em>%s</em></p>', wp_kses_post( __( 'Allowed HTML: script, img, iframe, noscript, div, span, p with safe attributes only.', 'republication-tracker-tool' ) ) );
+		printf( '<p><em>%s</em></p>', wp_kses_post( __( 'The additional Tracking Code field is where you will be able to input your additional tracking code that will be appended to your copied content.', 'republication-tracker-tool' ) ) );
+		printf( '<p><em>%s</em></p>', wp_kses_post( __( 'Allowed HTML: script, img, iframe, noscript, div, span, p with safe attributes only.', 'republication-tracker-tool' ) ) );
 	}
 
+	/**
+	 * Republication Tracker Tool policy callback.
+	 */
 	public function republication_tracker_tool_policy_callback() {
 		$content = get_option( 'republication_tracker_tool_policy' );
 		wp_editor(
@@ -163,6 +174,9 @@ class Republication_Tracker_Tool_Settings {
 		printf( '<p><em>%s</em></p>', wp_kses_post( __( 'The Republication Tracker Tool Policy field is where you will be able to input your rules and policies for users to see before they copy and paste your content to republish.As an example of a republication policy hat uses a Creative Commons license, check out the list in this plugin\'s <a href="https://github.com/Automattic/republication-tracker-tool/blob/trunk/docs/configuring-plugin-settings.md#republication-tracker-tool-policy" target="_blank">documentation</a> on GitHub.', 'republication-tracker-tool' ) ) );
 	}
 
+	/**
+	 * Republication Tracker Tool analytics ID callback.
+	 */
 	public function republication_tracker_tool_analytics_id_callback() {
 		$content = get_option( 'republication_tracker_tool_analytics_id' );
 		printf(
@@ -173,6 +187,9 @@ class Republication_Tracker_Tool_Settings {
 		);
 	}
 
+	/**
+	 * Republication Tracker Tool analytics GA4 ID callback.
+	 */
 	public function republication_tracker_tool_analytics_ga4_id_callback() {
 		$content = get_option( 'republication_tracker_tool_analytics_ga4_id' );
 		printf(
@@ -183,6 +200,9 @@ class Republication_Tracker_Tool_Settings {
 		);
 	}
 
+	/**
+	 * Republication Tracker Tool analytics GA4 secret callback.
+	 */
 	public function republication_tracker_tool_analytics_ga4_secret_callback() {
 		$content = get_option( 'republication_tracker_tool_analytics_ga4_secret' );
 		printf(
@@ -193,6 +213,9 @@ class Republication_Tracker_Tool_Settings {
 		);
 	}
 
+	/**
+	 * Republication Tracker Tool display attribution callback.
+	 */
 	public function republication_tracker_tool_display_attribution_callback() {
 		$display_attribution = get_option( 'republication_tracker_tool_display_attribution', 'on' );
 		?>
@@ -208,6 +231,9 @@ class Republication_Tracker_Tool_Settings {
 		<?php
 	}
 
+	/**
+	 * Republication Tracker Tool media distribution callback.
+	 */
 	public function republication_tracker_tool_media_distribution_callback() {
 		$media_distribution = get_option( 'republication_tracker_tool_media_distribution', 'on' );
 		?>
@@ -226,6 +252,9 @@ class Republication_Tracker_Tool_Settings {
 		<?php
 	}
 
+	/**
+	 * Republication Tracker Tool default attachment distribution callback.
+	 */
 	public function republication_tracker_tool_default_attachment_distribution_callback() {
 		$default_attachment_distribution = get_option( 'republication_tracker_tool_default_attachment_distribution', 'off' );
 		?>
@@ -244,6 +273,9 @@ class Republication_Tracker_Tool_Settings {
 		<?php
 	}
 
+	/**
+	 * Republication Tracker Tool license callback.
+	 */
 	public function republication_tracker_tool_license_callback() {
 		$selected = get_option( 'republication_tracker_tool_license', REPUBLICATION_TRACKER_TOOL_DEFAULT_LICENSE );
 
@@ -252,26 +284,45 @@ class Republication_Tracker_Tool_Settings {
 		?>
 		<fieldset>
 			<p>
-			<?php foreach ( $licenses as $license_key => $license_values ) : ?>
+				<?php foreach ( $licenses as $license_key => $license_values ) : ?>
+					<label>
+						<input
+							type="radio"
+							id="<?php echo esc_attr( 'republication_tracker_tool_license_' . $license_key ); ?>"
+							name="republication_tracker_tool_license"
+							<?php if ( $license_key === $selected ) : ?>
+								checked
+							<?php endif; ?>
+							value="<?php echo esc_attr( $license_key ); ?>"
+						/>
+						<?php echo esc_html( $license_values['label'] . ' - ' . $license_values['description'] ); ?>
+					</label>
+					<br>
+				<?php endforeach; ?>
+
 				<label>
 					<input
 						type="radio"
-						id="<?php echo esc_attr( 'republication_tracker_tool_license' ) . '_' . $license_key; ?>"
+						id="republication_tracker_tool_license_none"
 						name="<?php echo esc_attr( 'republication_tracker_tool_license' ); ?>"
-						<?php if ( $license_key === $selected ) : ?>
+						<?php if ( 'none' === $selected ) : ?>
 							checked
 						<?php endif; ?>
-						value="<?php esc_attr_e( $license_key ); ?>"
+						value="none"
 					/>
-					<?php esc_html_e( $license_values['label'] . ' - ' . $license_values['description'] ); ?>
+					<?php _e( 'No License', 'republication-tracker-tool' ); ?>
 				</label>
 				<br>
-			<?php endforeach; ?>
+
+
 			</p>
 		</fieldset>
 		<?php
 	}
 
+	/**
+	 * Republication Tracker Tool default post distribution callback.
+	 */
 	public function republication_tracker_tool_default_post_distribution_callback() {
 		$default_post_distribution = get_option( 'republication_tracker_tool_default_post_distribution', 'off' );
 		?>
@@ -284,6 +335,27 @@ class Republication_Tracker_Tool_Settings {
 				<?php endif; ?>
 			/>
 			<p><em><?php echo esc_html__( 'If checked, "Hide Republication Widget" will be enabled by default for new posts.', 'republication-tracker-tool' ); ?></em></p>
+		<?php
+	}
+
+	/**
+	 * Republication Tracker Tool enable plain text callback.
+	 */
+	public function republication_tracker_tool_enable_plain_text_callback() {
+		$enable_plain_text = get_option( 'republication_tracker_tool_enable_plain_text', 'off' );
+		?>
+			<input
+				type="checkbox"
+				id="<?php echo esc_attr( 'republication_tracker_tool_enable_plain_text' ); ?>"
+				name="<?php echo esc_attr( 'republication_tracker_tool_enable_plain_text' ); ?>"
+				<?php if ( 'on' === $enable_plain_text ) : ?>
+					checked
+				<?php endif; ?>
+			/>
+			<label for="<?php echo esc_attr( 'republication_tracker_tool_enable_plain_text' ); ?>">
+				<?php echo esc_html__( 'Offer plain text version alongside HTML', 'republication-tracker-tool' ); ?>
+			</label>
+			<p><em><?php echo esc_html__( 'If checked, users will be able to copy both HTML and plain text versions of the republishable content.', 'republication-tracker-tool' ); ?></em></p>
 		<?php
 	}
 
@@ -334,5 +406,15 @@ class Republication_Tracker_Tool_Settings {
 		];
 
 		return wp_kses( $content, $allowed_html );
+	}
+
+	/**
+	 * Check if plain text content feature is enabled.
+	 *
+	 * @return bool True if plain text content is enabled, false otherwise.
+	 */
+	public static function is_plain_text_enabled() {
+		$enable_plain_text = get_option( 'republication_tracker_tool_enable_plain_text', 'off' );
+		return 'on' === $enable_plain_text;
 	}
 }
