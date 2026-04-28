@@ -1,0 +1,51 @@
+name: Sync legacy repos
+
+# Daily 06:00 UTC mirror of legacy Newspack repos into this monorepo.
+#
+# bin/sync-legacy.sh runs end-to-end: filters each legacy repo's trunk into
+# the monorepo layout, publishes per-repo sync/<name> branches, and merges
+# them into monorepo-integration with auto-resolution and per-repo
+# escalation (draft PR with @adekbadek as reviewer) for any repo that
+# can't be merged automatically. See bin/sync-legacy.sh for the policy.
+#
+# The same script runs locally — DRY_RUN=1 bin/sync-legacy.sh from any
+# worktree skips git push and gh pr create.
+#
+# Manual trigger via workflow_dispatch is available for the day of cutover
+# and whenever someone wants fresh legacy commits reflected immediately.
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: sync-legacy
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    name: Filter, publish, and integrate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: monorepo-integration
+      - name: Install git-filter-repo
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git-filter-repo
+      - name: Configure git
+        run: |
+          git config user.name  "Adam Cassis"
+          git config user.email "adam.cassis@automattic.com"
+      - name: Run sync
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bin/sync-legacy.sh
