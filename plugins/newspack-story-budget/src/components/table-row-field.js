@@ -36,7 +36,7 @@ export default function TableRowField( { story, field, allowEdit = false } ) {
 					} }
 				/>
 			) : (
-				<StoryField fieldId={ field.slug } storyId={ story.id } allowEdit={ allowEdit } saveInPlace />
+				<StoryField fieldId={ field.slug } storyId={ story.id } allowEdit={ allowEdit } saveInPlace showPostLinks />
 			) }
 			{ fieldIdx === 0 && ! isLoadingStory && storyError && (
 				<Tooltip text={ storyError }>

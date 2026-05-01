@@ -22,7 +22,17 @@ const DEFAULT_POPOVER_PROPS = {
 	shift: true,
 };
 
-export default ( { fieldId, storyId, value, onChange = () => {}, onCloseEdit = () => {}, allowEdit = true, saveInPlace = false, popoverProps } ) => {
+export default ( {
+	fieldId,
+	storyId,
+	value,
+	onChange = () => {},
+	onCloseEdit = () => {},
+	allowEdit = true,
+	saveInPlace = false,
+	showPostLinks = false,
+	popoverProps,
+} ) => {
 	const { canEditStory, isLoadingStory, fieldError } = useSelect(
 		select => ( {
 			isLoadingStory: select( storeNamespace ).isLoadingStory( storyId ),
@@ -35,7 +45,7 @@ export default ( { fieldId, storyId, value, onChange = () => {}, onCloseEdit = (
 	const story = useStory( storyId );
 	const field = useStoryField( storyId, fieldId );
 
-	const { saveStoryField, clearErrors } = useDispatch( storeNamespace );
+	const { saveStoryField, clearErrors, fetchStory } = useDispatch( storeNamespace );
 
 	value = value !== undefined ? value : story[ fieldId ];
 
@@ -143,25 +153,46 @@ export default ( { fieldId, storyId, value, onChange = () => {}, onCloseEdit = (
 									/>
 								</div>
 								{ saveInPlace && (
-									<HStack expanded spacing={ 2 } justify="end" direction="row-reverse">
-										<Button
-											variant="primary"
-											disabled={ value === editedValue || isLoadingStory }
-											isBusy={ isLoadingStory }
-											type="submit"
-										>
-											{ __( 'Save', 'newspack-story-budget' ) }
-										</Button>
-										<Button
-											variant="secondary"
-											disabled={ isLoadingStory }
-											onClick={ () => {
-												onClose();
-												setEditedValue( value );
-											} }
-										>
-											{ __( 'Cancel', 'newspack-story-budget' ) }
-										</Button>
+									<HStack expanded spacing={ 2 } justify="space-between">
+										<HStack spacing={ 2 } justify="start">
+											{ showPostLinks && field.slug === 'name' && (
+												<Button
+													variant="link"
+													onClick={ () => {
+														onClose();
+														fetchStory( storyId );
+														window.location.hash = '#/stories/' + storyId;
+													} }
+												>
+													{ __( 'View', 'newspack-story-budget' ) }
+												</Button>
+											) }
+											{ showPostLinks && field.slug === 'name' && story.metadata?.edit_url && (
+												<Button variant="link" href={ story.metadata.edit_url } target="_blank">
+													{ __( 'Edit Post', 'newspack-story-budget' ) }
+												</Button>
+											) }
+										</HStack>
+										<HStack spacing={ 2 } justify="end" direction="row-reverse">
+											<Button
+												variant="primary"
+												disabled={ value === editedValue || isLoadingStory }
+												isBusy={ isLoadingStory }
+												type="submit"
+											>
+												{ __( 'Save', 'newspack-story-budget' ) }
+											</Button>
+											<Button
+												variant="secondary"
+												disabled={ isLoadingStory }
+												onClick={ () => {
+													onClose();
+													setEditedValue( value );
+												} }
+											>
+												{ __( 'Cancel', 'newspack-story-budget' ) }
+											</Button>
+										</HStack>
 									</HStack>
 								) }
 							</VStack>

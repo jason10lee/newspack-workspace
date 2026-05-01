@@ -30,46 +30,7 @@ body.toplevel_page_newspack-story-budget {
 	$parent-selector: &;
 
 	&__content {
-		padding: 64px 64px 0;
-		// DataViews custom styles for rendering inside content area.
-		.dataviews-wrapper {
-			overflow: auto;
-			height: calc(100vh - 140px);
-		}
-		.dataviews__view-actions,
-		.dataviews-filters__container {
-			padding: 0 0 16px;
-			left: 0;
-		}
-		.dataviews-view-table {
-			thead {
-				top: -48px;
-				background: #fff;
-			}
-			tr td:first-child,
-			tr th:first-child {
-				padding-left: 8px;
-			}
-			&__actions-column {
-				background: transparent;
-				pointer-events: none;
-				padding-bottom: 0 !important;
-				right: 0;
-				vertical-align: top;
-				.dataviews-item-actions {
-					pointer-events: auto;
-					right: 0;
-					.components-button.has-icon {
-						min-width: 32px;
-						width: 32px;
-						height: 32px;
-					}
-				}
-				.dataviews-view-table-header {
-					display: none;
-				}
-			}
-		}
+		padding: 32px 0 0;
 	}
 	&__loading {
 		display: flex;
@@ -361,6 +322,7 @@ body.toplevel_page_newspack-story-budget {
 	}
 
 	&__budgets {
+		padding: 16px 48px;
 		&-actions {
 			margin-bottom: 16px;
 

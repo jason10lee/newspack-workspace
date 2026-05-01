@@ -119,12 +119,17 @@ class Test_API extends \WP_UnitTestCase {
 	 * Test get stories modified or created since a timestamp.
 	 */
 	public function test_get_stories_since() {
-		// Get current timestamp.
+		// Set all existing stories' `_modified` meta to a known past time so they
+		// won't be returned when filtering by the current timestamp.
+		$past_time = time() - 100;
+		foreach ( self::$stories as $post_id ) {
+			update_post_meta( $post_id, Abstract_Field::FIELD_PREFIX . '_modified', $past_time );
+		}
+
+		// Capture the current timestamp as the threshold.
 		$current_time = time();
 
-		sleep( 3 );
-
-		// Create a new story after the timestamp.
+		// Create a new story; its `_modified` will be set to >= $current_time via the save_post hook.
 		$new_story = self::factory()->post->create();
 		$story = new Story( $new_story );
 		$story->update_budgets( [ self::$budgets[0] ] );
