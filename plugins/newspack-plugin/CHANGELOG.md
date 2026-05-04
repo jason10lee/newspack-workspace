@@ -1,3 +1,10 @@
+## [6.38.1](https://github.com/Automattic/newspack-plugin/compare/v6.38.0...v6.38.1) (2026-05-04)
+
+
+### Bug Fixes
+
+* **reader-revenue:** handle PayPal Payments 4.x container service IDs ([#4694](https://github.com/Automattic/newspack-plugin/issues/4694)) ([5bd0a8a](https://github.com/Automattic/newspack-plugin/commit/5bd0a8a984e1d733b96a233b75dcfe476479663f))
+
 # [6.38.0](https://github.com/Automattic/newspack-plugin/compare/v6.37.0...v6.38.0) (2026-05-04)
 
 
