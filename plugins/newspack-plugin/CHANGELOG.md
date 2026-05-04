@@ -1,3 +1,10 @@
+## [6.38.2](https://github.com/Automattic/newspack-plugin/compare/v6.38.1...v6.38.2) (2026-05-04)
+
+
+### Bug Fixes
+
+* **integrations:** conditionally enable ESP on first registration ([#4699](https://github.com/Automattic/newspack-plugin/issues/4699)) ([5605699](https://github.com/Automattic/newspack-plugin/commit/5605699bc63d8d18967d8e2eea2ae28487262409))
+
 ## [6.38.1](https://github.com/Automattic/newspack-plugin/compare/v6.38.0...v6.38.1) (2026-05-04)
 
 
