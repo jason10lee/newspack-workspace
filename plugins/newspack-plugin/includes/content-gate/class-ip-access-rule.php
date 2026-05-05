@@ -684,5 +684,21 @@ class IP_Access_Rule {
 		}
 		return '';
 	}
+
+	/**
+	 * Whether the IP-access bypass cookie was sent on the current request.
+	 *
+	 * The cookie is set after a successful institutional-access verification
+	 * (any of an institution's rules matching — IP range, email domain, or
+	 * reader data) and signals that downstream IP-rule checks may safely
+	 * run server-side without breaking the page cache. Centralizes the
+	 * `phpcs:ignore` for the restricted `$_COOKIE` read so callers don't
+	 * each carry their own annotation.
+	 *
+	 * @return bool True if the cookie is present on this request.
+	 */
+	public static function is_cookie_set() {
+		return isset( $_COOKIE[ self::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+	}
 }
 IP_Access_Rule::init();
