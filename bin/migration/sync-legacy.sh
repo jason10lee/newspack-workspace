@@ -47,6 +47,11 @@ SCRIPT_PATH="$SCRIPT_DIR/$(basename "${BASH_SOURCE[0]}")"
 SCRATCH_DIR="${SCRATCH_DIR:-/tmp/sync-legacy}"
 PARALLEL_FILTER_JOBS="${PARALLEL_FILTER_JOBS:-5}"
 
+# Shared helpers (manifest, structural overrides, dry-run wrappers, etc.)
+# live in lib.sh so transplant-pr.sh can reuse them at cutover time.
+# shellcheck source=lib.sh
+. "$SCRIPT_DIR/lib.sh"
+
 # In dry-run mode, transparently re-execute inside a fresh detached-HEAD
 # worktree based off the integration target (origin/monorepo-integration by
 # default; override with DRY_RUN_BASE) so the caller's working tree and HEAD
@@ -90,54 +95,16 @@ if [ "$DRY_RUN" = "1" ] && [ "${SYNC_LEGACY_DRY_RUN_ISOLATED:-0}" != "1" ]; then
   exit $?
 fi
 
-# Manifest: name:target_subdir. Stable order (the integrate phase merges in
-# this order, so changing it changes the merge commit shape).
-REPOS=(
-  newspack-plugin:plugins/newspack-plugin
-  newspack-blocks:plugins/newspack-blocks
-  newspack-popups:plugins/newspack-popups
-  newspack-newsletters:plugins/newspack-newsletters
-  newspack-ads:plugins/newspack-ads
-  newspack-network:plugins/newspack-network
-  newspack-multibranded-site:plugins/newspack-multibranded-site
-  newspack-listings:plugins/newspack-listings
-  newspack-sponsors:plugins/newspack-sponsors
-  newspack-story-budget:plugins/newspack-story-budget
-  super-cool-ad-inserter-plugin:plugins/super-cool-ad-inserter-plugin
-  republication-tracker-tool:plugins/republication-tracker-tool
-  newspack-theme:themes/newspack-theme
-  newspack-block-theme:themes/newspack-block-theme
-  newspack-scripts:packages/scripts
-)
-
-git_push() {
-  if [ "$DRY_RUN" = "1" ]; then
-    echo "    [dry-run] would push: git push $*"
-  else
-    git push "$@"
-  fi
-}
-
-gh_pr_create() {
-  if [ "$DRY_RUN" = "1" ]; then
-    echo "    [dry-run] would create draft PR: gh pr create $*" | head -c 400
-    echo
-  else
-    gh pr create "$@" \
-      || echo "WARN: gh pr create failed; conflict branch is at origin"
-  fi
-}
-
 # ---------------------------------------------------------------------------
 # Phase 1: filter
 # ---------------------------------------------------------------------------
 filter_all() {
   mkdir -p "$SCRATCH_DIR"
-  echo "==> Phase 1: filtering ${#REPOS[@]} legacy repos (P=$PARALLEL_FILTER_JOBS)"
+  echo "==> Phase 1: filtering ${#LEGACY_REPOS[@]} legacy repos (P=$PARALLEL_FILTER_JOBS)"
 
   # Render manifest as one entry per line for xargs.
   local manifest
-  manifest=$(printf '%s\n' "${REPOS[@]}")
+  manifest=$(printf '%s\n' "${LEGACY_REPOS[@]}")
   local rc=0
   # xargs appends each stdin line as an extra argument after the fixed ones,
   # so positional args inside `bash -c` are: $0=script, $1=scratch, $2=entry.
@@ -179,7 +146,7 @@ filter_all() {
 # ---------------------------------------------------------------------------
 publish_all() {
   echo "==> Phase 2: publishing sync/<name> branches"
-  for entry in "${REPOS[@]}"; do
+  for entry in "${LEGACY_REPOS[@]}"; do
     local name="${entry%%:*}"
     if [ "$DRY_RUN" = "1" ]; then
       # Wire the filtered tip directly into refs/remotes/origin/sync/<name>
@@ -199,146 +166,6 @@ publish_all() {
 # ---------------------------------------------------------------------------
 # Phase 3: integrate
 # ---------------------------------------------------------------------------
-
-# Drop legacy per-plugin .github/ (CI runs at the monorepo root) and
-# package-lock.json (the monorepo uses pnpm-lock.yaml at the root; per-plugin
-# lockfiles are vestigial and would otherwise be re-added on every sync run
-# that touches them upstream). Also restore workspace:* in any conflicting
-# plugin/theme package.json.
-apply_structural_overrides() {
-  local target=$1
-  git rm -rf --ignore-unmatch \
-    "$target/.github" "$target/package-lock.json" \
-    > /dev/null 2>&1 || true
-  while IFS= read -r f; do
-    case "$f" in
-      plugins/*/package.json|themes/*/package.json)
-        git checkout --ours -- "$f"
-        git add "$f"
-        ;;
-    esac
-  done < <(git diff --name-only --diff-filter=U)
-}
-
-# Rewrite repository field in every workspace package.json so semantic-release
-# resolves to the monorepo. Without this, multi-semantic-release ls-remotes
-# the legacy standalone repo of each plugin (which has no alpha/release
-# branches) and aborts. Idempotent — safe to call after every merge.
-normalize_package_repos() {
-  node -e '
-    const fs = require("fs"), path = require("path");
-    const url = "git+https://github.com/Automattic/newspack-workspace.git";
-    const roots = ["plugins", "themes", "packages"];
-    const changed = [];
-    for (const r of roots) {
-      if (!fs.existsSync(r)) continue;
-      for (const name of fs.readdirSync(r)) {
-        const dir = path.join(r, name);
-        const pj = path.join(dir, "package.json");
-        if (!fs.existsSync(pj)) continue;
-        const src = fs.readFileSync(pj, "utf8");
-        const indentMatch = src.match(/\n(\t+|[ ]+)"/);
-        const indent = indentMatch ? indentMatch[1] : "  ";
-        const trail = src.endsWith("\n") ? "\n" : "";
-        const j = JSON.parse(src);
-        const want = { type: "git", url, directory: dir };
-        if (JSON.stringify(j.repository) === JSON.stringify(want)) continue;
-        j.repository = want;
-        fs.writeFileSync(pj, JSON.stringify(j, null, indent) + trail);
-        changed.push(pj);
-      }
-    }
-    process.stdout.write(changed.join("\0"));
-  ' | while IFS= read -r -d "" f; do
-    git add -- "$f"
-  done
-}
-
-# For newspack-plugin: redirect any path under
-# plugins/newspack-plugin/packages/{colors,components,icons}/ to the workspace
-# path packages/<pkg>/<rest>. Handles three cases:
-#   1. Path is conflicted: 3-way merge legacy's change into the workspace file.
-#   2. Path is cleanly merged in (legacy added or modified, no monorepo-side
-#      change): move/overwrite at the workspace path.
-#   3. Path is deleted in legacy: drop it.
-# Returns 1 if any routed file ends up with conflict markers, or if a modified
-# file has no workspace target.
-route_extracted_packages() {
-  local rc=0
-
-  # Process conflicts first (the unresolved index entries hold the base/theirs
-  # blobs we need for a real 3-way merge).
-  while IFS= read -r path; do
-    case "$path" in
-      plugins/newspack-plugin/packages/colors/*|\
-      plugins/newspack-plugin/packages/components/*|\
-      plugins/newspack-plugin/packages/icons/*) ;;
-      *) continue ;;
-    esac
-
-    local rel="${path#plugins/newspack-plugin/packages/}"
-    local target="packages/$rel"
-    local base_blob theirs_blob
-    base_blob=$(git ls-files -s -- "$path" | awk '$3==1{print $2}')
-    theirs_blob=$(git ls-files -s -- "$path" | awk '$3==3{print $2}')
-
-    if [ -z "$theirs_blob" ]; then
-      git rm -f -- "$path" > /dev/null
-      continue
-    fi
-
-    if [ ! -e "$target" ]; then
-      if [ -z "$base_blob" ]; then
-        mkdir -p "$(dirname "$target")"
-        git show "$theirs_blob" > "$target"
-        git add "$target"
-        git rm -f -- "$path" > /dev/null
-      else
-        rc=1
-      fi
-      continue
-    fi
-
-    local base_src=/tmp/sync-base-$$
-    local theirs_src=/tmp/sync-theirs-$$
-    local merged=/tmp/sync-merged-$$
-    if [ -n "$base_blob" ]; then
-      git show "$base_blob" > "$base_src"
-    else
-      : > "$base_src"
-    fi
-    git show "$theirs_blob" > "$theirs_src"
-
-    if git merge-file -p "$theirs_src" "$base_src" "$target" > "$merged" 2>/dev/null; then
-      cp "$merged" "$target"
-      git add "$target"
-      git rm -f -- "$path" > /dev/null
-    else
-      cp "$merged" "$target"
-      git rm -f -- "$path" > /dev/null
-      rc=1
-    fi
-    rm -f "$base_src" "$theirs_src" "$merged"
-  done < <(git diff --name-only --diff-filter=U)
-
-  # Sweep any remaining cleanly-merged files under the extracted dirs (the
-  # conflict pass missed them because there was no conflict — just legacy's
-  # content landing at the legacy path).
-  while IFS= read -r path; do
-    [ -z "$path" ] && continue
-    local rel="${path#plugins/newspack-plugin/packages/}"
-    local target="packages/$rel"
-    mkdir -p "$(dirname "$target")"
-    git show ":0:$path" > "$target"
-    git add "$target"
-    git rm -f -- "$path" > /dev/null
-  done < <(git ls-files -- \
-    'plugins/newspack-plugin/packages/colors/*' \
-    'plugins/newspack-plugin/packages/components/*' \
-    'plugins/newspack-plugin/packages/icons/*')
-
-  return "$rc"
-}
 
 # Push the conflicted state to a sync/conflicts/* branch and open a draft PR.
 escalate() {
@@ -370,7 +197,7 @@ integrate_all() {
   local START
   START=$(git rev-parse HEAD)
 
-  for entry in "${REPOS[@]}"; do
+  for entry in "${LEGACY_REPOS[@]}"; do
     local name="${entry%%:*}"
     local target="${entry#*:}"
     local saved
