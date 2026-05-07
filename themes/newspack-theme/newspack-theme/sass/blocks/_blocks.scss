@@ -1035,6 +1035,17 @@ body:not(.wp-child-theme-newspack-joseph):not(.wp-child-theme-newspack-nelson) .
 	}
 }
 
+//! Icon
+.wp-block-icon {
+	&.alignleft,
+	&.alignright {
+		svg {
+			height: auto;
+			max-width: 100%;
+		}
+	}
+}
+
 //! Separator
 .wp-block-separator,
 hr {

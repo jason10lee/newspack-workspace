@@ -127,6 +127,7 @@ blockquote {
 [data-align="right"] .wp-block-pullquote {
 	border-width: 0;
 	position: relative;
+	text-align: left;
 
 	blockquote {
 		margin-top: #{1.5 * structure.$size__spacing-unit};

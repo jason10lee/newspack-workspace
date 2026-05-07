@@ -161,7 +161,8 @@ if ( ! function_exists( 'newspack_post_subtitle' ) ) :
 	 * Prints the post subtitle.
 	 */
 	function newspack_post_subtitle() {
-		$subtitle              = get_post_meta( get_the_ID(), 'newspack_post_subtitle', true );
+		$subtitle = get_post_meta( get_the_ID(), 'newspack_post_subtitle', true );
+		// TODO: Keep in sync with SUBTITLE_ALLOWED_TAGS in js/src/post-subtitle/utils.js.
 		$subtitle_allowed_tags = array(
 			'b'      => true,
 			'strong' => true,
@@ -173,9 +174,7 @@ if ( ! function_exists( 'newspack_post_subtitle' ) ) :
 			'sub'    => true,
 			'sup'    => true,
 			'a'      => array(
-				'href'   => true,
-				'target' => true,
-				'rel'    => true,
+				'href' => true,
 			),
 		);
 		if ( $subtitle ) :

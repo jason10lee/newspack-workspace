@@ -404,6 +404,7 @@ blockquote {
 
 	&:not([style*="border-"]) {
 		border-width: 16px 0 4px;
+		border-style: solid;
 		border-color: currentcolor;
 	}
 

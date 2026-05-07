@@ -1182,19 +1182,6 @@ function newspack_get_post_toggle_post_types() {
 }
 
 /**
- * Co-authors in RSS and other feeds
- * /wp-includes/feed-rss2.php uses the_author(), so we selectively filter the_author value
- */
-function newspack_coauthors_in_rss( $the_author ) {
-	if ( ! is_feed() || ! function_exists( 'coauthors' ) ) {
-		return $the_author;
-	} else {
-		return coauthors( null, null, null, null, false );
-	}
-}
-add_filter( 'the_author', 'newspack_coauthors_in_rss' );
-
-/**
  * Should a particular Ad deployment use responsive placement.
  *
  * @param boolean $responsive Default value of whether to use responsive placement.
