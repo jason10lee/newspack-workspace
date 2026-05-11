@@ -1,3 +1,17 @@
+## [6.39.3](https://github.com/Automattic/newspack-plugin/compare/v6.39.2...v6.39.3) (2026-05-11)
+
+
+### Bug Fixes
+
+* add spce above 'save' button in ad settings ([#4710](https://github.com/Automattic/newspack-plugin/issues/4710)) ([01bcd34](https://github.com/Automattic/newspack-plugin/commit/01bcd343fe2e828d2b992ab94cd017ae780b9694))
+
+## [6.39.2](https://github.com/Automattic/newspack-plugin/compare/v6.39.1...v6.39.2) (2026-05-07)
+
+
+### Bug Fixes
+
+* **subscriptions:** allow migrated subs to resubscribe ([#4706](https://github.com/Automattic/newspack-plugin/issues/4706)) ([05095d4](https://github.com/Automattic/newspack-plugin/commit/05095d434d55d9784b3eb071310fec77fbf0c5c0))
+
 ## [6.39.1](https://github.com/Automattic/newspack-plugin/compare/v6.39.0...v6.39.1) (2026-05-05)
 
 
