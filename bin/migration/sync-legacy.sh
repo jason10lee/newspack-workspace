@@ -470,10 +470,33 @@ integrate_all() {
   done
 
   if [ "$(git rev-parse HEAD)" != "$START" ]; then
+    regenerate_lockfile
     echo "==> Pushing $(git rev-list --count "$START..HEAD") new commits to monorepo-integration"
     git_push origin HEAD:monorepo-integration
   else
     echo "==> No clean merges this run; nothing to push to monorepo-integration"
+  fi
+}
+
+# Refresh pnpm-lock.yaml when plugin/theme package.json files have changed
+# during the integration run. Without this, a legacy commit that adds/removes
+# a dependency cleanly merges into the monorepo but leaves the lockfile out
+# of sync, and CI's `pnpm install --frozen-lockfile` fails on the next PR.
+# Silently no-ops when pnpm isn't available (e.g. local DRY_RUN on a machine
+# without it) — only commits a change if the lockfile actually moved.
+regenerate_lockfile() {
+  command -v pnpm > /dev/null 2>&1 || { echo "==> pnpm not found, skipping lockfile refresh"; return; }
+  echo "==> Refreshing pnpm-lock.yaml"
+  pnpm install --lockfile-only > /dev/null 2>&1 || {
+    echo "    WARN: pnpm install --lockfile-only failed; leaving lockfile untouched"
+    return
+  }
+  if [ -n "$(git status --porcelain pnpm-lock.yaml)" ]; then
+    git add pnpm-lock.yaml
+    git commit -m "chore(sync): refresh pnpm-lock.yaml after legacy merges" > /dev/null
+    echo "    lockfile updated"
+  else
+    echo "    lockfile already in sync"
   fi
 }
 

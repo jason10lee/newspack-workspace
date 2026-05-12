@@ -335,9 +335,6 @@ importers:
       '@types/lodash':
         specifier: ^4.17.23
         version: 4.17.24
-      lodash:
-        specifier: ^4.17.0
-        version: 4.18.1
       newspack-components:
         specifier: workspace:*
         version: link:../../packages/components
