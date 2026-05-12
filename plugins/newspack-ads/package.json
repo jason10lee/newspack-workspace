@@ -8,7 +8,7 @@
 		"url": "git+https://github.com/Automattic/newspack-workspace.git",
 		"directory": "plugins/newspack-ads"
 	},
-	"license": "GPL-3.0-or-later",
+	"license": "GPL-2.0-or-later",
 	"bugs": {
 		"url": "https://github.com/Automattic/newspack-ads/issues"
 	},

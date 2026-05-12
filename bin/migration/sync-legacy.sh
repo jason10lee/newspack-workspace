@@ -200,15 +200,18 @@ publish_all() {
 # Phase 3: integrate
 # ---------------------------------------------------------------------------
 
-# Drop legacy per-plugin .github/ (CI runs at the monorepo root) and
+# Drop legacy per-plugin .github/ (CI runs at the monorepo root),
 # package-lock.json (the monorepo uses pnpm-lock.yaml at the root; per-plugin
 # lockfiles are vestigial and would otherwise be re-added on every sync run
-# that touches them upstream). Also restore workspace:* in any conflicting
-# plugin/theme package.json.
+# that touches them upstream), and per-plugin LICENSE/LICENSE.md (the monorepo
+# carries a single root LICENSE under GPL-2.0-or-later, with each plugin
+# header declaring the same; per-plugin copies were folded out at cutover).
+# Also restore workspace:* in any conflicting plugin/theme package.json.
 apply_structural_overrides() {
   local target=$1
   git rm -rf --ignore-unmatch \
     "$target/.github" "$target/package-lock.json" \
+    "$target/LICENSE" "$target/LICENSE.md" \
     > /dev/null 2>&1 || true
   while IFS= read -r f; do
     case "$f" in

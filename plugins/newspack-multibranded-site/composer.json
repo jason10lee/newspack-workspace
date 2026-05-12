@@ -2,7 +2,7 @@
 	"name": "automattic/newspack-multibranded-site",
 	"description": "A plugin to allow your site to host multiple brands",
 	"type": "wordpress-plugin",
-	"license": "GPL-3.0",
+	"license": "GPL-2.0-or-later",
 	"require-dev": {
 		"automattic/vipwpcs": "^3.0",
 		"wp-coding-standards/wpcs": "^3.0",

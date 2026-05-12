@@ -2,7 +2,7 @@
 	"name": "newspack-network",
 	"version": "2.20.0",
 	"description": "The Newspack Network plugin.",
-	"license": "GPL-3.0",
+	"license": "GPL-2.0-or-later",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/Automattic/newspack-workspace.git",
