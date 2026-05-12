@@ -38,7 +38,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
-          cache: 'pnpm'
       - id: detect
         name: Compute package matrices
         run: |
