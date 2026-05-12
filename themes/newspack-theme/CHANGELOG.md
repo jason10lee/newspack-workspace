@@ -1,3 +1,10 @@
+# [2.22.0-alpha.2](https://github.com/Automattic/newspack-theme/compare/v2.22.0-alpha.1...v2.22.0-alpha.2) (2026-05-12)
+
+
+### Bug Fixes
+
+* add a box-sizing attribute to the table block to prevent overflow ([#2707](https://github.com/Automattic/newspack-theme/issues/2707)) ([7a44c99](https://github.com/Automattic/newspack-theme/commit/7a44c990d31301157d804191d7865cd1b1885c3a))
+
 ## [2.21.1](https://github.com/Automattic/newspack-theme/compare/v2.21.0...v2.21.1) (2026-05-12)
 
 
