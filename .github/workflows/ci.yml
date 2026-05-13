@@ -215,12 +215,17 @@ jobs:
         if: steps.check.outputs.has_tests == 'true'
         run: |
           # Download WP core and test library.
-          mkdir -p "$WP_CORE_DIR" "$WP_TESTS_DIR"
-          WP_VERSION=latest
+          mkdir -p "$WP_TESTS_DIR"
           WP_TESTS_TAG=$(curl -s "https://api.wordpress.org/core/version-check/1.7/" | jq -r '.offers[0].version')
 
-          curl -s "https://wordpress.org/wordpress-$WP_TESTS_TAG.tar.gz" | tar xz -C /tmp
-          mv /tmp/wordpress/* "$WP_CORE_DIR/"
+          # The tarball's top-level directory is "wordpress/". Extract to
+          # $WP_CORE_DIR's parent and strip that prefix so files land at
+          # $WP_CORE_DIR directly. Avoids the "mv: same file" failure when
+          # $WP_CORE_DIR happens to be /tmp/wordpress.
+          rm -rf "$WP_CORE_DIR"
+          mkdir -p "$WP_CORE_DIR"
+          curl -s "https://wordpress.org/wordpress-$WP_TESTS_TAG.tar.gz" \
+            | tar xz --strip-components=1 -C "$WP_CORE_DIR"
 
           svn co --quiet "https://develop.svn.wordpress.org/tags/$WP_TESTS_TAG/tests/phpunit/includes/" "$WP_TESTS_DIR/includes"
           svn co --quiet "https://develop.svn.wordpress.org/tags/$WP_TESTS_TAG/tests/phpunit/data/" "$WP_TESTS_DIR/data"
