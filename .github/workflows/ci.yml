@@ -160,11 +160,13 @@ jobs:
           # package dir lets phpcs auto-discover phpcs.xml / phpcs.xml.dist
           # and apply the local ruleset. Root phpcs.xml is the fallback
           # for packages without their own config.
+          # ignore_warnings_on_exit: errors fail CI, warnings inform but don't
+          # block. Matches the legacy per-plugin CI convention.
           dir=$(pnpm --silent --filter "${{ matrix.package }}" exec pwd)
           if [ -f "$dir/phpcs.xml" ] || [ -f "$dir/phpcs.xml.dist" ]; then
-            cd "$dir" && "$GITHUB_WORKSPACE/vendor/bin/phpcs"
+            cd "$dir" && "$GITHUB_WORKSPACE/vendor/bin/phpcs" --runtime-set ignore_warnings_on_exit 1
           else
-            "$GITHUB_WORKSPACE/vendor/bin/phpcs" --standard="$GITHUB_WORKSPACE/phpcs.xml" "$dir"
+            "$GITHUB_WORKSPACE/vendor/bin/phpcs" --standard="$GITHUB_WORKSPACE/phpcs.xml" --runtime-set ignore_warnings_on_exit 1 "$dir"
           fi
 
   php-test:
