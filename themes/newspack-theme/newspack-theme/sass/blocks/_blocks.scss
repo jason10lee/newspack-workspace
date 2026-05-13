@@ -1100,6 +1100,7 @@ hr {
 
 //! Table
 .wp-block-table {
+	box-sizing: border-box;
 	&.is-style-stripes td,
 	&.is-style-stripes th {
 		border-color: var(--newspack-theme-color-text-light);
