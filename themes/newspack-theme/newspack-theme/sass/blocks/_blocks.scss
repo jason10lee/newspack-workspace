@@ -1004,6 +1004,12 @@ body:not(.wp-child-theme-newspack-joseph):not(.wp-child-theme-newspack-nelson) .
 	img:not([style*="object-fit"]) {
 		height: auto !important; // !important to override inline styles.
 	}
+
+	// Preventing space under linked images; the wacky structure is to avoid affecting images from migrations that may not have ideal markup.
+	& > a:has( img ) {
+		display: block;
+	}
+
 }
 
 //! Galleries
