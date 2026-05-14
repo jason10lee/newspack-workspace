@@ -60,6 +60,45 @@ if ( ! function_exists( 'newspack_is_default_template' ) ) :
 endif;
 
 /**
+ * Adds check for pages that technically pass is_archive() checks but shouldn't get the classes.
+ *
+ * Inspects queried object + meta only — does not check is_feed()/is_admin().
+ * Safe for body_class (doesn't run on feeds); reuse elsewhere with care.
+ *
+ * @return bool
+ */
+function newspack_should_skip_archive_layout() {
+	if ( ! is_archive() && ! is_home() ) {
+		return false;
+	}
+
+	// Multibranded brand front page replaces a brand taxonomy archive with a page.
+	if (
+		class_exists( '\Newspack_Multibranded_Site\Meta\Show_Page_On_Front' )
+		&& class_exists( '\Newspack_Multibranded_Site\Taxonomy' )
+	) {
+		$queried_object = get_queried_object();
+		if (
+			$queried_object instanceof WP_Term
+			&& \Newspack_Multibranded_Site\Taxonomy::SLUG === $queried_object->taxonomy
+			&& ! empty( get_term_meta( $queried_object->term_id, \Newspack_Multibranded_Site\Meta\Show_Page_On_Front::get_key(), true ) )
+		) {
+			return true;
+		}
+	}
+
+	// Collections post type archive uses its own custom rendering.
+	if (
+		class_exists( '\Newspack\Collections\Post_Type' )
+		&& is_post_type_archive( \Newspack\Collections\Post_Type::get_post_type() )
+	) {
+		return true;
+	}
+
+	return false;
+}
+
+/**
  * Adds custom classes to the array of body classes.
  *
  * @param array $classes Classes for the body element.
@@ -220,25 +259,27 @@ function newspack_body_classes( $classes ) {
 		$classes[] = 'has-summary';
 	}
 
-	if ( is_home() ) {
+	$skip_archive_layout = newspack_should_skip_archive_layout();
+
+	if ( is_home() && ! $skip_archive_layout ) {
 		$classes[] = 'archive';
 	}
 
 	// Adds a class for the archive page layout.
 	$archive_layout = get_theme_mod( 'archive_layout', 'default' );
-	if ( ( is_archive() || is_home() ) && 'default' !== $archive_layout ) {
+	if ( ( is_archive() || is_home() ) && ! $skip_archive_layout && 'default' !== $archive_layout ) {
 		$classes[] = 'archive-' . esc_attr( $archive_layout );
 	}
 
 	// Adds a class for the archive page layout.
 	$archive_list_or_grid = get_theme_mod( 'archive_list_or_grid', 'list' );
-	if ( ( is_archive() || is_home() ) && 'list' !== $archive_list_or_grid ) {
+	if ( ( is_archive() || is_home() ) && ! $skip_archive_layout && 'list' !== $archive_list_or_grid ) {
 		$classes[] = 'archive-grid';
 	}
 
 	// Add a class when using the 'featured latest' archive layout.
 	$feature_latest_post = get_theme_mod( 'archive_feature_latest_post', true );
-	if ( ( is_archive() || is_home() ) && true === $feature_latest_post && ! is_post_type_archive( 'tribe_events' ) ) {
+	if ( ( is_archive() || is_home() ) && ! $skip_archive_layout && true === $feature_latest_post && ! is_post_type_archive( 'tribe_events' ) ) {
 		$classes[] = 'feature-latest';
 	}
 
