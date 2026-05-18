@@ -132,6 +132,14 @@ class WC_Order_Item_Product {
 	public function get_product_id() {
 		return $this->data['product_id'] ?? 0;
 	}
+	public function get_subtotal() {
+		return $this->data['subtotal'] ?? 0;
+	}
+	public function get_product() {
+		global $products_database;
+		$product_id = $this->data['product_id'] ?? 0;
+		return $products_database[ $product_id ] ?? false;
+	}
 }
 
 class WC_Product {
@@ -243,6 +251,12 @@ class WC_Order {
 	public function save() {
 		return true;
 	}
+	public function get_billing_email() {
+		return $this->data['billing_email'] ?? '';
+	}
+	public function get_currency() {
+		return $this->data['currency'] ?? '';
+	}
 }
 
 class WC_Subscription {
@@ -316,6 +330,12 @@ class WC_Subscription {
 	public function get_billing_interval() {
 		return $this->data['billing_interval'];
 	}
+	public function get_billing_email() {
+		return $this->data['billing_email'] ?? '';
+	}
+	public function get_currency() {
+		return $this->data['currency'] ?? '';
+	}
 	public function get_last_order( $output = 'all', $types = [], $exclude_statuses = [] ) {
 		if ( empty( $this->orders ) ) {
 			return false;
@@ -357,6 +377,11 @@ class WC_Subscription {
 		foreach ( $dates as $type => $date ) {
 			$this->data['dates'][ $type ] = $date;
 		}
+	}
+	public function get_formatted_billing_full_name() {
+		$first = $this->data['billing_first_name'] ?? '';
+		$last  = $this->data['billing_last_name'] ?? '';
+		return trim( "$first $last" );
 	}
 	public function get_items() {
 		return $this->data['items'] ?? [];
@@ -412,8 +437,42 @@ function wcs_get_subscription( $subscription_id ) {
 	global $subscriptions_database;
 	return $subscriptions_database[ $subscription_id ] ?? null;
 }
-function wcs_get_subscriptions_for_order( $order ) {
-	return [];
+function wcs_get_objects_property( $object, $property ) {
+	if ( ! is_object( $object ) ) {
+		return null;
+	}
+	if ( method_exists( $object, 'get_meta' ) ) {
+		// Real WC convention: _subscription_switch_data => 'subscription_switch_data'.
+		$meta = $object->get_meta( '_' . $property );
+		if ( ! empty( $meta ) ) {
+			return $meta;
+		}
+	}
+	return null;
+}
+function wcs_get_subscriptions_for_order( $order, $args = [] ) {
+	global $subscriptions_database;
+	if ( ! $order instanceof \WC_Order ) {
+		return [];
+	}
+	$subscription_id = (int) $order->get_meta( '_subscription_renewal' );
+	if ( $subscription_id <= 0 || ! isset( $subscriptions_database[ $subscription_id ] ) ) {
+		return [];
+	}
+	return [ $subscriptions_database[ $subscription_id ] ];
+}
+
+function wcs_order_contains_renewal( $order ) {
+	// @todo Migrate `teams-for-memberships-mocks.php` to set `_subscription_renewal` meta on its
+	// fixture orders, then drop this $GLOBALS shim. Until then, honor the legacy global so
+	// existing teams tests keep passing.
+	if ( isset( $GLOBALS['teams_mock_is_renewal'] ) ) {
+		return ! empty( $GLOBALS['teams_mock_is_renewal'] );
+	}
+	if ( ! $order instanceof \WC_Order ) {
+		return false;
+	}
+	return (int) $order->get_meta( '_subscription_renewal' ) > 0;
 }
 function wcs_get_users_subscriptions( $user_id ) {
 	global $subscriptions_database;
@@ -426,6 +485,9 @@ function wcs_get_users_subscriptions( $user_id ) {
 	return $user_subscriptions;
 }
 function wcs_get_canonical_product_id( $item ) {
+	if ( is_object( $item ) && method_exists( $item, 'get_product_id' ) ) {
+		return $item->get_product_id();
+	}
 	return null;
 }
 function wc_string_to_bool( $string ) {
@@ -483,11 +545,15 @@ function wc_customer_bought_product( $customer_email, $user_id, $product_id ) {
 	return false;
 }
 function wc_get_order( $order_id ) {
-	global $orders_database;
+	global $orders_database, $subscriptions_database;
 	foreach ( $orders_database as $order ) {
 		if ( $order->get_id() === $order_id ) {
 			return $order;
 		}
+	}
+	// Real WC: WC_Subscription extends WC_Order, so wc_get_order resolves a subscription ID too.
+	if ( isset( $subscriptions_database[ $order_id ] ) ) {
+		return $subscriptions_database[ $order_id ];
 	}
 	return false;
 }
