@@ -1,3 +1,10 @@
+## [6.39.4](https://github.com/Automattic/newspack-plugin/compare/v6.39.3...v6.39.4) (2026-05-18)
+
+
+### Bug Fixes
+
+* **stripe:** prevent re-stamping `_stripe_customer_id` on non-Stripe subscriptions ([#4714](https://github.com/Automattic/newspack-plugin/issues/4714)) ([1fbd0e9](https://github.com/Automattic/newspack-plugin/commit/1fbd0e9fdde7882650621ad6861c76eb5861d24b)), closes [woocommerce/woocommerce-gateway-stripe#2661](https://github.com/woocommerce/woocommerce-gateway-stripe/issues/2661) [#4718](https://github.com/Automattic/newspack-plugin/issues/4718) [#2](https://github.com/Automattic/newspack-plugin/issues/2)
+
 ## [6.39.3](https://github.com/Automattic/newspack-plugin/compare/v6.39.2...v6.39.3) (2026-05-11)
 
 
