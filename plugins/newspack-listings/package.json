@@ -45,6 +45,6 @@
 		"newspack-components": "workspace:*"
 	},
 	"devDependencies": {
-		"newspack-scripts": "workspace:*"
+		"newspack-scripts": "^5.9.8"
 	}
 }

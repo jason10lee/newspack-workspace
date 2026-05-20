@@ -1,6 +1,6 @@
 {
 	"name": "newspack-ads",
-	"version": "3.10.4",
+	"version": "3.11.2",
 	"author": "Automattic",
 	"private": true,
 	"repository": {
@@ -49,8 +49,6 @@
 	},
 	"devDependencies": {
 		"classnames": "^2.5.1",
-		"newspack-scripts": "workspace:*",
-		"lodash": "^4.17.0",
-		"prop-types": "^15.8.0"
+		"newspack-scripts": "^5.9.8"
 	}
 }

@@ -1,3 +1,31 @@
+## [3.11.2](https://github.com/Automattic/newspack-ads/compare/v3.11.1...v3.11.2) (2026-05-19)
+
+
+### Bug Fixes
+
+* correct spacing between ad suppression toggles for WP 7.0 ([#1066](https://github.com/Automattic/newspack-ads/issues/1066)) ([e184999](https://github.com/Automattic/newspack-ads/commit/e1849995d16ad945e6ca56ff585a4834bef7dbbb))
+
+## [3.11.1](https://github.com/Automattic/newspack-ads/compare/v3.11.0...v3.11.1) (2026-05-18)
+
+
+### Bug Fixes
+
+* **suppression:** guard get_current_screen() in customizer preview ([#1072](https://github.com/Automattic/newspack-ads/issues/1072)) ([520240e](https://github.com/Automattic/newspack-ads/commit/520240e34d35f0e13a0487fd0793a79cc2d48430))
+
+# [3.11.0](https://github.com/Automattic/newspack-ads/compare/v3.10.4...v3.11.0) (2026-05-18)
+
+
+### Bug Fixes
+
+* force alpha release ([c54d906](https://github.com/Automattic/newspack-ads/commit/c54d90668345eb9c5f2efafd9ba90304d66a1b3d))
+* hide SCAIP's panel when Newspack Ads in active, since it has its own visibility controls ([#1064](https://github.com/Automattic/newspack-ads/issues/1064)) ([17f6c41](https://github.com/Automattic/newspack-ads/commit/17f6c4169c54b49cc4d4c761ad0af15c13e6fb60))
+* update blocks for compatibility with iframe-based Post Editor ([#1031](https://github.com/Automattic/newspack-ads/issues/1031)) ([ac8a876](https://github.com/Automattic/newspack-ads/commit/ac8a87619d0cb68f44325a46c64b8b3de547996b))
+
+
+### Features
+
+* add a warning message when hidden block contains an ad ([#1056](https://github.com/Automattic/newspack-ads/issues/1056)) ([f2b0919](https://github.com/Automattic/newspack-ads/commit/f2b091970d50fc83e0ce5eacfd5d9ae67dd49db0))
+
 ## [3.10.4](https://github.com/Automattic/newspack-ads/compare/v3.10.3...v3.10.4) (2026-05-04)
 
 

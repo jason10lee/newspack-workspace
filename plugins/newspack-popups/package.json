@@ -1,6 +1,6 @@
 {
 	"name": "newspack-popups",
-	"version": "3.11.0",
+	"version": "3.12.0",
 	"author": "Automattic",
 	"main": "srsc/view/index.js",
 	"scripts": {
@@ -35,12 +35,11 @@
 	},
 	"dependencies": {
 		"classnames": "^2.5.1",
-		"js-cookie": "^3.0.5",
-		"newspack-components": "workspace:*"
+		"js-cookie": "^3.0.7",
+		"newspack-components": "^4.3.0"
 	},
 	"devDependencies": {
-		"newspack-scripts": "workspace:*",
-		"lodash": "^4.17.0"
+		"newspack-scripts": "^5.9.8"
 	},
 	"repository": {
 		"type": "git",
