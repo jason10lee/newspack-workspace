@@ -1,3 +1,10 @@
+## [2.22.2](https://github.com/Automattic/newspack-theme/compare/v2.22.1...v2.22.2) (2026-05-21)
+
+
+### Bug Fixes
+
+* remove unneeded CSS variables from TEC styles ([#2705](https://github.com/Automattic/newspack-theme/issues/2705)) ([6ada622](https://github.com/Automattic/newspack-theme/commit/6ada62255ba40ca31f9cdc0779ccf518daa6c00d))
+
 ## [2.22.1](https://github.com/Automattic/newspack-theme/compare/v2.22.0...v2.22.1) (2026-05-21)
 
 
