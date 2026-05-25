@@ -1,15 +1,6 @@
 {
 	"name": "newspack-components",
 	"version": "4.3.0",
-	"release": {
-		"branches": [
-			"release",
-			{
-				"name": "alpha",
-				"prerelease": true
-			}
-		]
-	},
 	"description": "Newspack design system components",
 	"author": "Automattic",
 	"license": "GPL-2.0-or-later",

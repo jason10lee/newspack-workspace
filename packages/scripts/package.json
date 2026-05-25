@@ -76,15 +76,6 @@
 		"format:js": "./bin/newspack-scripts.js wp-scripts format '**/{bin,config,scripts}/**/*.{js,jsx,ts,tsx}'",
 		"semantic-release": "semantic-release"
 	},
-	"release": {
-		"branches": [
-			"release",
-			{
-				"name": "alpha",
-				"prerelease": true
-			}
-		]
-	},
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/Automattic/newspack-workspace.git",
