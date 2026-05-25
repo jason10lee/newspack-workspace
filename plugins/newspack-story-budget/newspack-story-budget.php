@@ -14,10 +14,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-// Define NEWSPACK_STORY_BUDGET_VERSION.
-if ( ! defined( 'NEWSPACK_STORY_BUDGET_VERSION' ) ) {
-	define( 'NEWSPACK_STORY_BUDGET_VERSION', '1.0.0' );
-}
+define( 'NEWSPACK_STORY_BUDGET_VERSION', '1.0.0' );
 
 // Define NEWSPACK_STORY_BUDGET_PLUGIN_DIR.
 if ( ! defined( 'NEWSPACK_STORY_BUDGET_PLUGIN_DIR' ) ) {
