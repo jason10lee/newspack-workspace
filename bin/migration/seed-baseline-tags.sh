@@ -21,9 +21,17 @@
 #   - plugins/ and themes/: latest non-prerelease GitHub release of the matching
 #     legacy repo (Automattic/<dir-basename>).
 #   - packages/ (shared npm libs): latest version published to npm.
-#   A package with no resolvable prior release (e.g. the experimental
-#   newspack-story-budget, which was never released) is skipped — msr will then
-#   initialise it at 1.0.0, which is the intended behaviour for a first release.
+#   - fallback (no public release found, e.g. the never-released
+#     newspack-story-budget): the version in the package's package.json.
+#
+# Every releasable package MUST get a baseline tag — including ones with no
+# public release. A package that msr sees with no prior tag does not merely
+# start at 1.0.0: with no baseline it has no commit boundary, so it pulls the
+# ENTIRE monorepo history into its release notes. That makes the
+# `@semantic-release/git` release commit message enormous (it fails with E2BIG
+# on macOS, and produces a junk changelog full of unrelated packages' commits
+# even where the commit succeeds). Seeding a baseline at the cutover commit
+# scopes each package to only its own post-cutover commits.
 #
 # Run this ONCE, at cutover, on the cutover commit, before the first release.
 #
@@ -103,8 +111,16 @@ seed_one() {
     version=$(npm_latest "$pkg_name")
   fi
 
+  # No public release found: fall back to the in-repo version so the package
+  # still gets a baseline (see the header note on why an unbaselined package is
+  # not safe to leave to msr).
+  local from="$source"
   if [ -z "$version" ]; then
-    skipped+=("$pkg_name (no prior $source release — will start at 1.0.0)")
+    version=$(pkg_field "$pj" 'version')
+    from="package.json"
+  fi
+  if [ -z "$version" ]; then
+    skipped+=("$pkg_name (no version resolvable from $source or package.json)")
     return 0
   fi
 
