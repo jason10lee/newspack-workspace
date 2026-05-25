@@ -1,6 +1,15 @@
 {
 	"name": "newspack-icons",
 	"version": "1.0.8",
+	"release": {
+		"branches": [
+			"release",
+			{
+				"name": "alpha",
+				"prerelease": true
+			}
+		]
+	},
 	"description": "A collection of custom SVG icons for Newspack projects",
 	"main": "index.js",
 	"module": "index.js",
