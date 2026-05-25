@@ -1,6 +1,6 @@
 {
 	"name": "newspack-story-budget",
-	"version": "6.0.3",
+	"version": "1.0.0",
 	"description": "Story budgeting by Newspack. https://newspack.com",
 	"bugs": {
 		"url": "https://github.com/Automattic/newspack-story-budget/issues"
@@ -8,7 +8,7 @@
 	"homepage": "https://newspack.com",
 	"scripts": {
 		"cm": "newspack-scripts commit",
-		"semantic-release": "newspack-scripts release --files=newspack.php",
+		"semantic-release": "newspack-scripts release --files=newspack-story-budget.php",
 		"clean": "rm -rf dist",
 		"build": "npm run clean && newspack-scripts wp-scripts build",
 		"start": "npm ci && npm run watch",
