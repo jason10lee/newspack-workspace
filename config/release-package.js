@@ -16,6 +16,8 @@ module.exports = {
 	branches: [
 		'release',
 		{ name: 'alpha', prerelease: true },
+		{ name: 'hotfix/*', prerelease: '${name.replace(/\\//g, "-")}' },
+		{ name: 'epic/*', prerelease: '${name.replace(/\\//g, "-")}' },
 	],
 	plugins: [
 		'@semantic-release/commit-analyzer',
