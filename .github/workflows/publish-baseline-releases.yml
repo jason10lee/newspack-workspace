@@ -1,0 +1,51 @@
+name: Publish baseline releases
+
+# One-shot cutover step: publish each package's CURRENT production release as a
+# real GitHub release on the monorepo, so newspack-wpcloud-externals reaches
+# production parity before Atomic flips its source to the monorepo. The zip
+# assets are sourced (downloaded) from each plugin/theme's latest legacy release
+# — no rebuild — and the created `<pkgName>@<version>` tags double as the
+# multi-semantic-release baseline, so this run also replaces seed-baseline-tags.sh.
+# Manual trigger only. See publish-baseline-releases-plan.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Commit/branch to tag the monorepo releases at (default: the ref this workflow runs on).'
+        required: false
+        default: ''
+      dry-run:
+        description: 'Dry run: resolve + list, but create no releases.'
+        type: boolean
+        default: false
+
+concurrency:
+  group: publish-baseline-releases
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  publish-baseline:
+    name: Publish baseline releases
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.ref }}
+          token: ${{ secrets.GH_TOKEN }}
+      # node is used only to read package.json fields (pkg_field). No build,
+      # no install, no composer — the zips come from the legacy releases.
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+      - name: Publish baseline releases
+        run: ./.github/scripts/publish-baseline-releases.sh
+        env:
+          # TARGET defaults to HEAD = the checked-out commit, the correct cutover
+          # commit for either an empty or explicit `ref`.
+          DRY_RUN: ${{ github.event.inputs.dry-run == 'true' && '1' || '0' }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
