@@ -15,7 +15,7 @@ on:
         description: 'Commit/branch to tag the monorepo releases at (default: the ref this workflow runs on).'
         required: false
         default: ''
-      dry-run:
+      dry_run:
         description: 'Dry run: resolve + list, but create no releases.'
         type: boolean
         default: false
@@ -47,5 +47,5 @@ jobs:
         env:
           # TARGET defaults to HEAD = the checked-out commit, the correct cutover
           # commit for either an empty or explicit `ref`.
-          DRY_RUN: ${{ github.event.inputs.dry-run == 'true' && '1' || '0' }}
+          DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && '1' || '0' }}
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
