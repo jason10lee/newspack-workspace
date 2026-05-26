@@ -43,7 +43,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # Use a PAT (not GITHUB_TOKEN) so the sync's pushes to
+          # monorepo-integration trigger CI. Commits pushed with GITHUB_TOKEN
+          # do not start new workflow runs, which would leave synced changes
+          # (and PR #70's checks) silently un-validated.
+          token: ${{ secrets.GH_TOKEN }}
           ref: monorepo-integration
           path: integration
       - name: Install git-filter-repo
