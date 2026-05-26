@@ -94,11 +94,17 @@ highest_version() {
 created=()
 skipped=()
 
-# A package is releasable if it carries a release config that msr will honour:
-# either a release.config.js file or a "release" field in package.json.
+# A package is releasable if it carries a release config that semantic-release
+# (via cosmiconfig) will honour: a release.config.{js,cjs} file, any
+# .releaserc* file (e.g. newspack-theme uses .releaserc.js), or a "release"
+# field in package.json. Missing any of these forms here means the package is
+# silently skipped and msr reborns it at 1.0.0 — so keep this in sync with
+# cosmiconfig's search places.
 is_releasable() {
   local dir="$1"
   [ -f "$dir/release.config.js" ] && return 0
+  [ -f "$dir/release.config.cjs" ] && return 0
+  ls "$dir"/.releaserc* > /dev/null 2>&1 && return 0
   [ -n "$(pkg_field "$dir/package.json" 'release')" ] && return 0
   return 1
 }
