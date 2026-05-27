@@ -48,14 +48,43 @@ jobs:
           git config user.email "newspack-release-bot@users.noreply.github.com"
       - name: Install
         run: pnpm install --frozen-lockfile
+      # Determine up front whether any package will actually release. A dry-run
+      # runs only verifyConditions/analyzeCommits/generateNotes -- it never
+      # enters the prepare step, so it never invokes release:archive and needs
+      # no built assets. This lets us skip the multi-minute build below on the
+      # common no-op push (e.g. only chore/ci commits since the last tag).
+      - name: Plan release (does any package need a release?)
+        id: plan
+        run: |
+          set +e
+          pnpm exec multi-semantic-release --dry-run --sequential-init 2>&1 | tee msr-dryrun.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "multi-semantic-release dry-run failed (exit $status)"
+            exit "$status"
+          fi
+          if grep -q 'The next release version is' msr-dryrun.log; then
+            echo "release_needed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "release_needed=false" >> "$GITHUB_OUTPUT"
+            echo "No package requires a release; skipping build and release."
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_OPTIONS: --max-old-space-size=12288
       - name: Build shared packages
+        if: steps.plan.outputs.release_needed == 'true'
         run: pnpm run build:packages
       - name: Build all
+        if: steps.plan.outputs.release_needed == 'true'
         run: pnpm run build
       # Install each plugin's production PHP dependencies so release:archive
       # bundles vendor/ into the release zips. Without this the published zips
       # are missing composer dependencies (e.g. newspack-ads' googleads lib).
       - name: Install plugin PHP dependencies
+        if: steps.plan.outputs.release_needed == 'true'
         run: |
           for dir in plugins/*/; do
             if [ -f "${dir}composer.json" ]; then
@@ -64,6 +93,7 @@ jobs:
             fi
           done
       - name: Release
+        if: steps.plan.outputs.release_needed == 'true'
         run: pnpm exec multi-semantic-release --sequential-init
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
