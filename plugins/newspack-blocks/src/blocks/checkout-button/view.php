@@ -47,10 +47,8 @@ function render_callback( $attributes ) {
 	\Newspack_Blocks::enqueue_view_assets( 'checkout-button' );
 
 	$background_color           = $attributes['backgroundColor'] ?? '';
-	$text_color                 = $attributes['textColor'] ?? '';
 	$gradient                   = $attributes['gradient'] ?? '';
 	$font_size                  = $attributes['fontSize'] ?? '';
-	$font_family                = $attributes['fontFamily'] ?? '';
 	$style                      = $attributes['style'] ?? [];
 	$text_align                 = $attributes['textAlign'] ?? '';
 	$width                      = $attributes['width'] ?? '';
@@ -64,17 +62,22 @@ function render_callback( $attributes ) {
 	}
 
 	// Generate the button.
-	// Fall back to the legacy link-color storage path if textColor isn't set.
-	if ( ! $text_color && isset( $style['elements']['link']['color']['text'] ) ) {
-		$color = explode( '|', $style['elements']['link']['color']['text'] );
+	$button_color = '';
+	// Get button color from style attribute since style engine doesn't seem to handle this.
+	if ( isset( $style['elements']['link']['color']['text'] ) ) {
+		$color = $style['elements']['link']['color']['text'];
+		$color = explode( '|', $color );
 		if ( isset( $color[2] ) ) {
-			$text_color = $color[2];
+			$button_color = $color[2];
 		}
 	}
 	$button_styles = Newspack_Blocks::block_styles(
 		$attributes,
 		[
+			$background_color ? 'background-color:' . esc_attr( $background_color ) . ';' : '',
+			$font_size ? 'font-size:' . esc_attr( $font_size ) . ';' : '',
 			$width ? 'width:' . esc_attr( $width ) . '%;' : '',
+			$button_color ? 'color:' . esc_attr( $button_color ) . ';' : '',
 		]
 	);
 
@@ -83,23 +86,19 @@ function render_callback( $attributes ) {
 		$attributes,
 		[
 			'wp-block-button__link',
-			( $background_color || $gradient || isset( $style['color']['background'] ) || isset( $style['color']['gradient'] ) ) ? 'has-background' : '',
-			$background_color ? 'has-' . esc_attr( $background_color ) . '-background-color' : '',
-			$gradient ? 'has-' . esc_attr( $gradient ) . '-gradient-background' : '',
-			$font_size ? 'has-' . esc_attr( $font_size ) . '-font-size' : '',
-			$font_family ? 'has-' . esc_attr( $font_family ) . '-font-family' : '',
+			$background_color ? 'has-background has-' . esc_attr( $background_color ) . '-background-color' : '',
+			$gradient ? 'has-background has-' . esc_attr( $gradient ) . '-gradient-background' : '',
 			$text_align ? 'has-text-align-' . esc_attr( $text_align ) : '',
 			isset( $style['border']['radius'] ) && $style['border']['radius'] === 0 ? 'no-border-radius' : '',
-			( $text_color || isset( $style['color']['text'] ) ) ? 'has-text-color' : '',
-			$text_color ? 'has-' . esc_attr( $text_color ) . '-color' : '',
+			$button_color ? 'has-text-color has-' . esc_attr( $button_color ) . '-color' : '',
 		]
 	);
 
 	$button = sprintf(
 		'<button class="%1$s" style="%2$s" type="submit">%3$s</button>',
-		esc_attr( $button_classes ),
-		esc_attr( $button_styles ),
-		wp_kses_post( $text )
+		$button_classes,
+		$button_styles,
+		$text
 	);
 
 	// Generate hidden fields for the form.
@@ -167,7 +166,7 @@ function render_callback( $attributes ) {
 		[
 			'wp-block-button',
 			( $font_size || isset( $style['typography']['fontSize'] ) ) ? 'has-custom-font-size' : '',
-			$width ? 'has-custom-width wp-block-button__width-' . esc_attr( $width ) : '',
+			$width ? ' has-custom-width wp-block-button__width-' . esc_attr( $width ) : '',
 		]
 	);
 	return sprintf(
