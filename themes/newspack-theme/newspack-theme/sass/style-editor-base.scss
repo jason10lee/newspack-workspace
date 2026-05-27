@@ -499,7 +499,6 @@ html :where(.wp-block)[data-align="right"] {
 	font-family: var(--newspack-theme-font-heading);
 	font-size: var(--newspack-theme-font-size-sm);
 	font-weight: bold;
-	padding: 0.76rem 1rem;
 
 	&:not(.has-background) {
 		background: var(--newspack-theme-color-secondary);
@@ -512,7 +511,6 @@ html :where(.wp-block)[data-align="right"] {
 
 .is-style-outline .wp-block-button__link, // legacy selector
 .wp-block-button__link.is-style-outline {
-	padding: calc(0.76rem - 2px) calc(1rem - 2px);
 	&:not(.has-background) {
 		background: transparent;
 	}

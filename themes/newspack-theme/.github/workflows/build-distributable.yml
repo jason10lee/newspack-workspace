@@ -1,0 +1,64 @@
+name: Build distributable
+
+on:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-distributable:
+    name: Build theme ZIPs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Build and create archives
+        run: npm run build && npm run release:archive
+
+      - name: Upload newspack-theme
+        uses: actions/upload-artifact@v4
+        with:
+          name: newspack-theme
+          path: release/newspack-theme.zip
+
+      - name: Upload newspack-joseph
+        uses: actions/upload-artifact@v4
+        with:
+          name: newspack-joseph
+          path: release/newspack-joseph.zip
+
+      - name: Upload newspack-katharine
+        uses: actions/upload-artifact@v4
+        with:
+          name: newspack-katharine
+          path: release/newspack-katharine.zip
+
+      - name: Upload newspack-nelson
+        uses: actions/upload-artifact@v4
+        with:
+          name: newspack-nelson
+          path: release/newspack-nelson.zip
+
+      - name: Upload newspack-sacha
+        uses: actions/upload-artifact@v4
+        with:
+          name: newspack-sacha
+          path: release/newspack-sacha.zip
+
+      - name: Upload newspack-scott
+        uses: actions/upload-artifact@v4
+        with:
+          name: newspack-scott
+          path: release/newspack-scott.zip
