@@ -188,6 +188,7 @@ const Emails = () => {
 		{
 			id: 'edit',
 			label: __( 'Edit', 'newspack-plugin' ),
+			isPrimary: true,
 			callback: ( items: EmailItem[] ) => {
 				window.location.href = items[ 0 ].edit_link;
 			},

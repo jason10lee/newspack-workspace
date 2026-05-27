@@ -58,6 +58,12 @@ export default settingsSectionKeys.reduce( ( acc: any[], sectionPath ) => {
 		path: settingsTabs[ sectionPath ].path ?? `/${ sectionPath }`,
 		activeTabPaths: settingsTabs[ sectionPath ].activeTabPaths ?? undefined,
 		render: sectionComponents[ sectionPath ] ?? sectionComponents.default,
+		// The unified Emails section uses DataViews and wants the wide layout.
+		// Setting fullWidth here adds `.newspack-wizard__content--full-width`
+		// to the parent, which (a) zeroes the parent's horizontal padding and
+		// (b) disables the with-wizard-screen negative-margin breakout that
+		// would otherwise pull .newspack-dataviews 48px past our edges.
+		fullWidth: 'emails' === sectionPath,
 	} );
 	return acc;
 }, [] );

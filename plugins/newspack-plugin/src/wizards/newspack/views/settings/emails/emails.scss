@@ -2,12 +2,19 @@
 
 // Full-width override for the emails tab.
 // The parent `.newspack-wizard__sections` constrains width via max-width.
-// Break out of that for the DataViews table.
+// Break out of that for the DataViews table, but set the inherited
+// horizontal padding explicitly here so cascade quirks can't leave the
+// grid edge-to-edge.
 .newspack-emails-tab.newspack-wizard__sections {
 	max-width: 100%;
+	padding-left: var(--newspack-wizard-section-space, 24px);
+	padding-right: var(--newspack-wizard-section-space, 24px);
 }
 
 // DataViews search/filter/icon alignment.
+// The Settings emails section is registered with `fullWidth: true` in
+// sections.tsx, which adds `.newspack-wizard__content--full-width` to the
+// parent and disables the with-wizard-screen negative-margin breakout.
 .newspack-emails-tab {
 	.dataviews__view-actions {
 		display: flex;
@@ -19,6 +26,15 @@
 		display: flex;
 		align-items: flex-start;
 		gap: 8px;
+	}
+
+	// DataViews v14 hides the per-card actions menu (kebab) by default and
+	// reveals it only on hover. Override so it's always visible at the
+	// top-right of each card's media tile. Matches the user-discoverability
+	// expectation from PR #4727 (v10's kebab was inline with title; v14
+	// places it on the media tile but the same affordance applies).
+	.dataviews-view-grid__media-actions {
+		opacity: 1;
 	}
 }
 
@@ -35,8 +51,11 @@
 }
 
 // Clickable name link in grid/table view.
-.newspack-emails__name-link {
-	color: inherit;
+// Scope under `.newspack-emails-tab` (2-class specificity) so the rule
+// wins against WP's default `a` link color, which would otherwise paint
+// these titles WP-admin blue.
+.newspack-emails-tab .newspack-emails__name-link {
+	color: wp-colors.$gray-900;
 	text-decoration: none;
 
 	&:hover,
