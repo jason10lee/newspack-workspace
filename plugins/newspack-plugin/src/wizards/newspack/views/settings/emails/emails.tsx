@@ -17,6 +17,7 @@ import { Icon, envelope } from '@wordpress/icons';
 import { Badge, DataViews, Notice, utils } from '../../../../../../packages/components/src';
 import WizardsPluginCard from '../../../../wizards-plugin-card';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
+import './emails.scss';
 
 interface EmailItem {
 	label: string;

@@ -1,0 +1,58 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+// Full-width override for the emails tab.
+// The parent `.newspack-wizard__sections` constrains width via max-width.
+// Break out of that for the DataViews table.
+.newspack-emails-tab.newspack-wizard__sections {
+	max-width: 100%;
+}
+
+// DataViews search/filter/icon alignment.
+.newspack-emails-tab {
+	.dataviews__view-actions {
+		display: flex;
+		align-items: center;
+		margin-bottom: 16px;
+	}
+
+	.dataviews__search {
+		display: flex;
+		align-items: flex-start;
+		gap: 8px;
+	}
+}
+
+// Preview placeholder (grid view media field).
+.newspack-emails__preview-placeholder {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	aspect-ratio: 1;
+	width: 100%;
+	background: wp-colors.$gray-100;
+	border-radius: 4px;
+	color: wp-colors.$gray-700;
+}
+
+// Clickable name link in grid/table view.
+.newspack-emails__name-link {
+	color: inherit;
+	text-decoration: none;
+
+	&:hover,
+	&:focus {
+		text-decoration: underline;
+	}
+}
+
+// Trigger description sub-text under the title.
+// Two-line clamp keeps grid cards uniform while still showing enough context.
+.newspack-emails__trigger-description {
+	color: wp-colors.$gray-900;
+	font-size: 12px;
+	margin-top: 4px;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
