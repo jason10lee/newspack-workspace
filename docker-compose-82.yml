@@ -41,7 +41,9 @@ services:
       - ./logs/newspack-dev/apache2/:/var/log/apache2
       - ./logs/newspack-dev/php:/var/log/php
       - ./bin:/var/scripts
-      - ./repos:/newspack-repos
+      - .:/newspack-monorepo
+      - ./plugins:/newspack-plugins
+      - ./themes:/newspack-themes
       - ./html:/var/www/html
       - ./manager-html:/var/www/manager-html
       - ./additional-sites-html:/var/www/additional-sites-html

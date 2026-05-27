@@ -158,18 +158,8 @@ stop() {
 }
 
 switch_all_repos_to_branch() {
-    for dir in repos/*/; do
-        cd "$NABSPATH/$dir"
-        if [ -d ".git" ]; then
-            git checkout $1
-            echo "Updating repository to $1: $dir"
-            git pull
-            target=$(basename $dir)
-            echo $target
-            docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/build-repos.sh $target"
-        fi
-        cd ..
-    done
+    echo "In a monorepo, all code shares a single branch."
+    echo "Use 'git checkout $1' at the workspace root instead."
 }
 
 # NOTE: when adding a new command, update the 'help' case below.
@@ -278,9 +268,11 @@ case $1 in
                     src="$main_plugins/$plugin"
                     if [[ -L "$src" ]]; then
                         target="$(readlink "$src")"
-                        # Translate container path /newspack-repos/<name> to host path repos/<name>.
-                        if [[ "$target" == /newspack-repos/* ]]; then
-                            src="$NABSPATH/repos/${target#/newspack-repos/}"
+                        # Translate container path /newspack-plugins/<name> to host path plugins/<name>.
+                        if [[ "$target" == /newspack-plugins/* ]]; then
+                            src="$NABSPATH/plugins/${target#/newspack-plugins/}"
+                        elif [[ "$target" == /newspack-themes/* ]]; then
+                            src="$NABSPATH/themes/${target#/newspack-themes/}"
                         fi
                     fi
                     if [[ -d "$src" ]]; then
@@ -389,14 +381,8 @@ case $1 in
         docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER $cmd
         ;;
     pull)
-        for dir in repos/*/; do
-        cd "$NABSPATH/$dir"
-        if [ -d ".git" ]; then
-            echo "Updating repository: $dir"
-            git pull
-        fi
-        cd ..
-        done
+        echo "Pulling latest from origin..."
+        cd "$NABSPATH" && git pull
         ;;
     branch)
         switch_all_repos_to_branch $2

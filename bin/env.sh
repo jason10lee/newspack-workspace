@@ -1,6 +1,7 @@
 #!/bin/bash
 
 source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/repos.sh"
 
 # Sanitize env name for use as a database name (replace dashes with underscores).
 db_name_for_env() {
@@ -68,18 +69,32 @@ case $1 in
             case $1 in
                 --worktree)
                     if [[ -z "$2" || "$2" == --* ]]; then
-                        echo "Error: --worktree requires a value (repo:branch)"
+                        echo "Error: --worktree requires a value (plugin:branch)"
                         exit 1
                     fi
                     IFS=':' read -r wt_repo wt_branch <<< "$2"
                     validate_name "$wt_repo" "repo"
                     validate_name "$wt_branch" "branch"
-                    worktree_dir="./worktrees/$wt_repo/$wt_branch"
-                    if [[ ! -d "$NABSPATH/worktrees/$wt_repo/$wt_branch" ]]; then
-                        echo "Creating worktree $wt_repo/$wt_branch..."
-                        "$NABSPATH/bin/worktree.sh" add "$wt_repo" "$wt_branch" || exit 1
+                    # Sanitize branch for directory name (feat/foo -> feat-foo).
+                    safe_branch=$(echo "$wt_branch" | tr '/' '-')
+                    # Create a monorepo worktree at this branch if it doesn't exist.
+                    if [[ ! -d "$NABSPATH/worktrees/$safe_branch" ]]; then
+                        echo "Creating worktree at branch $wt_branch..."
+                        "$NABSPATH/bin/worktree.sh" add "$wt_branch" || exit 1
                     fi
-                    worktree_volumes="$worktree_volumes      - $worktree_dir:/newspack-repos/$wt_repo
+                    # Mount the specific plugin/theme subdirectory from the worktree.
+                    wt_host_path=$(get_repo_host_path "$wt_repo")
+                    if [[ -z "$wt_host_path" ]]; then
+                        echo "Error: unknown project '$wt_repo'"
+                        exit 1
+                    fi
+                    if [[ "$wt_host_path" == themes/* ]]; then
+                        wt_container_path="/newspack-themes/$wt_repo"
+                    else
+                        wt_container_path="/newspack-plugins/$wt_repo"
+                    fi
+                    worktree_dir="./worktrees/$safe_branch/$wt_host_path"
+                    worktree_volumes="$worktree_volumes      - $worktree_dir:$wt_container_path
 "
                     shift 2
                     ;;
@@ -123,7 +138,9 @@ services:
       - ./logs/env-${env_name}/apache2:/var/log/apache2
       - ./logs/env-${env_name}/php:/var/log/php
       - ./bin:/var/scripts
-      - ./repos:/newspack-repos
+      - .:/newspack-monorepo
+      - ./plugins:/newspack-plugins
+      - ./themes:/newspack-themes
 ${worktree_volumes}      - ./envs/${env_name}/html:/var/www/html
       - ./manager-html:/var/www/manager-html
       - ./additional-sites-html:/var/www/additional-sites-html
@@ -381,10 +398,14 @@ MIGRATE
         echo "Environment '$env_name' is ready at https://${domain}/"
         # Copy built assets from main repos into worktrees.
         if [[ "$auto_build" == true ]]; then
-            grep 'worktrees/' "$compose_file" | sed 's|.*/newspack-repos/||' | while read -r repo; do
-                src="$NABSPATH/repos/$repo"
-                # Extract worktree path from the compose volume line.
-                wt_path=$(grep "newspack-repos/$repo" "$compose_file" | sed 's/^ *- //' | cut -d: -f1)
+            grep 'worktrees/' "$compose_file" | while read -r line; do
+                # Parse volume line: "- ./worktrees/repo/branch:/newspack-{plugins,themes}/repo"
+                wt_path=$(echo "$line" | sed 's/^ *- //' | cut -d: -f1)
+                container_path=$(echo "$line" | cut -d: -f2)
+                repo=$(basename "$container_path")
+                # Resolve the source from the monorepo layout.
+                repo_host_path=$(get_repo_host_path "$repo")
+                src="$NABSPATH/$repo_host_path"
                 dst="$NABSPATH/${wt_path#./}"
                 echo "Copying built assets for $repo..."
                 for dir in node_modules vendor dist build; do
@@ -424,7 +445,7 @@ MIGRATE
             domain=$(domain_for_env "$compose_file")
             ip=$(ip_for_env "$compose_file")
             while IFS= read -r line; do
-                # Extract repo and branch from worktree volume lines like: ./worktrees/repo/branch:/newspack-repos/repo
+                # Extract repo and branch from worktree volume lines like: ./worktrees/repo/branch:/newspack-plugins/repo
                 wt=$(echo "$line" | grep -o 'worktrees/[^:]*' | sed 's|worktrees/||')
                 [[ -n "$wt" ]] && worktree_entries+=("$wt")
             done < <(grep 'worktrees/' "$compose_file")

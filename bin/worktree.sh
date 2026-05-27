@@ -1,26 +1,44 @@
 #!/bin/bash
 
 source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/repos.sh"
+
+# In the monorepo, all worktrees are of the single workspace repo.
+# A worktree at branch "feat/foo" lives at worktrees/feat-foo/ and
+# contains the entire monorepo tree. The env system mounts specific
+# subdirectories (plugins/<name>, themes/<name>) into the container.
+
+# Sanitize a branch name for use as a directory: feat/foo -> feat-foo.
+sanitize_branch() {
+    echo "$1" | tr '/' '-'
+}
 
 case $1 in
     add)
-        repo="$2"
-        branch="$3"
-        if [[ -z "$repo" || -z "$branch" ]]; then
-            echo "Usage: n worktree add <repo> <branch>"
+        # Usage: worktree.sh add <branch>
+        # Or legacy compat: worktree.sh add <repo> <branch>
+        # (repo is ignored since there's only one git repo now)
+        if [[ -n "$3" ]]; then
+            # Legacy two-arg form: worktree.sh add <repo> <branch>
+            branch="$3"
+        else
+            branch="$2"
+        fi
+        if [[ -z "$branch" ]]; then
+            echo "Usage: n worktree add <branch>"
+            echo "   or: n worktree add <plugin> <branch>  (plugin name is informational only)"
             exit 1
         fi
-        validate_name "$repo" "repo"
-        validate_name "$branch" "branch"
-        repo_dir="$NABSPATH/repos/$repo"
-        if [[ ! -d "$repo_dir/.git" ]]; then
-            echo "Error: $repo is not a valid git repo in repos/"
-            exit 1
+        validate_name "$(sanitize_branch "$branch")" "branch"
+        safe_branch=$(sanitize_branch "$branch")
+        worktree_dir="$NABSPATH/worktrees/$safe_branch"
+        if [[ -d "$worktree_dir" ]]; then
+            echo "Worktree already exists at worktrees/$safe_branch"
+            exit 0
         fi
-        worktree_dir="$NABSPATH/worktrees/$repo/$branch"
         mkdir -p "$(dirname "$worktree_dir")"
-        cd "$repo_dir" || exit 1
-        # Fetch so we see remote branches that haven't been pulled yet.
+        cd "$NABSPATH" || exit 1
+        # Fetch so we see remote branches.
         git fetch origin "$branch" 2>/dev/null
         if git show-ref --verify --quiet "refs/heads/$branch" || git show-ref --verify --quiet "refs/remotes/origin/$branch"; then
             git worktree add "$worktree_dir" "$branch" || exit 1
@@ -28,85 +46,59 @@ case $1 in
             echo "Creating branch '$branch' from $(git rev-parse --abbrev-ref HEAD)..."
             git worktree add -b "$branch" "$worktree_dir" || exit 1
         fi
+        echo "Created worktree at worktrees/$safe_branch"
         ;;
     list)
-        repo="$2"
-        if [[ -n "$repo" ]]; then
-            validate_name "$repo" "repo"
-            repo_dir="$NABSPATH/repos/$repo"
-            if [[ -d "$repo_dir/.git" ]]; then
-                cd "$repo_dir" && git worktree list
-            else
-                echo "Error: $repo is not a valid git repo in repos/"
-                exit 1
-            fi
-        else
-            for dir in "$NABSPATH"/repos/*/; do
-                if [[ -d "$dir/.git" ]]; then
-                    name=$(basename "$dir")
-                    worktrees=$(cd "$dir" && git worktree list | tail -n +2)
-                    if [[ -n "$worktrees" ]]; then
-                        echo "=== $name ==="
-                        echo "$worktrees"
-                        echo
-                    fi
-                fi
-            done
-        fi
+        cd "$NABSPATH" || exit 1
+        git worktree list
         ;;
     remove)
-        repo="$2"
-        branch="$3"
         skip_confirm=false
-        if [[ "$4" == "--yes" || "$2" == "--yes" ]]; then
-            skip_confirm=true
-        fi
-        # Support: n worktree remove --yes <repo> <branch>
-        if [[ "$2" == "--yes" ]]; then
-            repo="$3"
-            branch="$4"
-        fi
-        if [[ -z "$repo" || -z "$branch" ]]; then
-            echo "Usage: n worktree remove <repo> <branch> [--yes]"
+        shift  # consume "remove"
+        # Parse flags.
+        args=()
+        for arg in "$@"; do
+            if [[ "$arg" == "--yes" ]]; then
+                skip_confirm=true
+            else
+                args+=("$arg")
+            fi
+        done
+        # Support legacy two-arg form: remove <repo> <branch> (repo ignored).
+        if [[ ${#args[@]} -ge 2 ]]; then
+            branch="${args[1]}"
+        elif [[ ${#args[@]} -eq 1 ]]; then
+            branch="${args[0]}"
+        else
+            echo "Usage: n worktree remove <branch> [--yes]"
             exit 1
         fi
-        validate_name "$repo" "repo"
-        validate_name "$branch" "branch"
-        worktree_dir="$NABSPATH/worktrees/$repo/$branch"
-        repo_dir="$NABSPATH/repos/$repo"
-        cd "$repo_dir" || exit 1
-        # Check if worktree or branch actually exists.
+        safe_branch=$(sanitize_branch "$branch")
+        worktree_dir="$NABSPATH/worktrees/$safe_branch"
+        cd "$NABSPATH" || exit 1
         if [[ ! -d "$worktree_dir" ]] && ! git show-ref --verify --quiet "refs/heads/$branch"; then
-            echo "Nothing to remove: no worktree or branch '$branch' found for $repo."
+            echo "Nothing to remove: no worktree or branch '$branch' found."
             exit 0
         fi
         # Block removal if an environment mounts this worktree.
         for f in "$NABSPATH"/docker-compose.env-*.yml; do
             [[ -f "$f" ]] || continue
-            if grep -q "worktrees/$repo/$branch" "$f" 2>/dev/null; then
+            if grep -q "worktrees/$safe_branch" "$f" 2>/dev/null; then
                 env_name=$(basename "$f" | sed 's/docker-compose\.env-//' | sed 's/\.yml//')
-                echo "Error: worktree $repo/$branch is used by environment '$env_name'."
+                echo "Error: worktree $safe_branch is used by environment '$env_name'."
                 echo "Destroy the environment first: n env destroy $env_name"
                 exit 1
             fi
         done
-        # Show details and confirm.
         echo "Worktree: $worktree_dir"
         echo "Branch:   $branch (will be deleted)"
-        echo "Repo:     $repo"
-        # Check for uncommitted changes.
         if [[ -d "$worktree_dir" ]]; then
             changes=$(cd "$worktree_dir" && git status --porcelain 2>/dev/null)
             if [[ -n "$changes" ]]; then
                 echo ""
                 echo "WARNING: Worktree has uncommitted changes:"
                 echo "$changes" | head -10
-                count=$(echo "$changes" | wc -l | tr -d ' ')
-                if [[ "$count" -gt 10 ]]; then
-                    echo "  ... and $((count - 10)) more"
-                fi
             fi
-            # Show unpushed commits.
             unpushed=$(cd "$worktree_dir" && git log --oneline "origin/$branch..$branch" 2>/dev/null)
             if [[ -n "$unpushed" ]]; then
                 echo ""
@@ -125,18 +117,9 @@ case $1 in
         if [[ -d "$worktree_dir" ]]; then
             git worktree remove --force "$worktree_dir" || exit 1
         else
-            # Directory already gone — clean up stale git worktree reference.
             git worktree prune
         fi
-        # Delete the local branch.
         git branch -D "$branch" 2>/dev/null && echo "Deleted branch $branch"
-        # Clean up empty parent dirs left by branch names with slashes.
-        dir="$(dirname "$worktree_dir")"
-        while [[ "$dir" != "$NABSPATH/worktrees" && "$dir" != "$NABSPATH" ]]; do
-            rmdir "$dir" 2>/dev/null || break
-            dir="$(dirname "$dir")"
-        done
-        exit 0
         ;;
     cleanup)
         shift
@@ -149,58 +132,48 @@ case $1 in
                 *) echo "Usage: n worktree cleanup [--all] [--yes]"; exit 1 ;;
             esac
         done
-        # Collect all worktrees across repos.
+        cd "$NABSPATH" || exit 1
+        # Collect all worktrees (skip the main one).
         worktrees=()
-        worktree_repos=()
         worktree_branches=()
-        for dir in "$NABSPATH"/repos/*/; do
-            [[ -d "$dir/.git" ]] || continue
-            repo=$(basename "$dir")
-            while IFS= read -r line; do
-                # Skip the main worktree (first line).
-                wt_path=$(echo "$line" | awk '{print $1}')
-                wt_branch=$(echo "$line" | sed 's/.*\[//' | sed 's/\]//')
-                [[ "$wt_path" == "${dir%/}"* ]] && continue  # skip main repo dir
-                [[ -z "$wt_branch" ]] && continue
-                worktrees+=("$repo:$wt_branch")
-                worktree_repos+=("$repo")
-                worktree_branches+=("$wt_branch")
-            done < <(cd "$dir" && git worktree list 2>/dev/null)
-        done
+        while IFS= read -r line; do
+            wt_path=$(echo "$line" | awk '{print $1}')
+            wt_branch=$(echo "$line" | sed 's/.*\[//' | sed 's/\]//')
+            [[ "$wt_path" == "$NABSPATH" ]] && continue
+            [[ -z "$wt_branch" ]] && continue
+            worktrees+=("$wt_path")
+            worktree_branches+=("$wt_branch")
+        done < <(git worktree list 2>/dev/null)
         if [[ ${#worktrees[@]} -eq 0 ]]; then
             echo "No worktrees to clean up."
             exit 0
         fi
-        # --all: skip interactive selection (select all for removal).
-        # --yes: skip final confirmation prompt.
         if [[ "$cleanup_all" != true ]]; then
             if ! [ -t 0 ] || ! [ -t 1 ]; then
                 echo "Interactive mode requires a terminal. Use --all --yes for non-interactive cleanup."
                 exit 1
             fi
-            # Interactive toggle loop.
             keep_flags=()
             for i in "${!worktrees[@]}"; do keep_flags[$i]=false; done
             while true; do
                 echo ""
                 echo "Worktrees (marked for REMOVAL unless toggled):"
                 for i in "${!worktrees[@]}"; do
-                    repo="${worktree_repos[$i]}"
                     branch="${worktree_branches[$i]}"
-                    # Check if an env uses this worktree.
+                    safe=$(sanitize_branch "$branch")
                     env_label=""
                     for f in "$NABSPATH"/docker-compose.env-*.yml; do
                         [[ -f "$f" ]] || continue
-                        if grep -q "worktrees/$repo/$branch" "$f" 2>/dev/null; then
+                        if grep -q "worktrees/$safe" "$f" 2>/dev/null; then
                             env_name=$(basename "$f" | sed 's/docker-compose\.env-//' | sed 's/\.yml//')
                             env_label=" (env: $env_name)"
                             break
                         fi
                     done
                     if [[ "${keep_flags[$i]}" == true ]]; then
-                        echo "  $((i+1)). [KEEP]    ${worktrees[$i]}$env_label"
+                        echo "  $((i+1)). [KEEP]    $branch$env_label"
                     else
-                        echo "  $((i+1)). [REMOVE]  ${worktrees[$i]}$env_label"
+                        echo "  $((i+1)). [REMOVE]  $branch$env_label"
                     fi
                 done
                 echo ""
@@ -220,25 +193,22 @@ case $1 in
                 fi
             done
             to_remove=()
-            to_remove_repos=()
             to_remove_branches=()
             for i in "${!worktrees[@]}"; do
                 if [[ "${keep_flags[$i]}" != true ]]; then
                     to_remove+=("${worktrees[$i]}")
-                    to_remove_repos+=("${worktree_repos[$i]}")
                     to_remove_branches+=("${worktree_branches[$i]}")
                 fi
             done
         else
             to_remove=("${worktrees[@]}")
-            to_remove_repos=("${worktree_repos[@]}")
             to_remove_branches=("${worktree_branches[@]}")
         fi
         if [[ ${#to_remove[@]} -eq 0 ]]; then
             echo "Nothing to remove."
             exit 0
         fi
-        echo "Will remove: ${to_remove[*]}"
+        echo "Will remove: ${to_remove_branches[*]}"
         if [[ "$cleanup_yes" != true ]]; then
             read -p "Confirm? (y/N): " confirm
             if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
@@ -248,12 +218,15 @@ case $1 in
         fi
         for i in "${!to_remove[@]}"; do
             echo ""
-            echo "--- Removing ${to_remove[$i]} ---"
-            "$NABSPATH/bin/worktree.sh" remove --yes "${to_remove_repos[$i]}" "${to_remove_branches[$i]}"
+            echo "--- Removing ${to_remove_branches[$i]} ---"
+            "$NABSPATH/bin/worktree.sh" remove --yes "${to_remove_branches[$i]}"
         done
         ;;
     *)
-        echo "Usage: n worktree <add|list|remove|cleanup> [repo] [branch]"
-        echo "  cleanup [--all] [--yes]  Remove worktrees (--all selects everything, --yes skips confirmation)"
+        echo "Usage: n worktree <add|list|remove|cleanup> [branch]"
+        echo "  add <branch>              Create a monorepo worktree at the given branch"
+        echo "  list                      List all worktrees"
+        echo "  remove <branch> [--yes]   Remove a worktree and delete the branch"
+        echo "  cleanup [--all] [--yes]   Interactive bulk cleanup"
         ;;
 esac

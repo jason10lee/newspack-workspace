@@ -4,15 +4,19 @@ This file provides guidance to AI coding agents working with code in this reposi
 
 ## Overview
 
-newspack-workspace is a Docker-based local development environment for Newspack WordPress plugins and themes. It provides containerized PHP/Apache/MySQL with all dependencies needed to develop, build, and test Newspack projects.
+newspack-workspace is the Newspack monorepo. It contains all product plugins, themes, and shared packages in a single repository, plus a Docker-based local development environment with containerized PHP/Apache/MySQL.
 
-**This repository serves as a monorepo-like workspace** where all Newspack plugins and themes are cloned into the `repos/` directory. Agents can make changes across multiple plugins from this single location.
+**This is a pnpm workspace.** Plugins live in `plugins/`, themes in `themes/`, shared packages (newspack-scripts, newspack-components, newspack-colors, newspack-icons) in `packages/`. All workspace packages share a single lockfile and hoisted dependencies.
 
-## Working Across Multiple Repositories
+## Workspace Layout
 
-### Repository Locations
+### Directory Structure
 
-All Newspack repositories are cloned to `./repos/<project-name>/`. Each is an independent Git repository hosted at `github.com/Automattic/<project-name>`.
+- `plugins/<name>/` - Product plugins (12 total).
+- `themes/<name>/` - Themes (newspack-theme, newspack-block-theme).
+- `packages/<name>/` - Shared libraries (scripts, components, colors, icons).
+
+Each directory is a standalone WordPress plugin/theme that can be zipped and installed independently.
 
 ### Plugins and Themes
 
@@ -117,7 +121,7 @@ n restart         # Stop and start
 cp default.env .env           # Create local config
 ./build-image.sh              # Build Docker image (PHP 8.3)
 ./build-image-82.sh           # Build PHP 8.2 image
-./clone-repos.sh              # Clone all Newspack repos to ./repos/
+./clone-repos.sh              # (legacy, no longer needed in the monorepo)
 n start                       # Launch containers
 n install                     # Install WordPress
 n ci-build all                # Build all projects
@@ -182,7 +186,9 @@ n release                     # Switch all repos to release
 ## Architecture
 
 ### Directory Structure
-- `repos/` - Cloned Newspack repositories (plugins + themes), mounted at `/newspack-repos/` in container
+- `plugins/` - Product plugins, mounted at `/newspack-plugins/` in container
+- `themes/` - Themes, mounted at `/newspack-themes/` in container
+- `packages/` - Shared libraries (scripts, components, colors, icons)
 - `html/` - Main WordPress site, mounted at `/var/www/html`
 - `additional-sites-html/` - Additional WordPress sites
 - `manager-html/` - Newspack Manager site
@@ -197,7 +203,7 @@ n release                     # Switch all repos to release
 
 ### Context-Aware Commands
 The `n` script detects your current working directory:
-- From `repos/<project>/` - commands target that project
+- From `plugins/<project>/` or `themes/<project>/` - commands target that project
 - From `additional-sites-html/<site>/` - commands target that site
 - From `manager-html/` - commands target the manager site
 - Otherwise - commands target the main site
@@ -209,7 +215,7 @@ Use `ncd <name>` (install with `n cd-install`) for quick navigation between proj
 - Batcache for page caching via `advanced-cache.php`
 
 ### Xdebug
-Configured on port 9003 with IDE key `DOCKERDEBUG`. Path mapping: `/newspack-repos/<project>` maps to local `repos/<project>`.
+Configured on port 9003 with IDE key `DOCKERDEBUG`. Path mapping: `/newspack-plugins/<project>` maps to local `plugins/<project>`, `/newspack-themes/<project>` maps to local `themes/<project>`.
 
 ## Isolated Environments for Parallel Development
 
@@ -269,7 +275,7 @@ n sh <name>                    # Shell into environment container
 - Each env mounts `envs/<name>/html/` as `/var/www/html` (isolated from `./html/`)
 - Each env gets its own database (`wordpress_<name>`) in the shared MariaDB server
 - Each env gets a unique `WP_CACHE_KEY_SALT` to prevent memcached key collisions
-- Worktrees override specific repos (e.g., `newspack-plugin`) while sharing the rest from `./repos/`
+- Worktrees override specific plugins (e.g., `newspack-plugin`) while sharing the rest from `./plugins/`
 - All env containers join a shared `newspack_envs` Docker bridge network with their domain as a DNS alias, enabling inter-container communication (e.g., hub/node setups)
 - `n env destroy` cleans up everything: container, DB, html dir, hosts entry, and worktrees
 
@@ -305,38 +311,23 @@ n build newspack-plugin
 n build newspack-popups
 
 # Run PHP tests for each
-cd repos/newspack-plugin && n test-php
-cd repos/newspack-popups && n test-php
+cd plugins/newspack-plugin && n test-php
+cd plugins/newspack-popups && n test-php
 ```
 
 ### 4. Git Workflow for Multi-Repo Changes
-Each repo in `repos/` is independent. For related changes:
-1. Create branches with the same name across repos for easier tracking
-2. Commit to each repo separately
-3. Reference related PRs in commit messages/PR descriptions
+Everything is in a single repository. Cross-plugin changes happen in one branch and one PR.
 
-Example:
+### 5. Finding Code Across Plugins
 ```bash
-# In each affected repo
-cd repos/newspack-plugin
-git checkout -b feature/my-feature
-# ... make changes, commit ...
-
-cd repos/newspack-newsletters
-git checkout -b feature/my-feature
-# ... make changes, commit ...
-```
-
-### 5. Finding Code Across Repos
-```bash
-# Search all repos for a hook
-grep -r "newspack_reader_logged_in" repos/
+# Search all plugins for a hook
+grep -r "newspack_reader_logged_in" plugins/
 
 # Find where a function is defined
-grep -rn "function get_reader_data" repos/
+grep -rn "function get_reader_data" plugins/
 
 # Find all usages of a class
-grep -rn "Newspack_Popups" repos/
+grep -rn "Newspack_Popups" plugins/
 ```
 
 ## Common Integration Points
