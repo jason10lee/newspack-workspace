@@ -5,7 +5,8 @@
  * Version: 2.20.1
  * Author: Automattic
  * Author URI: https://newspack.com/
- * License: GPL3
+ * License: GPLv2 or later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Requires PHP: 8.1
  * Text Domain: newspack-network
  * Domain Path: /languages/
