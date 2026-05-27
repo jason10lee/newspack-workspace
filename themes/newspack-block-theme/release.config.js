@@ -6,8 +6,6 @@ module.exports = {
 			name: 'alpha',
 			prerelease: 'alpha',
 		},
-		{ name: 'hotfix/*', prerelease: '${name.replace(/\\//g, "-")}' },
-		{ name: 'epic/*', prerelease: '${name.replace(/\\//g, "-")}' },
 	],
 	prepare: [
 		'@semantic-release/changelog',

@@ -1,14 +1,13 @@
 {
-	"name": "newspack-block-theme",
+	"name": "@automattic/newspack-block-theme",
 	"version": "1.28.1",
 	"description": "A forward-looking news theme designed and developed to be highly customizable with the WordPress block editor. Brought to you by Newspack: https://newspack.com",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/Automattic/newspack-workspace.git",
-		"directory": "themes/newspack-block-theme"
+		"url": "git+https://github.com/Automattic/newspack-block-theme.git"
 	},
 	"author": "Newspack",
-	"license": "GPL-2.0-or-later",
+	"license": "GPL-3.0",
 	"bugs": {
 		"url": "https://github.com/Automattic/newspack-block-theme/issues"
 	},
@@ -43,7 +42,7 @@
 		"release": "npm run build && npm run semantic-release"
 	},
 	"devDependencies": {
-		"newspack-components": "workspace:*",
-		"newspack-scripts": "workspace:*"
+		"newspack-components": "^4.3.0",
+		"newspack-scripts": "^5.9.7"
 	}
 }
