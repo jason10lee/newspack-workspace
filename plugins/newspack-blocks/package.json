@@ -5,9 +5,10 @@
 	"description": "=== Newspack Blocks === Contributors: (this should be a list of wordpress.org userid's) Donate link: https://example.com/ Tags: comments, spam Requires at least: 4.5 Tested up to: 5.1.1 Stable tag: 0.1.0 License: GPLv2 or later License URI: https://www.gnu.org/licenses/gpl-2.0.html",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/Automattic/newspack-blocks.git"
+		"url": "git+https://github.com/Automattic/newspack-workspace.git",
+		"directory": "plugins/newspack-blocks"
 	},
-	"license": "GPL-3.0-or-later",
+	"license": "GPL-2.0-or-later",
 	"bugs": {
 		"url": "https://github.com/Automattic/newspack-blocks/issues"
 	},
@@ -44,8 +45,9 @@
 	],
 	"dependencies": {
 		"classnames": "^2.5.1",
-		"newspack-colors": "^1.1.0",
-		"newspack-icons": "^1.0.5",
+		"lodash": "^4.17.21",
+		"newspack-colors": "workspace:*",
+		"newspack-icons": "workspace:*",
 		"redux": "^5.0.0",
 		"redux-saga": "^1.4.2",
 		"regenerator-runtime": "^0.14.1",
@@ -53,8 +55,8 @@
 	},
 	"devDependencies": {
 		"@types/lodash": "^4.17.23",
-		"newspack-components": "^4.2.0",
-		"newspack-scripts": "^5.9.2"
+		"newspack-components": "workspace:*",
+		"newspack-scripts": "workspace:*"
 	},
 	"overrides": {
 		"path-to-regexp": "1.7.0"
