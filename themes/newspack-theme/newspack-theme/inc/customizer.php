@@ -1385,7 +1385,7 @@ function newspack_customize_typography_register( $wp_customize ) {
 		array(
 			'label'       => __( 'Font Provider Import Code or URL', 'newspack-theme' ),
 			// phpcs:ignore WordPress.WP.EnqueuedResources.NonEnqueuedStylesheet -- This is example text, not actual code.
-			'description' => __( 'Example: &lt;link href="https://fonts.googleapis.com/css?family=Open+Sans&display=swap" rel="stylesheet"&gt; or https://fonts.googleapis.com/css?family=Open+Sans' ),
+			'description' => __( 'Example: &lt;link href="https://fonts.googleapis.com/css?family=Open+Sans&display=swap" rel="stylesheet"&gt; or https://fonts.googleapis.com/css?family=Open+Sans.', 'newspack-theme' ),
 			'section'     => 'newspack_typography',
 			'type'        => 'text',
 		)
@@ -1690,6 +1690,8 @@ function newspack_sanitize_font_provider_url( $code ) {
 	}
 	$font_service_urls = array(
 		'google'      => 'fonts.googleapis.com',
+		'bunny'       => 'fonts.bunny.net',
+		'coollabs'    => 'api.fonts.coollabs.io',
 		'fonts'       => 'fast.fonts.net',
 		'typekit'     => 'use.typekit.net',
 		'typenetwork' => 'cloud.typenetwork.com',
