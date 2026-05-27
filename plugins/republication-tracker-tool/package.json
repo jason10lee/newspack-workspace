@@ -6,9 +6,9 @@
 	"scripts": {
 		"start": "npm ci",
 		"cm": "newspack-scripts commit",
-		"build": "newspack-scripts wp-scripts build",
+		"build": "echo 'No build in this repository.'",
 		"i18n": "grunt i18n",
-		"lint:js": "newspack-scripts wp-scripts lint-js src",
+		"lint:js": "echo 'No JS to lint in this repository.'",
 		"readme": "grunt readme",
 		"semantic-release": "newspack-scripts release --files=republication-tracker-tool.php",
 		"release:archive": "rm -rf release && mkdir -p release && rsync -r . ./release/republication-tracker-tool --exclude-from='./.distignore' && cd release && zip -r republication-tracker-tool.zip republication-tracker-tool",
@@ -16,8 +16,7 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/Automattic/newspack-workspace.git",
-		"directory": "plugins/republication-tracker-tool"
+		"url": "git+https://github.com/Automattic/republication-tracker-tool.git"
 	},
 	"license": "GPL-2.0-or-later",
 	"bugs": {
@@ -27,6 +26,6 @@
 		"grunt": "~1.6.1",
 		"grunt-wp-i18n": "~1.0.3",
 		"grunt-wp-readme-to-markdown": "~2.1.0",
-		"newspack-scripts": "workspace:*"
+		"newspack-scripts": "^5.9.5"
 	}
 }
