@@ -273,7 +273,7 @@ land_on_main() {
   n=$(git rev-list --count "$start..HEAD")
   echo "==> Landing $n new commits on main via PR (branch: $INCOMING_BRANCH)"
   if [ "$DRY_RUN" = "1" ]; then
-    echo "    [dry-run] would force-push HEAD:$INCOMING_BRANCH, open/refresh a PR to main, and enable --auto --merge"
+    echo "    [dry-run] would force-push HEAD:$INCOMING_BRANCH, open/refresh a PR to main, wait for its CI, then admin-merge"
     return 0
   fi
   git_push origin --force "HEAD:refs/heads/$INCOMING_BRANCH"
@@ -284,11 +284,21 @@ land_on_main() {
       --base main \
       --head "$INCOMING_BRANCH" \
       --title "sync: land legacy trunk commits" \
-      --body "$(printf 'Automated daily sync of commits that merged on the (frozen) legacy trunks into the monorepo.\n\n**Merge with a merge commit, never squash** — squashing collapses the per-plugin commits and breaks semantic-release version computation. Auto-merge (merge) is enabled; it lands once CI passes.')" \
+      --body "$(printf 'Automated daily sync of commits that merged on the (frozen) legacy trunks into the monorepo.\n\nLanded automatically by the sync job (admin merge with a **merge commit** after CI passes — never squash, which would collapse the per-plugin commits and break semantic-release version computation).')" \
       || echo "WARN: gh pr create failed; branch is on origin for manual handling"
   fi
-  gh pr merge "$INCOMING_BRANCH" --auto --merge \
-    || echo "WARN: could not enable auto-merge; PR is open on origin for manual merge"
+  # Wait for the PR's required checks, then admin-merge with a merge commit.
+  # GitHub auto-merge can't be used: it ignores bypass allowances and would block
+  # on main's required review. matticbot is a repo admin, so --admin merges past
+  # the review once CI is green. On CI failure the PR is left open for review.
+  echo "    waiting for CI on $INCOMING_BRANCH ..."
+  if gh pr checks "$INCOMING_BRANCH" --watch --fail-fast > /dev/null 2>&1; then
+    gh pr merge "$INCOMING_BRANCH" --merge --admin \
+      && echo "    landed on main (admin merge after green CI)" \
+      || echo "WARN: admin merge failed; PR is open on origin for manual merge"
+  else
+    echo "WARN: CI failed or incomplete on $INCOMING_BRANCH; leaving PR open for review"
+  fi
 }
 
 # ---------------------------------------------------------------------------

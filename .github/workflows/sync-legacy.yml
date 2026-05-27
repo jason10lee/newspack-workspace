@@ -5,7 +5,8 @@ name: Sync legacy repos
 # bin/migration/sync-legacy.sh runs end-to-end: filters each legacy repo's
 # trunk into the monorepo layout, publishes per-repo sync/<name> branches,
 # and integrates them onto main. Clean merges are pushed to the
-# sync/legacy-incoming branch and landed via an auto-merging PR (merge commit,
+# sync/legacy-incoming branch and landed via a PR the job admin-merges once CI
+# passes (merge commit,
 # never squash, so per-commit types survive for release versioning); repos that
 # can't be merged automatically escalate to a draft PR (@adekbadek reviewer).
 # See that script for the policy.
