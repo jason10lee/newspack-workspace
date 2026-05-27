@@ -56,19 +56,36 @@ jobs:
       - name: Plan release (does any package need a release?)
         id: plan
         run: |
+          # Fail loud on any pipeline/log/grep error: a false "no release" here
+          # would silently skip a real release, the one outcome we must avoid.
           set +e
           pnpm exec multi-semantic-release --dry-run --sequential-init 2>&1 | tee msr-dryrun.log
-          status=${PIPESTATUS[0]}
+          dryrun_status=${PIPESTATUS[0]}
+          tee_status=${PIPESTATUS[1]}
           set -e
-          if [ "$status" -ne 0 ]; then
-            echo "multi-semantic-release dry-run failed (exit $status)"
-            exit "$status"
+          if [ "$dryrun_status" -ne 0 ]; then
+            echo "multi-semantic-release dry-run failed (exit $dryrun_status)"
+            exit "$dryrun_status"
           fi
-          if grep -q 'The next release version is' msr-dryrun.log; then
+          if [ "$tee_status" -ne 0 ]; then
+            echo "Failed to write the dry-run log (tee exit $tee_status)"
+            exit "$tee_status"
+          fi
+          if [ ! -s msr-dryrun.log ]; then
+            echo "Dry-run log is missing or empty; refusing to assume no release"
+            exit 1
+          fi
+          # grep: 0 = match, 1 = no match, >=2 = error. Only 1 means "no release".
+          grep -q 'The next release version is' msr-dryrun.log
+          grep_status=$?
+          if [ "$grep_status" -eq 0 ]; then
             echo "release_needed=true" >> "$GITHUB_OUTPUT"
-          else
+          elif [ "$grep_status" -eq 1 ]; then
             echo "release_needed=false" >> "$GITHUB_OUTPUT"
             echo "No package requires a release; skipping build and release."
+          else
+            echo "Failed to scan the dry-run log (grep exit $grep_status)"
+            exit "$grep_status"
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
