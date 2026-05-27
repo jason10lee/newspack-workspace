@@ -4,8 +4,7 @@
 	"description": "",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/Automattic/newspack-workspace.git",
-		"directory": "plugins/newspack-newsletters"
+		"url": "git+https://github.com/Automattic/newspack-newsletters.git"
 	},
 	"license": "GPL-2.0-or-later",
 	"bugs": {
@@ -44,11 +43,10 @@
 	"dependencies": {
 		"classnames": "^2.5.1",
 		"mjml-browser": "^4.18.0",
-		"newspack-components": "workspace:*",
-		"qs": "^6.15.2"
+		"newspack-components": "^4.3.0",
+		"qs": "^6.15.1"
 	},
 	"devDependencies": {
-		"lodash": "^4.17.0",
-		"newspack-scripts": "workspace:*"
+		"newspack-scripts": "^5.9.7"
 	}
 }
