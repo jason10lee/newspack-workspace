@@ -53,7 +53,7 @@ jobs:
         run: pnpm run build:packages
       - name: Build plugin and release artifact
         run: |
-          pnpm --filter "{${{ inputs.plugin-path }}}" run build
+          pnpm --filter "{${{ inputs.plugin-path }}}" run --if-present build
           pnpm --filter "{${{ inputs.plugin-path }}}" run release:archive
       - name: Resolve released version
         id: ver
