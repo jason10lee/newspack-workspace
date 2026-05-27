@@ -214,51 +214,26 @@ route_extracted_packages() {
 
     local rel="${path#plugins/newspack-plugin/packages/}"
     local target="packages/$rel"
-    local base_blob theirs_blob
-    base_blob=$(git ls-files -s -- "$path" | awk '$3==1{print $2}')
+    local theirs_blob
     theirs_blob=$(git ls-files -s -- "$path" | awk '$3==3{print $2}')
 
+    # Legacy deleted the file: drop it from the workspace path too.
     if [ -z "$theirs_blob" ]; then
       git rm -f -- "$path" > /dev/null
       continue
     fi
 
-    if [ ! -e "$target" ]; then
-      if [ -z "$base_blob" ]; then
-        mkdir -p "$(dirname "$target")"
-        git show "$theirs_blob" > "$target"
-        git add "$target"
-        git rm -f -- "$path" > /dev/null
-      else
-        rc=1
-      fi
-      continue
-    fi
-
-    local base_src=/tmp/sync-base-$$
-    local theirs_src=/tmp/sync-theirs-$$
-    local merged=/tmp/sync-merged-$$
-    if [ -n "$base_blob" ]; then
-      git show "$base_blob" > "$base_src"
-    else
-      : > "$base_src"
-    fi
-    git show "$theirs_blob" > "$theirs_src"
-
-    # 3-way merge legacy's change onto the workspace file, resolving any
-    # conflicting hunk in legacy's favor (--ours, where "ours" is the first
-    # argument $theirs_src = legacy). This mirrors the run-wide "legacy wins"
-    # -Xtheirs policy: non-conflicting monorepo-side edits still merge in, but
-    # a line both sides touched takes legacy. Without --ours a divergent edit
-    # to the same line (e.g. packages/components/src/card-feature/index.tsx)
-    # leaves conflict markers and re-escalates this whole repo every sync run.
-    # With --ours the merge always resolves, so escalation is reserved for the
-    # genuinely unmergeable cases handled above (modified file, no target).
-    git merge-file --ours -p "$theirs_src" "$base_src" "$target" > "$merged" 2>/dev/null || true
-    cp "$merged" "$target"
+    # Take legacy's version of the routed file wholesale, mirroring the run-wide
+    # "legacy wins" -Xtheirs policy. A hunk-level 3-way merge here is wrong: when
+    # legacy and the monorepo's extracted copy both touched overlapping regions
+    # (e.g. packages/components/src/card-feature/index.tsx after #4721), splicing
+    # the two sides yields an internally inconsistent file — referencing an
+    # identifier only one side declares — which Babel/ESLint on .tsx won't catch
+    # and only breaks at runtime. Replacing wholesale keeps the file consistent.
+    mkdir -p "$(dirname "$target")"
+    git show "$theirs_blob" > "$target"
     git add "$target"
     git rm -f -- "$path" > /dev/null
-    rm -f "$base_src" "$theirs_src" "$merged"
   done < <(git diff --name-only --diff-filter=U)
 
   # Sweep any remaining cleanly-merged files under the extracted dirs (the

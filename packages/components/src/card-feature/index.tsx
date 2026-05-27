@@ -112,11 +112,11 @@ const CardFeature = ( {
 		badge = { text: badgeText ?? __( 'Enabled', 'newspack-plugin' ), level: badgeLevel };
 	}
 
-	const buttonLabel =
-		enabled && ! requirements ? configureLabel ?? __( 'Configure', 'newspack-plugin' ) : enableLabel ?? __( 'Enable', 'newspack-plugin' );
+	const isConfigureState = enabled && ! requirements;
+	const buttonLabel = isConfigureState ? configureLabel ?? __( 'Configure', 'newspack-plugin' ) : enableLabel ?? __( 'Enable', 'newspack-plugin' );
 
 	const handleButtonClick = () => {
-		if ( enabled && ! requirements ) {
+		if ( isConfigureState ) {
 			onConfigure?.();
 		} else {
 			onEnable?.();
@@ -165,8 +165,13 @@ const CardFeature = ( {
 								>
 									{ buttonLabel }
 								</Button>
-								{ enabled && ! requirements && !! moreControls?.length && (
-									<DropdownMenu icon={ moreVertical } label={ __( 'More', 'newspack-plugin' ) } controls={ moreControls } />
+								{ isConfigureState && !! moreControls?.length && (
+									<DropdownMenu
+										icon={ moreVertical }
+										label={ __( 'More', 'newspack-plugin' ) }
+										controls={ moreControls }
+										toggleProps={ { size: 'compact' } }
+									/>
 								) }
 							</HStack>
 							{ badge && <Badge text={ badge.text } level={ badge.level } /> }
