@@ -373,10 +373,42 @@ class Emails {
 	}
 
 	/**
-	 * Get all email configs.
+	 * Default values for email config fields shared across all providers.
 	 */
-	private static function get_email_configs() {
-		return apply_filters( 'newspack_email_configs', [] );
+	const EMAIL_CONFIG_DEFAULTS = [
+		'trigger_description' => '',
+		'recipient'           => 'reader',
+		'recommended'         => true,
+		'chip'                => 'auth-account',
+	];
+
+	/**
+	 * Fill in default values for any email config field a provider omitted.
+	 *
+	 * @param array $config Single email config entry as registered via the
+	 *                      `newspack_email_configs` filter.
+	 * @return array Config with shared defaults applied for missing fields.
+	 */
+	public static function apply_config_defaults( array $config ): array {
+		return array_merge( self::EMAIL_CONFIG_DEFAULTS, $config );
+	}
+
+	/**
+	 * Get all email configs.
+	 *
+	 * Returns the merged config set from the `newspack_email_configs`
+	 * filter with shared defaults applied to each entry. Public so
+	 * downstream consumers (e.g. the wizard response builder) can read
+	 * the unified set without re-running the filter.
+	 *
+	 * @return array Configs keyed by type, each merged with the shared defaults.
+	 */
+	public static function get_email_configs() {
+		$configs = apply_filters( 'newspack_email_configs', [] );
+		foreach ( $configs as $type => $config ) {
+			$configs[ $type ] = self::apply_config_defaults( $config );
+		}
+		return $configs;
 	}
 
 	/**
@@ -399,11 +431,15 @@ class Emails {
 			}
 			$email_config = $configs[ $type ];
 		} else {
-			$email_config = [
-				'label'       => '',
-				'description' => '',
-				'category'    => '',
-			];
+			// Fallback config for the null-type branch. Apply the shared
+			// defaults so the serialized output shape stays uniform.
+			$email_config = self::apply_config_defaults(
+				[
+					'label'       => '',
+					'description' => '',
+					'category'    => '',
+				]
+			);
 		}
 		$html_payload = get_post_meta( $post_id, \Newspack_Newsletters::EMAIL_HTML_META, true );
 		if ( ! $html_payload || empty( $html_payload ) ) {
@@ -416,18 +452,23 @@ class Emails {
 			$edit_link = str_replace( site_url(), '', $post_link );
 		}
 		$serialized_email = [
-			'type'           => $type,
-			'category'       => $email_config['category'],
-			'label'          => $email_config['label'],
-			'description'    => $email_config['description'],
-			'post_id'        => $post_id,
-			'edit_link'      => $edit_link,
-			'subject'        => get_the_title( $post_id ),
-			'from_name'      => isset( $email_config['from_name'] ) ? $email_config['from_name'] : self::get_from_name(),
-			'from_email'     => isset( $email_config['from_email'] ) ? $email_config['from_email'] : self::get_from_email(),
-			'reply_to_email' => isset( $email_config['reply_to_email'] ) ? $email_config['reply_to_email'] : self::get_reply_to_email(),
-			'status'         => get_post_status( $post_id ),
-			'html_payload'   => $html_payload,
+			'type'                => $type,
+			'category'            => $email_config['category'],
+			'label'               => $email_config['label'],
+			'description'         => $email_config['description'],
+			'post_id'             => $post_id,
+			'edit_link'           => $edit_link,
+			'subject'             => get_the_title( $post_id ),
+			'from_name'           => isset( $email_config['from_name'] ) ? $email_config['from_name'] : self::get_from_name(),
+			'from_email'          => isset( $email_config['from_email'] ) ? $email_config['from_email'] : self::get_from_email(),
+			'reply_to_email'      => isset( $email_config['reply_to_email'] ) ? $email_config['reply_to_email'] : self::get_reply_to_email(),
+			'status'              => get_post_status( $post_id ),
+			'html_payload'        => $html_payload,
+			'trigger_description' => $email_config['trigger_description'],
+			'recipient'           => $email_config['recipient'],
+			'recommended'         => $email_config['recommended'],
+			'chip'                => $email_config['chip'],
+			'source'              => isset( $email_config['source'] ) ? $email_config['source'] : 'newspack',
 		];
 
 		return $serialized_email;
