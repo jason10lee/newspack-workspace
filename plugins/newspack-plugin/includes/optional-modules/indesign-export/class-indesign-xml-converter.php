@@ -164,12 +164,14 @@ class InDesign_XML_Converter {
 	}
 
 	/**
-	 * Strip the outer tag from a block's innerHTML and XML-escape the result.
+	 * Strip the outer tag from a block's innerHTML and convert inline HTML
+	 * to XML, preserving an inline-mark whitelist and escaping the rest.
 	 *
-	 * E.g. "<p>Hello & you</p>" → "Hello &amp; you".
+	 * Whitelist (passthrough or normalized):
+	 *   <strong>, <em>, <i> → <em>, <sup>, <sub>, <br> → <br/>, <a href> → <link href>
 	 *
 	 * @param string $inner_html Block innerHTML.
-	 * @return string Escaped inner text.
+	 * @return string XML fragment.
 	 */
 	private function extract_inner_text( $inner_html ) {
 		$trimmed = trim( $inner_html );
@@ -178,7 +180,82 @@ class InDesign_XML_Converter {
 		}
 		// Strip a single outer tag pair if present.
 		$inner = preg_replace( '/^<[^>]+>(.*)<\/[^>]+>$/s', '$1', $trimmed );
-		return $this->escape_text( $inner );
+		return $this->convert_inline_html( $inner );
+	}
+
+	/**
+	 * Convert a string of post-content HTML to XML body content. Preserves
+	 * inline marks per the whitelist and escapes the rest.
+	 *
+	 * @param string $html Raw HTML fragment.
+	 * @return string XML fragment.
+	 */
+	private function convert_inline_html( $html ) {
+		// Step 1: replace whitelisted tags with placeholder tokens that survive escaping.
+		$placeholders = [];
+		$counter      = 0;
+
+		// <br> → self-closing token.
+		$html = preg_replace_callback(
+			'/<br\s*\/?>/i',
+			function () use ( &$placeholders, &$counter ) {
+				$key                  = "\0XML_TOKEN_{$counter}\0";
+				$placeholders[ $key ] = '<br/>';
+				$counter++;
+				return $key;
+			},
+			$html
+		);
+
+		// <a href="..."> ... </a> → <link href="..."> ... </link>
+		$html = preg_replace_callback(
+			'/<a\s+[^>]*href=("|\')([^"\']*)\1[^>]*>(.*?)<\/a>/is',
+			function ( $m ) use ( &$placeholders, &$counter ) {
+				$href      = htmlspecialchars( $m[2], ENT_XML1 | ENT_QUOTES, 'UTF-8' );
+				$open_key  = "\0XML_TOKEN_{$counter}\0";
+				$counter++;
+				$close_key = "\0XML_TOKEN_{$counter}\0";
+				$counter++;
+				$placeholders[ $open_key ]  = '<link href="' . $href . '">';
+				$placeholders[ $close_key ] = '</link>';
+				return $open_key . $m[3] . $close_key;
+			},
+			$html
+		);
+
+		// <strong>, </strong>, <em>, </em>, <i>, </i>, <sup>, </sup>, <sub>, </sub>
+		$pairs = [
+			'/<strong[^>]*>/i' => '<strong>',
+			'/<\/strong>/i'    => '</strong>',
+			'/<em[^>]*>/i'     => '<em>',
+			'/<\/em>/i'        => '</em>',
+			'/<i[^>]*>/i'      => '<em>',
+			'/<\/i>/i'         => '</em>',
+			'/<sup[^>]*>/i'    => '<sup>',
+			'/<\/sup>/i'       => '</sup>',
+			'/<sub[^>]*>/i'    => '<sub>',
+			'/<\/sub>/i'       => '</sub>',
+		];
+		foreach ( $pairs as $pattern => $replacement ) {
+			$html = preg_replace_callback(
+				$pattern,
+				function () use ( $replacement, &$placeholders, &$counter ) {
+					$key                  = "\0XML_TOKEN_{$counter}\0";
+					$placeholders[ $key ] = $replacement;
+					$counter++;
+					return $key;
+				},
+				$html
+			);
+		}
+
+		// Step 2: escape everything else (any remaining HTML becomes literal text).
+		$escaped = $this->escape_text( $html );
+
+		// Step 3: restore placeholders.
+		$escaped = strtr( $escaped, $placeholders );
+
+		return $escaped;
 	}
 
 	/**

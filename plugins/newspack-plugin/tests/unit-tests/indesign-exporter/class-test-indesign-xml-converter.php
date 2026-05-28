@@ -171,4 +171,85 @@ class Newspack_Test_InDesign_XML_Converter extends WP_UnitTestCase {
 
 		$this->assertStringContainsString( '<para>Cats &amp; dogs &lt; mice.</para>', $xml );
 	}
+
+	/**
+	 * <strong> passes through as <strong>.
+	 */
+	public function test_paragraph_preserves_strong() {
+		$content = "<!-- wp:paragraph -->\n<p>Some <strong>bold</strong> text.</p>\n<!-- /wp:paragraph -->";
+		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<para>Some <strong>bold</strong> text.</para>', $xml );
+	}
+
+	/**
+	 * <em> and <i> normalize to <em>.
+	 */
+	public function test_paragraph_normalizes_italics_to_em() {
+		$content = "<!-- wp:paragraph -->\n<p>A <em>real em</em> and an <i>html i</i>.</p>\n<!-- /wp:paragraph -->";
+		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<para>A <em>real em</em> and an <em>html i</em>.</para>', $xml );
+	}
+
+	/**
+	 * <sup> and <sub> pass through.
+	 */
+	public function test_paragraph_preserves_sup_sub() {
+		$content = "<!-- wp:paragraph -->\n<p>x<sup>2</sup> and H<sub>2</sub>O.</p>\n<!-- /wp:paragraph -->";
+		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( 'x<sup>2</sup>', $xml );
+		$this->assertStringContainsString( 'H<sub>2</sub>O', $xml );
+	}
+
+	/**
+	 * <br> becomes <br/>.
+	 */
+	public function test_paragraph_normalizes_br_to_self_closing() {
+		$content = "<!-- wp:paragraph -->\n<p>Line one<br>line two.</p>\n<!-- /wp:paragraph -->";
+		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( 'Line one<br/>line two.', $xml );
+	}
+
+	/**
+	 * <a href> becomes lowercase <link href>.
+	 */
+	public function test_paragraph_preserves_hyperlink_as_lowercase_link() {
+		$content = "<!-- wp:paragraph -->\n<p>See <a href=\"https://example.com/\">the source</a>.</p>\n<!-- /wp:paragraph -->";
+		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<link href="https://example.com/">the source</link>', $xml );
+	}
+
+	/**
+	 * Disallowed inline tags get escaped (not stripped, not silently rendered).
+	 *
+	 * Note: wp_insert_post() runs wp_kses_post for non-unfiltered_html users and
+	 * would strip <script> before our converter sees it. We disable kses filters
+	 * around the post create so this test exercises the converter's own escape
+	 * logic rather than WordPress's sanitization pipeline.
+	 */
+	public function test_paragraph_escapes_disallowed_inline_html() {
+		kses_remove_filters();
+		$content = "<!-- wp:paragraph -->\n<p>Naughty <script>alert(1)</script> text.</p>\n<!-- /wp:paragraph -->";
+		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
+		kses_init_filters();
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringNotContainsString( '<script>', $xml );
+		$this->assertStringContainsString( '&lt;script&gt;', $xml );
+	}
 }
