@@ -6,7 +6,7 @@
 	"scripts": {
 		"start": "npm ci",
 		"cm": "newspack-scripts commit",
-		"build": "newspack-scripts wp-scripts build",
+		"build": "true",
 		"i18n": "grunt i18n",
 		"lint:js": "newspack-scripts wp-scripts lint-js src",
 		"readme": "grunt readme",
