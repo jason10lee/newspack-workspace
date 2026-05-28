@@ -215,7 +215,139 @@ class Newspack_Test_CAP_Count_User_Posts_Fix extends WP_UnitTestCase {
 		// 1 published other-authored post on the GA term.
 		$this->create_authored_post( $other_user_id, $ga['term_id'] );
 
-		// public_only = true (the default for count_user_posts) → 2 + 1 = 3 distinct published.
+		// public_only = true → 2 + 1 = 3 distinct published. Drafts excluded.
 		$this->assertEquals( 3, count_user_posts( $user_id, 'post', true ) ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.count_user_posts_count_user_posts
+	}
+
+	/**
+	 * Drafts and trashed posts must NOT be counted even when the default $public_only=false
+	 * is passed. WP core's count_user_posts and CAP's filter both restrict to publish (+ private)
+	 * in this branch; including every registered status would inflate the Users-list column
+	 * as drafts accumulate over time.
+	 */
+	public function test_excludes_drafts_and_trash_when_public_only_false() {
+		$user_id       = self::factory()->user->create( [ 'user_login' => 'drafty' ] );
+		$other_user_id = self::factory()->user->create();
+		$ga            = $this->create_linked_ga( 'drafty' );
+
+		// 2 published posts authored by the user, all tagged with the GA term.
+		for ( $i = 0; $i < 2; $i++ ) {
+			$this->create_authored_post( $user_id, $ga['term_id'] );
+		}
+		// 1 draft authored by the user, also tagged with the GA term.
+		$draft = self::factory()->post->create(
+			[
+				'post_author' => $user_id,
+				'post_status' => 'draft',
+				'post_type'   => 'post',
+			]
+		);
+		wp_set_object_terms( $draft, [ $ga['term_id'] ], 'author' );
+		// 1 trashed post authored by the user, also tagged with the GA term.
+		$trash = self::factory()->post->create(
+			[
+				'post_author' => $user_id,
+				'post_status' => 'trash',
+				'post_type'   => 'post',
+			]
+		);
+		wp_set_object_terms( $trash, [ $ga['term_id'] ], 'author' );
+		// 1 published other-authored post on the GA term.
+		$this->create_authored_post( $other_user_id, $ga['term_id'] );
+
+		// Default $public_only=false should still exclude drafts/trash.
+		// Distinct published attributed to the user: 2 + 1 = 3.
+		$this->assertEquals( 3, count_user_posts( $user_id ) ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.count_user_posts_count_user_posts
+	}
+
+	/**
+	 * Private posts must be included when $public_only=false (matches WP core and CAP behavior).
+	 */
+	public function test_includes_private_posts_when_public_only_false() {
+		$user_id = self::factory()->user->create( [ 'user_login' => 'privposts' ] );
+		$ga      = $this->create_linked_ga( 'privposts' );
+
+		// 2 published, 1 private, all by the user and all tagged with the GA term.
+		for ( $i = 0; $i < 2; $i++ ) {
+			$this->create_authored_post( $user_id, $ga['term_id'] );
+		}
+		$private = self::factory()->post->create(
+			[
+				'post_author' => $user_id,
+				'post_status' => 'private',
+				'post_type'   => 'post',
+			]
+		);
+		wp_set_object_terms( $private, [ $ga['term_id'] ], 'author' );
+
+		// Default $public_only=false → publish + private = 3.
+		$this->assertEquals( 3, count_user_posts( $user_id ) ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.count_user_posts_count_user_posts
+	}
+
+	/**
+	 * WP_Query's 'any' post_type sentinel must be honored — `IN ('any')` would match
+	 * zero rows. Caller in the wild: newspack-blocks Author List controller calls
+	 * count_user_posts($id, ['any'], true) and drops authors with count=0 from the
+	 * API response when exclude_empty is set.
+	 */
+	public function test_honors_any_post_type_sentinel() {
+		$user_id = self::factory()->user->create( [ 'user_login' => 'manytype' ] );
+		$ga      = $this->create_linked_ga( 'manytype' );
+
+		// Author taxonomy needs to apply to pages for this test's fixtures.
+		register_taxonomy_for_object_type( 'author', 'page' );
+
+		// 2 published posts + 1 published page, all authored by the user and tagged with the GA term.
+		for ( $i = 0; $i < 2; $i++ ) {
+			$this->create_authored_post( $user_id, $ga['term_id'] );
+		}
+		$page = self::factory()->post->create(
+			[
+				'post_author' => $user_id,
+				'post_status' => 'publish',
+				'post_type'   => 'page',
+			]
+		);
+		wp_set_object_terms( $page, [ $ga['term_id'] ], 'author' );
+
+		// 'any' should expand to all searchable post types (post + page here) and return 3.
+		$this->assertEquals( 3, count_user_posts( $user_id, 'any' ) ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.count_user_posts_count_user_posts
+	}
+
+	/**
+	 * When the default 'post' is passed, the filter must honor CAP's
+	 * `coauthors_count_published_post_types` hook so third-party CPT additions
+	 * (e.g. newsletters) are included.
+	 */
+	public function test_applies_coauthors_count_published_post_types_filter() {
+		$user_id = self::factory()->user->create( [ 'user_login' => 'expanded' ] );
+		$ga      = $this->create_linked_ga( 'expanded' );
+
+		register_post_type( 'newsletter', [ 'public' => false ] );
+		register_taxonomy_for_object_type( 'author', 'newsletter' );
+
+		// 1 'post' + 1 'newsletter', both by the user, both tagged with the GA term.
+		$this->create_authored_post( $user_id, $ga['term_id'] );
+		$nl = self::factory()->post->create(
+			[
+				'post_author' => $user_id,
+				'post_status' => 'publish',
+				'post_type'   => 'newsletter',
+			]
+		);
+		wp_set_object_terms( $nl, [ $ga['term_id'] ], 'author' );
+
+		$filter = function ( $types ) {
+			return array_merge( $types, [ 'newsletter' ] );
+		};
+		add_filter( 'coauthors_count_published_post_types', $filter );
+
+		try {
+			// Default 'post' + the filter should include 'newsletter' → 2 distinct.
+			$this->assertEquals( 2, count_user_posts( $user_id ) ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.count_user_posts_count_user_posts
+		} finally {
+			remove_filter( 'coauthors_count_published_post_types', $filter );
+			unregister_post_type( 'newsletter' );
+		}
 	}
 }

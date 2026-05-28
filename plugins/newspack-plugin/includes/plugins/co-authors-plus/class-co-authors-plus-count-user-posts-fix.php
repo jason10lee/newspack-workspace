@@ -110,7 +110,7 @@ class Co_Authors_Plus_Count_User_Posts_Fix {
 	private static function count_distinct_attributed_posts( $user_id, $ga_term_taxonomy_id, $post_type, $public_only ) {
 		global $wpdb;
 
-		$type_sql   = self::build_in_list_fragment( $post_type );
+		$type_sql   = self::build_in_list_fragment( self::resolve_post_types( $post_type ) );
 		$status_sql = self::build_in_list_fragment( self::resolve_post_statuses( $public_only ) );
 
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery -- IN clauses are built from a known-safe esc_sql'd allow-list (post types and registered post statuses); direct query needed for COUNT(DISTINCT) over the union.
@@ -132,13 +132,44 @@ class Co_Authors_Plus_Count_User_Posts_Fix {
 	}
 
 	/**
-	 * Resolve the post statuses to count over, matching WP's count_user_posts behavior.
+	 * Resolve the post statuses to count over, matching CAP's `get_post_count_for_author_term`
+	 * and WP core's `count_user_posts` behavior: `publish` only when restricted to public,
+	 * `publish` + `private` otherwise. Notably excludes drafts, pending, trash, auto-draft,
+	 * and other transient/internal statuses that would inflate the count over time.
 	 *
 	 * @param bool $public_only Restrict to public statuses when true.
 	 * @return string[] Post status names.
 	 */
 	private static function resolve_post_statuses( $public_only ) {
-		return $public_only ? get_post_stati( [ 'public' => true ] ) : get_post_stati();
+		return $public_only ? [ 'publish' ] : [ 'publish', 'private' ];
+	}
+
+	/**
+	 * Resolve the post types to count over, mirroring the upstream behaviors this filter
+	 * runs after:
+	 *
+	 * - WP_Query's `'any'` sentinel expands to every post type whose `exclude_from_search`
+	 *   is `false`. Without this, `IN ('any')` would match zero rows — a real regression
+	 *   for callers like newspack-blocks' Author List controller which passes `['any']`.
+	 * - When the default `'post'` is passed (string or `['post']`), CAP's
+	 *   `coauthors_count_published_post_types` filter lets publishers expand the set
+	 *   (e.g. include `newsletter`). CAP applies this at priority 10; we mirror it here
+	 *   so the dedup'd count matches the surface area CAP counted.
+	 *
+	 * @param string|string[] $post_type The post type argument passed to count_user_posts.
+	 * @return string[] Resolved list of post type names.
+	 */
+	private static function resolve_post_types( $post_type ) {
+		if ( 'any' === $post_type || ( is_array( $post_type ) && in_array( 'any', $post_type, true ) ) ) {
+			return array_values( get_post_types( [ 'exclude_from_search' => false ], 'names' ) );
+		}
+
+		$is_default = ( 'post' === $post_type || ( is_array( $post_type ) && [ 'post' ] === $post_type ) );
+		if ( $is_default ) {
+			return (array) apply_filters( 'coauthors_count_published_post_types', [ 'post' ] );
+		}
+
+		return is_array( $post_type ) ? $post_type : [ $post_type ];
 	}
 
 	/**
