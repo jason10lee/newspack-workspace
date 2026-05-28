@@ -44,18 +44,21 @@ class Group_Subscription_MyAccount {
 	const LEAVE_GROUP_NONCE_ACTION = 'newspack_group_subscription_leave_group';
 
 	/**
-	 * Initialize hooks and filters.
+	 * Initialize hooks and filters. Deferred to init:11 so My_Account_UI_V1
+	 * (loaded inside an init:10 callback) is available for the guard.
 	 */
 	public static function init() {
-		// Ensure My Account UI v1 is active before registering endpoints/actions.
-		if ( ! class_exists( 'Newspack\\My_Account_UI_V1' ) ) {
+		add_action( 'init', [ __CLASS__, 'register_hooks' ], 11 );
+	}
+
+	public static function register_hooks() {
+		if ( ! class_exists( __NAMESPACE__ . '\\My_Account_UI_V1' ) ) {
 			return;
 		}
-		add_action( 'init', [ __CLASS__, 'flush_rewrite_rules' ] );
+		self::flush_rewrite_rules();
 		add_filter( 'woocommerce_get_query_vars', [ __CLASS__, 'add_manage_members_endpoint' ] );
 		add_filter( 'woocommerce_get_query_vars', [ __CLASS__, 'add_group_endpoint' ] );
 		add_action( 'woocommerce_account_' . self::GROUP_ENDPOINT . '_endpoint', [ __CLASS__, 'resolve_group_landing' ] );
-		// Keep the legacy endpoint addressable; redirect to the new one.
 		add_action( 'woocommerce_account_' . self::MANAGE_MEMBERS_ENDPOINT . '_endpoint', [ __CLASS__, 'render_manage_members_template_redirect' ] );
 		add_filter( 'wcs_get_users_subscriptions', [ __CLASS__, 'inject_member_group_subscriptions' ], 15, 2 );
 		add_filter( 'map_meta_cap', [ __CLASS__, 'grant_group_member_view_order_cap' ], 15, 4 );

@@ -5,7 +5,7 @@
  * that the tabs controller restores on switch) still respond.
  */
 
-const positionContent = ( dropdown, content, toggle ) => {
+const positionContent = ( content, toggle ) => {
 	const rect = content.getBoundingClientRect();
 
 	// If content would overflow the right edge of the viewport.
@@ -51,7 +51,7 @@ document.addEventListener( 'click', e => {
 		} );
 		dropdown.classList.toggle( 'active' );
 		if ( dropdown.classList.contains( 'active' ) ) {
-			positionContent( dropdown, content, toggle );
+			positionContent( content, toggle );
 		}
 		return;
 	}

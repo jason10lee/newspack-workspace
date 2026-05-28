@@ -216,32 +216,29 @@ class Test_Group_Management_Nav extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Group endpoint with no subscription ID auto-redirects when the user manages exactly one group.
+	 * Group endpoint with no subscription ID renders the group page inline
+	 * (no redirect) when the user manages exactly one group.
 	 */
-	public function test_group_endpoint_without_subscription_id_redirects_when_user_has_one_group() {
+	public function test_group_endpoint_without_subscription_id_renders_when_user_has_one_group() {
 		$owner_id = $this->factory->user->create( [ 'role' => 'subscriber' ] );
-		$sub      = $this->create_subscription( $owner_id, true );
+		$this->create_subscription( $owner_id, true );
 		wp_set_current_user( $owner_id );
 
-		$redirect_to = null;
-		$capture     = function( $location ) use ( &$redirect_to ) {
-			$redirect_to = $location;
+		$redirected = false;
+		$capture    = function( $location ) use ( &$redirected ) {
+			$redirected = true;
 			throw new \Exception( 'redirect_intercepted' );
 		};
 		$allow_host = fn( $hosts ) => array_merge( $hosts, [ 'example.com' ] );
 		add_filter( 'wp_redirect', $capture, 1 );
 		add_filter( 'allowed_redirect_hosts', $allow_host );
 
+		ob_start();
 		try {
-			try {
-				\Newspack\Group_Subscription_MyAccount::resolve_group_landing( '' );
-				$this->fail( 'Expected redirect exception' );
-			} catch ( \Exception $e ) {
-				$this->assertStringContainsString( 'redirect_intercepted', $e->getMessage() );
-			}
-			$this->assertNotNull( $redirect_to );
-			$this->assertStringContainsString( '/group/' . $sub->get_id(), $redirect_to );
+			\Newspack\Group_Subscription_MyAccount::resolve_group_landing( '' );
+			$this->assertFalse( $redirected, 'Single-group landing should render inline, not redirect.' );
 		} finally {
+			ob_end_clean();
 			remove_filter( 'wp_redirect', $capture, 1 );
 			remove_filter( 'allowed_redirect_hosts', $allow_host );
 			wp_set_current_user( 0 );
