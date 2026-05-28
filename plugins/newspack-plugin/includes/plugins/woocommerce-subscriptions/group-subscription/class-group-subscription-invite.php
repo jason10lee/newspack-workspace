@@ -692,7 +692,7 @@ class Group_Subscription_Invite {
 		// Compute "where do we send them on errors" for both auth states.
 		$current_user      = wp_get_current_user();
 		$is_logged_in      = (bool) $current_user->ID;
-		$myaccount_url = function_exists( 'wc_get_account_endpoint_url' ) ? wc_get_account_endpoint_url( 'edit-account' ) : home_url();
+		$myaccount_url     = function_exists( 'wc_get_account_endpoint_url' ) ? wc_get_account_endpoint_url( 'edit-account' ) : home_url();
 		$error_target_url  = $is_logged_in ? $myaccount_url : home_url();
 
 		// Validate the link.
