@@ -1,3 +1,10 @@
+## newspack [6.41.4-hotfix-cap-count-user-posts-dedup.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.41.4-hotfix-cap-count-user-posts-dedup.1...newspack@6.41.4-hotfix-cap-count-user-posts-dedup.2) (2026-05-28)
+
+
+### Bug Fixes
+
+* **co-authors-plus:** correct status set, honor any sentinel and CPT filter ([18d91b7](https://github.com/Automattic/newspack-workspace/commit/18d91b77cd645f668e1d999806bd4415cdccb4f9))
+
 ## newspack [6.41.4-hotfix-cap-count-user-posts-dedup.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.41.3...newspack@6.41.4-hotfix-cap-count-user-posts-dedup.1) (2026-05-28)
 
 
