@@ -38,18 +38,6 @@
 	}
 }
 
-// Preview placeholder (grid view media field).
-.newspack-emails__preview-placeholder {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	aspect-ratio: 1;
-	width: 100%;
-	background: wp-colors.$gray-100;
-	border-radius: 4px;
-	color: wp-colors.$gray-700;
-}
-
 // Clickable name link in grid/table view.
 // Scope under `.newspack-emails-tab` (2-class specificity) so the rule
 // wins against WP's default `a` link color, which would otherwise paint
@@ -59,8 +47,13 @@
 	text-decoration: none;
 
 	&:hover,
-	&:focus {
+	&:focus-visible {
 		text-decoration: underline;
+	}
+
+	&:focus-visible {
+		outline: 2px solid;
+		outline-offset: 1px;
 	}
 }
 

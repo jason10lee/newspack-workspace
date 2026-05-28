@@ -401,7 +401,25 @@ class Emails {
 	 * downstream consumers (e.g. the wizard response builder) can read
 	 * the unified set without re-running the filter.
 	 *
-	 * @return array Configs keyed by type, each merged with the shared defaults.
+	 * @return array<string, array{
+	 *     name?:                string,
+	 *     category?:            string,
+	 *     label?:               string,
+	 *     description?:         string,
+	 *     template?:            string,
+	 *     editor_notice?:       string,
+	 *     from_name?:           string,
+	 *     from_email?:          string,
+	 *     reply_to_email?:      string,
+	 *     available_placeholders?: array,
+	 *     trigger_description: string,
+	 *     recipient:           'reader'|'admin',
+	 *     recommended:         bool,
+	 *     chip:                'auth-account'|'reader-revenue',
+	 *     source?:             'newspack'|'woocommerce',
+	 * }> Configs keyed by type. The four fields without `?` are guaranteed
+	 *    by `apply_config_defaults()`; the rest are provider-specified and
+	 *    may be absent.
 	 */
 	public static function get_email_configs() {
 		$configs = apply_filters( 'newspack_email_configs', [] );

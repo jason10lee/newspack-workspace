@@ -9,7 +9,6 @@ import { __ } from '@wordpress/i18n';
 import { useState, useEffect, useMemo, Fragment } from '@wordpress/element';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
-import { Icon, envelope } from '@wordpress/icons';
 
 /**
  * Internal dependencies.
@@ -29,6 +28,8 @@ interface EmailItem {
 	trigger_description: string;
 	registry_slug: string;
 	recipient: 'reader' | 'admin';
+	recommended: boolean;
+	chip: 'auth-account' | 'reader-revenue';
 	source: 'newspack' | 'woocommerce';
 }
 
@@ -49,7 +50,6 @@ const DEFAULT_VIEW: View = {
 	layout: {},
 	titleField: 'name',
 	descriptionField: 'trigger_description',
-	mediaField: 'preview',
 };
 
 const PageHeading = () => <h1 className="screen-reader-text">{ __( 'Emails', 'newspack-plugin' ) }</h1>;
@@ -116,19 +116,6 @@ const Emails = () => {
 
 	const fields: Field< EmailItem >[] = useMemo(
 		() => [
-			{
-				id: 'preview',
-				label: __( 'Preview', 'newspack-plugin' ),
-				type: 'media',
-				enableSorting: false,
-				enableHiding: true,
-				// @todo NPPD-1525 Replace with <EmailPreview> component.
-				render: ( { item }: { item: EmailItem } ) => (
-					<a href={ item.edit_link } className="newspack-emails__preview-placeholder">
-						<Icon icon={ envelope } size={ 32 } />
-					</a>
-				),
-			},
 			{
 				id: 'name',
 				label: __( 'Email', 'newspack-plugin' ),

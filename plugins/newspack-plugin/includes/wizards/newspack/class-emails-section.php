@@ -53,7 +53,29 @@ class Emails_Section extends Wizard_Section {
 	 * WooCommerce-source rows are filtered out at this layer; slice 2
 	 * removes that filter when the WC surface lands.
 	 *
-	 * @return array
+	 * @return array{
+	 *     newspack_emails: array<int, array{
+	 *         type:                string,
+	 *         category:            string,
+	 *         label:               string,
+	 *         description:         string,
+	 *         post_id:             int,
+	 *         edit_link:           string,
+	 *         subject:             string,
+	 *         from_name:           string,
+	 *         from_email:          string,
+	 *         reply_to_email:      string,
+	 *         status:              string,
+	 *         html_payload:        string,
+	 *         trigger_description: string,
+	 *         recipient:           'reader'|'admin',
+	 *         recommended:         bool,
+	 *         chip:                'auth-account'|'reader-revenue',
+	 *         source:              'newspack'|'woocommerce',
+	 *         registry_slug:       string,
+	 *     }>,
+	 *     post_type: string,
+	 * }
 	 */
 	public static function api_get_email_settings(): array {
 		$configs = Emails::get_email_configs();
@@ -67,10 +89,7 @@ class Emails_Section extends Wizard_Section {
 		// Without Reader Activation, the auth/account flows are unused —
 		// scope the visible set to reader-revenue configs only. Mirrors the
 		// legacy slice 1 behavior.
-		if ( ! Reader_Activation::is_enabled() ) {
-			$allowed = array_values( Reader_Revenue_Emails::EMAIL_TYPES );
-			$configs = array_intersect_key( $configs, array_flip( $allowed ) );
-		}
+		$configs = self::filter_configs_by_ra_state( Reader_Activation::is_enabled(), $configs );
 
 		// Resolve each newspack-source config to a Newspack post + serialized
 		// payload via the existing Emails::get_emails() pipeline. The
@@ -105,5 +124,30 @@ class Emails_Section extends Wizard_Section {
 			'newspack_emails' => $newspack_emails,
 			'post_type'       => Emails::POST_TYPE,
 		];
+	}
+
+	/**
+	 * Restrict configs to the set visible in the wizard given the current
+	 * Reader Activation state.
+	 *
+	 * When RA is enabled, all configs are visible. When it's disabled, only
+	 * reader-revenue configs (those whose keys appear in
+	 * `Reader_Revenue_Emails::EMAIL_TYPES`) surface — the auth/account flows
+	 * have no use without RA.
+	 *
+	 * Extracted from `api_get_email_settings()` so the gating is unit-testable
+	 * without toggling `Reader_Activation::is_enabled()` (which hard-returns
+	 * true in the test environment).
+	 *
+	 * @param bool  $ra_enabled Whether Reader Activation is enabled.
+	 * @param array $configs    Configs keyed by type.
+	 * @return array Configs filtered to the visible set for the given RA state.
+	 */
+	public static function filter_configs_by_ra_state( bool $ra_enabled, array $configs ): array {
+		if ( $ra_enabled ) {
+			return $configs;
+		}
+		$allowed = array_values( Reader_Revenue_Emails::EMAIL_TYPES );
+		return array_intersect_key( $configs, array_flip( $allowed ) );
 	}
 }

@@ -319,4 +319,66 @@ class Newspack_Test_Emails_Section extends WP_UnitTestCase {
 		$this->assertTrue( $configs[ $type ]['recommended'] );
 		$this->assertSame( 'auth-account', $configs[ $type ]['chip'] );
 	}
+
+	/*
+	 * ------------------------------------------------------------------
+	 * Bucket E — Reader Activation gating
+	 * ------------------------------------------------------------------
+	 * Covers Emails_Section::filter_configs_by_ra_state(), the helper
+	 * api_get_email_settings() uses to scope the visible config set when
+	 * Reader Activation is disabled. Tests the helper directly because
+	 * Reader_Activation::is_enabled() hard-returns true in the test
+	 * environment (see class-reader-activation.php:1013), making the
+	 * disabled branch unreachable through the public endpoint.
+	 */
+
+	/**
+	 * When RA is enabled, all configs pass through unchanged.
+	 */
+	public function test_filter_configs_by_ra_state_passes_through_when_enabled() {
+		$configs = [
+			'receipt'                        => [ 'name' => 'receipt' ],
+			'reader-activation-verification' => [ 'name' => 'reader-activation-verification' ],
+			'group-subscription-invite'      => [ 'name' => 'group-subscription-invite' ],
+		];
+		$filtered = Emails_Section::filter_configs_by_ra_state( true, $configs );
+		$this->assertSame( $configs, $filtered );
+	}
+
+	/**
+	 * When RA is disabled, only reader-revenue types
+	 * (Reader_Revenue_Emails::EMAIL_TYPES) survive the filter.
+	 */
+	public function test_filter_configs_by_ra_state_scopes_to_reader_revenue_when_disabled() {
+		$configs = [
+			Reader_Revenue_Emails::EMAIL_TYPES['RECEIPT'] => [ 'name' => 'receipt' ],
+			Reader_Revenue_Emails::EMAIL_TYPES['WELCOME'] => [ 'name' => 'welcome' ],
+			Reader_Revenue_Emails::EMAIL_TYPES['CANCELLATION'] => [ 'name' => 'cancellation' ],
+			'reader-activation-verification'              => [ 'name' => 'reader-activation-verification' ],
+			'reader-activation-magic-link'                => [ 'name' => 'reader-activation-magic-link' ],
+			'group-subscription-invite'                   => [ 'name' => 'group-subscription-invite' ],
+		];
+		$filtered = Emails_Section::filter_configs_by_ra_state( false, $configs );
+
+		// Reader-revenue types should survive.
+		$this->assertArrayHasKey( Reader_Revenue_Emails::EMAIL_TYPES['RECEIPT'], $filtered );
+		$this->assertArrayHasKey( Reader_Revenue_Emails::EMAIL_TYPES['WELCOME'], $filtered );
+		$this->assertArrayHasKey( Reader_Revenue_Emails::EMAIL_TYPES['CANCELLATION'], $filtered );
+
+		// Reader-activation and group-subscription types should be dropped.
+		$this->assertArrayNotHasKey( 'reader-activation-verification', $filtered );
+		$this->assertArrayNotHasKey( 'reader-activation-magic-link', $filtered );
+		$this->assertArrayNotHasKey( 'group-subscription-invite', $filtered );
+
+		// Exact count: 3 reader-revenue types only.
+		$this->assertCount( 3, $filtered );
+	}
+
+	/**
+	 * Empty configs in, empty configs out — regardless of RA state.
+	 */
+	public function test_filter_configs_by_ra_state_handles_empty_configs() {
+		$this->assertSame( [], Emails_Section::filter_configs_by_ra_state( true, [] ) );
+		$this->assertSame( [], Emails_Section::filter_configs_by_ra_state( false, [] ) );
+	}
 }
