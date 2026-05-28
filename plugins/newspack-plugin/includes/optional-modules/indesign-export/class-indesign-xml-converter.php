@@ -135,6 +135,12 @@ class InDesign_XML_Converter {
 			// calls render_list_item() via render_blocks( innerBlocks ). It is
 			// intentionally NOT dispatched here at top level — a stray
 			// list-item outside a list is malformed content and is dropped.
+			case 'core/quote':
+				return $this->render_quote( $block, 'blockquote' );
+			case 'core/pullquote':
+				return $this->render_quote( $block, 'pullquote' );
+			case 'core/separator':
+				return '    <hr/>' . "\n";
 		}
 
 		return '';
@@ -216,6 +222,70 @@ class InDesign_XML_Converter {
 			return '      <li>' . $text . "\n" . $nested . '      </li>' . "\n";
 		}
 		return '      <li>' . $text . '</li>' . "\n";
+	}
+
+	/**
+	 * Render a quote/pullquote block.
+	 *
+	 * Extracts text + optional cite. Because parse_blocks moves inner paragraph
+	 * content into innerBlocks (leaving innerHTML with only the cite and wrapper
+	 * tags), we check innerBlocks first for paragraph text, then fall back to
+	 * scanning innerHTML directly for any <p> tags.
+	 *
+	 * @param array  $block        Block data.
+	 * @param string $element_name 'blockquote' or 'pullquote'.
+	 * @return string XML fragment.
+	 */
+	private function render_quote( $block, $element_name ) {
+		$inner_html = $block['innerHTML'] ?? '';
+		$inner_html = preg_replace( '/<!--.*?-->/s', '', $inner_html );
+
+		// Extract optional <cite>...</cite> from innerHTML.
+		$cite = '';
+		if ( preg_match( '/<cite[^>]*>(.*?)<\/cite>/is', $inner_html, $m ) ) {
+			$cite       = '      <cite>' . $this->convert_inline_html( $m[1] ) . '</cite>' . "\n";
+			$inner_html = preg_replace( '/<cite[^>]*>.*?<\/cite>/is', '', $inner_html );
+		}
+
+		// Collect paragraph text. parse_blocks places inner paragraph content in
+		// innerBlocks (not innerHTML), so check there first.
+		$paras = [];
+		foreach ( $block['innerBlocks'] ?? [] as $inner_block ) {
+			$block_name = $inner_block['blockName'] ?? null;
+			if ( 'core/paragraph' === $block_name ) {
+				$text = $this->extract_inner_text( $inner_block['innerHTML'] ?? '' );
+				if ( '' !== trim( $text ) ) {
+					$paras[] = '      <para>' . $text . '</para>';
+				}
+			}
+		}
+
+		// Fallback: scan innerHTML for <p> tags (pullquote wraps in <figure>/<blockquote>).
+		if ( empty( $paras ) ) {
+			if ( preg_match_all( '/<p[^>]*>(.*?)<\/p>/is', $inner_html, $matches ) ) {
+				foreach ( $matches[1] as $para ) {
+					$text = $this->convert_inline_html( $para );
+					if ( '' !== trim( $text ) ) {
+						$paras[] = '      <para>' . $text . '</para>';
+					}
+				}
+			}
+		}
+
+		// Final fallback: use the whole stripped-tag content.
+		if ( empty( $paras ) ) {
+			$bare = trim( wp_strip_all_tags( $inner_html ) );
+			if ( '' !== $bare ) {
+				$paras[] = '      <para>' . $this->escape_text( $bare ) . '</para>';
+			}
+		}
+
+		if ( empty( $paras ) && '' === $cite ) {
+			return '';
+		}
+
+		$body = '' === implode( "\n", $paras ) ? '' : implode( "\n", $paras ) . "\n";
+		return '    <' . $element_name . '>' . "\n" . $body . $cite . '    </' . $element_name . '>' . "\n";
 	}
 
 	/**

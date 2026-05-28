@@ -329,4 +329,45 @@ class Newspack_Test_InDesign_XML_Converter extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( '<li>Orphan', $xml );
 		$this->assertStringContainsString( '<para>After.</para>', $xml );
 	}
+
+	/**
+	 * core/quote emits <blockquote> with optional <cite>.
+	 */
+	public function test_emits_blockquote_with_cite() {
+		$content = "<!-- wp:quote -->\n<blockquote class=\"wp-block-quote\"><!-- wp:paragraph --><p>Quoted text.</p><!-- /wp:paragraph --><cite>Source</cite></blockquote>\n<!-- /wp:quote -->";
+		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<blockquote>', $xml );
+		$this->assertStringContainsString( '<para>Quoted text.</para>', $xml );
+		$this->assertStringContainsString( '<cite>Source</cite>', $xml );
+		$this->assertStringContainsString( '</blockquote>', $xml );
+	}
+
+	/**
+	 * core/pullquote emits <pullquote>.
+	 */
+	public function test_emits_pullquote() {
+		$content = "<!-- wp:pullquote -->\n<figure class=\"wp-block-pullquote\"><blockquote><p>Big idea.</p><cite>Speaker</cite></blockquote></figure>\n<!-- /wp:pullquote -->";
+		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<pullquote>', $xml );
+		$this->assertStringContainsString( 'Big idea.', $xml );
+		$this->assertStringContainsString( '<cite>Speaker</cite>', $xml );
+	}
+
+	/**
+	 * core/separator emits <hr/>.
+	 */
+	public function test_emits_horizontal_rule() {
+		$content = "<!-- wp:separator -->\n<hr class=\"wp-block-separator\"/>\n<!-- /wp:separator -->";
+		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<hr/>', $xml );
+	}
 }
