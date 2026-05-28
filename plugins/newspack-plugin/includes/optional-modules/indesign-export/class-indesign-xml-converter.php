@@ -80,6 +80,11 @@ class InDesign_XML_Converter {
 	/**
 	 * Build the <body> children from post content.
 	 *
+	 * Only block-structured content is rendered. Classic (non-block) post
+	 * content is intentionally excluded — the InDesign XML format relies on
+	 * block-level structure for element mapping, and classic content has no
+	 * reliable way to map to <para>, <heading>, etc.
+	 *
 	 * @param \WP_Post $post Post object.
 	 * @return string Inner XML (without the <body> tag itself), or empty string.
 	 */
@@ -98,11 +103,11 @@ class InDesign_XML_Converter {
 	 * @return string XML fragment.
 	 */
 	private function render_blocks( $blocks ) {
-		$out = '';
+		$output = '';
 		foreach ( $blocks as $block ) {
-			$out .= $this->render_block( $block );
+			$output .= $this->render_block( $block );
 		}
-		return $out;
+		return $output;
 	}
 
 	/**

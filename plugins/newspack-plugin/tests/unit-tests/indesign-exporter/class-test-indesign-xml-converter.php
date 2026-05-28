@@ -154,4 +154,21 @@ class Newspack_Test_InDesign_XML_Converter extends WP_UnitTestCase {
 
 		$this->assertStringContainsString( '<heading level="2">Default level</heading>', $xml );
 	}
+
+	/**
+	 * Paragraph body content is XML-escaped.
+	 */
+	public function test_paragraph_body_xml_escapes_special_characters() {
+		$content = "<!-- wp:paragraph -->\n<p>Cats &amp; dogs &lt; mice.</p>\n<!-- /wp:paragraph -->";
+		$post_id = self::factory()->post->create(
+			[
+				'post_title'   => 'Title',
+				'post_content' => $content,
+			]
+		);
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<para>Cats &amp; dogs &lt; mice.</para>', $xml );
+	}
 }
