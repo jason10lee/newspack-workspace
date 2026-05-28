@@ -295,7 +295,7 @@ class Newspack_Test_InDesign_XML_Converter extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Nested lists are preserved.
+	 * Nested lists are preserved with the inner list inside its parent's <li>.
 	 */
 	public function test_emits_nested_list() {
 		$content = "<!-- wp:list -->\n<ul><!-- wp:list-item --><li>Outer<!-- wp:list -->\n<ul><!-- wp:list-item --><li>Inner</li><!-- /wp:list-item --></ul>\n<!-- /wp:list --></li><!-- /wp:list-item --></ul>\n<!-- /wp:list -->";
@@ -306,5 +306,27 @@ class Newspack_Test_InDesign_XML_Converter extends WP_UnitTestCase {
 		$this->assertStringContainsString( '<ul>', $xml );
 		$this->assertStringContainsString( '<li>Outer', $xml );
 		$this->assertStringContainsString( '<li>Inner</li>', $xml );
+
+		// Structural: <li>Inner</li> must appear AFTER <li>Outer, not before
+		// (i.e. it's actually nested, not a sibling).
+		$outer_pos = strpos( $xml, '<li>Outer' );
+		$inner_pos = strpos( $xml, '<li>Inner</li>' );
+		$this->assertNotFalse( $outer_pos );
+		$this->assertNotFalse( $inner_pos );
+		$this->assertLessThan( $inner_pos, $outer_pos );
+	}
+
+	/**
+	 * Stray top-level core/list-item (outside core/list) is dropped, not
+	 * emitted as an orphan <li>.
+	 */
+	public function test_orphan_list_item_outside_list_is_dropped() {
+		$content = "<!-- wp:list-item -->\n<li>Orphan</li>\n<!-- /wp:list-item -->\n\n<!-- wp:paragraph -->\n<p>After.</p>\n<!-- /wp:paragraph -->";
+		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringNotContainsString( '<li>Orphan', $xml );
+		$this->assertStringContainsString( '<para>After.</para>', $xml );
 	}
 }

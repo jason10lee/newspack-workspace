@@ -131,8 +131,10 @@ class InDesign_XML_Converter {
 				return $this->render_heading( $block );
 			case 'core/list':
 				return $this->render_list( $block );
-			case 'core/list-item':
-				return $this->render_list_item( $block );
+			// core/list-item is only valid inside core/list, where render_list()
+			// calls render_list_item() via render_blocks( innerBlocks ). It is
+			// intentionally NOT dispatched here at top level — a stray
+			// list-item outside a list is malformed content and is dropped.
 		}
 
 		return '';
@@ -170,13 +172,27 @@ class InDesign_XML_Converter {
 	/**
 	 * Render a core/list block as <ul> or <ol>.
 	 *
+	 * Iterates inner blocks directly and dispatches list items via
+	 * render_list_item() — bypasses render_block() so a stray top-level
+	 * core/list-item (malformed content) cannot emit an orphan <li>.
+	 *
+	 * Note: nested lists currently share the parent list's indent depth
+	 * (cosmetic, not a well-formedness issue). A depth-aware refactor of
+	 * the render pipeline is deferred until container blocks arrive in
+	 * Task 7, where the depth parameter pays off across multiple methods.
+	 *
 	 * @param array $block Block data.
 	 * @return string XML fragment.
 	 */
 	private function render_list( $block ) {
 		$ordered = ! empty( $block['attrs']['ordered'] );
 		$tag     = $ordered ? 'ol' : 'ul';
-		$inner   = $this->render_blocks( $block['innerBlocks'] ?? [] );
+		$inner   = '';
+		foreach ( $block['innerBlocks'] ?? [] as $item ) {
+			if ( 'core/list-item' === ( $item['blockName'] ?? null ) ) {
+				$inner .= $this->render_list_item( $item );
+			}
+		}
 		if ( '' === trim( $inner ) ) {
 			return '';
 		}
