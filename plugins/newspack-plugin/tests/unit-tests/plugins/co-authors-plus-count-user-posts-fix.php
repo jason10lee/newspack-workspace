@@ -315,6 +315,33 @@ class Newspack_Test_CAP_Count_User_Posts_Fix extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The newspack-blocks Author List controller calls count_user_posts with the array form
+	 * `['any']` (not the bare string). The filter must honor both forms.
+	 */
+	public function test_honors_array_form_any_sentinel() {
+		$user_id = self::factory()->user->create( [ 'user_login' => 'arrayany' ] );
+		$ga      = $this->create_linked_ga( 'arrayany' );
+
+		register_taxonomy_for_object_type( 'author', 'page' );
+
+		// 2 published posts + 1 published page, all authored by the user and tagged with the GA term.
+		for ( $i = 0; $i < 2; $i++ ) {
+			$this->create_authored_post( $user_id, $ga['term_id'] );
+		}
+		$page = self::factory()->post->create(
+			[
+				'post_author' => $user_id,
+				'post_status' => 'publish',
+				'post_type'   => 'page',
+			]
+		);
+		wp_set_object_terms( $page, [ $ga['term_id'] ], 'author' );
+
+		// ['any'] (array form, public_only=true) — the call shape used by newspack-blocks Author List.
+		$this->assertEquals( 3, count_user_posts( $user_id, [ 'any' ], true ) ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.count_user_posts_count_user_posts
+	}
+
+	/**
 	 * When the default 'post' is passed, the filter must honor CAP's
 	 * `coauthors_count_published_post_types` hook so third-party CPT additions
 	 * (e.g. newsletters) are included.

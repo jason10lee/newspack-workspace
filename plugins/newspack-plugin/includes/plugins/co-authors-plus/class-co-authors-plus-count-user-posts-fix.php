@@ -35,10 +35,11 @@ class Co_Authors_Plus_Count_User_Posts_Fix {
 	/**
 	 * Replace the count CAP produced with a deduplicated union count.
 	 *
-	 * @param int|string $count       The count value from previous filters (CAP at priority 10).
-	 * @param int        $user_id     The user ID.
-	 * @param string     $post_type   The post type to count.
-	 * @param bool       $public_only Whether to restrict the count to public-status posts.
+	 * @param int|string      $count       The count value from previous filters (CAP at priority 10).
+	 * @param int             $user_id     The user ID.
+	 * @param string|string[] $post_type   The post type(s) to count. WP's count_user_posts accepts
+	 *                                     a string or an array; the WP_Query 'any' sentinel is honored.
+	 * @param bool            $public_only Whether to restrict the count to public-status posts.
 	 * @return int|string The deduplicated count, or the original $count if no linked GA.
 	 */
 	public static function dedup_linked_author_count( $count, $user_id, $post_type, $public_only ) {
