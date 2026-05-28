@@ -48,81 +48,93 @@ class Co_Authors_Plus_Count_User_Posts_Fix {
 			return $count;
 		}
 
-		$ga_term_taxonomy_id = self::get_linked_guest_author_term_taxonomy_id( $user->user_login );
-		if ( ! $ga_term_taxonomy_id ) {
+		$ga_term_taxonomy_ids = self::get_linked_guest_author_term_taxonomy_ids( $user->user_login );
+		if ( empty( $ga_term_taxonomy_ids ) ) {
 			return $count;
 		}
 
-		return self::count_distinct_attributed_posts( $user_id, $ga_term_taxonomy_id, $post_type, (bool) $public_only );
+		return self::count_distinct_attributed_posts( $user_id, $ga_term_taxonomy_ids, $post_type, (bool) $public_only );
 	}
 
 	/**
-	 * Find the term_taxonomy_id of the author term belonging to a guest author
-	 * whose cap-linked_account meta matches the given user_login.
+	 * Find every author term_taxonomy_id belonging to guest authors whose
+	 * `cap-linked_account` meta matches the given user_login.
+	 *
+	 * CAP's data model treats this as a 1:1 link, but data corruption, manual
+	 * term edits, or in-progress migrations can leave a user pointed at by more
+	 * than one GA (and a GA can carry more than one author term). Collecting
+	 * all of them prevents silent undercount in the dedup query.
 	 *
 	 * @param string $user_login The WP user's user_login value.
-	 * @return int|null term_taxonomy_id, or null if no linked GA exists.
+	 * @return int[] Unique term_taxonomy_ids across all linked GAs (empty if none).
 	 */
-	private static function get_linked_guest_author_term_taxonomy_id( $user_login ) {
+	private static function get_linked_guest_author_term_taxonomy_ids( $user_login ) {
 		if ( ! post_type_exists( 'guest-author' ) || ! taxonomy_exists( 'author' ) ) {
-			return null;
+			return [];
 		}
 
 		global $wpdb;
 
-		// Find the GA CPT post whose cap-linked_account meta matches the user's login.
+		// Find every GA CPT post whose cap-linked_account meta matches the user's login.
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery -- WP_Query + meta_query would be markedly slower; this fires per count_user_posts call.
-		$ga_post_id = $wpdb->get_var(
+		$ga_post_ids = $wpdb->get_col(
 			$wpdb->prepare(
 				"SELECT p.ID FROM {$wpdb->posts} p
 				INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
 				WHERE p.post_type = 'guest-author'
 				AND p.post_status != 'trash'
 				AND pm.meta_key = 'cap-linked_account'
-				AND pm.meta_value = %s
-				LIMIT 1",
+				AND pm.meta_value = %s",
 				$user_login
 			)
 		);
 		// phpcs:enable WordPress.DB.DirectDatabaseQuery
 
-		if ( ! $ga_post_id ) {
-			return null;
+		if ( empty( $ga_post_ids ) ) {
+			return [];
 		}
 
-		$terms = wp_get_object_terms( (int) $ga_post_id, 'author', [ 'fields' => 'tt_ids' ] );
-		if ( is_wp_error( $terms ) || empty( $terms ) ) {
-			return null;
+		$tt_ids = [];
+		foreach ( $ga_post_ids as $ga_post_id ) {
+			$terms = wp_get_object_terms( (int) $ga_post_id, 'author', [ 'fields' => 'tt_ids' ] );
+			if ( is_wp_error( $terms ) ) {
+				continue;
+			}
+			foreach ( $terms as $tt_id ) {
+				$tt_ids[] = (int) $tt_id;
+			}
 		}
 
-		return (int) $terms[0];
+		return array_values( array_unique( $tt_ids ) );
 	}
 
 	/**
 	 * Run a COUNT(DISTINCT) over the union of (post_author = user) and
-	 * (attached to GA term), honoring post type and public-only filters.
+	 * (attached to any of the GA's author terms), honoring post type and
+	 * public-only filters.
 	 *
-	 * @param int             $user_id              The user ID.
-	 * @param int             $ga_term_taxonomy_id  The author term's term_taxonomy_id.
-	 * @param string|string[] $post_type            The post type(s) to count (WP's count_user_posts accepts either).
-	 * @param bool            $public_only          Restrict to public-status posts.
+	 * @param int             $user_id               The user ID.
+	 * @param int[]           $ga_term_taxonomy_ids  Author term_taxonomy_ids for all linked GAs.
+	 * @param string|string[] $post_type             The post type(s) to count (WP's count_user_posts accepts either).
+	 * @param bool            $public_only           Restrict to public-status posts.
 	 * @return int The deduplicated count.
 	 */
-	private static function count_distinct_attributed_posts( $user_id, $ga_term_taxonomy_id, $post_type, $public_only ) {
+	private static function count_distinct_attributed_posts( $user_id, $ga_term_taxonomy_ids, $post_type, $public_only ) {
 		global $wpdb;
 
 		$types               = self::resolve_post_types( $post_type );
 		$statuses            = self::resolve_post_statuses( $public_only );
+		$tt_placeholders     = implode( ',', array_fill( 0, count( $ga_term_taxonomy_ids ), '%d' ) );
 		$type_placeholders   = implode( ',', array_fill( 0, count( $types ), '%s' ) );
 		$status_placeholders = implode( ',', array_fill( 0, count( $statuses ), '%s' ) );
-		$prepare_args        = array_merge( [ $ga_term_taxonomy_id ], $types, $statuses, [ $user_id ] );
+		$prepare_args        = array_merge( $ga_term_taxonomy_ids, $types, $statuses, [ $user_id ] );
 
-		// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- $type_placeholders / $status_placeholders are %s-only fragments built from count() of the resolved arrays; the actual values flow through prepare() in $prepare_args. Direct query needed for COUNT(DISTINCT) over the union (loses index-friendly form as WP_Query meta/tax_query).
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- $tt_placeholders / $type_placeholders / $status_placeholders are %d/%s-only fragments built from count() of the resolved arrays; the actual values flow through prepare() in $prepare_args. Direct query needed for COUNT(DISTINCT) over the union (loses index-friendly form as WP_Query meta/tax_query).
 		$count = $wpdb->get_var(
 			$wpdb->prepare(
 				"SELECT COUNT(DISTINCT p.ID) FROM {$wpdb->posts} p
 				LEFT JOIN {$wpdb->term_relationships} tr
-					ON tr.object_id = p.ID AND tr.term_taxonomy_id = %d
+					ON tr.object_id = p.ID AND tr.term_taxonomy_id IN ({$tt_placeholders})
 				WHERE p.post_type IN ({$type_placeholders})
 				AND p.post_status IN ({$status_placeholders})
 				AND ( p.post_author = %d OR tr.object_id IS NOT NULL )",

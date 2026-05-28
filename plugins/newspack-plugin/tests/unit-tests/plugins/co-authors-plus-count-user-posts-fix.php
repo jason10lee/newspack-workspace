@@ -342,6 +342,53 @@ class Newspack_Test_CAP_Count_User_Posts_Fix extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Data-corruption / migration edge case: more than one guest author with
+	 * `cap-linked_account` pointing at the same WP user. The filter must aggregate
+	 * across ALL linked GAs (and their author terms), not silently pick one and
+	 * undercount.
+	 */
+	public function test_dedups_across_multiple_linked_guest_authors() {
+		$user_id       = self::factory()->user->create( [ 'user_login' => 'multilink' ] );
+		$other_user_id = self::factory()->user->create();
+
+		// GA #1 linked to the user.
+		$ga1_id = self::factory()->post->create(
+			[
+				'post_type'   => 'guest-author',
+				'post_status' => 'publish',
+				'post_title'  => 'Multilink A',
+			]
+		);
+		update_post_meta( $ga1_id, 'cap-linked_account', 'multilink' );
+		update_post_meta( $ga1_id, 'cap-user_login', 'multilink-a' );
+		$term1 = wp_insert_term( 'cap-multilink-a', 'author', [ 'slug' => 'cap-multilink-a' ] );
+		wp_set_object_terms( $ga1_id, [ $term1['term_id'] ], 'author' );
+
+		// GA #2 ALSO linked to the same user.
+		$ga2_id = self::factory()->post->create(
+			[
+				'post_type'   => 'guest-author',
+				'post_status' => 'publish',
+				'post_title'  => 'Multilink B',
+			]
+		);
+		update_post_meta( $ga2_id, 'cap-linked_account', 'multilink' );
+		update_post_meta( $ga2_id, 'cap-user_login', 'multilink-b' );
+		$term2 = wp_insert_term( 'cap-multilink-b', 'author', [ 'slug' => 'cap-multilink-b' ] );
+		wp_set_object_terms( $ga2_id, [ $term2['term_id'] ], 'author' );
+
+		// 1 post by the user, attached to term1.
+		$this->create_authored_post( $user_id, $term1['term_id'] );
+		// 1 post by other user, attached to term1 only.
+		$this->create_authored_post( $other_user_id, $term1['term_id'] );
+		// 1 post by other user, attached to term2 only — would be silently dropped if only term1 were aggregated.
+		$this->create_authored_post( $other_user_id, $term2['term_id'] );
+
+		// Distinct: 1 (user own + in term1) + 1 (other in term1) + 1 (other in term2) = 3.
+		$this->assertEquals( 3, count_user_posts( $user_id ) ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.count_user_posts_count_user_posts
+	}
+
+	/**
 	 * When the default 'post' is passed, the filter must honor CAP's
 	 * `coauthors_count_published_post_types` hook so third-party CPT additions
 	 * (e.g. newsletters) are included.
