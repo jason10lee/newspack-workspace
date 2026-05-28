@@ -264,4 +264,47 @@ class Newspack_Test_InDesign_XML_Converter extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( '<script>', $xml );
 		$this->assertStringContainsString( '&lt;script&gt;', $xml );
 	}
+
+	/**
+	 * Unordered list emits <ul><li>...</li></ul>.
+	 */
+	public function test_emits_unordered_list() {
+		$content = "<!-- wp:list -->\n<ul><!-- wp:list-item --><li>One</li><!-- /wp:list-item --><!-- wp:list-item --><li>Two</li><!-- /wp:list-item --></ul>\n<!-- /wp:list -->";
+		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<ul>', $xml );
+		$this->assertStringContainsString( '<li>One</li>', $xml );
+		$this->assertStringContainsString( '<li>Two</li>', $xml );
+		$this->assertStringContainsString( '</ul>', $xml );
+	}
+
+	/**
+	 * Ordered list emits <ol>.
+	 */
+	public function test_emits_ordered_list() {
+		$content = "<!-- wp:list {\"ordered\":true} -->\n<ol><!-- wp:list-item --><li>First</li><!-- /wp:list-item --></ol>\n<!-- /wp:list -->";
+		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<ol>', $xml );
+		$this->assertStringContainsString( '<li>First</li>', $xml );
+		$this->assertStringContainsString( '</ol>', $xml );
+	}
+
+	/**
+	 * Nested lists are preserved.
+	 */
+	public function test_emits_nested_list() {
+		$content = "<!-- wp:list -->\n<ul><!-- wp:list-item --><li>Outer<!-- wp:list -->\n<ul><!-- wp:list-item --><li>Inner</li><!-- /wp:list-item --></ul>\n<!-- /wp:list --></li><!-- /wp:list-item --></ul>\n<!-- /wp:list -->";
+		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<ul>', $xml );
+		$this->assertStringContainsString( '<li>Outer', $xml );
+		$this->assertStringContainsString( '<li>Inner</li>', $xml );
+	}
 }

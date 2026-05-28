@@ -129,6 +129,10 @@ class InDesign_XML_Converter {
 				return $this->render_paragraph( $block );
 			case 'core/heading':
 				return $this->render_heading( $block );
+			case 'core/list':
+				return $this->render_list( $block );
+			case 'core/list-item':
+				return $this->render_list_item( $block );
 		}
 
 		return '';
@@ -161,6 +165,41 @@ class InDesign_XML_Converter {
 			return '';
 		}
 		return '    <heading level="' . $level . '">' . $text . '</heading>' . "\n";
+	}
+
+	/**
+	 * Render a core/list block as <ul> or <ol>.
+	 *
+	 * @param array $block Block data.
+	 * @return string XML fragment.
+	 */
+	private function render_list( $block ) {
+		$ordered = ! empty( $block['attrs']['ordered'] );
+		$tag     = $ordered ? 'ol' : 'ul';
+		$inner   = $this->render_blocks( $block['innerBlocks'] ?? [] );
+		if ( '' === trim( $inner ) ) {
+			return '';
+		}
+		return '    <' . $tag . '>' . "\n" . $inner . '    </' . $tag . '>' . "\n";
+	}
+
+	/**
+	 * Render a core/list-item block as <li>.
+	 *
+	 * @param array $block Block data.
+	 * @return string XML fragment.
+	 */
+	private function render_list_item( $block ) {
+		$text = $this->extract_inner_text( $block['innerHTML'] ?? '' );
+		// Render any nested lists inside this item.
+		$nested = $this->render_blocks( $block['innerBlocks'] ?? [] );
+		if ( '' === $text && '' === trim( $nested ) ) {
+			return '';
+		}
+		if ( '' !== trim( $nested ) ) {
+			return '      <li>' . $text . "\n" . $nested . '      </li>' . "\n";
+		}
+		return '      <li>' . $text . '</li>' . "\n";
 	}
 
 	/**
