@@ -1,6 +1,6 @@
 {
-	"name": "newspack",
-	"version": "2.23.0-alpha.1",
+	"name": "newspack-theme",
+	"version": "2.22.2",
 	"description": "A theme for Newspack. https://newspack.com",
 	"bugs": {
 		"url": "https://github.com/Automattic/newspack-theme/issues"
@@ -44,11 +44,17 @@
 		"@octokit/rest": "^20.1.2",
 		"chokidar-cli": "^3.0.0",
 		"classnames": "^2.5.1",
-		"cssnano": "^7.1.7",
+		"cssnano": "^7.1.4",
 		"fs-extra": "^11.3.4",
-		"newspack-scripts": "^5.9.7",
+		"newspack-scripts": "workspace:*",
 		"npm-run-all": "^4.1.5",
 		"rtlcss": "^4.3.0",
-		"sass": "^1.99.0"
+		"sass": "^1.98.0"
+	},
+	"private": true,
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Automattic/newspack-workspace.git",
+		"directory": "themes/newspack-theme"
 	}
 }

@@ -2,10 +2,11 @@
 	"name": "newspack-network",
 	"version": "2.20.1",
 	"description": "The Newspack Network plugin.",
-	"license": "GPL-3.0",
+	"license": "GPL-2.0-or-later",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/Automattic/newspack-network.git"
+		"url": "git+https://github.com/Automattic/newspack-workspace.git",
+		"directory": "plugins/newspack-network"
 	},
 	"bugs": {
 		"url": "https://github.com/Automattic/newspack-network/issues"
@@ -42,6 +43,7 @@
 		"*.php": "npm run lint:php:staged"
 	},
 	"devDependencies": {
-		"newspack-scripts": "^5.9.8"
+		"clsx": "^2.1.0",
+		"newspack-scripts": "workspace:*"
 	}
 }

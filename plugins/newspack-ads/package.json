@@ -1,13 +1,14 @@
 {
 	"name": "newspack-ads",
-	"version": "3.11.1",
+	"version": "3.11.2",
 	"author": "Automattic",
 	"private": true,
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/Automattic/newspack-ads.git"
+		"url": "git+https://github.com/Automattic/newspack-workspace.git",
+		"directory": "plugins/newspack-ads"
 	},
-	"license": "GPL-3.0-or-later",
+	"license": "GPL-2.0-or-later",
 	"bugs": {
 		"url": "https://github.com/Automattic/newspack-ads/issues"
 	},
@@ -43,11 +44,13 @@
 	},
 	"dependencies": {
 		"@10up/component-tabs": "^2.0.1",
-		"newspack-components": "^4.1.0",
+		"newspack-components": "workspace:*",
 		"prebid.js": "^8.51.0"
 	},
 	"devDependencies": {
 		"classnames": "^2.5.1",
-		"newspack-scripts": "^5.9.8"
+		"lodash": "^4.17.0",
+		"newspack-scripts": "workspace:*",
+		"prop-types": "^15.8.0"
 	}
 }
