@@ -7,10 +7,6 @@
 
 use Newspack\Optional_Modules\InDesign_Export\InDesign_XML_Converter;
 
-// Mock get_coauthors() to simulate Co-Authors Plus being active.
-// Uses a global so individual tests can control the return value.
-require_once __DIR__ . '/../../mocks/co-authors-plus-mocks.php';
-
 /**
  * Test class for InDesign_XML_Converter.
  */
@@ -25,6 +21,10 @@ class Newspack_Test_InDesign_XML_Converter extends WP_UnitTestCase {
 	 * Set up the test.
 	 */
 	public function set_up() {
+		// Mock get_coauthors() to simulate Co-Authors Plus being active.
+		// Uses a global so individual tests can control the return value.
+		// Loaded here (not file scope) to avoid leaking into other test files.
+		require_once __DIR__ . '/../../mocks/co-authors-plus-mocks.php';
 		parent::set_up();
 		$this->converter = new InDesign_XML_Converter();
 	}
