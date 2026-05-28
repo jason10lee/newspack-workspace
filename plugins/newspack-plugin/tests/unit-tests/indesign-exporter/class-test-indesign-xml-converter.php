@@ -222,6 +222,18 @@ class Newspack_Test_InDesign_XML_Converter extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Already self-closed <br/> stays as <br/> (idempotent).
+	 */
+	public function test_paragraph_br_self_closing_is_idempotent() {
+		$content = "<!-- wp:paragraph -->\n<p>Line one<br/>line two.</p>\n<!-- /wp:paragraph -->";
+		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( 'Line one<br/>line two.', $xml );
+	}
+
+	/**
 	 * <a href> becomes lowercase <link href>.
 	 */
 	public function test_paragraph_preserves_hyperlink_as_lowercase_link() {

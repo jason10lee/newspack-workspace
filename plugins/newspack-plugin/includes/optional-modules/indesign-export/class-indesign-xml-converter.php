@@ -208,6 +208,12 @@ class InDesign_XML_Converter {
 		);
 
 		// <a href="..."> ... </a> → <link href="..."> ... </link>
+		//
+		// NOTE: ordering matters. The anchor's inner text ($m[3]) is returned
+		// raw between the open/close placeholder tokens, then re-scanned by
+		// the inline-mark pass below. So <a><strong>x</strong></a> works
+		// because the <strong> tokenization runs after this callback.
+		// Do not reorder the inline-mark pass to run before this one.
 		$html = preg_replace_callback(
 			'/<a\s+[^>]*href=("|\')([^"\']*)\1[^>]*>(.*?)<\/a>/is',
 			function ( $m ) use ( &$placeholders, &$counter ) {
@@ -224,17 +230,21 @@ class InDesign_XML_Converter {
 		);
 
 		// <strong>, </strong>, <em>, </em>, <i>, </i>, <sup>, </sup>, <sub>, </sub>
+		//
+		// Opening-tag patterns use \b after the tag name so <i[^>]*> doesn't
+		// also match <iframe...>, <em...> doesn't match <embed...>, etc.
+		// (Kses normally strips those, but defense in depth is cheap.)
 		$pairs = [
-			'/<strong[^>]*>/i' => '<strong>',
-			'/<\/strong>/i'    => '</strong>',
-			'/<em[^>]*>/i'     => '<em>',
-			'/<\/em>/i'        => '</em>',
-			'/<i[^>]*>/i'      => '<em>',
-			'/<\/i>/i'         => '</em>',
-			'/<sup[^>]*>/i'    => '<sup>',
-			'/<\/sup>/i'       => '</sup>',
-			'/<sub[^>]*>/i'    => '<sub>',
-			'/<\/sub>/i'       => '</sub>',
+			'/<strong\b[^>]*>/i' => '<strong>',
+			'/<\/strong>/i'      => '</strong>',
+			'/<em\b[^>]*>/i'     => '<em>',
+			'/<\/em>/i'          => '</em>',
+			'/<i\b[^>]*>/i'      => '<em>',
+			'/<\/i>/i'           => '</em>',
+			'/<sup\b[^>]*>/i'    => '<sup>',
+			'/<\/sup>/i'         => '</sup>',
+			'/<sub\b[^>]*>/i'    => '<sub>',
+			'/<\/sub>/i'         => '</sub>',
 		];
 		foreach ( $pairs as $pattern => $replacement ) {
 			$html = preg_replace_callback(
