@@ -5,14 +5,9 @@
  * Test isolation:
  *
  *   - WC presence: flipped via the `newspack_wc_emails_available` filter
- *     rather than a `class WC_Emails {}` shim. A global class shim
- *     would couple this test class to suite ordering and collide with
- *     slice 2a's tests (`emails-section-woocommerce.php`), which
- *     branch on the same `class_exists( 'WC_Emails' )` check to detect
- *     a real-WC environment. With a shim present, 2a's tests would
- *     skip the "no real WC" branch and call into production code that
- *     also gates on `function_exists( 'WC' )` — which isn't shimmed —
- *     so an assertNotEmpty downstream would fail.
+ *     rather than a `class WC_Emails {}` shim. A global class shim would
+ *     couple this test class to suite ordering with any future code
+ *     that branches on `class_exists( 'WC_Emails' )`.
  *
  *   - Hook detach: `Emails::maybe_update_email_templates` is hooked on
  *     `update_option_theme_mods_{theme}` and calls into a
@@ -36,12 +31,24 @@ class Newspack_Test_WooCommerce_Email_Style_Sync extends WP_UnitTestCase {
 	 */
 	private $theme_mods_hook;
 
+	private function create_fake_logo_attachment_id(): int {
+		return self::factory()->attachment->create_object(
+			'fake-logo.png',
+			0,
+			[
+				'post_mime_type' => 'image/png',
+				'post_type'      => 'attachment',
+				'post_status'    => 'inherit',
+			]
+		);
+	}
+
 	/**
 	 * Reset state between tests so option / theme-mod writes don't leak.
 	 */
 	public function set_up() {
 		parent::set_up();
-		delete_option( WooCommerce_Email_Style_Sync::SYNCED_VERSION_OPTION );
+		delete_option( WooCommerce_Email_Style_Sync::FIRST_RUN_DONE_OPTION );
 		delete_option( 'woocommerce_email_base_color' );
 		delete_option( 'woocommerce_email_header_image' );
 		remove_theme_mod( 'primary_color_hex' );
@@ -63,12 +70,16 @@ class Newspack_Test_WooCommerce_Email_Style_Sync extends WP_UnitTestCase {
 	 * tests in the same PHPUnit process.
 	 */
 	public function tear_down() {
-		delete_option( WooCommerce_Email_Style_Sync::SYNCED_VERSION_OPTION );
+		delete_option( WooCommerce_Email_Style_Sync::FIRST_RUN_DONE_OPTION );
 		delete_option( 'woocommerce_email_base_color' );
 		delete_option( 'woocommerce_email_header_image' );
 		remove_theme_mod( 'primary_color_hex' );
 		remove_theme_mod( 'custom_logo' );
-		remove_all_filters( 'newspack_wc_email_style_sync_enabled' );
+
+		// Narrow removal of the specific callback this class registers,
+		// not remove_all_filters — that would nuke any sibling caller's
+		// registration on the same hook.
+		remove_filter( 'newspack_wc_email_style_sync_enabled', '__return_false' );
 		remove_filter( 'newspack_wc_emails_available', '__return_true' );
 
 		// Restore the hook we removed in set_up() so subsequent tests
@@ -78,14 +89,34 @@ class Newspack_Test_WooCommerce_Email_Style_Sync extends WP_UnitTestCase {
 		parent::tear_down();
 	}
 
-	public function test_sync_styles_writes_expected_options() {
+	public function test_sync_styles_writes_base_color_only() {
 		set_theme_mod( 'primary_color_hex', '#abcdef' );
+
+		// Seed a custom logo too — sync_styles() should NOT propagate
+		// it. Only base color is touched on the ongoing-change paths.
+		set_theme_mod( 'custom_logo', $this->create_fake_logo_attachment_id() );
 
 		WooCommerce_Email_Style_Sync::sync_styles();
 
 		$this->assertSame( '#abcdef', get_option( 'woocommerce_email_base_color' ) );
-		// No custom logo set — header image is written as empty string.
-		$this->assertSame( '', get_option( 'woocommerce_email_header_image' ) );
+		$this->assertSame(
+			false,
+			get_option( 'woocommerce_email_header_image', false ),
+			'sync_styles() must not write the header_image option — that is first-run-only.'
+		);
+	}
+
+	public function test_first_run_writes_header_image_when_logo_set() {
+		set_theme_mod( 'primary_color_hex', '#abcdef' );
+		$attachment_id = $this->create_fake_logo_attachment_id();
+		set_theme_mod( 'custom_logo', $attachment_id );
+
+		WooCommerce_Email_Style_Sync::maybe_sync_on_first_run();
+
+		$expected_url = wp_get_attachment_url( $attachment_id );
+		$this->assertNotEmpty( $expected_url, 'Test setup invariant: attachment URL must resolve.' );
+		$this->assertSame( $expected_url, get_option( 'woocommerce_email_header_image' ) );
+		$this->assertSame( '#abcdef', get_option( 'woocommerce_email_base_color' ) );
 	}
 
 	public function test_maybe_sync_on_first_run_writes_when_no_customization() {
@@ -94,26 +125,25 @@ class Newspack_Test_WooCommerce_Email_Style_Sync extends WP_UnitTestCase {
 		WooCommerce_Email_Style_Sync::maybe_sync_on_first_run();
 
 		$this->assertSame( '#112233', get_option( 'woocommerce_email_base_color' ) );
-		$this->assertSame(
-			WooCommerce_Email_Style_Sync::CURRENT_VERSION,
-			get_option( WooCommerce_Email_Style_Sync::SYNCED_VERSION_OPTION )
+		$this->assertTrue(
+			(bool) get_option( WooCommerce_Email_Style_Sync::FIRST_RUN_DONE_OPTION )
 		);
 	}
 
 	public function test_maybe_sync_on_first_run_skips_when_customized() {
-		// Publisher has already customized the base color directly in WC.
+		// Publisher already has a value in the option row — could be a
+		// real customization or could be a WC migration write. Either
+		// way, the row-presence check treats it as customization.
 		update_option( 'woocommerce_email_base_color', '#deadbe' );
 		set_theme_mod( 'primary_color_hex', '#112233' );
 
 		WooCommerce_Email_Style_Sync::maybe_sync_on_first_run();
 
-		// The publisher's customization is preserved — not overwritten with
-		// the theme's primary color.
+		// The pre-existing value is preserved.
 		$this->assertSame( '#deadbe', get_option( 'woocommerce_email_base_color' ) );
-		// But the version is still marked so we don't re-evaluate forever.
-		$this->assertSame(
-			WooCommerce_Email_Style_Sync::CURRENT_VERSION,
-			get_option( WooCommerce_Email_Style_Sync::SYNCED_VERSION_OPTION )
+		// First-run is still marked done so we don't re-evaluate forever.
+		$this->assertTrue(
+			(bool) get_option( WooCommerce_Email_Style_Sync::FIRST_RUN_DONE_OPTION )
 		);
 	}
 
@@ -122,10 +152,10 @@ class Newspack_Test_WooCommerce_Email_Style_Sync extends WP_UnitTestCase {
 		WooCommerce_Email_Style_Sync::maybe_sync_on_first_run();
 		$this->assertSame( '#111111', get_option( 'woocommerce_email_base_color' ) );
 
-		// Simulate the theme color changing AFTER first-run, then re-invoking
-		// the first-run gate. Because the version is already marked, the
-		// first-run path must short-circuit — only the customize_save_after /
-		// after_switch_theme hooks should propagate ongoing theme changes.
+		// Simulate theme color changing AFTER first-run, then re-invoke
+		// the first-run gate. Because the flag is set, the first-run
+		// path must short-circuit — only the customize_save_after /
+		// after_switch_theme hooks propagate ongoing theme changes.
 		set_theme_mod( 'primary_color_hex', '#222222' );
 		WooCommerce_Email_Style_Sync::maybe_sync_on_first_run();
 
@@ -140,8 +170,13 @@ class Newspack_Test_WooCommerce_Email_Style_Sync extends WP_UnitTestCase {
 		WooCommerce_Email_Style_Sync::maybe_sync_on_first_run();
 		WooCommerce_Email_Style_Sync::sync_styles();
 
-		$this->assertFalse( get_option( 'woocommerce_email_base_color' ) );
-		$this->assertFalse( get_option( 'woocommerce_email_header_image' ) );
-		$this->assertFalse( get_option( WooCommerce_Email_Style_Sync::SYNCED_VERSION_OPTION ) );
+		// Use assertSame against false sentinel rather than assertFalse(
+		// get_option(...) ): on a CI matrix where WC's installer has run,
+		// these options would exist as empty-string rows and assertFalse
+		// would fail on `''`. assertSame( false, ... ) survives that
+		// (an empty-string row would be a real signal something wrote).
+		$this->assertSame( false, get_option( 'woocommerce_email_base_color', false ) );
+		$this->assertSame( false, get_option( 'woocommerce_email_header_image', false ) );
+		$this->assertSame( false, get_option( WooCommerce_Email_Style_Sync::FIRST_RUN_DONE_OPTION, false ) );
 	}
 }
