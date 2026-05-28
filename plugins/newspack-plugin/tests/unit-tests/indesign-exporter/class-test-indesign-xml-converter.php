@@ -7,6 +7,10 @@
 
 use Newspack\Optional_Modules\InDesign_Export\InDesign_XML_Converter;
 
+// Mock get_coauthors() to simulate Co-Authors Plus being active.
+// Uses a global so individual tests can control the return value.
+require_once __DIR__ . '/../../mocks/co-authors-plus-mocks.php';
+
 /**
  * Test class for InDesign_XML_Converter.
  */
@@ -23,6 +27,14 @@ class Newspack_Test_InDesign_XML_Converter extends WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
 		$this->converter = new InDesign_XML_Converter();
+	}
+
+	/**
+	 * Clean up after each test.
+	 */
+	public function tear_down() {
+		parent::tear_down();
+		unset( $GLOBALS['_test_cap_coauthors'] );
 	}
 
 	/**
@@ -79,13 +91,10 @@ class Newspack_Test_InDesign_XML_Converter extends WP_UnitTestCase {
 	 * Single-author byline is "By {name}".
 	 */
 	public function test_byline_single_author() {
-		$user_id = self::factory()->user->create( [ 'display_name' => 'Jane Doe' ] );
-		$post_id = self::factory()->post->create(
-			[
-				'post_title'  => 'Title',
-				'post_author' => $user_id,
-			]
-		);
+		$post_id = self::factory()->post->create( [ 'post_title' => 'Title' ] );
+
+		// Simulate CAP returning a single author for this post.
+		$GLOBALS['_test_cap_coauthors'] = [ (object) [ 'display_name' => 'Jane Doe' ] ];
 
 		$xml = $this->converter->convert_post( $post_id );
 

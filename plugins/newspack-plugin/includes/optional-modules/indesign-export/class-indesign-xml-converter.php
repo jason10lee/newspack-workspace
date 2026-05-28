@@ -99,19 +99,14 @@ class InDesign_XML_Converter {
 	/**
 	 * Get the post authors (CAP-aware).
 	 *
-	 * Falls back to wp_posts.post_author when CAP returns no authors (e.g. when
-	 * force_guest_authors is enabled and the post has no co-author terms yet).
-	 *
 	 * @param \WP_Post $post Post object.
 	 * @return array Author objects.
 	 */
 	private function get_post_authors( $post ) {
 		if ( function_exists( 'get_coauthors' ) ) {
-			$coauthors = get_coauthors( $post->ID );
-			if ( ! empty( $coauthors ) ) {
-				return $coauthors;
-			}
+			return get_coauthors( $post->ID );
 		}
+
 		$author = get_userdata( $post->post_author );
 		return $author ? [ $author ] : [];
 	}
