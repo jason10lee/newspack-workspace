@@ -272,7 +272,11 @@ class Group_Subscription_MyAccount {
 		if ( self::is_subscription_manageable( $subscription_id ) ) {
 			return;
 		}
-		$error_message = __( 'This group subscription is no longer active, so its members can\'t be changed.', 'newspack-plugin' );
+		$error_message = sprintf(
+			/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+			__( 'This %s is no longer active, so its members can\'t be changed.', 'newspack-plugin' ),
+			Group_Subscription::get_label_lower( 'singular' )
+		);
 		self::redirect(
 			new \WP_Error( 'newspack_group_subscription_inactive', $error_message ),
 			$redirect_url,
@@ -285,7 +289,11 @@ class Group_Subscription_MyAccount {
 		if ( self::is_subscription_active( $subscription_id ) ) {
 			return;
 		}
-		$error_message = __( 'This group subscription is not active, so new invitations can\'t be issued.', 'newspack-plugin' );
+		$error_message = sprintf(
+			/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+			__( 'This %s is not active, so new invitations can\'t be issued.', 'newspack-plugin' ),
+			Group_Subscription::get_label_lower( 'singular' )
+		);
 		self::redirect(
 			new \WP_Error( 'newspack_group_subscription_inactive', $error_message ),
 			$redirect_url,

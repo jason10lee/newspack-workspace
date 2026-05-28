@@ -34,7 +34,7 @@ usort(
 		</h1>
 		<p>
 			<?php
-			/* translators: %s: pluralized group label */
+			/* translators: %s: singular group label (e.g. "group", "team"). */
 			printf( esc_html__( 'Pick a %s to manage its members.', 'newspack-plugin' ), esc_html( Group_Subscription::get_label( 'singular' ) ) );
 			?>
 		</p>

@@ -482,6 +482,7 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 	 * @return string Captured redirect URL.
 	 */
 	private function invoke_leave_group_handler( int $subscription_id, string $nonce_action = Group_Subscription_MyAccount::LEAVE_GROUP_NONCE_ACTION ): string {
+		$original_request_method = $_SERVER['REQUEST_METHOD'] ?? null;
 		// phpcs:disable WordPress.Security.NonceVerification.Missing,WordPress.Security.NonceVerification.Recommended
 		$_POST                     = [];
 		$_POST['subscription_id']  = (string) $subscription_id;
@@ -508,6 +509,11 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 			remove_filter( 'allowed_redirect_hosts', $allow_host );
 			$_POST = [];
 			$_REQUEST = [];
+			if ( null === $original_request_method ) {
+				unset( $_SERVER['REQUEST_METHOD'] );
+			} else {
+				$_SERVER['REQUEST_METHOD'] = $original_request_method;
+			}
 		}
 		return $captured;
 	}
