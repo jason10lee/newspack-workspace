@@ -43,19 +43,8 @@ class Group_Subscription_MyAccount {
 	 */
 	const LEAVE_GROUP_NONCE_ACTION = 'newspack_group_subscription_leave_group';
 
-	/**
-	 * Initialize hooks and filters. Deferred to init:11 so My_Account_UI_V1
-	 * (loaded inside an init:10 callback) is available for the guard.
-	 */
 	public static function init() {
-		add_action( 'init', [ __CLASS__, 'register_hooks' ], 11 );
-	}
-
-	public static function register_hooks() {
-		if ( ! class_exists( __NAMESPACE__ . '\\My_Account_UI_V1' ) ) {
-			return;
-		}
-		self::flush_rewrite_rules();
+		add_action( 'init', [ __CLASS__, 'flush_rewrite_rules' ] );
 		add_filter( 'woocommerce_get_query_vars', [ __CLASS__, 'add_manage_members_endpoint' ] );
 		add_filter( 'woocommerce_get_query_vars', [ __CLASS__, 'add_group_endpoint' ] );
 		add_action( 'woocommerce_account_' . self::GROUP_ENDPOINT . '_endpoint', [ __CLASS__, 'resolve_group_landing' ] );
@@ -128,7 +117,7 @@ class Group_Subscription_MyAccount {
 	 * @param mixed $value Subscription ID passed as the endpoint value, if any.
 	 */
 	public static function resolve_group_landing( $value ) {
-		if ( Memberships::is_active() ) {
+		if ( Memberships::is_active() || ! class_exists( __NAMESPACE__ . '\\My_Account_UI_V1' ) ) {
 			wp_safe_redirect( wc_get_account_endpoint_url( 'dashboard' ) );
 			exit;
 		}
@@ -264,6 +253,14 @@ class Group_Subscription_MyAccount {
 		return ! $subscription->has_status( [ 'cancelled', 'expired', 'trash' ] );
 	}
 
+	public static function is_subscription_active( $subscription ): bool {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription instanceof \WC_Subscription ) {
+			return false;
+		}
+		return $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES );
+	}
+
 	/**
 	 * Verify the subscription accepts manager changes, redirecting with an error on failure.
 	 *
@@ -276,6 +273,19 @@ class Group_Subscription_MyAccount {
 			return;
 		}
 		$error_message = __( 'This group subscription is no longer active, so its members can\'t be changed.', 'newspack-plugin' );
+		self::redirect(
+			new \WP_Error( 'newspack_group_subscription_inactive', $error_message ),
+			$redirect_url,
+			$active_tab,
+			$error_message
+		);
+	}
+
+	private static function verify_active( $subscription_id, $redirect_url, $active_tab ): void {
+		if ( self::is_subscription_active( $subscription_id ) ) {
+			return;
+		}
+		$error_message = __( 'This group subscription is not active, so new invitations can\'t be issued.', 'newspack-plugin' );
 		self::redirect(
 			new \WP_Error( 'newspack_group_subscription_inactive', $error_message ),
 			$redirect_url,
@@ -340,7 +350,7 @@ class Group_Subscription_MyAccount {
 		check_admin_referer( self::INVITE_NONCE_ACTION );
 		[ $subscription_id, $redirect_url ] = self::get_subscription_context();
 		self::verify_permission( $subscription_id, $redirect_url, 'invites' );
-		self::verify_manageable( $subscription_id, $redirect_url, 'invites' );
+		self::verify_active( $subscription_id, $redirect_url, 'invites' );
 
 		$email  = filter_input( INPUT_POST, 'newspack-group-subscription-invite-email', FILTER_SANITIZE_EMAIL ) ?? '';
 		$invite = Group_Subscription_Invite::generate_invite( $subscription_id, $email );
