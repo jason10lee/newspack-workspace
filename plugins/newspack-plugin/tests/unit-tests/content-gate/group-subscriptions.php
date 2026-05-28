@@ -1134,7 +1134,7 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 	 */
 	private function build_subscription_search_query( $term ) {
 		$query = new \WP_Query();
-		$query->set( 'subscription', $term );
+		$query->set( 's', $term );
 		$query->set( 'post_type', 'shop_subscription' );
 		$query->is_search = true;
 		return $query;
@@ -1146,7 +1146,7 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 	 */
 	public function test_search_group_name_where_skips_non_subscription_query() {
 		$query = new \WP_Query();
-		$query->set( 'subscription', 'foo' );
+		$query->set( 's', 'foo' );
 		$query->set( 'post_type', 'post' );
 		$query->is_search = true;
 
