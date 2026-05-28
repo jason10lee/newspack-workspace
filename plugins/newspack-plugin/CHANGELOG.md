@@ -1,3 +1,10 @@
+## newspack [6.41.4-hotfix-cap-count-user-posts-dedup.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.41.3...newspack@6.41.4-hotfix-cap-count-user-posts-dedup.1) (2026-05-28)
+
+
+### Bug Fixes
+
+* **co-authors-plus:** dedup count_user_posts for linked guest authors ([5d7126c](https://github.com/Automattic/newspack-workspace/commit/5d7126ca87de6782a0cda672fce3a32fd931bdf4))
+
 ## [6.41.3](https://github.com/Automattic/newspack-plugin/compare/v6.41.2...v6.41.3) (2026-05-25)
 
 
