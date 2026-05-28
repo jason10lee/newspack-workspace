@@ -111,12 +111,18 @@ class Emails_Section extends Wizard_Section {
 			'reader-revenue'    => 0,
 			'reader-activation' => 1,
 		];
+		// `usort` is not stable in PHP — same-category rows can reorder
+		// across requests without a tiebreaker. Use the config type as a
+		// deterministic secondary key so the API output is consistent.
 		usort(
 			$newspack_emails,
 			function ( $a, $b ) use ( $category_order ) {
 				$order_a = $category_order[ $a['category'] ?? '' ] ?? 2;
 				$order_b = $category_order[ $b['category'] ?? '' ] ?? 2;
-				return $order_a - $order_b;
+				if ( $order_a !== $order_b ) {
+					return $order_a - $order_b;
+				}
+				return strcmp( (string) ( $a['type'] ?? '' ), (string) ( $b['type'] ?? '' ) );
 			}
 		);
 

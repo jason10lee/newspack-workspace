@@ -75,7 +75,6 @@ declare global {
 					emails: {
 						dependencies: Record< string, boolean >;
 						postType: string;
-						isEmailEnhancementsActive: boolean;
 					};
 				};
 			};

@@ -12,7 +12,6 @@ use Newspack\OAuth;
 use Newspack\Wizard;
 use Newspack\Everlit_Configuration_Manager;
 use Newspack\Nextdoor;
-use Newspack\WooCommerce_Emails;
 use Newspack\Complianz;
 use function Newspack\google_site_kit_available;
 
@@ -82,11 +81,10 @@ class Newspack_Settings extends Wizard {
 				'label'    => __( 'Emails', 'newspack-plugin' ),
 				'sections' => [
 					'emails' => [
-						'dependencies'              => [
+						'dependencies' => [
 							'newspackNewsletters' => is_plugin_active( 'newspack-newsletters/newspack-newsletters.php' ),
 						],
-						'postType'                  => Emails::POST_TYPE,
-						'isEmailEnhancementsActive' => WooCommerce_Emails::is_active(),
+						'postType'     => Emails::POST_TYPE,
 					],
 				],
 			],

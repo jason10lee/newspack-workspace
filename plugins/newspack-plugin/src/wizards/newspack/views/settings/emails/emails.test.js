@@ -130,6 +130,18 @@ const mockEmails = [
 		recipient: 'reader',
 		source: 'newspack',
 	},
+	{
+		label: 'Welcome email',
+		post_id: 5,
+		edit_link: '/edit/5',
+		status: 'draft',
+		type: 'welcome',
+		category: 'reader-revenue',
+		trigger_description: 'Sent to new supporters after their first payment.',
+		registry_slug: 'welcome',
+		recipient: 'reader',
+		source: 'newspack',
+	},
 ];
 
 describe( 'Emails', () => {
@@ -169,6 +181,7 @@ describe( 'Emails', () => {
 			expect( screen.getByText( 'Cancellation confirmation' ) ).toBeInTheDocument();
 			expect( screen.getByText( 'Reader verification' ) ).toBeInTheDocument();
 			expect( screen.getByText( 'Account deletion' ) ).toBeInTheDocument();
+			expect( screen.getByText( 'Welcome email' ) ).toBeInTheDocument();
 		} );
 	} );
 
@@ -178,7 +191,7 @@ describe( 'Emails', () => {
 
 		await waitFor( () => {
 			const readerCells = screen.getAllByText( 'Reader' );
-			expect( readerCells.length ).toBeGreaterThanOrEqual( 4 );
+			expect( readerCells.length ).toBeGreaterThanOrEqual( 5 );
 		} );
 	} );
 
@@ -238,12 +251,15 @@ describe( 'Emails', () => {
 		} );
 
 		const activate = mockCapturedActions.find( a => a.id === 'activate' );
-		// mockEmails[3] (Account deletion) is newspack + draft.
-		activate.callback( [ mockEmails[ 3 ] ] );
+		// mockEmails[4] (Welcome email) is newspack + reader-revenue + draft —
+		// actually eligible for activate (category !== 'reader-activation').
+		// Verifies the callback wiring on an item that would pass `isEligible`.
+		expect( activate.isEligible( mockEmails[ 4 ] ) ).toBe( true );
+		activate.callback( [ mockEmails[ 4 ] ] );
 
 		expect( mockWizardApiFetch ).toHaveBeenCalledWith(
 			expect.objectContaining( {
-				path: '/wp/v2/newspack_rr_email/4',
+				path: '/wp/v2/newspack_rr_email/5',
 				method: 'POST',
 				data: { status: 'publish' },
 			} ),
