@@ -6,7 +6,7 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
-import { useState, useEffect, useMemo, Fragment } from '@wordpress/element';
+import { useState, useEffect, useCallback, useMemo, Fragment } from '@wordpress/element';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
 
@@ -26,7 +26,6 @@ interface EmailItem {
 	type: string;
 	category: string;
 	trigger_description: string;
-	registry_slug: string;
 	recipient: 'reader' | 'admin';
 	recommended: boolean;
 	chip: 'auth-account' | 'reader-revenue';
@@ -58,13 +57,17 @@ const Emails = () => {
 	const emailSections = window.newspackSettings.emails.sections;
 	const [ pluginsReady, setPluginsReady ] = useState( Boolean( emailSections.emails.dependencies.newspackNewsletters ) );
 
-	const [ data, setData ] = useState< EmailItem[] >( [] );
-	const [ postType, setPostType ] = useState< string >( emailSections.emails.postType );
+	// Seed from the SSR bootstrap (class-newspack-settings.php passes the same
+	// shape as api_get_email_settings()) so DataViews renders on first paint
+	// instead of waiting for the mount-time XHR.
+	const initial = emailSections.emails.initial;
+	const [ data, setData ] = useState< EmailItem[] >( initial?.newspack_emails ?? [] );
+	const postType = initial?.post_type ?? emailSections.emails.postType;
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
 
 	const { wizardApiFetch, isFetching, errorMessage, resetError } = useWizardApiFetch( 'newspack-settings/emails' );
 
-	const fetchData = () => {
+	const fetchData = useCallback( () => {
 		resetError();
 		wizardApiFetch< EmailSettings >(
 			{
@@ -74,18 +77,36 @@ const Emails = () => {
 			{
 				onSuccess( result: EmailSettings ) {
 					setData( result.newspack_emails || [] );
-					if ( result.post_type ) {
-						setPostType( result.post_type );
-					}
+				},
+				onError() {
+					// useWizardApiFetch surfaces the message via errorMessage;
+					// this handler is here so a rejection doesn't become an
+					// unhandled promise rejection if the hook's plumbing changes.
 				},
 			}
 		);
-	};
+	}, [ wizardApiFetch, resetError ] );
 
-	useEffect( fetchData, [] );
+	useEffect( () => {
+		// Only refetch on mount if we didn't get the SSR seed. The SSR data
+		// is built from the same api_get_email_settings() shape, so it's
+		// authoritative for first paint.
+		if ( ! initial?.newspack_emails ) {
+			fetchData();
+		}
+		// Empty cleanup return; the hook's promise resolves to nothing
+		// observable post-unmount, but explicit cleanup signals intent.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [] );
 
 	const updateStatus = ( postId: number, nextStatus: string ) => {
 		resetError();
+		// Optimistic update — the server response only confirms what we
+		// already wrote, so patch the row in place and skip the full
+		// refetch (which would otherwise re-pay the N+1 query in
+		// Emails::get_emails on every toggle).
+		const prev = data;
+		setData( data.map( email => ( email.post_id === postId ? { ...email, status: nextStatus } : email ) ) );
 		wizardApiFetch(
 			{
 				path: `/wp/v2/${ postType }/${ postId }`,
@@ -93,7 +114,10 @@ const Emails = () => {
 				data: { status: nextStatus },
 			},
 			{
-				onSuccess: () => fetchData(),
+				onError() {
+					// Roll back optimistic update on failure.
+					setData( prev );
+				},
 			}
 		);
 	};
@@ -200,7 +224,7 @@ const Emails = () => {
 			id: 'reset',
 			label: __( 'Reset', 'newspack-plugin' ),
 			isDestructive: true,
-			isEligible: ( item: EmailItem ) => Boolean( item.registry_slug ),
+			isEligible: ( item: EmailItem ) => item.source === 'newspack',
 			callback: ( items: EmailItem[] ) => {
 				if ( utils.confirmAction( __( 'Are you sure you want to reset the contents of this email?', 'newspack-plugin' ) ) ) {
 					resetEmail( items[ 0 ].post_id );
@@ -217,14 +241,10 @@ const Emails = () => {
 				<PageHeading />
 				<Notice
 					isError
-					noticeText={
-						__(
-							'Newspack uses Newspack Newsletters to handle editing email-type content. Please activate this plugin to proceed.',
-							'newspack-plugin'
-						) +
-						' ' +
-						__( 'Until this feature is configured, default receipts will be used.', 'newspack-plugin' )
-					}
+					noticeText={ __(
+						'Newspack uses Newspack Newsletters to handle editing email-type content. Please activate this plugin to proceed. Until this feature is configured, default receipts will be used.',
+						'newspack-plugin'
+					) }
 				/>
 				<WizardsPluginCard
 					slug="newspack-newsletters"

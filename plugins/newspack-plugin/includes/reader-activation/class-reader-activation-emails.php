@@ -77,9 +77,7 @@ class Reader_Activation_Emails {
 			'template'               => dirname( NEWSPACK_PLUGIN_FILE ) . '/includes/templates/reader-activation-emails/verification.php',
 			'editor_notice'          => __( 'This email will be sent to a reader after they\'ve registered.', 'newspack-plugin' ),
 			'trigger_description'    => __( 'Sent when a reader needs to verify their email address.', 'newspack-plugin' ),
-			'recipient'              => 'reader',
 			'recommended'            => true,
-			'chip'                   => 'auth-account',
 			'available_placeholders' => array_merge(
 				$available_placeholders,
 				[
@@ -98,9 +96,7 @@ class Reader_Activation_Emails {
 			'template'               => dirname( NEWSPACK_PLUGIN_FILE ) . '/includes/templates/reader-activation-emails/magic-link.php',
 			'editor_notice'          => __( 'This email will be sent to a reader when they request a login link.', 'newspack-plugin' ),
 			'trigger_description'    => __( 'Sent when a reader requests a magic login link.', 'newspack-plugin' ),
-			'recipient'              => 'reader',
 			'recommended'            => true,
-			'chip'                   => 'auth-account',
 			'available_placeholders' => array_merge(
 				$available_placeholders,
 				[
@@ -119,9 +115,7 @@ class Reader_Activation_Emails {
 			'template'               => dirname( NEWSPACK_PLUGIN_FILE ) . '/includes/templates/reader-activation-emails/otp.php',
 			'editor_notice'          => __( 'This email will be sent to a reader when they request a login link and a one-time password is available.', 'newspack-plugin' ),
 			'trigger_description'    => __( 'Sent when a reader logs in with a one-time password.', 'newspack-plugin' ),
-			'recipient'              => 'reader',
 			'recommended'            => true,
-			'chip'                   => 'auth-account',
 			'available_placeholders' => array_merge(
 				$available_placeholders,
 				[
@@ -148,9 +142,7 @@ class Reader_Activation_Emails {
 			'template'               => dirname( NEWSPACK_PLUGIN_FILE ) . '/includes/templates/reader-activation-emails/password-reset.php',
 			'editor_notice'          => __( 'This email will be sent to a reader when they request a password creation or reset.', 'newspack-plugin' ),
 			'trigger_description'    => __( 'Sent when a reader requests a password reset.', 'newspack-plugin' ),
-			'recipient'              => 'reader',
 			'recommended'            => true,
-			'chip'                   => 'auth-account',
 			'available_placeholders' => array_merge(
 				$available_placeholders,
 				[
@@ -169,9 +161,6 @@ class Reader_Activation_Emails {
 			'template'               => dirname( NEWSPACK_PLUGIN_FILE ) . '/includes/templates/reader-activation-emails/delete-account.php',
 			'editor_notice'          => __( 'This email will be sent to a reader when they request an account deletion.', 'newspack-plugin' ),
 			'trigger_description'    => __( 'Sent when a reader requests to delete their account.', 'newspack-plugin' ),
-			'recipient'              => 'reader',
-			'recommended'            => false,
-			'chip'                   => 'auth-account',
 			'available_placeholders' => [
 				[
 					'label'    => __( 'the account deletion link', 'newspack-plugin' ),
@@ -188,9 +177,6 @@ class Reader_Activation_Emails {
 				'template'               => dirname( NEWSPACK_PLUGIN_FILE ) . '/includes/templates/reader-activation-emails/change-email.php',
 				'editor_notice'          => __( 'This email will be sent to a reader\'s new email address after they update their email address.', 'newspack-plugin' ),
 				'trigger_description'    => __( 'Sent to the new address to confirm an email change.', 'newspack-plugin' ),
-				'recipient'              => 'reader',
-				'recommended'            => false,
-				'chip'                   => 'auth-account',
 				'available_placeholders' => array_merge(
 					$available_placeholders,
 					[
@@ -213,9 +199,6 @@ class Reader_Activation_Emails {
 				'template'               => dirname( NEWSPACK_PLUGIN_FILE ) . '/includes/templates/reader-activation-emails/change-email-cancel.php',
 				'editor_notice'          => __( 'This email will be sent to a reader\'s existing email address after they update their email address.', 'newspack-plugin' ),
 				'trigger_description'    => __( 'Sent to the old address when a reader changes their email.', 'newspack-plugin' ),
-				'recipient'              => 'reader',
-				'recommended'            => false,
-				'chip'                   => 'auth-account',
 				'available_placeholders' => array_merge(
 					$available_placeholders,
 					[
@@ -239,9 +222,6 @@ class Reader_Activation_Emails {
 			'template'               => dirname( NEWSPACK_PLUGIN_FILE ) . '/includes/templates/reader-activation-emails/non-reader.php',
 			'editor_notice'          => __( 'This email will be sent to non-reader WP user accounts as a reminder to use standard WP login flows.', 'newspack-plugin' ),
 			'trigger_description'    => __( 'Sent when a non-reader WordPress user tries to log in as a reader.', 'newspack-plugin' ),
-			'recipient'              => 'reader',
-			'recommended'            => false,
-			'chip'                   => 'auth-account',
 			'available_placeholders' => array_merge(
 				$available_placeholders,
 				[

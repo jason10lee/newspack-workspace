@@ -75,6 +75,10 @@ declare global {
 					emails: {
 						dependencies: Record< string, boolean >;
 						postType: string;
+						initial?: {
+							newspack_emails: Record< string, unknown >[];
+							post_type: string;
+						};
 					};
 				};
 			};

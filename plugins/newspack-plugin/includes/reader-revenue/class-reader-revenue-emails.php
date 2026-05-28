@@ -101,9 +101,7 @@ class Reader_Revenue_Emails {
 			'editor_notice'          => __( 'This email will be sent to a reader after they contribute to your site.', 'newspack-plugin' ),
 			'from_email'             => self::get_from_email(),
 			'trigger_description'    => __( 'Sent after a successful payment.', 'newspack-plugin' ),
-			'recipient'              => 'reader',
 			'recommended'            => true,
-			'chip'                   => 'reader-revenue',
 			'available_placeholders' => array_merge(
 				$available_placeholders,
 				[
@@ -135,9 +133,7 @@ class Reader_Revenue_Emails {
 			'editor_notice'          => __( 'This email will be sent to readers when they register an account during a transaction.', 'newspack-plugin' ),
 			'from_email'             => self::get_from_email(),
 			'trigger_description'    => __( 'Sent to new supporters after their first payment.', 'newspack-plugin' ),
-			'recipient'              => 'reader',
 			'recommended'            => true,
-			'chip'                   => 'reader-revenue',
 			'available_placeholders' => array_merge(
 				$available_placeholders,
 				[
@@ -173,9 +169,7 @@ class Reader_Revenue_Emails {
 			'editor_notice'          => __( 'This email will be sent to a reader after they cancel a recurring donation.', 'newspack-plugin' ),
 			'from_email'             => self::get_from_email(),
 			'trigger_description'    => __( 'Sent when a reader cancels their subscription.', 'newspack-plugin' ),
-			'recipient'              => 'reader',
 			'recommended'            => true,
-			'chip'                   => 'reader-revenue',
 			'available_placeholders' => array_merge(
 				$available_placeholders,
 				[

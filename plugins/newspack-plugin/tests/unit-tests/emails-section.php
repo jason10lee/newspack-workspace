@@ -172,9 +172,17 @@ class Newspack_Test_Emails_Section extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'post_type', $result );
 		$this->assertIsArray( $result['newspack_emails'] );
 
+		// Precondition: if Emails::supports_emails() returns false (e.g.
+		// Newspack_Newsletters isn't loaded in this test bootstrap),
+		// newspack_emails is [] and the foreach below runs zero times —
+		// making the per-row assertions vacuous. Skip explicitly rather
+		// than letting a regression slip through silently.
+		if ( empty( $result['newspack_emails'] ) ) {
+			$this->markTestSkipped( 'Emails::supports_emails() is false in this environment; no rows to assert against.' );
+		}
+
 		$required_row_fields = [
 			'label',
-			'registry_slug',
 			'trigger_description',
 			'recipient',
 			'recommended',
@@ -232,16 +240,6 @@ class Newspack_Test_Emails_Section extends WP_UnitTestCase {
 		}
 	}
 
-	/**
-	 * The registry_slug field echoes the config key — just a string identifier, no registry concept.
-	 */
-	public function test_api_get_email_settings_registry_slug_is_config_key() {
-		$result = Emails_Section::api_get_email_settings();
-		foreach ( $result['newspack_emails'] as $email ) {
-			$this->assertNotEmpty( $email['registry_slug'] );
-			$this->assertSame( $email['type'], $email['registry_slug'] );
-		}
-	}
 
 	/*
 	 * ------------------------------------------------------------------
@@ -265,13 +263,40 @@ class Newspack_Test_Emails_Section extends WP_UnitTestCase {
 
 		$this->assertSame( '', $merged['trigger_description'] );
 		$this->assertSame( 'reader', $merged['recipient'] );
-		$this->assertTrue( $merged['recommended'] );
+		// `recommended` defaults to false — third-parties must opt in.
+		$this->assertFalse( $merged['recommended'] );
+		// `chip` is derived from category in apply_config_defaults().
 		$this->assertSame( 'auth-account', $merged['chip'] );
 
 		// Declared fields pass through unchanged.
 		$this->assertSame( 'test-email', $merged['name'] );
 		$this->assertSame( 'Test Email', $merged['label'] );
 		$this->assertSame( 'reader-activation', $merged['category'] );
+	}
+
+	/**
+	 * Chip is derived from category: reader-revenue → reader-revenue.
+	 */
+	public function test_apply_config_defaults_derives_reader_revenue_chip_from_category() {
+		$partial = [
+			'name'     => 'test-rr-email',
+			'category' => 'reader-revenue',
+		];
+		$merged  = Emails::apply_config_defaults( $partial );
+		$this->assertSame( 'reader-revenue', $merged['chip'] );
+	}
+
+	/**
+	 * Explicit chip declaration wins over the category-derived default.
+	 */
+	public function test_apply_config_defaults_explicit_chip_overrides_derivation() {
+		$partial = [
+			'name'     => 'test-email',
+			'category' => 'reader-revenue',
+			'chip'     => 'auth-account',
+		];
+		$merged  = Emails::apply_config_defaults( $partial );
+		$this->assertSame( 'auth-account', $merged['chip'] );
 	}
 
 	/**
@@ -316,8 +341,37 @@ class Newspack_Test_Emails_Section extends WP_UnitTestCase {
 		$this->assertArrayHasKey( $type, $configs );
 		$this->assertSame( '', $configs[ $type ]['trigger_description'] );
 		$this->assertSame( 'reader', $configs[ $type ]['recipient'] );
-		$this->assertTrue( $configs[ $type ]['recommended'] );
+		$this->assertFalse( $configs[ $type ]['recommended'] );
 		$this->assertSame( 'auth-account', $configs[ $type ]['chip'] );
+	}
+
+	/**
+	 * Defensive: a third-party filter that returns a non-array entry at a
+	 * key must NOT fatal get_email_configs() — the bad row is dropped and
+	 * the other entries pass through unchanged.
+	 */
+	public function test_email_configs_filter_skips_non_array_entries() {
+		$callback = function ( $configs ) {
+			$configs['malformed-string']    = 'not-an-array';
+			$configs['malformed-null']      = null;
+			$configs['valid-third-party']   = [
+				'name'     => 'valid-third-party',
+				'category' => 'reader-activation',
+				'label'    => 'Valid third-party',
+			];
+			return $configs;
+		};
+
+		add_filter( 'newspack_email_configs', $callback );
+		$configs = Emails::get_email_configs();
+		remove_filter( 'newspack_email_configs', $callback );
+
+		// Bad rows silently dropped.
+		$this->assertArrayNotHasKey( 'malformed-string', $configs );
+		$this->assertArrayNotHasKey( 'malformed-null', $configs );
+		// Valid row still surfaces with defaults applied.
+		$this->assertArrayHasKey( 'valid-third-party', $configs );
+		$this->assertSame( 'reader', $configs['valid-third-party']['recipient'] );
 	}
 
 	/*
@@ -346,32 +400,48 @@ class Newspack_Test_Emails_Section extends WP_UnitTestCase {
 	}
 
 	/**
-	 * When RA is disabled, only reader-revenue types
-	 * (Reader_Revenue_Emails::EMAIL_TYPES) survive the filter.
+	 * When RA is disabled, only configs tagged with `chip: 'reader-revenue'`
+	 * survive — i.e. anything in the reader-revenue grouping regardless of
+	 * which provider class registered it.
 	 */
 	public function test_filter_configs_by_ra_state_scopes_to_reader_revenue_when_disabled() {
 		$configs = [
-			Reader_Revenue_Emails::EMAIL_TYPES['RECEIPT'] => [ 'name' => 'receipt' ],
-			Reader_Revenue_Emails::EMAIL_TYPES['WELCOME'] => [ 'name' => 'welcome' ],
-			Reader_Revenue_Emails::EMAIL_TYPES['CANCELLATION'] => [ 'name' => 'cancellation' ],
-			'reader-activation-verification'              => [ 'name' => 'reader-activation-verification' ],
-			'reader-activation-magic-link'                => [ 'name' => 'reader-activation-magic-link' ],
-			'group-subscription-invite'                   => [ 'name' => 'group-subscription-invite' ],
+			'receipt'                        => [
+				'name' => 'receipt',
+				'chip' => 'reader-revenue',
+			],
+			'welcome'                        => [
+				'name' => 'welcome',
+				'chip' => 'reader-revenue',
+			],
+			'group-subscription-invite'      => [
+				'name' => 'group-subscription-invite',
+				'chip' => 'reader-revenue',
+			],
+			'reader-activation-verification' => [
+				'name' => 'verification',
+				'chip' => 'auth-account',
+			],
+			'reader-activation-magic-link'   => [
+				'name' => 'magic-link',
+				'chip' => 'auth-account',
+			],
+			// Edge: a config that somehow lost its chip — must be excluded.
+			'untagged'                       => [ 'name' => 'untagged' ],
 		];
 		$filtered = Emails_Section::filter_configs_by_ra_state( false, $configs );
 
-		// Reader-revenue types should survive.
-		$this->assertArrayHasKey( Reader_Revenue_Emails::EMAIL_TYPES['RECEIPT'], $filtered );
-		$this->assertArrayHasKey( Reader_Revenue_Emails::EMAIL_TYPES['WELCOME'], $filtered );
-		$this->assertArrayHasKey( Reader_Revenue_Emails::EMAIL_TYPES['CANCELLATION'], $filtered );
+		// Reader-revenue-chipped configs should survive.
+		$this->assertArrayHasKey( 'receipt', $filtered );
+		$this->assertArrayHasKey( 'welcome', $filtered );
+		$this->assertArrayHasKey( 'group-subscription-invite', $filtered );
 
-		// Reader-activation and group-subscription types should be dropped.
+		// Auth-account-chipped configs should be dropped.
 		$this->assertArrayNotHasKey( 'reader-activation-verification', $filtered );
 		$this->assertArrayNotHasKey( 'reader-activation-magic-link', $filtered );
-		$this->assertArrayNotHasKey( 'group-subscription-invite', $filtered );
 
-		// Exact count: 3 reader-revenue types only.
-		$this->assertCount( 3, $filtered );
+		// Untagged configs (no chip) should also be dropped — conservative.
+		$this->assertArrayNotHasKey( 'untagged', $filtered );
 	}
 
 	/**

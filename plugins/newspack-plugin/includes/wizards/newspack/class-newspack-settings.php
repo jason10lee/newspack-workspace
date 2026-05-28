@@ -85,6 +85,10 @@ class Newspack_Settings extends Wizard {
 							'newspackNewsletters' => is_plugin_active( 'newspack-newsletters/newspack-newsletters.php' ),
 						],
 						'postType'     => Emails::POST_TYPE,
+						// SSR-bootstrap the email list so DataViews renders
+						// on first paint rather than after the mount XHR.
+						// Same shape as api_get_email_settings()'s response.
+						'initial'      => \Newspack\Wizards\Newspack\Emails_Section::api_get_email_settings(),
 					],
 				],
 			],

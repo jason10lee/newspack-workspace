@@ -374,12 +374,20 @@ class Emails {
 
 	/**
 	 * Default values for email config fields shared across all providers.
+	 *
+	 * `chip` intentionally omitted — derived from `category` in
+	 * `apply_config_defaults()` because the category→chip mapping is 1:1
+	 * for every Newspack-side provider, and a global default of
+	 * 'auth-account' would silently misclassify any reader-revenue config
+	 * that didn't override it.
+	 *
+	 * `recommended` defaults to false (conservative): a third-party config
+	 * that doesn't opt in shouldn't surface with a "Recommended" treatment.
 	 */
 	const EMAIL_CONFIG_DEFAULTS = [
 		'trigger_description' => '',
 		'recipient'           => 'reader',
-		'recommended'         => true,
-		'chip'                => 'auth-account',
+		'recommended'         => false,
 	];
 
 	/**
@@ -390,7 +398,16 @@ class Emails {
 	 * @return array Config with shared defaults applied for missing fields.
 	 */
 	public static function apply_config_defaults( array $config ): array {
-		return array_merge( self::EMAIL_CONFIG_DEFAULTS, $config );
+		$merged = array_merge( self::EMAIL_CONFIG_DEFAULTS, $config );
+		// Derive chip from category if not explicitly set. Category →
+		// chip mapping is 1:1 for every Newspack-side provider, so
+		// providers don't need to declare both.
+		if ( ! isset( $merged['chip'] ) ) {
+			$merged['chip'] = ( 'reader-revenue' === ( $merged['category'] ?? '' ) )
+				? 'reader-revenue'
+				: 'auth-account';
+		}
+		return $merged;
 	}
 
 	/**
@@ -423,7 +440,19 @@ class Emails {
 	 */
 	public static function get_email_configs() {
 		$configs = apply_filters( 'newspack_email_configs', [] );
+		if ( ! is_array( $configs ) ) {
+			return [];
+		}
 		foreach ( $configs as $type => $config ) {
+			// Defensive: a third-party filter callback can return a non-array
+			// value at a key (e.g. ['mytype' => 'string']). apply_config_defaults
+			// is typed array, so an unguarded call would throw TypeError and
+			// take down every consumer of get_email_configs. Drop the bad row
+			// silently rather than fatal the whole endpoint.
+			if ( ! is_array( $config ) ) {
+				unset( $configs[ $type ] );
+				continue;
+			}
 			$configs[ $type ] = self::apply_config_defaults( $config );
 		}
 		return $configs;

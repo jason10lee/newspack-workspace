@@ -72,7 +72,6 @@ class Emails_Section extends Wizard_Section {
 	 *         recommended:         bool,
 	 *         chip:                'auth-account'|'reader-revenue',
 	 *         source:              'newspack'|'woocommerce',
-	 *         registry_slug:       string,
 	 *     }>,
 	 *     post_type: string,
 	 * }
@@ -95,16 +94,23 @@ class Emails_Section extends Wizard_Section {
 		// payload via the existing Emails::get_emails() pipeline. The
 		// serialized output now carries the four new schema fields per the
 		// commit 1 patch to Emails::serialize_email().
-		$types  = array_keys( $configs );
+		$types = array_keys( $configs );
+
+		// Guard against the empty-types case: Emails::get_emails() treats
+		// an empty $config_names as "no filter" and returns every registered
+		// email, which would bypass the WC-source and RA-state filters
+		// above. Return an empty list explicitly when there's nothing to
+		// resolve.
+		if ( empty( $types ) ) {
+			return [
+				'newspack_emails' => [],
+				'post_type'       => Emails::POST_TYPE,
+			];
+		}
+
 		$emails = Emails::get_emails( $types, false );
 
-		$newspack_emails = [];
-		foreach ( $emails as $type => $email ) {
-			// registry_slug is just the config key — kept as a stable string
-			// identifier the frontend reads for reset eligibility.
-			$email['registry_slug'] = $type;
-			$newspack_emails[]      = $email;
-		}
+		$newspack_emails = array_values( $emails );
 
 		// Single category-only sort: reader-revenue → reader-activation → other.
 		$category_order = [
@@ -137,9 +143,14 @@ class Emails_Section extends Wizard_Section {
 	 * Reader Activation state.
 	 *
 	 * When RA is enabled, all configs are visible. When it's disabled, only
-	 * reader-revenue configs (those whose keys appear in
-	 * `Reader_Revenue_Emails::EMAIL_TYPES`) surface — the auth/account flows
-	 * have no use without RA.
+	 * reader-revenue configs surface — the auth/account flows have no use
+	 * without RA. Membership is keyed off the config's `chip` field
+	 * (`'reader-revenue'`) rather than a hardcoded provider-specific
+	 * constant: any new reader-revenue provider that declares
+	 * `category: 'reader-revenue'` (and therefore inherits
+	 * `chip: 'reader-revenue'` via apply_config_defaults) automatically
+	 * surfaces in the RA-off view without needing to be added to a list
+	 * the section class knows about.
 	 *
 	 * Extracted from `api_get_email_settings()` so the gating is unit-testable
 	 * without toggling `Reader_Activation::is_enabled()` (which hard-returns
@@ -153,7 +164,9 @@ class Emails_Section extends Wizard_Section {
 		if ( $ra_enabled ) {
 			return $configs;
 		}
-		$allowed = array_values( Reader_Revenue_Emails::EMAIL_TYPES );
-		return array_intersect_key( $configs, array_flip( $allowed ) );
+		return array_filter(
+			$configs,
+			fn( $config ) => 'reader-revenue' === ( $config['chip'] ?? '' )
+		);
 	}
 }
