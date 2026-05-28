@@ -41,8 +41,8 @@
 		"classnames": "^2.5.0",
 		"clsx": "^2.1.0",
 		"lodash": "^4.17.0",
-		"newspack-components": "4.3.0",
-		"newspack-scripts": "5.9.8",
+		"newspack-components": "workspace:*",
+		"newspack-scripts": "workspace:*",
 		"react-dom": "^18.0.0",
 		"react-router-dom": "^5.3.4",
 		"redux": "^5.0.0"
