@@ -1,10 +1,3 @@
-## newspack [6.41.4-hotfix-group-subscription-invite-link-params.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.41.3...newspack@6.41.4-hotfix-group-subscription-invite-link-params.1) (2026-05-28)
-
-
-### Bug Fixes
-
-* **group-subscription:** update param names, avoid secondary My Account redirect ([16bf647](https://github.com/Automattic/newspack-workspace/commit/16bf6470349773d127eda5db5f80e7580f2f5c59))
-
 ## [6.41.3](https://github.com/Automattic/newspack-plugin/compare/v6.41.2...v6.41.3) (2026-05-25)
 
 
