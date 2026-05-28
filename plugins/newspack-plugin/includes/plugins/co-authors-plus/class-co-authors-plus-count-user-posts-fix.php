@@ -111,23 +111,25 @@ class Co_Authors_Plus_Count_User_Posts_Fix {
 	private static function count_distinct_attributed_posts( $user_id, $ga_term_taxonomy_id, $post_type, $public_only ) {
 		global $wpdb;
 
-		$type_sql   = self::build_in_list_fragment( self::resolve_post_types( $post_type ) );
-		$status_sql = self::build_in_list_fragment( self::resolve_post_statuses( $public_only ) );
+		$types               = self::resolve_post_types( $post_type );
+		$statuses            = self::resolve_post_statuses( $public_only );
+		$type_placeholders   = implode( ',', array_fill( 0, count( $types ), '%s' ) );
+		$status_placeholders = implode( ',', array_fill( 0, count( $statuses ), '%s' ) );
+		$prepare_args        = array_merge( [ $ga_term_taxonomy_id ], $types, $statuses, [ $user_id ] );
 
-		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery -- IN clauses are built from a known-safe esc_sql'd allow-list (post types and registered post statuses); direct query needed for COUNT(DISTINCT) over the union.
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- $type_placeholders / $status_placeholders are %s-only fragments built from count() of the resolved arrays; the actual values flow through prepare() in $prepare_args. Direct query needed for COUNT(DISTINCT) over the union (loses index-friendly form as WP_Query meta/tax_query).
 		$count = $wpdb->get_var(
 			$wpdb->prepare(
 				"SELECT COUNT(DISTINCT p.ID) FROM {$wpdb->posts} p
 				LEFT JOIN {$wpdb->term_relationships} tr
 					ON tr.object_id = p.ID AND tr.term_taxonomy_id = %d
-				WHERE p.post_type IN ({$type_sql})
-				AND p.post_status IN ({$status_sql})
+				WHERE p.post_type IN ({$type_placeholders})
+				AND p.post_status IN ({$status_placeholders})
 				AND ( p.post_author = %d OR tr.object_id IS NOT NULL )",
-				$ga_term_taxonomy_id,
-				$user_id
+				$prepare_args
 			)
 		);
-		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
 
 		return (int) $count;
 	}
@@ -171,20 +173,6 @@ class Co_Authors_Plus_Count_User_Posts_Fix {
 		}
 
 		return is_array( $post_type ) ? $post_type : [ $post_type ];
-	}
-
-	/**
-	 * Build a comma-separated list of quoted, escaped values for safe SQL interpolation.
-	 *
-	 * @param string|string[] $values One value or an array of values.
-	 * @return string e.g. "'post','page'"
-	 */
-	private static function build_in_list_fragment( $values ) {
-		if ( ! is_array( $values ) ) {
-			$values = [ $values ];
-		}
-		$escaped = array_map( 'esc_sql', $values );
-		return "'" . implode( "','", $escaped ) . "'";
 	}
 }
 Co_Authors_Plus_Count_User_Posts_Fix::init();
