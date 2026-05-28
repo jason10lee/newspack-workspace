@@ -1,20 +1,3 @@
-# [2.23.0-alpha.1](https://github.com/Automattic/newspack-theme/compare/v2.22.2...v2.23.0-alpha.1) (2026-05-21)
-
-
-### Bug Fixes
-
-* **a11y:** respect prefers-reduced-motion user preference ([#2687](https://github.com/Automattic/newspack-theme/issues/2687)) ([43922fb](https://github.com/Automattic/newspack-theme/commit/43922fbdea196f47893fb6dd3d7a4cfc705ba5a4)), closes [#2622](https://github.com/Automattic/newspack-theme/issues/2622)
-* correct checkout button block padding ([#2686](https://github.com/Automattic/newspack-theme/issues/2686)) ([6434d5d](https://github.com/Automattic/newspack-theme/commit/6434d5d84e65723e9fc25d09817dd405fd535fdd))
-* hide empty paragraphs to prevent unexpected spacing ([#2708](https://github.com/Automattic/newspack-theme/issues/2708)) ([f2a22d4](https://github.com/Automattic/newspack-theme/commit/f2a22d46e7e8282832071bdeb3d3e066a256eebc))
-* remove extra spacing on linked images ([#2709](https://github.com/Automattic/newspack-theme/issues/2709)) ([07995e3](https://github.com/Automattic/newspack-theme/commit/07995e32824170bc63a08942a72887d998dc492d))
-* replace display:none with visually-hidden styles in pagination text ([#2688](https://github.com/Automattic/newspack-theme/issues/2688)) ([c53305a](https://github.com/Automattic/newspack-theme/commit/c53305ac328e4707270c9281505a304b7e6e5c30)), closes [#2526](https://github.com/Automattic/newspack-theme/issues/2526)
-* **template-tags:** resolve loading/fetchpriority conflict in post thumbnail ([c5343ed](https://github.com/Automattic/newspack-theme/commit/c5343ede08379ce3a421ba61b00dc31ba89fe6fe)), closes [#2392](https://github.com/Automattic/newspack-theme/issues/2392)
-
-
-### Features
-
-* add support for alternative Google Font sources ([#2693](https://github.com/Automattic/newspack-theme/issues/2693)) ([9233c15](https://github.com/Automattic/newspack-theme/commit/9233c150498ea61cf7c0ae8816f416e7383f9611)), closes [#1976](https://github.com/Automattic/newspack-theme/issues/1976)
-
 ## [2.22.2](https://github.com/Automattic/newspack-theme/compare/v2.22.1...v2.22.2) (2026-05-21)
 
 
