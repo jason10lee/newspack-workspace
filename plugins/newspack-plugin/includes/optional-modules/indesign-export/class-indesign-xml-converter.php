@@ -67,9 +67,113 @@ class InDesign_XML_Converter {
 			}
 		}
 
+		$body = $this->process_content( $post );
+		if ( '' !== $body ) {
+			$xml .= '  <body>' . "\n" . $body . '  </body>' . "\n";
+		}
+
 		$xml .= '</article>' . "\n";
 
 		return $xml;
+	}
+
+	/**
+	 * Build the <body> children from post content.
+	 *
+	 * @param \WP_Post $post Post object.
+	 * @return string Inner XML (without the <body> tag itself), or empty string.
+	 */
+	private function process_content( $post ) {
+		if ( ! has_blocks( $post->post_content ) ) {
+			return '';
+		}
+		$blocks = parse_blocks( $post->post_content );
+		return $this->render_blocks( $blocks );
+	}
+
+	/**
+	 * Render a list of blocks as XML body children.
+	 *
+	 * @param array $blocks Block list.
+	 * @return string XML fragment.
+	 */
+	private function render_blocks( $blocks ) {
+		$out = '';
+		foreach ( $blocks as $block ) {
+			$out .= $this->render_block( $block );
+		}
+		return $out;
+	}
+
+	/**
+	 * Render a single block.
+	 *
+	 * @param array $block Block data.
+	 * @return string XML fragment for this block.
+	 */
+	private function render_block( $block ) {
+		$name = $block['blockName'] ?? null;
+
+		// parse_blocks returns null name for freeform/whitespace chunks; skip.
+		if ( null === $name ) {
+			return '';
+		}
+
+		switch ( $name ) {
+			case 'core/paragraph':
+				return $this->render_paragraph( $block );
+			case 'core/heading':
+				return $this->render_heading( $block );
+		}
+
+		return '';
+	}
+
+	/**
+	 * Render a core/paragraph block as <para>.
+	 *
+	 * @param array $block Block data.
+	 * @return string XML fragment.
+	 */
+	private function render_paragraph( $block ) {
+		$text = $this->extract_inner_text( $block['innerHTML'] ?? '' );
+		if ( '' === $text ) {
+			return '';
+		}
+		return '    <para>' . $text . '</para>' . "\n";
+	}
+
+	/**
+	 * Render a core/heading block as <heading level="N">.
+	 *
+	 * @param array $block Block data.
+	 * @return string XML fragment.
+	 */
+	private function render_heading( $block ) {
+		$level = (int) ( $block['attrs']['level'] ?? 2 );
+		$text  = $this->extract_inner_text( $block['innerHTML'] ?? '' );
+		if ( '' === $text ) {
+			return '';
+		}
+		return '    <heading level="' . $level . '">' . $text . '</heading>' . "\n";
+	}
+
+	/**
+	 * Strip the outer tag from a block's innerHTML and XML-escape the result.
+	 *
+	 * E.g. "<p>Hello & you</p>" → "Hello &amp; you".
+	 *
+	 * @param string $inner_html Block innerHTML.
+	 * @return string Escaped inner text.
+	 */
+	private function extract_inner_text( $inner_html ) {
+		$trimmed = trim( $inner_html );
+		if ( '' === $trimmed ) {
+			return '';
+		}
+		// Strip a single outer tag pair if present.
+		$inner = preg_replace( '/^<[^>]+>(.*)<\/[^>]+>$/s', '$1', $trimmed );
+		return $this->escape_text( $inner );
 	}
 
 	/**

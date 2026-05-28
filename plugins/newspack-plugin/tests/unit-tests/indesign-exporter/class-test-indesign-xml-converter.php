@@ -100,4 +100,58 @@ class Newspack_Test_InDesign_XML_Converter extends WP_UnitTestCase {
 
 		$this->assertStringContainsString( '<byline>By Jane Doe</byline>', $xml );
 	}
+
+	/**
+	 * Paragraph blocks emit <para> inside <body>.
+	 */
+	public function test_emits_paragraph_blocks() {
+		$content = "<!-- wp:paragraph -->\n<p>Hello world.</p>\n<!-- /wp:paragraph -->\n\n<!-- wp:paragraph -->\n<p>Second paragraph.</p>\n<!-- /wp:paragraph -->";
+		$post_id = self::factory()->post->create(
+			[
+				'post_title'   => 'Title',
+				'post_content' => $content,
+			]
+		);
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<body>', $xml );
+		$this->assertStringContainsString( '<para>Hello world.</para>', $xml );
+		$this->assertStringContainsString( '<para>Second paragraph.</para>', $xml );
+		$this->assertStringContainsString( '</body>', $xml );
+	}
+
+	/**
+	 * Heading blocks emit <heading level="N">.
+	 */
+	public function test_emits_heading_with_level() {
+		$content = "<!-- wp:heading {\"level\":3} -->\n<h3>A subhead</h3>\n<!-- /wp:heading -->";
+		$post_id = self::factory()->post->create(
+			[
+				'post_title'   => 'Title',
+				'post_content' => $content,
+			]
+		);
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<heading level="3">A subhead</heading>', $xml );
+	}
+
+	/**
+	 * Heading defaults to level 2 when not set.
+	 */
+	public function test_heading_defaults_to_level_2() {
+		$content = "<!-- wp:heading -->\n<h2>Default level</h2>\n<!-- /wp:heading -->";
+		$post_id = self::factory()->post->create(
+			[
+				'post_title'   => 'Title',
+				'post_content' => $content,
+			]
+		);
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<heading level="2">Default level</heading>', $xml );
+	}
 }
