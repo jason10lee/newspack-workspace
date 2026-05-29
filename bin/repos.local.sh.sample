@@ -7,6 +7,10 @@
 # Sourced by bin/repos.sh after the canonical arrays are defined. Use `+=` to
 # extend them; do not redeclare. The local file is gitignored — your
 # additions stay local to your machine.
+#
+# Names listed here must already exist locally at plugins/<name> or
+# themes/<name> (or be cloneable from github.com/Automattic/<name>.git via
+# clone-repos.sh). This file declares names; it does not fetch code.
 
 # newspack_plugins+=(
 # 	"newspack-manager"

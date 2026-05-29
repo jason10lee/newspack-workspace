@@ -19,7 +19,7 @@ while test $# -gt 0; do
 done
 
 cd repos
-for dir in "${newspack_plugins[@]}"
+for dir in "${newspack_plugins[@]}" "${newspack_themes[@]}"
     do :
         if [[ $PROTOCOL = "ssh" ]]; then
             git clone git@github.com:Automattic/${dir}.git
@@ -27,15 +27,3 @@ for dir in "${newspack_plugins[@]}"
             git clone https://github.com/Automattic/${dir}.git
         fi
     done
-
-if [[ $PROTOCOL = "ssh" ]]; then
-    git clone git@github.com:Automattic/newspack-theme.git
-else
-    git clone https://github.com/Automattic/newspack-theme.git
-fi
-
-if [[ $PROTOCOL = "ssh" ]]; then
-    git clone git@github.com:Automattic/newspack-block-theme.git
-else
-    git clone https://github.com/Automattic/newspack-block-theme.git
-fi
