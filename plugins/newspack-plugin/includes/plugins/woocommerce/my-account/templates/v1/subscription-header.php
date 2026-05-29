@@ -98,7 +98,8 @@ if ( ! empty( $actions['change_payment_method']['name'] ) ) {
 			</a>
 		<?php endif; ?>
 		<?php
-		$items = $subscription->get_items();
+		// Members get a view-only experience: no owner-only management controls.
+		$items = $is_group_member_subscription ? [] : $subscription->get_items();
 		if ( 1 < count( $items ) ) {
 			\add_filter(
 				'woocommerce_subscriptions_switch_link_classes',
@@ -156,7 +157,7 @@ if ( ! empty( $actions['change_payment_method']['name'] ) ) {
 			<?php
 		}
 		$parent_order = array_values( $subscription->get_related_orders( 'all', 'parent' ) );
-		if ( $subscription->has_status( [ 'expired', 'cancelled' ] ) && ! empty( $parent_order ) && empty( $actions['resubscribe'] ) ) {
+		if ( ! $is_group_member_subscription && $subscription->has_status( [ 'expired', 'cancelled' ] ) && ! empty( $parent_order ) && empty( $actions['resubscribe'] ) ) {
 			\woocommerce_order_again_button( $parent_order[0] );
 		}
 		?>
