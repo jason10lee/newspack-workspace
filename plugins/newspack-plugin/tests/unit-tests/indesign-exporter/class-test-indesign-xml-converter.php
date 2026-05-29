@@ -388,4 +388,83 @@ class Newspack_Test_InDesign_XML_Converter extends WP_UnitTestCase {
 
 		$this->assertStringContainsString( '<hr/>', $xml );
 	}
+
+	/**
+	 * core/group walks innerBlocks; the container itself does not emit a wrapper.
+	 */
+	public function test_group_block_walks_inner_blocks() {
+		$content = "<!-- wp:group -->\n<div class=\"wp-block-group\"><!-- wp:paragraph --><p>Inside group.</p><!-- /wp:paragraph --></div>\n<!-- /wp:group -->";
+		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<para>Inside group.</para>', $xml );
+		$this->assertStringNotContainsString( '<group>', $xml );
+	}
+
+	/**
+	 * core/file and core/embed are excluded by default.
+	 */
+	public function test_excluded_blocks_are_stripped() {
+		$content = "<!-- wp:paragraph -->\n<p>Before.</p>\n<!-- /wp:paragraph -->\n\n"
+			. "<!-- wp:file -->\n<div class=\"wp-block-file\"><a href=\"x.pdf\">Download</a></div>\n<!-- /wp:file -->\n\n"
+			. "<!-- wp:embed {\"url\":\"https://youtu.be/x\"} -->\n<figure class=\"wp-block-embed\"><div class=\"wp-block-embed__wrapper\">https://youtu.be/x</div></figure>\n<!-- /wp:embed -->\n\n"
+			. "<!-- wp:paragraph -->\n<p>After.</p>\n<!-- /wp:paragraph -->";
+		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<para>Before.</para>', $xml );
+		$this->assertStringContainsString( '<para>After.</para>', $xml );
+		$this->assertStringNotContainsString( 'Download', $xml );
+		$this->assertStringNotContainsString( 'youtu.be', $xml );
+	}
+
+	/**
+	 * Excluded blocks are stripped recursively inside containers.
+	 */
+	public function test_excluded_blocks_stripped_inside_group() {
+		$content = "<!-- wp:group -->\n<div class=\"wp-block-group\"><!-- wp:embed --><figure class=\"wp-block-embed\"><div class=\"wp-block-embed__wrapper\">https://youtu.be/x</div></figure><!-- /wp:embed --><!-- wp:paragraph --><p>Kept.</p><!-- /wp:paragraph --></div>\n<!-- /wp:group -->";
+		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<para>Kept.</para>', $xml );
+		$this->assertStringNotContainsString( 'youtu.be', $xml );
+	}
+
+	/**
+	 * Filter newspack_indesign_export_excluded_blocks adds custom block types.
+	 */
+	public function test_excluded_blocks_filter_applies() {
+		$content = "<!-- wp:my/custom -->\n<div>secret</div>\n<!-- /wp:my/custom -->\n<!-- wp:paragraph -->\n<p>kept</p>\n<!-- /wp:paragraph -->";
+		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
+
+		add_filter(
+			'newspack_indesign_export_excluded_blocks',
+			function ( $types ) {
+				$types[] = 'my/custom';
+				return $types;
+			}
+		);
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringNotContainsString( 'secret', $xml );
+		$this->assertStringContainsString( '<para>kept</para>', $xml );
+
+		remove_all_filters( 'newspack_indesign_export_excluded_blocks' );
+	}
+
+	/**
+	 * Per-block attrs.indesignTag becomes a style attribute (D1).
+	 */
+	public function test_per_block_indesign_tag_becomes_style_attribute() {
+		$content = "<!-- wp:paragraph {\"indesignTag\":\"dropcap\"} -->\n<p>Lead paragraph.</p>\n<!-- /wp:paragraph -->";
+		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<para style="dropcap">Lead paragraph.</para>', $xml );
+	}
 }

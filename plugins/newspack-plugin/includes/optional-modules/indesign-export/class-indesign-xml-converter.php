@@ -92,8 +92,64 @@ class InDesign_XML_Converter {
 		if ( ! has_blocks( $post->post_content ) ) {
 			return '';
 		}
-		$blocks = parse_blocks( $post->post_content );
+
+		$excluded = $this->get_excluded_block_types();
+		$blocks   = $this->strip_excluded_blocks( parse_blocks( $post->post_content ), $excluded );
 		return $this->render_blocks( $blocks );
+	}
+
+	/**
+	 * Resolve the filtered excluded-block-type list.
+	 *
+	 * @return string[]
+	 */
+	private function get_excluded_block_types() {
+		$excluded = (array) apply_filters(
+			'newspack_indesign_export_excluded_blocks',
+			self::EXCLUDED_BLOCK_TYPES
+		);
+		return array_values( array_filter( $excluded, 'is_string' ) );
+	}
+
+	/**
+	 * Recursively strip excluded block types from a block tree.
+	 *
+	 * @param array    $blocks   Block list.
+	 * @param string[] $excluded Excluded block type names.
+	 * @return array Filtered block list.
+	 */
+	private function strip_excluded_blocks( $blocks, $excluded ) {
+		$filtered = [];
+		foreach ( $blocks as $block ) {
+			if ( $this->is_excluded_block( $block['blockName'] ?? null, $excluded ) ) {
+				continue;
+			}
+			if ( ! empty( $block['innerBlocks'] ) ) {
+				$block['innerBlocks'] = $this->strip_excluded_blocks( $block['innerBlocks'], $excluded );
+			}
+			$filtered[] = $block;
+		}
+		return $filtered;
+	}
+
+	/**
+	 * Whether a block name is excluded. Mirrors the legacy core-embed/* rule.
+	 *
+	 * @param string|null $block_name Block type name.
+	 * @param string[]    $excluded   Excluded block type names.
+	 * @return bool
+	 */
+	private function is_excluded_block( $block_name, $excluded ) {
+		if ( ! is_string( $block_name ) || '' === $block_name ) {
+			return false;
+		}
+		if ( in_array( $block_name, $excluded, true ) ) {
+			return true;
+		}
+		if ( in_array( 'core/embed', $excluded, true ) && 0 === strpos( $block_name, 'core-embed/' ) ) {
+			return true;
+		}
+		return false;
 	}
 
 	/**
@@ -119,7 +175,6 @@ class InDesign_XML_Converter {
 	private function render_block( $block ) {
 		$name = $block['blockName'] ?? null;
 
-		// parse_blocks returns null name for freeform/whitespace chunks; skip.
 		if ( null === $name ) {
 			return '';
 		}
@@ -132,9 +187,8 @@ class InDesign_XML_Converter {
 			case 'core/list':
 				return $this->render_list( $block );
 			// core/list-item is only valid inside core/list, where render_list()
-			// calls render_list_item() via render_blocks( innerBlocks ). It is
-			// intentionally NOT dispatched here at top level — a stray
-			// list-item outside a list is malformed content and is dropped.
+			// calls render_list_item() directly. A stray list-item outside a
+			// list is malformed content and is dropped.
 			case 'core/quote':
 				return $this->render_quote( $block, 'blockquote' );
 			case 'core/pullquote':
@@ -143,6 +197,10 @@ class InDesign_XML_Converter {
 				return '    <hr/>' . "\n";
 		}
 
+		// Container fallback: walk innerBlocks if present, otherwise drop.
+		if ( ! empty( $block['innerBlocks'] ) ) {
+			return $this->render_blocks( $block['innerBlocks'] );
+		}
 		return '';
 	}
 
@@ -157,7 +215,11 @@ class InDesign_XML_Converter {
 		if ( '' === $text ) {
 			return '';
 		}
-		return '    <para>' . $text . '</para>' . "\n";
+		$style_attr = '';
+		if ( ! empty( $block['attrs']['indesignTag'] ) ) {
+			$style_attr = ' style="' . htmlspecialchars( (string) $block['attrs']['indesignTag'], ENT_XML1 | ENT_QUOTES, 'UTF-8' ) . '"';
+		}
+		return '    <para' . $style_attr . '>' . $text . '</para>' . "\n";
 	}
 
 	/**
