@@ -57,6 +57,16 @@ _check_array_collisions() {
 _check_array_collisions
 unset -f _check_array_collisions
 
+# Returns 0 if name is declared in newspack_standalone_repos.
+is_standalone_repo() {
+	local name="$1"
+	local r
+	for r in "${newspack_standalone_repos[@]}"; do
+		[ "$r" = "$name" ] && return 0
+	done
+	return 1
+}
+
 # Maps a plugin/theme/standalone-repo name to its host-side directory relative
 # to the workspace root. Used by the n script for cwd detection and path
 # translation. Plugins-first precedence; cross-array collisions are warned at

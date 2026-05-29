@@ -24,17 +24,6 @@ package_filter_for_dir() {
     basename "$1"
 }
 
-# Tier detection by name-membership (not path), since worktreed standalone
-# repos land at /newspack-plugins/<name> and would otherwise look monorepo-y.
-is_standalone_repo() {
-    local name="$1"
-    local r
-    for r in "${newspack_standalone_repos[@]}"; do
-        [ "$r" = "$name" ] && return 0
-    done
-    return 1
-}
-
 # Build a standalone repo using its own toolchain (it isn't part of the
 # pnpm workspace, so `pnpm --filter` won't find it). Respects lockfiles,
 # treats missing package.json as a no-op success.
