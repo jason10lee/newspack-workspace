@@ -53,15 +53,18 @@ export const setupTabController = ( element, classnames ) => {
 			return;
 		}
 
-		// First, restore any previously removed tab contents.
+		// First, restore any previously removed tab contents. Restore in reverse removal
+		// order so each saved nextSibling is back in the DOM before it's referenced, and
+		// guard that it's still a child of tab_body to avoid insertBefore NotFoundError.
 		if ( tab_body._removedContents ) {
-			tab_body._removedContents.forEach( ( { content, nextSibling } ) => {
-				if ( nextSibling ) {
+			for ( let i = tab_body._removedContents.length - 1; i >= 0; i-- ) {
+				const { content, nextSibling } = tab_body._removedContents[ i ];
+				if ( nextSibling && nextSibling.parentNode === tab_body ) {
 					tab_body.insertBefore( content, nextSibling );
 				} else {
 					tab_body.appendChild( content );
 				}
-			} );
+			}
 			delete tab_body._removedContents;
 		}
 
