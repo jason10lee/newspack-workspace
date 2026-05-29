@@ -42,6 +42,59 @@ ip_for_env() {
     grep -o '127\.0\.0\.[0-9]*' "$1" | head -1
 }
 
+# Emit per-worktree metadata for a generated compose file.
+# Output: tab-separated tuples of <repo>\t<branch>\t<safe_branch>\t<host_path>
+#   repo        — project name (e.g. newspack-plugin, newspack-community)
+#   branch      — original branch (from metadata comment, or sanitized fallback)
+#   safe_branch — sanitized directory-name form (slashes -> dashes)
+#   host_path   — host-side dir relative to workspace root (plugins/X, themes/X, repos/X)
+# Reads `# newspack-wt:` comments (commit 4+) as ground truth for the original
+# branch; falls back to safe_branch from the mount path when comments are absent
+# (e.g., compose files generated before metadata existed). Emits a one-time note
+# to stderr when falling back.
+parse_env_worktrees() {
+    local compose_file="$1"
+    [[ -f "$compose_file" ]] || return 0
+
+    local comment_repos=() comment_branches=()
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^[[:space:]]*#[[:space:]]*newspack-wt:[[:space:]]*repo=([^[:space:]]+)[[:space:]]+branch=([^[:space:]]+) ]]; then
+            comment_repos+=("${BASH_REMATCH[1]}")
+            comment_branches+=("${BASH_REMATCH[2]}")
+        fi
+    done < "$compose_file"
+
+    local warned_fallback=false
+    while IFS= read -r line; do
+        local repo="" safe_branch="" host=""
+        # Tier 2 first (more specific path shape).
+        if [[ "$line" =~ \./worktrees/standalone/([^/]+)/([^:]+):/newspack-(plugins|themes|repos)/([^[:space:]]+) ]]; then
+            repo="${BASH_REMATCH[1]}"
+            safe_branch="${BASH_REMATCH[2]}"
+            host="repos/${BASH_REMATCH[1]}"
+        elif [[ "$line" =~ \./worktrees/([^/]+)/([^:]+):/newspack-(plugins|themes|repos)/([^[:space:]]+) ]]; then
+            safe_branch="${BASH_REMATCH[1]}"
+            repo="${BASH_REMATCH[4]}"
+            host="${BASH_REMATCH[2]}"
+        else
+            continue
+        fi
+        local branch="$safe_branch" found=false i
+        for i in "${!comment_repos[@]}"; do
+            if [[ "${comment_repos[$i]}" == "$repo" ]]; then
+                branch="${comment_branches[$i]}"
+                found=true
+                break
+            fi
+        done
+        if [[ "$found" != true && "$warned_fallback" != true ]]; then
+            echo "[env] note: $(basename "$compose_file") lacks newspack-wt metadata; using sanitized branch names" >&2
+            warned_fallback=true
+        fi
+        printf '%s\t%s\t%s\t%s\n' "$repo" "$branch" "$safe_branch" "$host"
+    done < <(grep -E '^[[:space:]]*-[[:space:]]+\./worktrees/' "$compose_file")
+}
+
 # Roll back worktrees this `env create` attempt created — and only those.
 # Reads two arrays populated by the --worktree parser:
 #   created_workspace_wts=("<safe_branch>" ...)        tier-1 entries
@@ -446,24 +499,22 @@ MIGRATE
         # Reload Apache to pick up SSL config (it's running by now).
         docker exec "$container_name" apachectl graceful 2>/dev/null
         echo "Environment '$env_name' is ready at https://${domain}/"
-        # Copy built assets from main repos into worktrees.
+        # Copy built assets from canonical source into mounted worktrees.
         if [[ "$auto_build" == true ]]; then
-            grep 'worktrees/' "$compose_file" | while read -r line; do
-                # Parse volume line: "- ./worktrees/repo/branch:/newspack-{plugins,themes}/repo"
-                wt_path=$(echo "$line" | sed 's/^ *- //' | cut -d: -f1)
-                container_path=$(echo "$line" | cut -d: -f2)
-                repo=$(basename "$container_path")
-                # Resolve the source from the monorepo layout.
-                repo_host_path=$(get_repo_host_path "$repo")
-                src="$NABSPATH/$repo_host_path"
-                dst="$NABSPATH/${wt_path#./}"
+            while IFS=$'\t' read -r repo _branch safe_branch host; do
+                src="$NABSPATH/$host"
+                if [[ "$host" == repos/* ]]; then
+                    dst="$NABSPATH/worktrees/standalone/$repo/$safe_branch"
+                else
+                    dst="$NABSPATH/worktrees/$safe_branch/$host"
+                fi
                 echo "Copying built assets for $repo..."
                 for dir in node_modules vendor dist build; do
                     if [[ -d "$src/$dir" ]]; then
                         cp -al "$src/$dir" "$dst/$dir" 2>/dev/null || cp -a "$src/$dir" "$dst/$dir"
                     fi
                 done
-            done
+            done < <(parse_env_worktrees "$compose_file")
         fi
         ;;
     down)
@@ -490,21 +541,15 @@ MIGRATE
         # Read domain, IP, and worktrees before removing compose file.
         domain=""
         ip=""
-        worktree_entries=()
+        # Read worktree tuples (repo, branch, safe_branch, host) before
+        # removing the compose file. Each tuple drives one worktree.sh remove.
+        worktree_tuples=()
         if [[ -f "$compose_file" ]]; then
             domain=$(domain_for_env "$compose_file")
             ip=$(ip_for_env "$compose_file")
-            # Tier-1 mount shape: ./worktrees/<safe_branch>/<host_path>:/newspack-<prefix>/<name>
-            # Tier-2 mounts (./worktrees/standalone/<repo>/<safe>) are handled
-            # by a follow-up; skip them here so this parser stays tier-1-only.
-            while IFS= read -r line; do
-                [[ "$line" == *worktrees/standalone/* ]] && continue
-                if [[ "$line" =~ \./worktrees/([^/]+)/[^:]*:/newspack-(plugins|themes|repos)/ ]]; then
-                    sb="${BASH_REMATCH[1]}"
-                    [[ " ${worktree_entries[*]} " == *" $sb "* ]] && continue
-                    worktree_entries+=("$sb")
-                fi
-            done < <(grep -E '\./worktrees/' "$compose_file")
+            while IFS= read -r tuple; do
+                worktree_tuples+=("$tuple")
+            done < <(parse_env_worktrees "$compose_file")
         fi
         docker stop "$container_name" 2>/dev/null
         docker rm "$container_name" 2>/dev/null
@@ -542,8 +587,13 @@ MIGRATE
         # Remove compose file before worktrees so worktree.sh doesn't see them as env-bound.
         rm -f "$compose_file"
         # Remove worktrees that were mounted by this environment.
-        for sb in "${worktree_entries[@]}"; do
-            "$NABSPATH/bin/worktree.sh" remove --yes "$sb"
+        for tuple in "${worktree_tuples[@]}"; do
+            IFS=$'\t' read -r wt_repo wt_branch _safe wt_host <<< "$tuple"
+            if [[ "$wt_host" == repos/* ]]; then
+                "$NABSPATH/bin/worktree.sh" remove --yes "$wt_branch" --repo "$wt_repo"
+            else
+                "$NABSPATH/bin/worktree.sh" remove --yes "$wt_branch"
+            fi
         done
         echo "Destroyed environment '$env_name'"
         ;;
@@ -563,31 +613,23 @@ MIGRATE
             else
                 status="stopped"
             fi
-            # Collect worktrees as repo:safe_branch pairs.
-            # Mount shape: ./worktrees/<safe_branch>/<host_path>:/newspack-<prefix>/<name>
+            # Collect worktrees as repo:branch pairs via the shared helper.
             worktrees=""
             worktree_pairs=()
-            seen_pairs=""
-            while IFS= read -r line; do
-                if [[ "$line" =~ \./worktrees/([^/]+)/[^:]*:/newspack-(plugins|themes|repos)/([^[:space:]]+) ]]; then
-                    sb="${BASH_REMATCH[1]}"
-                    nm="${BASH_REMATCH[3]}"
-                    pair="${nm}:${sb}"
-                    [[ " $seen_pairs " == *" $pair "* ]] && continue
-                    seen_pairs="$seen_pairs $pair"
-                    worktree_pairs+=("$pair")
-                    [[ -n "$worktrees" ]] && worktrees="${worktrees},"
-                    worktrees="${worktrees}${pair}"
-                fi
-            done < <(grep -E '\./worktrees/' "$f" 2>/dev/null)
+            while IFS=$'\t' read -r repo branch _safe _host; do
+                pair="${repo}:${branch}"
+                worktree_pairs+=("$pair")
+                [[ -n "$worktrees" ]] && worktrees="${worktrees},"
+                worktrees="${worktrees}${pair}"
+            done < <(parse_env_worktrees "$f")
             if [[ "$porcelain" == true ]]; then
                 printf '%s\t%s\thttps://%s/\t%s\n' "$name" "$status" "$domain" "$worktrees"
             else
                 echo "  $name ($status) https://${domain}/"
                 for pair in "${worktree_pairs[@]}"; do
                     nm="${pair%:*}"
-                    sb="${pair#*:}"
-                    echo "    └ $nm ($sb)"
+                    br="${pair#*:}"
+                    echo "    └ $nm ($br)"
                 done
             fi
         done
