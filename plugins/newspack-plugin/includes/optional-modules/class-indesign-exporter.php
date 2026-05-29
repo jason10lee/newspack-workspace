@@ -310,6 +310,17 @@ class InDesign_Exporter {
 			exit;
 		}
 
+		// Register cleanup as a shutdown function so the temp dir is removed
+		// regardless of how the request ends (timeout, client abort, fatal error).
+		// readfile() can fail or be interrupted; without this guard the bundled
+		// image files leak in wp-content/uploads/ indefinitely.
+		$temp_dir = $result['temp_dir'];
+		register_shutdown_function(
+			function () use ( $packager, $temp_dir ) {
+				$packager->cleanup( $temp_dir );
+			}
+		);
+
 		$zip_path = $result['zip_path'];
 		$zip_name = basename( $zip_path );
 
@@ -319,8 +330,6 @@ class InDesign_Exporter {
 		header( 'Cache-Control: no-cache, must-revalidate' );
 		header( 'Expires: 0' );
 		readfile( $zip_path );
-
-		$packager->cleanup( $result['temp_dir'] );
 	}
 
 	/**

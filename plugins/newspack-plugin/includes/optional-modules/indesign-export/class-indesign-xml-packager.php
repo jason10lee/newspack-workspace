@@ -54,7 +54,9 @@ class InDesign_XML_Packager {
 		);
 		$zip_path     = $temp_dir . '/' . $zip_filename;
 
-		if ( ! $this->build_zip( $zip_path, $post_dir, '' ) ) {
+		// Pass $zip_filename as skip_basename so the just-opened zip doesn't
+		// add itself to its own contents during the recursive walk.
+		if ( ! $this->build_zip( $zip_path, $post_dir, $zip_filename ) ) {
 			$this->rrmdir( $temp_dir );
 			return false;
 		}

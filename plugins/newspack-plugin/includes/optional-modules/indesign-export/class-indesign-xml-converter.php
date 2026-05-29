@@ -70,7 +70,7 @@ class InDesign_XML_Converter {
 		$this->set_post_context( $post );
 		$this->emitted_image_ids = [];
 		$content_body = $this->process_content( $post );
-		$featured     = $this->render_featured_image( $post, $content_body );
+		$featured     = $this->render_featured_image( $post );
 		$body         = $featured . $content_body;
 		if ( '' !== $body ) {
 			$xml .= '  <body>' . "\n" . $body . '  </body>' . "\n";
@@ -496,11 +496,14 @@ class InDesign_XML_Converter {
 	/**
 	 * Render the featured image as a leading <figure>, unless already in body.
 	 *
-	 * @param \WP_Post $post         Post object.
-	 * @param string   $content_body Already-rendered body fragment (used for dedup).
+	 * Dedup against the structural emitted_image_ids list (populated by
+	 * build_figure) rather than scanning the rendered XML string — that way
+	 * future tweaks to the <figure> tag shape can't silently break dedup.
+	 *
+	 * @param \WP_Post $post Post object.
 	 * @return string XML fragment or empty string.
 	 */
-	private function render_featured_image( $post, $content_body ) {
+	private function render_featured_image( $post ) {
 		if ( ! $this->should_emit_images() ) {
 			return '';
 		}
@@ -508,8 +511,7 @@ class InDesign_XML_Converter {
 		if ( ! $featured_id ) {
 			return '';
 		}
-		// Dedup: if the body already references this attachment ID, skip.
-		if ( false !== strpos( $content_body, '<figure id="' . $featured_id . '">' ) ) {
+		if ( in_array( $featured_id, $this->emitted_image_ids, true ) ) {
 			return '';
 		}
 		return $this->build_figure( $featured_id, null );

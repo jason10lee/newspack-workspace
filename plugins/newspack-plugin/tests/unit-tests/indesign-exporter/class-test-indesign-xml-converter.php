@@ -104,6 +104,39 @@ class Newspack_Test_InDesign_XML_Converter extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Two-author byline joins with " & ".
+	 */
+	public function test_byline_two_authors() {
+		$post_id = self::factory()->post->create( [ 'post_title' => 'Title' ] );
+
+		$GLOBALS['_test_cap_coauthors'] = [
+			(object) [ 'display_name' => 'Jane Doe' ],
+			(object) [ 'display_name' => 'John Roe' ],
+		];
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<byline>By Jane Doe &amp; John Roe</byline>', $xml );
+	}
+
+	/**
+	 * Three-or-more-author byline uses commas with " & " before the last.
+	 */
+	public function test_byline_three_authors() {
+		$post_id = self::factory()->post->create( [ 'post_title' => 'Title' ] );
+
+		$GLOBALS['_test_cap_coauthors'] = [
+			(object) [ 'display_name' => 'Alice' ],
+			(object) [ 'display_name' => 'Bob' ],
+			(object) [ 'display_name' => 'Carol' ],
+		];
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<byline>By Alice, Bob &amp; Carol</byline>', $xml );
+	}
+
+	/**
 	 * Paragraph blocks emit <para> inside <body>.
 	 */
 	public function test_emits_paragraph_blocks() {
@@ -572,6 +605,9 @@ class Newspack_Test_InDesign_XML_Converter extends WP_UnitTestCase {
 		$xml = $this->converter->convert_post( $post_id );
 
 		$this->assertStringNotContainsString( '<figure', $xml );
+		// And get_image_ids() must NOT leak the skipped attachment — otherwise
+		// the packager would download an image the XML never references.
+		$this->assertEmpty( $this->converter->get_image_ids() );
 	}
 
 	/**

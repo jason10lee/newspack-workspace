@@ -99,16 +99,34 @@ class Print_Section extends Wizard_Section {
 	/**
 	 * Update print settings.
 	 *
+	 * Validates all submitted params before applying any of them. A request
+	 * with a valid module_enabled_print but an invalid format is rejected
+	 * without toggling the module — the partial-state leak that gets caught
+	 * in regression review.
+	 *
 	 * @param \WP_REST_Request $request The request object.
-	 * @return array
+	 * @return array|\WP_Error
 	 */
 	public function api_update_print_settings( $request ) {
-		if ( $request->has_param( 'module_enabled_print' ) ) {
+		$has_module = $request->has_param( 'module_enabled_print' );
+		$has_format = $request->has_param( 'format' );
+
+		if ( $has_module ) {
 			$module_enabled_print = $request->get_param( 'module_enabled_print' );
 			if ( ! is_bool( $module_enabled_print ) ) {
 				return new \WP_Error( 'invalid_param', __( 'Invalid parameter for module_enabled_print.', 'newspack' ), [ 'status' => 400 ] );
 			}
+		}
 
+		if ( $has_format ) {
+			$format = $request->get_param( 'format' );
+			if ( ! in_array( $format, [ 'tagged-text', 'xml' ], true ) ) {
+				return new \WP_Error( 'invalid_param', __( 'Invalid parameter for format.', 'newspack' ), [ 'status' => 400 ] );
+			}
+		}
+
+		// All validation passed — apply the changes.
+		if ( $has_module ) {
 			if ( $module_enabled_print ) {
 				Optional_Modules::activate_optional_module( InDesign_Exporter::MODULE_NAME );
 			} else {
@@ -116,11 +134,7 @@ class Print_Section extends Wizard_Section {
 			}
 		}
 
-		if ( $request->has_param( 'format' ) ) {
-			$format = $request->get_param( 'format' );
-			if ( ! in_array( $format, [ 'tagged-text', 'xml' ], true ) ) {
-				return new \WP_Error( 'invalid_param', __( 'Invalid parameter for format.', 'newspack' ), [ 'status' => 400 ] );
-			}
+		if ( $has_format ) {
 			update_option( self::SETTING_FORMAT, $format );
 		}
 
