@@ -31,9 +31,14 @@ build_standalone_repo() {
     local dir="$1"
     echo "Building standalone repo $dir"
 
-    # PHP deps if present.
+    # PHP deps if present. CI mode skips dev deps for parity with the JS
+    # path's --frozen-lockfile behaviour.
     if [ -f "$dir/composer.json" ]; then
-        composer install --working-dir "$dir"
+        if [ "$MODE" = "ci" ]; then
+            composer install --working-dir "$dir" --no-dev
+        else
+            composer install --working-dir "$dir"
+        fi
     fi
 
     # JS deps + build: no-op if there's no package.json.
@@ -89,10 +94,14 @@ fi
 
 case $WHAT_TO_BUILD in
     all)
-        # Composer install per project that ships its own composer.json
-        # (dev deps are hoisted to the root composer.json).
+        # Composer install per workspace project that ships its own composer.json.
+        # Skip standalone repos here — build_standalone_repo handles their PHP
+        # and JS install/build below.
         while IFS= read -r dir; do
-            [ -d "$dir" ] && [ -f "$dir/composer.json" ] && composer install --working-dir "$dir"
+            [ -d "$dir" ] || continue
+            [ -f "$dir/composer.json" ] || continue
+            is_standalone_repo "$(basename "$dir")" && continue
+            composer install --working-dir "$dir"
         done < <(get_all_project_dirs)
         # Build pnpm workspace packages.
         pnpm run build
