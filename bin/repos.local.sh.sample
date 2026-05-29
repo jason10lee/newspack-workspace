@@ -1,0 +1,23 @@
+#!/bin/bash
+#
+# Local-only extension to bin/repos.sh. Copy to bin/repos.local.sh and edit
+# to add non-canonical (private or custom) plugins/themes that aren't part of
+# the public workspace.
+#
+# Sourced by bin/repos.sh after the canonical arrays are defined. Use `+=` to
+# extend them; do not redeclare. The local file is gitignored — your
+# additions stay local to your machine.
+
+# newspack_plugins+=(
+# 	"newspack-manager"
+# 	"newspack-manager-admin"
+# 	"newspack-pyrobase"
+# )
+
+# newspack_themes+=(
+# 	"your-private-theme"
+# )
+
+# woocommerce_plugins+=(
+# 	"woocommerce-private-extension"
+# )

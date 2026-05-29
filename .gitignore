@@ -4,6 +4,7 @@ logs
 html
 data
 bin/secrets.json
+bin/repos.local.sh
 snapshots
 manager-html
 additional-sites-html

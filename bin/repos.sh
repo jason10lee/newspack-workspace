@@ -31,6 +31,12 @@ woocommerce_plugins=(
 	"woocommerce-name-your-price"
 )
 
+# Allow users to extend the arrays above via a local-only config file. Useful
+# for adding non-canonical (private/custom) plugins that aren't part of the
+# public workspace. The local file is gitignored — see bin/repos.local.sh.sample
+# for the convention.
+[[ -f "$(dirname "${BASH_SOURCE[0]}")/repos.local.sh" ]] && source "$(dirname "${BASH_SOURCE[0]}")/repos.local.sh"
+
 # Maps a plugin/theme name to its host-side directory relative to the
 # workspace root. Used by the n script for cwd detection and path translation.
 get_repo_host_path() {
