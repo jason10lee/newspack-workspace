@@ -37,7 +37,7 @@ class InDesign_XML_Converter {
 	 * @param array        $options Optional conversion options.
 	 * @return string|false XML string, or false on failure.
 	 */
-	public function convert_post( $post, $options = [] ) {
+	public function convert_post( int|\WP_Post $post, array $options = [] ): string|false {
 		$post = get_post( $post );
 		if ( ! $post ) {
 			return false;
@@ -92,7 +92,7 @@ class InDesign_XML_Converter {
 	 * @param \WP_Post $post Post object.
 	 * @return string Inner XML (without the <body> tag itself), or empty string.
 	 */
-	private function process_content( $post ) {
+	private function process_content( \WP_Post $post ): string {
 		if ( ! has_blocks( $post->post_content ) ) {
 			return '';
 		}
@@ -107,7 +107,15 @@ class InDesign_XML_Converter {
 	 *
 	 * @return string[]
 	 */
-	private function get_excluded_block_types() {
+	private function get_excluded_block_types(): array {
+		/**
+		 * Filters the block types excluded from InDesign XML export.
+		 *
+		 * Use this to drop additional non-printable blocks (e.g. custom embed types)
+		 * from the exported XML. Defaults to file/embed/video/audio.
+		 *
+		 * @param string[] $excluded Block type names to skip.
+		 */
 		$excluded = (array) apply_filters(
 			'newspack_indesign_export_excluded_blocks',
 			self::EXCLUDED_BLOCK_TYPES
@@ -122,7 +130,7 @@ class InDesign_XML_Converter {
 	 * @param string[] $excluded Excluded block type names.
 	 * @return array Filtered block list.
 	 */
-	private function strip_excluded_blocks( $blocks, $excluded ) {
+	private function strip_excluded_blocks( array $blocks, array $excluded ): array {
 		$filtered = [];
 		foreach ( $blocks as $block ) {
 			if ( $this->is_excluded_block( $block['blockName'] ?? null, $excluded ) ) {
@@ -143,7 +151,7 @@ class InDesign_XML_Converter {
 	 * @param string[]    $excluded   Excluded block type names.
 	 * @return bool
 	 */
-	private function is_excluded_block( $block_name, $excluded ) {
+	private function is_excluded_block( ?string $block_name, array $excluded ): bool {
 		if ( ! is_string( $block_name ) || '' === $block_name ) {
 			return false;
 		}
@@ -162,7 +170,7 @@ class InDesign_XML_Converter {
 	 * @param array $blocks Block list.
 	 * @return string XML fragment.
 	 */
-	private function render_blocks( $blocks ) {
+	private function render_blocks( array $blocks ): string {
 		$output = '';
 		foreach ( $blocks as $block ) {
 			$output .= $this->render_block( $block );
@@ -176,7 +184,7 @@ class InDesign_XML_Converter {
 	 * @param array $block Block data.
 	 * @return string XML fragment for this block.
 	 */
-	private function render_block( $block ) {
+	private function render_block( array $block ): string {
 		$name = $block['blockName'] ?? null;
 
 		if ( null === $name ) {
@@ -220,7 +228,7 @@ class InDesign_XML_Converter {
 	 * @param array $block Block data.
 	 * @return string XML fragment.
 	 */
-	private function render_paragraph( $block ) {
+	private function render_paragraph( array $block ): string {
 		$text = $this->extract_inner_text( $block['innerHTML'] ?? '' );
 		if ( '' === $text ) {
 			return '';
@@ -238,7 +246,7 @@ class InDesign_XML_Converter {
 	 * @param array $block Block data.
 	 * @return string XML fragment.
 	 */
-	private function render_heading( $block ) {
+	private function render_heading( array $block ): string {
 		$level = (int) ( $block['attrs']['level'] ?? 2 );
 		$text  = $this->extract_inner_text( $block['innerHTML'] ?? '' );
 		if ( '' === $text ) {
@@ -262,7 +270,7 @@ class InDesign_XML_Converter {
 	 * @param array $block Block data.
 	 * @return string XML fragment.
 	 */
-	private function render_list( $block ) {
+	private function render_list( array $block ): string {
 		$ordered = ! empty( $block['attrs']['ordered'] );
 		$tag     = $ordered ? 'ol' : 'ul';
 		$inner   = '';
@@ -283,7 +291,7 @@ class InDesign_XML_Converter {
 	 * @param array $block Block data.
 	 * @return string XML fragment.
 	 */
-	private function render_list_item( $block ) {
+	private function render_list_item( array $block ): string {
 		$text = $this->extract_inner_text( $block['innerHTML'] ?? '' );
 		// Render any nested lists inside this item.
 		$nested = $this->render_blocks( $block['innerBlocks'] ?? [] );
@@ -308,7 +316,7 @@ class InDesign_XML_Converter {
 	 * @param string $element_name 'blockquote' or 'pullquote'.
 	 * @return string XML fragment.
 	 */
-	private function render_quote( $block, $element_name ) {
+	private function render_quote( array $block, string $element_name ): string {
 		$inner_html = $block['innerHTML'] ?? '';
 		$inner_html = preg_replace( '/<!--.*?-->/s', '', $inner_html );
 
@@ -371,14 +379,14 @@ class InDesign_XML_Converter {
 	 *
 	 * @var int|null
 	 */
-	private $skip_images_for_post = null;
+	private ?int $skip_images_for_post = null;
 
 	/**
 	 * Attachment IDs emitted in the most recent convert_post() call.
 	 *
 	 * @var int[]
 	 */
-	private $emitted_image_ids = [];
+	private array $emitted_image_ids = [];
 
 	/**
 	 * Set the current post context so image rendering can check the network meta.
@@ -387,7 +395,7 @@ class InDesign_XML_Converter {
 	 *
 	 * @param \WP_Post $post Post object.
 	 */
-	private function set_post_context( $post ) {
+	private function set_post_context( \WP_Post $post ): void {
 		$this->skip_images_for_post = $post->ID;
 	}
 
@@ -396,7 +404,7 @@ class InDesign_XML_Converter {
 	 *
 	 * @return bool
 	 */
-	private function should_emit_images() {
+	private function should_emit_images(): bool {
 		if ( null === $this->skip_images_for_post ) {
 			return true;
 		}
@@ -409,7 +417,7 @@ class InDesign_XML_Converter {
 	 * @param array $block Block data.
 	 * @return string XML fragment.
 	 */
-	private function render_image( $block ) {
+	private function render_image( array $block ): string {
 		if ( ! $this->should_emit_images() ) {
 			return '';
 		}
@@ -434,7 +442,7 @@ class InDesign_XML_Converter {
 	 * @param array $block Block data.
 	 * @return string XML fragment.
 	 */
-	private function render_gallery( $block ) {
+	private function render_gallery( array $block ): string {
 		if ( ! $this->should_emit_images() ) {
 			return '';
 		}
@@ -470,7 +478,7 @@ class InDesign_XML_Converter {
 	 * @param string|null $inline_caption Optional override caption (raw HTML from figcaption).
 	 * @return string XML fragment.
 	 */
-	private function build_figure( $attachment_id, $inline_caption ) {
+	private function build_figure( int $attachment_id, ?string $inline_caption ): string {
 		$ext = $this->resolve_attachment_extension( $attachment_id );
 		if ( '' === $ext ) {
 			return '';
@@ -503,7 +511,7 @@ class InDesign_XML_Converter {
 	 * @param \WP_Post $post Post object.
 	 * @return string XML fragment or empty string.
 	 */
-	private function render_featured_image( $post ) {
+	private function render_featured_image( \WP_Post $post ): string {
 		if ( ! $this->should_emit_images() ) {
 			return '';
 		}
@@ -523,7 +531,7 @@ class InDesign_XML_Converter {
 	 * @param int $attachment_id Attachment ID.
 	 * @return string Extension or empty string.
 	 */
-	private function resolve_attachment_extension( $attachment_id ) {
+	private function resolve_attachment_extension( int $attachment_id ): string {
 		$file = get_attached_file( $attachment_id );
 		if ( $file ) {
 			$ext = strtolower( pathinfo( $file, PATHINFO_EXTENSION ) );
@@ -531,18 +539,13 @@ class InDesign_XML_Converter {
 				return $ext;
 			}
 		}
-		$mime = get_post_mime_type( $attachment_id );
-		switch ( $mime ) {
-			case 'image/jpeg':
-				return 'jpg';
-			case 'image/png':
-				return 'png';
-			case 'image/gif':
-				return 'gif';
-			case 'image/webp':
-				return 'webp';
-		}
-		return '';
+		return match ( get_post_mime_type( $attachment_id ) ) {
+			'image/jpeg' => 'jpg',
+			'image/png'  => 'png',
+			'image/gif'  => 'gif',
+			'image/webp' => 'webp',
+			default      => '',
+		};
 	}
 
 	/**
@@ -555,7 +558,7 @@ class InDesign_XML_Converter {
 	 * @param string $inner_html Block innerHTML.
 	 * @return string XML fragment.
 	 */
-	private function extract_inner_text( $inner_html ) {
+	private function extract_inner_text( string $inner_html ): string {
 		$trimmed = trim( $inner_html );
 		if ( '' === $trimmed ) {
 			return '';
@@ -572,7 +575,7 @@ class InDesign_XML_Converter {
 	 * @param string $html Raw HTML fragment.
 	 * @return string XML fragment.
 	 */
-	private function convert_inline_html( $html ) {
+	private function convert_inline_html( string $html ): string {
 		// Step 1: replace whitelisted tags with placeholder tokens that survive escaping.
 		$placeholders = [];
 		$counter      = 0;
@@ -664,7 +667,7 @@ class InDesign_XML_Converter {
 	 * @param string $text Raw text.
 	 * @return string Escaped text.
 	 */
-	private function escape_text( $text ) {
+	private function escape_text( string $text ): string {
 		$text = html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 		// Strip non-breaking space.
 		$text = str_replace( "\xC2\xA0", ' ', $text );
@@ -677,7 +680,7 @@ class InDesign_XML_Converter {
 	 * @param \WP_Post $post Post object.
 	 * @return string|null Subtitle or null.
 	 */
-	private function get_post_subtitle( $post ) {
+	private function get_post_subtitle( \WP_Post $post ): ?string {
 		$subtitle = get_post_meta( $post->ID, 'newspack_post_subtitle', true );
 		return $subtitle ?? null;
 	}
@@ -688,7 +691,7 @@ class InDesign_XML_Converter {
 	 * @param \WP_Post $post Post object.
 	 * @return array Author objects.
 	 */
-	private function get_post_authors( $post ) {
+	private function get_post_authors( \WP_Post $post ): array {
 		if ( function_exists( 'get_coauthors' ) ) {
 			return get_coauthors( $post->ID );
 		}
@@ -703,7 +706,7 @@ class InDesign_XML_Converter {
 	 * @param \WP_Post $post Post object.
 	 * @return string Formatted byline.
 	 */
-	private function get_byline( $post ) {
+	private function get_byline( \WP_Post $post ): string {
 		$authors = $this->get_post_authors( $post );
 		if ( empty( $authors ) ) {
 			return '';
@@ -729,7 +732,7 @@ class InDesign_XML_Converter {
 	 *
 	 * @return int[]
 	 */
-	public function get_image_ids() {
+	public function get_image_ids(): array {
 		return array_values( array_unique( $this->emitted_image_ids ) );
 	}
 }

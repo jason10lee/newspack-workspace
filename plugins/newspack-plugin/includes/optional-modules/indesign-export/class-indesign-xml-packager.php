@@ -7,6 +7,8 @@
 
 namespace Newspack\Optional_Modules\InDesign_Export;
 
+use Newspack\Logger;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -21,6 +23,13 @@ defined( 'ABSPATH' ) || exit;
 class InDesign_XML_Packager {
 
 	/**
+	 * Logger header for the InDesign export subsystem.
+	 *
+	 * @var string
+	 */
+	const LOGGER_HEADER = 'NEWSPACK-INDESIGN-EXPORT';
+
+	/**
 	 * Build a single-post ZIP and return its path on disk. Caller is responsible
 	 * for streaming and cleanup via cleanup().
 	 *
@@ -29,7 +38,7 @@ class InDesign_XML_Packager {
 	 * @param int[]    $image_ids Attachment IDs referenced by the XML.
 	 * @return array|false ['zip_path' => string, 'temp_dir' => string], or false on failure.
 	 */
-	public function package_single( $post, $xml, $image_ids ) {
+	public function package_single( \WP_Post $post, string $xml, array $image_ids ): array|false {
 		$temp_dir = $this->make_temp_dir();
 		if ( false === $temp_dir ) {
 			return false;
@@ -74,7 +83,7 @@ class InDesign_XML_Packager {
 	 * @param array $items List of ['post' => WP_Post, 'xml' => string, 'image_ids' => int[]].
 	 * @return array|false ['zip_path' => string, 'temp_dir' => string], or false on failure.
 	 */
-	public function package_multi( $items ) {
+	public function package_multi( array $items ): array|false {
 		$temp_dir = $this->make_temp_dir();
 		if ( false === $temp_dir ) {
 			return false;
@@ -118,7 +127,7 @@ class InDesign_XML_Packager {
 	 *
 	 * @param string $temp_dir Absolute path returned from package_*.
 	 */
-	public function cleanup( $temp_dir ) {
+	public function cleanup( string $temp_dir ): void {
 		if ( empty( $temp_dir ) || ! is_dir( $temp_dir ) ) {
 			return;
 		}
@@ -130,7 +139,7 @@ class InDesign_XML_Packager {
 	 *
 	 * @param string $dir Directory to remove.
 	 */
-	private function rrmdir( $dir ) {
+	private function rrmdir( string $dir ): void {
 		$items = scandir( $dir );
 		if ( false === $items ) {
 			return;
@@ -155,7 +164,7 @@ class InDesign_XML_Packager {
 	 *
 	 * @return string|false Absolute temp dir path, or false on failure.
 	 */
-	private function make_temp_dir() {
+	private function make_temp_dir(): string|false {
 		$upload_dir = wp_upload_dir();
 		// wp_generate_uuid4 gives more entropy than uniqid() — defends against
 		// concurrent exports colliding on directory names and makes URL-guessing
@@ -176,13 +185,22 @@ class InDesign_XML_Packager {
 	 * @param int[]  $image_ids Attachment IDs.
 	 * @param string $post_dir  Directory to write images/ into.
 	 */
-	private function copy_images_to( $image_ids, $post_dir ) {
+	private function copy_images_to( array $image_ids, string $post_dir ): void {
 		$images_dir = $post_dir . '/images';
 		// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.directory_mkdir -- Writing inside wp-content/uploads/ subdir.
 		if ( ! is_dir( $images_dir ) && ! mkdir( $images_dir, 0755, true ) ) {
 			return;
 		}
 
+		/**
+		 * Filters the image size bundled into the InDesign XML export ZIP.
+		 *
+		 * Defaults to 'full' (the original upload). Use 'large' or another
+		 * registered size to ship smaller files; the packager looks the slug
+		 * up in `wp_get_attachment_metadata()` and falls back to full on miss.
+		 *
+		 * @param string $size Image size slug.
+		 */
 		// Filter may return a non-string from a buggy callback; coerce and fall
 		// back to 'full' so wp_get_attachment_metadata size lookups don't silently miss.
 		$size = (string) apply_filters( 'newspack_indesign_export_image_size', 'full' );
@@ -211,7 +229,7 @@ class InDesign_XML_Packager {
 			if ( ! $url ) {
 				$url = wp_get_attachment_url( $id );
 			}
-			if ( $url ) {
+			if ( $url && $this->is_safe_fetch_host( $url ) ) {
 				// phpcs:ignore WordPressVIPMinimum.Performance.RemoteRequestTimeout.timeout_timeout -- 5s is too tight for binary image fetches that may be many MB.
 				$response = wp_remote_get( $url, [ 'timeout' => 15 ] );
 				if ( ! is_wp_error( $response ) && 200 === wp_remote_retrieve_response_code( $response ) ) {
@@ -222,18 +240,54 @@ class InDesign_XML_Packager {
 				}
 			}
 
-			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Operator-facing diagnostic; nothing in this path is user-actionable.
-			error_log( sprintf( '[InDesign XML export] Could not bundle attachment %d: neither local nor HTTP source available.', $id ) );
+			Logger::log(
+				sprintf( 'Could not bundle attachment %d: neither local nor HTTP source available.', $id ),
+				self::LOGGER_HEADER
+			);
 		}
 	}
 
 	/**
 	 * Resolve the file extension for an attachment.
 	 *
+	 * Whether the resolved attachment URL is safe to fetch over HTTP.
+	 *
+	 * Defaults to same-host only — defends against an attacker who can
+	 * write attachment URL meta from pointing the export at internal IPs
+	 * or other unintended hosts. Allow cross-host explicitly via the
+	 * `newspack_indesign_export_allowed_image_hosts` filter when integrating
+	 * with offloaded media or multi-site image origins.
+	 *
+	 * @param string $url Attachment URL to validate.
+	 * @return bool True if safe to fetch.
+	 */
+	private function is_safe_fetch_host( string $url ): bool {
+		$url_host = wp_parse_url( $url, PHP_URL_HOST );
+		if ( ! $url_host ) {
+			return false;
+		}
+		$site_host = wp_parse_url( home_url(), PHP_URL_HOST );
+
+		/**
+		 * Filters the hosts allowed for the InDesign export image HTTP fallback.
+		 *
+		 * Same-host (`home_url()`) is always allowed. Add additional hosts here
+		 * to support offloaded media (e.g. S3 CDN) or cross-site image origins.
+		 *
+		 * @param string[] $allowed_hosts Hostnames allowed in addition to the site's own host.
+		 */
+		$allowed = (array) apply_filters( 'newspack_indesign_export_allowed_image_hosts', [] );
+
+		return $url_host === $site_host || in_array( $url_host, $allowed, true );
+	}
+
+	/**
+	 * Get the file extension for an attachment.
+	 *
 	 * @param int $attachment_id Attachment ID.
 	 * @return string Extension (no dot), or empty string.
 	 */
-	private function resolve_extension( $attachment_id ) {
+	private function resolve_extension( int $attachment_id ): string {
 		$file = get_attached_file( $attachment_id );
 		if ( $file ) {
 			$ext = strtolower( pathinfo( $file, PATHINFO_EXTENSION ) );
@@ -241,18 +295,13 @@ class InDesign_XML_Packager {
 				return $ext;
 			}
 		}
-		$mime = get_post_mime_type( $attachment_id );
-		switch ( $mime ) {
-			case 'image/jpeg':
-				return 'jpg';
-			case 'image/png':
-				return 'png';
-			case 'image/gif':
-				return 'gif';
-			case 'image/webp':
-				return 'webp';
-		}
-		return '';
+		return match ( get_post_mime_type( $attachment_id ) ) {
+			'image/jpeg' => 'jpg',
+			'image/png'  => 'png',
+			'image/gif'  => 'gif',
+			'image/webp' => 'webp',
+			default      => '',
+		};
 	}
 
 	/**
@@ -262,7 +311,7 @@ class InDesign_XML_Packager {
 	 * @param string $size          Image size slug.
 	 * @return string|null Absolute path or null.
 	 */
-	private function local_path_for_size( $attachment_id, $size ) {
+	private function local_path_for_size( int $attachment_id, string $size ): ?string {
 		if ( 'full' === $size || 'original' === $size ) {
 			$path = get_attached_file( $attachment_id );
 			return $path ? $path : null;
@@ -288,7 +337,7 @@ class InDesign_XML_Packager {
 	 * @param string $skip_basename Filename to skip (the zip itself).
 	 * @return bool
 	 */
-	private function build_zip( $zip_path, $source_dir, $skip_basename ) {
+	private function build_zip( string $zip_path, string $source_dir, string $skip_basename ): bool {
 		$zip = new \ZipArchive();
 		if ( true !== $zip->open( $zip_path, \ZipArchive::CREATE | \ZipArchive::OVERWRITE ) ) {
 			return false;
@@ -306,7 +355,7 @@ class InDesign_XML_Packager {
 	 * @param string      $zip_subdir    Relative path inside the zip (empty for root).
 	 * @param string      $skip_basename Basename to skip at the root level.
 	 */
-	private function add_dir_to_zip( $zip, $source_dir, $zip_subdir, $skip_basename ) {
+	private function add_dir_to_zip( \ZipArchive $zip, string $source_dir, string $zip_subdir, string $skip_basename ): void {
 		$items = scandir( $source_dir );
 		if ( false === $items ) {
 			return;

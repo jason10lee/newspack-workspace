@@ -80,6 +80,15 @@ class Print_Section extends Wizard_Section {
 				'methods'             => WP_REST_Server::EDITABLE,
 				'callback'            => [ $this, 'api_update_print_settings' ],
 				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'module_enabled_print' => [
+						'type' => 'boolean',
+					],
+					'format'               => [
+						'type' => 'string',
+						'enum' => [ 'tagged-text', 'xml' ],
+					],
+				],
 			]
 		);
 	}
