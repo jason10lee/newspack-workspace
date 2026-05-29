@@ -357,6 +357,24 @@ class Newspack_Test_InDesign_XML_Converter extends WP_UnitTestCase {
 		$this->assertStringContainsString( '<pullquote>', $xml );
 		$this->assertStringContainsString( 'Big idea.', $xml );
 		$this->assertStringContainsString( '<cite>Speaker</cite>', $xml );
+		$this->assertStringContainsString( '</pullquote>', $xml );
+	}
+
+	/**
+	 * A quote with only a cite (no paragraphs) emits a clean <blockquote>
+	 * with just the cite — no spurious blank lines between open and cite.
+	 */
+	public function test_emits_blockquote_with_cite_only() {
+		$content = "<!-- wp:quote -->\n<blockquote class=\"wp-block-quote\"><cite>Source only</cite></blockquote>\n<!-- /wp:quote -->";
+		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<blockquote>', $xml );
+		$this->assertStringContainsString( '<cite>Source only</cite>', $xml );
+		$this->assertStringContainsString( '</blockquote>', $xml );
+		// No double newline between opening tag and cite.
+		$this->assertStringNotContainsString( "<blockquote>\n\n", $xml );
 	}
 
 	/**

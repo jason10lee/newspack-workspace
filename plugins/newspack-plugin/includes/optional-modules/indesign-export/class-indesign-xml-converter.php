@@ -241,6 +241,9 @@ class InDesign_XML_Converter {
 		$inner_html = preg_replace( '/<!--.*?-->/s', '', $inner_html );
 
 		// Extract optional <cite>...</cite> from innerHTML.
+		// Gutenberg's quote/pullquote UI emits at most one cite per block, so
+		// we capture only the first; all subsequent cite tags are stripped
+		// along with the first via the preg_replace below.
 		$cite = '';
 		if ( preg_match( '/<cite[^>]*>(.*?)<\/cite>/is', $inner_html, $m ) ) {
 			$cite       = '      <cite>' . $this->convert_inline_html( $m[1] ) . '</cite>' . "\n";
