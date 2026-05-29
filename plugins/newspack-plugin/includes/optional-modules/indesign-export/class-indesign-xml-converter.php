@@ -68,6 +68,7 @@ class InDesign_XML_Converter {
 		}
 
 		$this->set_post_context( $post );
+		$this->emitted_image_ids = [];
 		$content_body = $this->process_content( $post );
 		$featured     = $this->render_featured_image( $post, $content_body );
 		$body         = $featured . $content_body;
@@ -373,6 +374,13 @@ class InDesign_XML_Converter {
 	private $skip_images_for_post = null;
 
 	/**
+	 * Attachment IDs emitted in the most recent convert_post() call.
+	 *
+	 * @var int[]
+	 */
+	private $emitted_image_ids = [];
+
+	/**
 	 * Set the current post context so image rendering can check the network meta.
 	 *
 	 * Called from convert_post().
@@ -467,6 +475,8 @@ class InDesign_XML_Converter {
 		if ( '' === $ext ) {
 			return '';
 		}
+
+		$this->emitted_image_ids[] = (int) $attachment_id;
 
 		$caption = $inline_caption ?? wp_get_attachment_caption( $attachment_id );
 		$credit  = get_post_meta( $attachment_id, '_media_credit', true );
@@ -702,5 +712,14 @@ class InDesign_XML_Converter {
 		}
 
 		return 'By ' . $name;
+	}
+
+	/**
+	 * Get attachment IDs referenced in the last convert_post() call.
+	 *
+	 * @return int[]
+	 */
+	public function get_image_ids() {
+		return array_values( array_unique( $this->emitted_image_ids ) );
 	}
 }

@@ -608,4 +608,42 @@ class Newspack_Test_InDesign_XML_Converter extends WP_UnitTestCase {
 		// The figure for $attachment_id should appear exactly once.
 		$this->assertSame( 1, substr_count( $xml, '<figure id="' . $attachment_id . '">' ) );
 	}
+
+	/**
+	 * Converter exposes the attachment IDs it referenced in the last conversion.
+	 */
+	public function test_get_image_ids_returns_referenced_attachments() {
+		$attachment_id = self::factory()->attachment->create_object(
+			'image.jpg',
+			0,
+			[ 'post_mime_type' => 'image/jpeg' ]
+		);
+		$content = sprintf(
+			"<!-- wp:image {\"id\":%d} -->\n<figure class=\"wp-block-image\"><img src=\"image.jpg\" class=\"wp-image-%d\"/></figure>\n<!-- /wp:image -->",
+			$attachment_id,
+			$attachment_id
+		);
+		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
+
+		$this->converter->convert_post( $post_id );
+
+		$this->assertSame( [ $attachment_id ], $this->converter->get_image_ids() );
+	}
+
+	/**
+	 * Image IDs include the featured image when not duplicated.
+	 */
+	public function test_get_image_ids_includes_featured_when_not_inline() {
+		$featured_id = self::factory()->attachment->create_object(
+			'hero.jpg',
+			0,
+			[ 'post_mime_type' => 'image/jpeg' ]
+		);
+		$post_id = self::factory()->post->create();
+		set_post_thumbnail( $post_id, $featured_id );
+
+		$this->converter->convert_post( $post_id );
+
+		$this->assertContains( $featured_id, $this->converter->get_image_ids() );
+	}
 }
