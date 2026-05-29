@@ -50,8 +50,15 @@ final class Overlay_Menu_Block {
 	 */
 	public static function render_block( array $attributes, string $content ) {
 		// The compiled view script depends on dist/commons.js (a webpack split chunk).
-		// Ensure commons is enqueued so the entry callback can execute on the frontend.
-		\Newspack\Newspack::load_common_assets();
+		// Enqueue only the commons JS; block styles come from dist/blocks.css instead.
+		\wp_register_script(
+			'newspack_commons',
+			\Newspack\Newspack::plugin_url() . '/dist/commons.js',
+			[],
+			NEWSPACK_PLUGIN_VERSION,
+			true
+		);
+		\wp_enqueue_script( 'newspack_commons' );
 
 		$instance_id = esc_attr( $attributes['instanceId'] ?? '' );
 
