@@ -259,7 +259,8 @@ class Group_Subscription_Settings {
 			return self::DEFAULT_SETTINGS;
 		}
 		$product_id          = WooCommerce_Subscriptions::get_subscription_product_id( $subscription );
-		$settings            = self::get_product_settings( $product_id );
+		$product             = ( $product_id && function_exists( 'wc_get_product' ) ) ? \wc_get_product( $product_id ) : null;
+		$settings            = self::get_product_settings( $product ? $product : $product_id );
 		$enabled_meta        = $subscription->get_meta( self::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', true );
 		$limit_meta          = $subscription->get_meta( self::GROUP_SUBSCRIPTION_META_PREFIX . 'limit', true );
 		$name_meta           = $subscription->get_meta( self::GROUP_SUBSCRIPTION_META_PREFIX . 'name', true );
@@ -268,7 +269,6 @@ class Group_Subscription_Settings {
 		if ( $name_meta ) {
 			$settings['name'] = $name_meta;
 		} else {
-			$product          = $product_id ? \wc_get_product( $product_id ) : null;
 			$product_name     = $product ? trim( (string) $product->get_name() ) : '';
 			$settings['name'] = '' !== $product_name ? $product_name : Group_Subscription::get_label( 'singular' );
 		}
