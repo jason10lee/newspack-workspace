@@ -79,7 +79,7 @@ const PostsPreview = ( { isReady, blocks, className, viewportWidth }, ref ) => {
 				<Placeholder
 					icon={ pages }
 					label={ __( 'No posts found', 'newspack-newsletters' ) }
-					instructions={ __( 'Verify filtering settings.', 'newspack-newsletters' ) }
+					instructions={ __( 'Verify filter settings.', 'newspack-newsletters' ) }
 				/>
 			) }
 		</div>
