@@ -51,9 +51,11 @@ ip_for_env() {
 # Reads `# newspack-wt:` comments (commit 4+) as ground truth for the original
 # branch; falls back to safe_branch from the mount path when comments are absent
 # (e.g., compose files generated before metadata existed). Emits a one-time note
-# to stderr when falling back.
+# to stderr when falling back, unless `--quiet` is passed (used by read-only
+# callers like env list, where the note would repeat per-env).
 parse_env_worktrees() {
     local compose_file="$1"
+    local quiet="${2:-}"
     [[ -f "$compose_file" ]] || return 0
 
     local comment_repos=() comment_branches=()
@@ -87,7 +89,7 @@ parse_env_worktrees() {
                 break
             fi
         done
-        if [[ "$found" != true && "$warned_fallback" != true ]]; then
+        if [[ "$found" != true && "$warned_fallback" != true && "$quiet" != "--quiet" ]]; then
             echo "[env] note: $(basename "$compose_file") lacks newspack-wt metadata; using sanitized branch names" >&2
             warned_fallback=true
         fi
@@ -622,7 +624,7 @@ MIGRATE
                 worktree_pairs+=("$pair")
                 [[ -n "$worktrees" ]] && worktrees="${worktrees},"
                 worktrees="${worktrees}${pair}"
-            done < <(parse_env_worktrees "$f")
+            done < <(parse_env_worktrees "$f" --quiet)
             if [[ "$porcelain" == true ]]; then
                 printf '%s\t%s\thttps://%s/\t%s\n' "$name" "$status" "$domain" "$worktrees"
             else
