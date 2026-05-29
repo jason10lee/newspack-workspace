@@ -67,6 +67,7 @@ class InDesign_XML_Converter {
 			}
 		}
 
+		$this->set_post_context( $post );
 		$body = $this->process_content( $post );
 		if ( '' !== $body ) {
 			$xml .= '  <body>' . "\n" . $body . '  </body>' . "\n";
@@ -195,6 +196,12 @@ class InDesign_XML_Converter {
 				return $this->render_quote( $block, 'pullquote' );
 			case 'core/separator':
 				return '    <hr/>' . "\n";
+			case 'core/image':
+				return $this->render_image( $block );
+			case 'core/gallery':
+			case 'jetpack/slideshow':
+			case 'jetpack/tiled-gallery':
+				return $this->render_gallery( $block );
 		}
 
 		// Container fallback: walk innerBlocks if present, otherwise drop.
@@ -351,6 +358,155 @@ class InDesign_XML_Converter {
 
 		$body = '' === implode( "\n", $paras ) ? '' : implode( "\n", $paras ) . "\n";
 		return '    <' . $element_name . '>' . "\n" . $body . $cite . '    </' . $element_name . '>' . "\n";
+	}
+
+	/**
+	 * Whether this post's images should be skipped.
+	 *
+	 * Mirrors the existing Tagged Text converter — network-distributed posts skip
+	 * all images to avoid duplicating media that's owned by another site.
+	 *
+	 * @var int|null
+	 */
+	private $skip_images_for_post = null;
+
+	/**
+	 * Set the current post context so image rendering can check the network meta.
+	 *
+	 * Called from convert_post().
+	 *
+	 * @param \WP_Post $post Post object.
+	 */
+	private function set_post_context( $post ) {
+		$this->skip_images_for_post = $post->ID;
+	}
+
+	/**
+	 * Whether images for the current post should be emitted.
+	 *
+	 * @return bool
+	 */
+	private function should_emit_images() {
+		if ( null === $this->skip_images_for_post ) {
+			return true;
+		}
+		return ! get_post_meta( $this->skip_images_for_post, 'newspack_network_post_id', true );
+	}
+
+	/**
+	 * Render a core/image block as <figure>.
+	 *
+	 * @param array $block Block data.
+	 * @return string XML fragment.
+	 */
+	private function render_image( $block ) {
+		if ( ! $this->should_emit_images() ) {
+			return '';
+		}
+
+		$id = (int) ( $block['attrs']['id'] ?? 0 );
+		if ( ! $id ) {
+			return '';
+		}
+
+		// Prefer inline figcaption over the attachment excerpt.
+		$inline_caption = null;
+		if ( ! empty( $block['innerHTML'] ) && preg_match( '/<figcaption[^>]*>(.*?)<\/figcaption>/is', $block['innerHTML'], $m ) ) {
+			$inline_caption = $m[1];
+		}
+
+		return $this->build_figure( $id, $inline_caption );
+	}
+
+	/**
+	 * Render a gallery block as a sequence of <figure> siblings.
+	 *
+	 * @param array $block Block data.
+	 * @return string XML fragment.
+	 */
+	private function render_gallery( $block ) {
+		if ( ! $this->should_emit_images() ) {
+			return '';
+		}
+
+		$out = '';
+		$ids = [];
+
+		// core/gallery uses innerBlocks of core/image; jetpack/* may use attrs.ids.
+		if ( ! empty( $block['innerBlocks'] ) ) {
+			foreach ( $block['innerBlocks'] as $inner ) {
+				$inner_id = (int) ( $inner['attrs']['id'] ?? 0 );
+				if ( $inner_id ) {
+					$ids[] = $inner_id;
+				}
+			}
+		}
+		if ( ! empty( $block['attrs']['ids'] ) && is_array( $block['attrs']['ids'] ) ) {
+			foreach ( $block['attrs']['ids'] as $i ) {
+				$ids[] = (int) $i;
+			}
+		}
+
+		foreach ( array_unique( array_filter( $ids ) ) as $id ) {
+			$out .= $this->build_figure( $id, null );
+		}
+		return $out;
+	}
+
+	/**
+	 * Build a <figure> XML fragment for an attachment.
+	 *
+	 * @param int         $attachment_id Attachment post ID.
+	 * @param string|null $inline_caption Optional override caption (raw HTML from figcaption).
+	 * @return string XML fragment.
+	 */
+	private function build_figure( $attachment_id, $inline_caption ) {
+		$ext = $this->resolve_attachment_extension( $attachment_id );
+		if ( '' === $ext ) {
+			return '';
+		}
+
+		$caption = $inline_caption ?? wp_get_attachment_caption( $attachment_id );
+		$credit  = get_post_meta( $attachment_id, '_media_credit', true );
+
+		$xml  = '    <figure id="' . $attachment_id . '">' . "\n";
+		$xml .= '      <Link href="images/' . $attachment_id . '.' . $ext . '"/>' . "\n";
+		if ( $caption ) {
+			$xml .= '      <caption>' . $this->convert_inline_html( $caption ) . '</caption>' . "\n";
+		}
+		if ( $credit ) {
+			$xml .= '      <credit>' . $this->escape_text( $credit ) . '</credit>' . "\n";
+		}
+		$xml .= '    </figure>' . "\n";
+		return $xml;
+	}
+
+	/**
+	 * Get the file extension (no dot) for an attachment, or '' if unresolvable.
+	 *
+	 * @param int $attachment_id Attachment ID.
+	 * @return string Extension or empty string.
+	 */
+	private function resolve_attachment_extension( $attachment_id ) {
+		$file = get_attached_file( $attachment_id );
+		if ( $file ) {
+			$ext = strtolower( pathinfo( $file, PATHINFO_EXTENSION ) );
+			if ( $ext ) {
+				return $ext;
+			}
+		}
+		$mime = get_post_mime_type( $attachment_id );
+		switch ( $mime ) {
+			case 'image/jpeg':
+				return 'jpg';
+			case 'image/png':
+				return 'png';
+			case 'image/gif':
+				return 'gif';
+			case 'image/webp':
+				return 'webp';
+		}
+		return '';
 	}
 
 	/**

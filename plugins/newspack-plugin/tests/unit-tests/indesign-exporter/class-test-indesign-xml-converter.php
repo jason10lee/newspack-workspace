@@ -472,4 +472,84 @@ class Newspack_Test_InDesign_XML_Converter extends WP_UnitTestCase {
 
 		$this->assertStringContainsString( '<para style="dropcap">Lead paragraph.</para>', $xml );
 	}
+
+	/**
+	 * core/image emits <figure> with <Link href="images/N.ext"/> and caption/credit.
+	 */
+	public function test_emits_inline_image_figure() {
+		$attachment_id = self::factory()->attachment->create_object(
+			'image.jpg',
+			0,
+			[
+				'post_mime_type' => 'image/jpeg',
+				'post_excerpt'   => 'A nice scene',
+			]
+		);
+		update_post_meta( $attachment_id, '_media_credit', 'Photo by Alice' );
+
+		$content  = sprintf(
+			"<!-- wp:image {\"id\":%d} -->\n<figure class=\"wp-block-image\"><img src=\"image.jpg\" class=\"wp-image-%d\"/></figure>\n<!-- /wp:image -->",
+			$attachment_id,
+			$attachment_id
+		);
+		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<figure id="' . $attachment_id . '">', $xml );
+		$this->assertStringContainsString( '<Link href="images/' . $attachment_id . '.jpg"/>', $xml );
+		$this->assertStringContainsString( '<caption>A nice scene</caption>', $xml );
+		$this->assertStringContainsString( '<credit>Photo by Alice</credit>', $xml );
+		$this->assertStringContainsString( '</figure>', $xml );
+	}
+
+	/**
+	 * Inline caption from figcaption overrides the attachment excerpt.
+	 */
+	public function test_inline_figcaption_overrides_attachment_caption() {
+		$attachment_id = self::factory()->attachment->create_object(
+			'image.png',
+			0,
+			[
+				'post_mime_type' => 'image/png',
+				'post_excerpt'   => 'Attachment default',
+			]
+		);
+		$content  = sprintf(
+			"<!-- wp:image {\"id\":%d} -->\n<figure class=\"wp-block-image\"><img src=\"image.png\" class=\"wp-image-%d\"/><figcaption>Inline override</figcaption></figure>\n<!-- /wp:image -->",
+			$attachment_id,
+			$attachment_id
+		);
+		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<caption>Inline override</caption>', $xml );
+		$this->assertStringNotContainsString( 'Attachment default', $xml );
+	}
+
+	/**
+	 * Network-distributed posts skip all images.
+	 */
+	public function test_network_distributed_post_skips_images() {
+		$attachment_id = self::factory()->attachment->create_object(
+			'image.jpg',
+			0,
+			[
+				'post_mime_type' => 'image/jpeg',
+				'post_excerpt'   => 'Caption',
+			]
+		);
+		$content  = sprintf(
+			"<!-- wp:image {\"id\":%d} -->\n<figure class=\"wp-block-image\"><img src=\"image.jpg\" class=\"wp-image-%d\"/></figure>\n<!-- /wp:image -->",
+			$attachment_id,
+			$attachment_id
+		);
+		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
+		update_post_meta( $post_id, 'newspack_network_post_id', 'remote-123' );
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringNotContainsString( '<figure', $xml );
+	}
 }
