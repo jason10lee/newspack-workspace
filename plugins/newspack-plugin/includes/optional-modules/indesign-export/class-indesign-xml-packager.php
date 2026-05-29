@@ -46,12 +46,13 @@ class InDesign_XML_Packager {
 			$this->copy_images_to( $image_ids, $post_dir );
 		}
 
-		$zip_filename = sprintf(
-			'indesign-export-%d-%s-%s.zip',
-			$post->ID,
-			sanitize_title( $post->post_title ),
-			gmdate( 'Y-m-d' )
-		);
+		// sanitize_title strips non-ASCII so multi-byte titles (CJK, etc.) yield
+		// only hyphens. Fall back to a bare ID+date name so the filename is
+		// always informative rather than 'indesign-export-123--2026-05-29.zip'.
+		$slug         = sanitize_title( $post->post_title );
+		$zip_filename = '' !== $slug
+			? sprintf( 'indesign-export-%d-%s-%s.zip', $post->ID, $slug, gmdate( 'Y-m-d' ) )
+			: sprintf( 'indesign-export-%d-%s.zip', $post->ID, gmdate( 'Y-m-d' ) );
 		$zip_path     = $temp_dir . '/' . $zip_filename;
 
 		// Pass $zip_filename as skip_basename so the just-opened zip doesn't
@@ -156,7 +157,10 @@ class InDesign_XML_Packager {
 	 */
 	private function make_temp_dir() {
 		$upload_dir = wp_upload_dir();
-		$temp_dir   = $upload_dir['basedir'] . '/indesign_export_' . uniqid();
+		// wp_generate_uuid4 gives more entropy than uniqid() — defends against
+		// concurrent exports colliding on directory names and makes URL-guessing
+		// the temp dir's contents impractical during the brief window before cleanup.
+		$temp_dir = $upload_dir['basedir'] . '/indesign_export_' . wp_generate_uuid4();
 		// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.directory_mkdir -- Writing inside wp-content/uploads/ is allowed.
 		if ( ! mkdir( $temp_dir, 0755, true ) ) {
 			return false;
@@ -179,7 +183,12 @@ class InDesign_XML_Packager {
 			return;
 		}
 
-		$size = apply_filters( 'newspack_indesign_export_image_size', 'full' );
+		// Filter may return a non-string from a buggy callback; coerce and fall
+		// back to 'full' so wp_get_attachment_metadata size lookups don't silently miss.
+		$size = (string) apply_filters( 'newspack_indesign_export_image_size', 'full' );
+		if ( '' === $size ) {
+			$size = 'full';
+		}
 
 		foreach ( array_unique( array_map( 'intval', $image_ids ) ) as $id ) {
 			if ( ! $id ) {

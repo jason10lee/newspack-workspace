@@ -324,6 +324,13 @@ class InDesign_Exporter {
 		$zip_path = $result['zip_path'];
 		$zip_name = basename( $zip_path );
 
+		// Drain any active output buffers so readfile() streams the (potentially
+		// hundred-MB) zip directly to the client instead of buffering it in PHP
+		// memory. Without this, an admin-context buffer can OOM on large bundles.
+		while ( ob_get_level() > 0 ) {
+			ob_end_clean();
+		}
+
 		header( 'Content-Type: application/zip' );
 		header( 'Content-Disposition: attachment; filename="' . $zip_name . '"' );
 		header( 'Content-Length: ' . filesize( $zip_path ) );
