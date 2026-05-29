@@ -66,15 +66,27 @@ parse_env_worktrees() {
         fi
     done < "$compose_file"
 
-    local warned_fallback=false
+    local warned_fallback=false warned_legacy=false
     while IFS= read -r line; do
         local repo="" safe_branch="" host=""
+        # Legacy mount shape (pre-PR-#154): ./worktrees/<repo>/<branch>:/newspack-repos/<name>
+        # The destroy / list helpers can't safely manage these; warn once per
+        # compose file and skip. Affected envs need manual cleanup (`n env destroy`
+        # will still drop the container/db/compose file even when worktrees are skipped).
+        if [[ "$line" =~ \./worktrees/[^/]+/[^:]+:/newspack-repos/[^[:space:]]+ ]] \
+           && [[ ! "$line" =~ \./worktrees/standalone/ ]]; then
+            if [[ "$warned_legacy" != true && "$quiet" != "--quiet" ]]; then
+                echo "[env] note: $(basename "$compose_file") uses legacy worktree mounts (pre-PR-#154); their worktrees will not be auto-managed" >&2
+                warned_legacy=true
+            fi
+            continue
+        fi
         # Tier 2 first (more specific path shape).
-        if [[ "$line" =~ \./worktrees/standalone/([^/]+)/([^:]+):/newspack-(plugins|themes|repos)/([^[:space:]]+) ]]; then
+        if [[ "$line" =~ \./worktrees/standalone/([^/]+)/([^:]+):/newspack-(plugins|themes)/([^[:space:]]+) ]]; then
             repo="${BASH_REMATCH[1]}"
             safe_branch="${BASH_REMATCH[2]}"
             host="repos/${BASH_REMATCH[1]}"
-        elif [[ "$line" =~ \./worktrees/([^/]+)/([^:]+):/newspack-(plugins|themes|repos)/([^[:space:]]+) ]]; then
+        elif [[ "$line" =~ \./worktrees/([^/]+)/([^:]+):/newspack-(plugins|themes)/([^[:space:]]+) ]]; then
             safe_branch="${BASH_REMATCH[1]}"
             repo="${BASH_REMATCH[4]}"
             host="${BASH_REMATCH[2]}"
