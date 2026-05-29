@@ -135,17 +135,20 @@ case $1 in
     create)
         env_name="$2"
         if [[ -z "$env_name" ]]; then
-            echo "Usage: n env create <name> --worktree <repo>:<branch> [--worktree ...] [--domain <domain>] [--up]"
+            echo "Usage: n env create <name> --worktree <repo>:<branch> [--worktree ...] [--domain <domain>] [--isolated-db] [--up]"
             exit 1
         fi
         validate_env_name "$env_name"
-        # Reject names that would collide after dash/underscore normalization.
-        normalized=$(echo "$env_name" | tr '-' '_')
+        # Reject names that would collide after dash/dot/underscore normalization.
+        # validate_env_name permits dots; env_safe_name folds them to underscores
+        # alongside dashes, so foo-bar, foo.bar, and foo_bar all resolve to the
+        # same docker-safe identifier and must not coexist.
+        normalized=$(env_safe_name "$env_name")
         for f in "$NABSPATH"/docker-compose.env-*.yml; do
             [[ -f "$f" ]] || continue
             existing=$(basename "$f" | sed 's/docker-compose\.env-//' | sed 's/\.yml//')
             [[ "$existing" == "$env_name" ]] && continue
-            if [[ "$(echo "$existing" | tr '-' '_')" == "$normalized" ]]; then
+            if [[ "$(env_safe_name "$existing")" == "$normalized" ]]; then
                 echo "Error: '$env_name' conflicts with existing environment '$existing' (same container/database name after normalization)"
                 exit 1
             fi
@@ -158,6 +161,7 @@ case $1 in
         created_standalone_wts=()
         domain=""
         auto_up=false
+        isolated_db=false
         while [[ $# -gt 0 ]]; do
             case $1 in
                 --worktree)
@@ -228,6 +232,10 @@ case $1 in
                     auto_up=true
                     shift
                     ;;
+                --isolated-db)
+                    isolated_db=true
+                    shift
+                    ;;
                 *)
                     echo "Unknown option: $1"
                     exit 1
@@ -243,13 +251,66 @@ case $1 in
         db_name=$(db_name_for_env "$env_name")
         # Create isolated html directory.
         mkdir -p "$NABSPATH/envs/${env_name}/html"
+        # Assemble the env-container YAML once. The isolated-db branch differs
+        # only in (a) a prepended sidecar service block, (b) which DB service
+        # the env depends on, and (c) a MYSQL_HOST override that points at the
+        # sidecar. Building once means future edits to volumes / ports /
+        # networks land in one place (R2 finding: heredoc duplication risks
+        # silent drift -- the prior shape had MYSQL_HOST already asymmetric).
+        db_service="db"
+        mysql_host_line=""
+        sidecar_block=""
+        suffix_log=""
+        if [[ "$isolated_db" == true ]]; then
+            safe_name=$(env_safe_name "$env_name")
+            sidecar_service="db_lowercase_${safe_name}"
+            sidecar_container="newspack_db_lowercase_${safe_name}"
+            db_service="${sidecar_service}"
+            mysql_host_line="      - MYSQL_HOST=${sidecar_service}:3306
+"
+            # mariadb:11.8.6 is duplicated with docker-compose.yml's `db`
+            # service tag intentionally (no shared variable in v1). If the
+            # shared db's image tag is bumped, bump this one too so isolated
+            # envs stay version-aligned with the rest of the workspace.
+            #
+            # The sidecar deliberately declares NO `networks:` key, so it joins
+            # only Compose's implicit per-project `default` network. The env
+            # service (below) is on both `default` and `newspack_envs`; the env
+            # reaches the sidecar via `MYSQL_HOST=${sidecar_service}:3306` over
+            # that shared `default` network. Keeping the sidecar off
+            # `newspack_envs` is the isolation boundary -- but it means the env
+            # service's `default` membership is load-bearing and must not be
+            # removed.
+            sidecar_block="  ${sidecar_service}:
+    container_name: ${sidecar_container}
+    image: mariadb:11.8.6
+    volumes:
+      - ./data/newspack-dev_mysql_lowercase_${safe_name}:/var/lib/mysql
+      - ./config/mysql_lowercase.conf:/etc/mysql/conf.d/docker.cnf
+    env_file:
+      - default.env
+      - .env
+    # Use the stock mariadbd entrypoint instead of the shared db's
+    # docker-db-start-and-autoupgrade.sh wrapper -- that script has -hdb
+    # hardcoded and would never resolve against this service's name. Two
+    # consequences accepted as known limitations: (1) no /var/log/mysql
+    # ownership fix runs, but the sidecar doesn't bind-mount a host log dir
+    # and the LCTN config disables slow-log, so nothing actually writes
+    # there; (2) no mariadb-upgrade runs -- fresh data dirs don't need it;
+    # if the image tag above is bumped, run mariadb-upgrade manually inside
+    # the sidecar.
+    command: [\"mariadbd\"]
+
+"
+            suffix_log=", isolated-db"
+        fi
         cat > "$compose_file" <<YAML
 services:
-  env-${env_name}:
+${sidecar_block}  env-${env_name}:
     container_name: ${container_name}
     platform: linux/arm64
     depends_on:
-      - db
+      - ${db_service}
     image: newspack-dev:latest
     volumes:
       - ./logs/env-${env_name}/apache2:/var/log/apache2
@@ -271,7 +332,7 @@ ${worktree_volumes}${worktree_metadata}      - ./envs/${env_name}/html:/var/www/
       - .env
     environment:
       - HOST_PORT=80
-      - MYSQL_DATABASE=${db_name}
+${mysql_host_line}      - MYSQL_DATABASE=${db_name}
       - WP_CACHE_KEY_SALT=env_${env_name}_
       - WP_DOMAIN=${domain}
       - APACHE_RUN_USER=\${USE_CUSTOM_APACHE_USER:-www-data}
@@ -286,7 +347,7 @@ networks:
   newspack_envs:
     external: true
 YAML
-        echo "Created $compose_file (db: $db_name, domain: $domain, ip: $ip)"
+        echo "Created $compose_file (db: $db_name, domain: $domain, ip: $ip${suffix_log})"
         # Check networking prerequisites (macOS only — Linux routes all 127.x.x.x by default).
         if [[ "$(uname)" == "Darwin" ]] && ! ifconfig lo0 2>/dev/null | grep -q "$ip"; then
             if command -v newspack-manage-host >/dev/null 2>&1; then
@@ -374,6 +435,12 @@ YAML
         db_name=$(db_name_for_env "$env_name")
         domain=$(domain_for_env "$compose_file")
         ip=$(ip_for_env "$compose_file")
+        # Detect isolated-db (sidecar) envs by the presence of a db_lowercase_* service.
+        sidecar_service=$(sidecar_service_for_env "$compose_file")
+        sidecar_container=""
+        if [[ -n "$sidecar_service" ]]; then
+            sidecar_container="newspack_${sidecar_service}"
+        fi
         # --- Migration: add shared network + domain if missing ---
         if ! grep -q 'newspack_envs' "$compose_file"; then
             # Assign a .test domain if the env is IP-based.
@@ -434,12 +501,48 @@ MIGRATE
         source "$NABSPATH/default.env"
         [[ -f "$NABSPATH/.env" ]] && source "$NABSPATH/.env"
         set +a
-        # Ensure db is running and create the environment database.
-        docker compose -f "$NABSPATH/docker-compose.yml" up -d db
-        echo "Creating database $db_name..."
-        docker compose -f "$NABSPATH/docker-compose.yml" exec -T db \
-            mariadb -h localhost -u root -p"${MYSQL_ROOT_PASSWORD}" \
-            -e "CREATE DATABASE IF NOT EXISTS \`${db_name}\`; GRANT ALL PRIVILEGES ON \`${db_name}\`.* TO '${MYSQL_USER}'@'%'; FLUSH PRIVILEGES;" 2>/dev/null
+        # Ensure DB is running and create the environment database.
+        if [[ -n "$sidecar_service" ]]; then
+            echo "Starting isolated-db sidecar ($sidecar_service)..."
+            docker compose -f "$NABSPATH/docker-compose.yml" -f "$compose_file" up -d "$sidecar_service"
+            # Wait for sidecar to accept connections.
+            ready=false
+            for i in $(seq 1 60); do
+                if docker compose -f "$NABSPATH/docker-compose.yml" -f "$compose_file" \
+                    exec -T "$sidecar_service" \
+                    mariadb -h localhost -u root -p"${MYSQL_ROOT_PASSWORD}" -e "SELECT 1" \
+                    >/dev/null 2>&1; then
+                    ready=true; break
+                fi
+                sleep 1
+            done
+            if [[ "$ready" != "true" ]]; then
+                echo "Error: $sidecar_service did not become ready within 60s" >&2
+                exit 1
+            fi
+            # Verify LCTN=1 (guards against silent config-mount drift).
+            lctn=$(docker compose -f "$NABSPATH/docker-compose.yml" -f "$compose_file" \
+                exec -T "$sidecar_service" \
+                mariadb -h localhost -u root -p"${MYSQL_ROOT_PASSWORD}" -N -B \
+                -e "SELECT @@lower_case_table_names" 2>/dev/null | tr -d '\r')
+            if [[ "$lctn" != "1" ]]; then
+                echo "Error: $sidecar_service reports lower_case_table_names=$lctn (expected 1)" >&2
+                echo "Check that config/mysql_lowercase.conf is mounted correctly." >&2
+                echo "If the data dir was previously initialized with LCTN=2, the only fix is 'n env destroy $env_name' then re-create (LCTN is locked at data-dir init)." >&2
+                exit 1
+            fi
+            echo "Creating database $db_name on $sidecar_service..."
+            docker compose -f "$NABSPATH/docker-compose.yml" -f "$compose_file" \
+                exec -T "$sidecar_service" \
+                mariadb -h localhost -u root -p"${MYSQL_ROOT_PASSWORD}" \
+                -e "CREATE DATABASE IF NOT EXISTS \`${db_name}\`; GRANT ALL PRIVILEGES ON \`${db_name}\`.* TO '${MYSQL_USER}'@'%'; FLUSH PRIVILEGES;"
+        else
+            docker compose -f "$NABSPATH/docker-compose.yml" up -d db
+            echo "Creating database $db_name..."
+            docker compose -f "$NABSPATH/docker-compose.yml" exec -T db \
+                mariadb -h localhost -u root -p"${MYSQL_ROOT_PASSWORD}" \
+                -e "CREATE DATABASE IF NOT EXISTS \`${db_name}\`; GRANT ALL PRIVILEGES ON \`${db_name}\`.* TO '${MYSQL_USER}'@'%'; FLUSH PRIVILEGES;"
+        fi
         # Start the env container.
         if ! docker compose -f "$NABSPATH/docker-compose.yml" -f "$compose_file" up -d "env-${env_name}"; then
             echo "Error: failed to start container"
@@ -540,8 +643,16 @@ MIGRATE
         fi
         validate_env_name "$env_name"
         container_name=$(echo "newspack_env_${env_name}" | tr '-' '_')
+        compose_file="$NABSPATH/docker-compose.env-${env_name}.yml"
         docker stop "$container_name" 2>/dev/null
         docker rm "$container_name" 2>/dev/null
+        if [[ -f "$compose_file" ]]; then
+            sidecar_service=$(sidecar_service_for_env "$compose_file")
+            if [[ -n "$sidecar_service" ]]; then
+                docker stop "newspack_${sidecar_service}" 2>/dev/null
+                docker rm "newspack_${sidecar_service}" 2>/dev/null
+            fi
+        fi
         ;;
     destroy)
         env_name="$2"
@@ -553,31 +664,43 @@ MIGRATE
         compose_file="$NABSPATH/docker-compose.env-${env_name}.yml"
         container_name=$(echo "newspack_env_${env_name}" | tr '-' '_')
         db_name=$(db_name_for_env "$env_name")
-        # Read domain, IP, and worktrees before removing compose file.
+        # Read domain, IP, worktrees, and sidecar before removing compose file.
         domain=""
         ip=""
         # Read worktree tuples (repo, branch, safe_branch, host) before
         # removing the compose file. Each tuple drives one worktree.sh remove.
         worktree_tuples=()
+        sidecar_service=""
+        sidecar_container=""
         if [[ -f "$compose_file" ]]; then
             domain=$(domain_for_env "$compose_file")
             ip=$(ip_for_env "$compose_file")
             while IFS= read -r tuple; do
                 worktree_tuples+=("$tuple")
             done < <(parse_env_worktrees "$compose_file")
+            sidecar_service=$(sidecar_service_for_env "$compose_file")
+            if [[ -n "$sidecar_service" ]]; then
+                sidecar_container="newspack_${sidecar_service}"
+            fi
         fi
         docker stop "$container_name" 2>/dev/null
         docker rm "$container_name" 2>/dev/null
-        # Drop the environment database via docker compose (avoids hardcoding container name).
         set -a
         source "$NABSPATH/default.env"
         [[ -f "$NABSPATH/.env" ]] && source "$NABSPATH/.env"
         set +a
-        docker compose -f "$NABSPATH/docker-compose.yml" up -d db 2>/dev/null
-        docker compose -f "$NABSPATH/docker-compose.yml" exec -T db \
-            mariadb -h localhost -u root -p"${MYSQL_ROOT_PASSWORD}" \
-            -e "DROP DATABASE IF EXISTS \`${db_name}\`" 2>/dev/null
-        echo "Dropped database $db_name"
+        if [[ -n "$sidecar_service" && -n "$sidecar_container" ]]; then
+            docker stop "$sidecar_container" 2>/dev/null
+            docker rm "$sidecar_container" 2>/dev/null
+            # Sidecar removed -- nothing more to drop. Its data dir is removed below.
+            echo "Stopped isolated-db sidecar $sidecar_container"
+        else
+            docker compose -f "$NABSPATH/docker-compose.yml" up -d db 2>/dev/null
+            docker compose -f "$NABSPATH/docker-compose.yml" exec -T db \
+                mariadb -h localhost -u root -p"${MYSQL_ROOT_PASSWORD}" \
+                -e "DROP DATABASE IF EXISTS \`${db_name}\`" 2>/dev/null
+            echo "Dropped database $db_name"
+        fi
         # Remove env html and certs directories.
         if [[ -d "$NABSPATH/envs/${env_name}" ]]; then
             rm -rf "$NABSPATH/envs/${env_name}"
@@ -587,6 +710,17 @@ MIGRATE
         if [[ -d "$NABSPATH/logs/env-${env_name}" ]]; then
             rm -rf "$NABSPATH/logs/env-${env_name}"
             echo "Removed logs/env-${env_name}/"
+        fi
+        # Remove isolated-db sidecar's data dir if this was an --isolated-db env.
+        # The sidecar bind-mounts no host log dir (the LCTN config disables the
+        # slow-log and nothing writes to /var/log/mysql), so there is no
+        # logs/db-lowercase-<env> to clean up.
+        if [[ -n "$sidecar_service" ]]; then
+            safe="${sidecar_service#db_lowercase_}"
+            if [[ -d "$NABSPATH/data/newspack-dev_mysql_lowercase_${safe}" ]]; then
+                rm -rf "$NABSPATH/data/newspack-dev_mysql_lowercase_${safe}"
+                echo "Removed data/newspack-dev_mysql_lowercase_${safe}/"
+            fi
         fi
         # Remove /etc/hosts entry (only for custom domains, not IP-based).
         if [[ -n "$domain" && "$domain" != "$ip" ]] && grep -q "$domain" /etc/hosts 2>/dev/null; then
@@ -623,6 +757,12 @@ MIGRATE
             name=$(basename "$f" | sed 's/docker-compose\.env-//' | sed 's/\.yml//')
             container_name=$(echo "newspack_env_${name}" | tr '-' '_')
             domain=$(domain_for_env "$f")
+            isolated_marker=""
+            db_kind="shared"
+            if [[ -n "$(sidecar_service_for_env "$f")" ]]; then
+                isolated_marker=" [isolated-db]"
+                db_kind="isolated"
+            fi
             if status=$(docker inspect -f '{{.State.Status}}' "$container_name" 2>/dev/null); then
                 :
             else
@@ -638,9 +778,9 @@ MIGRATE
                 worktrees="${worktrees}${pair}"
             done < <(parse_env_worktrees "$f" --quiet)
             if [[ "$porcelain" == true ]]; then
-                printf '%s\t%s\thttps://%s/\t%s\n' "$name" "$status" "$domain" "$worktrees"
+                printf '%s\t%s\thttps://%s/\t%s\t%s\n' "$name" "$status" "$domain" "$worktrees" "$db_kind"
             else
-                echo "  $name ($status) https://${domain}/"
+                echo "  $name ($status) https://${domain}/${isolated_marker}"
                 for pair in "${worktree_pairs[@]}"; do
                     nm="${pair%:*}"
                     br="${pair#*:}"
