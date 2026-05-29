@@ -250,14 +250,16 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 		$legacy = fn() => '0.0.0';
 		add_filter( 'newspack_my_account_version', $legacy );
 
-		$owner_id  = $this->create_reader_user();
-		$member_id = $this->create_reader_user();
-		$group_sub = $this->create_group_subscription( $owner_id );
-		$this->add_member( $member_id, $group_sub );
+		try {
+			$owner_id  = $this->create_reader_user();
+			$member_id = $this->create_reader_user();
+			$group_sub = $this->create_group_subscription( $owner_id );
+			$this->add_member( $member_id, $group_sub );
 
-		$result = Group_Subscription_MyAccount::inject_member_group_subscriptions( [], $member_id );
-
-		remove_filter( 'newspack_my_account_version', $legacy );
+			$result = Group_Subscription_MyAccount::inject_member_group_subscriptions( [], $member_id );
+		} finally {
+			remove_filter( 'newspack_my_account_version', $legacy );
+		}
 
 		$this->assertEmpty( $result, 'Should not inject on the legacy My Account UI' );
 	}
@@ -349,20 +351,22 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 		$legacy = fn() => '0.0.0';
 		add_filter( 'newspack_my_account_version', $legacy );
 
-		$owner_id  = $this->create_reader_user();
-		$member_id = $this->create_reader_user();
-		$group_sub = $this->create_group_subscription( $owner_id );
-		$this->add_member( $member_id, $group_sub );
-
 		$original_caps = [ 'manage_woocommerce' ];
-		$result        = Group_Subscription_MyAccount::grant_group_member_view_order_cap(
-			$original_caps,
-			'view_order',
-			$member_id,
-			[ $group_sub->get_id() ]
-		);
+		try {
+			$owner_id  = $this->create_reader_user();
+			$member_id = $this->create_reader_user();
+			$group_sub = $this->create_group_subscription( $owner_id );
+			$this->add_member( $member_id, $group_sub );
 
-		remove_filter( 'newspack_my_account_version', $legacy );
+			$result = Group_Subscription_MyAccount::grant_group_member_view_order_cap(
+				$original_caps,
+				'view_order',
+				$member_id,
+				[ $group_sub->get_id() ]
+			);
+		} finally {
+			remove_filter( 'newspack_my_account_version', $legacy );
+		}
 
 		$this->assertEquals( $original_caps, $result, 'Should not grant view_order cap on the legacy My Account UI' );
 	}
