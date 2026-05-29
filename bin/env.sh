@@ -42,6 +42,28 @@ ip_for_env() {
     grep -o '127\.0\.0\.[0-9]*' "$1" | head -1
 }
 
+# Roll back worktrees this `env create` attempt created — and only those.
+# Reads two arrays populated by the --worktree parser:
+#   created_workspace_wts=("<safe_branch>" ...)        tier-1 entries
+#   created_standalone_wts=("<repo>/<safe_branch>" ...) tier-2 entries
+# Safe to call repeatedly; entries already gone are silently skipped.
+cleanup_partial_env_state() {
+    local wt
+    for wt in "${created_workspace_wts[@]}"; do
+        local ws_wt="$NABSPATH/worktrees/$wt"
+        if [[ -d "$ws_wt" ]]; then
+            (cd "$NABSPATH" && git worktree remove --force "$ws_wt" 2>/dev/null) || true
+        fi
+    done
+    for wt in "${created_standalone_wts[@]}"; do
+        local s2_repo="${wt%%/*}"
+        local s2_wt="$NABSPATH/worktrees/standalone/$wt"
+        if [[ -d "$s2_wt" ]]; then
+            (cd "$NABSPATH/repos/$s2_repo" && git worktree remove --force "$s2_wt" 2>/dev/null) || true
+        fi
+    done
+}
+
 case $1 in
     create)
         env_name="$2"
@@ -63,6 +85,10 @@ case $1 in
         done
         shift 2
         worktree_volumes=""
+        worktree_metadata=""
+        # Track worktrees this attempt creates so failure cleanup is scoped.
+        created_workspace_wts=()
+        created_standalone_wts=()
         domain=""
         auto_up=false
         while [[ $# -gt 0 ]]; do
@@ -77,24 +103,48 @@ case $1 in
                     validate_name "$wt_branch" "branch"
                     # Sanitize branch for directory name (feat/foo -> feat-foo).
                     safe_branch=$(echo "$wt_branch" | tr '/' '-')
-                    # Create a monorepo worktree at this branch if it doesn't exist.
-                    if [[ ! -d "$NABSPATH/worktrees/$safe_branch" ]]; then
-                        echo "Creating worktree at branch $wt_branch..."
-                        "$NABSPATH/bin/worktree.sh" add "$wt_branch" || exit 1
-                    fi
-                    # Mount the specific plugin/theme subdirectory from the worktree.
+                    # Resolve tier BEFORE checking worktree existence — avoids
+                    # leaking a workspace worktree when the repo name is unknown.
                     wt_host_path=$(get_repo_host_path "$wt_repo")
                     if [[ -z "$wt_host_path" ]]; then
                         echo "Error: unknown project '$wt_repo'"
                         exit 1
                     fi
-                    if [[ "$wt_host_path" == themes/* ]]; then
-                        wt_container_path="/newspack-themes/$wt_repo"
-                    else
+                    if [[ "$wt_host_path" == repos/* ]]; then
+                        # Tier 2: standalone-repo worktree, mounted at /newspack-plugins/<name>
+                        # so link-repos.sh picks it up as an active plugin in this env.
+                        worktree_dir="./worktrees/standalone/$wt_repo/$safe_branch"
                         wt_container_path="/newspack-plugins/$wt_repo"
+                        if [[ ! -d "$NABSPATH/$worktree_dir" ]]; then
+                            echo "Creating standalone worktree at branch $wt_branch in $wt_repo..."
+                            if ! "$NABSPATH/bin/worktree.sh" add "$wt_branch" --repo "$wt_repo"; then
+                                cleanup_partial_env_state
+                                exit 1
+                            fi
+                            created_standalone_wts+=("$wt_repo/$safe_branch")
+                        fi
+                    else
+                        # Tier 1: workspace worktree of the monorepo.
+                        if [[ ! -d "$NABSPATH/worktrees/$safe_branch" ]]; then
+                            echo "Creating worktree at branch $wt_branch..."
+                            if ! "$NABSPATH/bin/worktree.sh" add "$wt_branch"; then
+                                cleanup_partial_env_state
+                                exit 1
+                            fi
+                            created_workspace_wts+=("$safe_branch")
+                        fi
+                        if [[ "$wt_host_path" == themes/* ]]; then
+                            wt_container_path="/newspack-themes/$wt_repo"
+                        else
+                            wt_container_path="/newspack-plugins/$wt_repo"
+                        fi
+                        worktree_dir="./worktrees/$safe_branch/$wt_host_path"
                     fi
-                    worktree_dir="./worktrees/$safe_branch/$wt_host_path"
                     worktree_volumes="$worktree_volumes      - $worktree_dir:$wt_container_path
+"
+                    # Persist original branch + repo so destroy/list don't have to
+                    # reconstruct from sanitized paths (commit 5 reads this).
+                    worktree_metadata="$worktree_metadata      # newspack-wt: repo=$wt_repo branch=$wt_branch host=$wt_host_path
 "
                     shift 2
                     ;;
@@ -141,7 +191,7 @@ services:
       - .:/newspack-monorepo
       - ./plugins:/newspack-plugins
       - ./themes:/newspack-themes
-${worktree_volumes}      - ./envs/${env_name}/html:/var/www/html
+${worktree_volumes}${worktree_metadata}      - ./envs/${env_name}/html:/var/www/html
       - ./manager-html:/var/www/manager-html
       - ./additional-sites-html:/var/www/additional-sites-html
       - ./snapshots:/snapshots
@@ -444,10 +494,11 @@ MIGRATE
         if [[ -f "$compose_file" ]]; then
             domain=$(domain_for_env "$compose_file")
             ip=$(ip_for_env "$compose_file")
-            # Mount shape: ./worktrees/<safe_branch>/<host_path>:/newspack-<prefix>/<name>
-            # Extract safe_branch (second path segment) and dedupe — one env may
-            # mount multiple worktrees that share the same safe_branch.
+            # Tier-1 mount shape: ./worktrees/<safe_branch>/<host_path>:/newspack-<prefix>/<name>
+            # Tier-2 mounts (./worktrees/standalone/<repo>/<safe>) are handled
+            # by a follow-up; skip them here so this parser stays tier-1-only.
             while IFS= read -r line; do
+                [[ "$line" == *worktrees/standalone/* ]] && continue
                 if [[ "$line" =~ \./worktrees/([^/]+)/[^:]*:/newspack-(plugins|themes|repos)/ ]]; then
                     sb="${BASH_REMATCH[1]}"
                     [[ " ${worktree_entries[*]} " == *" $sb "* ]] && continue
