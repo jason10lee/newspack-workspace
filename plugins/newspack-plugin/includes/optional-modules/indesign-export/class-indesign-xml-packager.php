@@ -230,8 +230,18 @@ class InDesign_XML_Packager {
 				$url = wp_get_attachment_url( $id );
 			}
 			if ( $url && $this->is_safe_fetch_host( $url ) ) {
+				// wp_safe_remote_get sets reject_unsafe_urls, which blocks internal
+				// IPs and validates redirect targets — defends against a same-host
+				// URL that 302s to a private address. redirection=>0 hardens further
+				// by refusing to follow redirects at all on the image fetch path.
 				// phpcs:ignore WordPressVIPMinimum.Performance.RemoteRequestTimeout.timeout_timeout -- 5s is too tight for binary image fetches that may be many MB.
-				$response = wp_remote_get( $url, [ 'timeout' => 15 ] );
+				$response = wp_safe_remote_get(
+					$url,
+					[
+						'timeout'     => 15,
+						'redirection' => 0,
+					]
+				);
 				if ( ! is_wp_error( $response ) && 200 === wp_remote_retrieve_response_code( $response ) ) {
 					// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents -- Target lives in wp-content/uploads/ subdir.
 					if ( false !== file_put_contents( $target, wp_remote_retrieve_body( $response ) ) ) {
