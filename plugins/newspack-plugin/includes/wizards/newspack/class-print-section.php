@@ -28,11 +28,34 @@ use Newspack\Wizards\Wizard_Section;
 class Print_Section extends Wizard_Section {
 
 	/**
+	 * Option key for the InDesign export format setting.
+	 *
+	 * @var string
+	 */
+	const SETTING_FORMAT = 'newspack_indesign_export_format';
+
+	/**
 	 * Containing wizard slug.
 	 *
 	 * @var string
 	 */
 	protected $wizard_slug = 'newspack-settings';
+
+	/**
+	 * Get the current InDesign export format setting.
+	 *
+	 * @return string 'tagged-text' (default) or 'xml'.
+	 */
+	public static function get_format() {
+		$format = get_option( self::SETTING_FORMAT, 'tagged-text' );
+		/**
+		 * Filters the InDesign export format.
+		 *
+		 * @param string $format Export format. Either 'tagged-text' or 'xml'.
+		 */
+		$format = apply_filters( 'newspack_indesign_export_format', $format );
+		return in_array( $format, [ 'tagged-text', 'xml' ], true ) ? $format : 'tagged-text';
+	}
 
 	/**
 	 * Register Wizard Section specific endpoints.

@@ -11,6 +11,9 @@ defined( 'ABSPATH' ) || exit;
 
 use Newspack\Optional_Modules;
 use Newspack\Optional_Modules\InDesign_Export\InDesign_Converter;
+use Newspack\Optional_Modules\InDesign_Export\InDesign_XML_Converter;
+use Newspack\Optional_Modules\InDesign_Export\InDesign_XML_Packager;
+use Newspack\Wizards\Newspack\Print_Section;
 
 /**
  * InDesign Export module class.
@@ -36,6 +39,8 @@ class InDesign_Exporter {
 		}
 
 		require_once NEWSPACK_ABSPATH . 'includes/optional-modules/indesign-export/class-indesign-converter.php';
+		require_once NEWSPACK_ABSPATH . 'includes/optional-modules/indesign-export/class-indesign-xml-converter.php';
+		require_once NEWSPACK_ABSPATH . 'includes/optional-modules/indesign-export/class-indesign-xml-packager.php';
 
 		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_block_editor_assets' ] );
 
@@ -205,11 +210,36 @@ class InDesign_Exporter {
 	}
 
 	/**
-	 * Export posts as InDesign Tagged Text files.
+	 * Get the current export format.
 	 *
-	 * @param array $post_ids Array of post IDs to export.
+	 * Delegates to Print_Section::get_format() which reads from wp_options
+	 * and applies the newspack_indesign_export_format filter.
+	 *
+	 * @return string 'tagged-text' (default) or 'xml'.
+	 */
+	private static function get_export_format() {
+		return Print_Section::get_format();
+	}
+
+	/**
+	 * Export posts in the configured format.
+	 *
+	 * @param int[] $post_ids Array of post IDs to export.
 	 */
 	private static function export_posts( $post_ids ) {
+		if ( 'xml' === self::get_export_format() ) {
+			self::export_posts_xml( $post_ids );
+			return;
+		}
+		self::export_posts_tagged_text( $post_ids );
+	}
+
+	/**
+	 * Export posts as InDesign Tagged Text files.
+	 *
+	 * @param int[] $post_ids Array of post IDs to export.
+	 */
+	private static function export_posts_tagged_text( $post_ids ) {
 		$converter      = new InDesign_Converter();
 		$exported_files = [];
 
@@ -235,6 +265,62 @@ class InDesign_Exporter {
 			// Multiple files export as zip.
 			self::download_zip_file( $exported_files );
 		}
+	}
+
+	/**
+	 * Export posts as InDesign XML (bundled with images in a ZIP).
+	 *
+	 * @param int[] $post_ids Post IDs.
+	 */
+	private static function export_posts_xml( $post_ids ) {
+		$converter = new InDesign_XML_Converter();
+		$packager  = new InDesign_XML_Packager();
+		$items     = [];
+
+		foreach ( $post_ids as $post_id ) {
+			$post = get_post( $post_id );
+			if ( ! $post ) {
+				continue;
+			}
+			$xml     = $converter->convert_post( $post );
+			$items[] = [
+				'post'      => $post,
+				'xml'       => $xml,
+				'image_ids' => $converter->get_image_ids(),
+			];
+		}
+
+		if ( empty( $items ) ) {
+			wp_safe_redirect(
+				add_query_arg( 'indesign_export_error', 'no_posts', admin_url( 'edit.php' ) )
+			);
+			exit;
+		}
+
+		if ( 1 === count( $items ) ) {
+			$result = $packager->package_single( $items[0]['post'], $items[0]['xml'], $items[0]['image_ids'] );
+		} else {
+			$result = $packager->package_multi( $items );
+		}
+
+		if ( false === $result ) {
+			wp_safe_redirect(
+				add_query_arg( 'indesign_export_error', 'zip_error', admin_url( 'edit.php' ) )
+			);
+			exit;
+		}
+
+		$zip_path = $result['zip_path'];
+		$zip_name = basename( $zip_path );
+
+		header( 'Content-Type: application/zip' );
+		header( 'Content-Disposition: attachment; filename="' . $zip_name . '"' );
+		header( 'Content-Length: ' . filesize( $zip_path ) );
+		header( 'Cache-Control: no-cache, must-revalidate' );
+		header( 'Expires: 0' );
+		readfile( $zip_path );
+
+		$packager->cleanup( $result['temp_dir'] );
 	}
 
 	/**
