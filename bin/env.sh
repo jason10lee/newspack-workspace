@@ -444,11 +444,16 @@ MIGRATE
         if [[ -f "$compose_file" ]]; then
             domain=$(domain_for_env "$compose_file")
             ip=$(ip_for_env "$compose_file")
+            # Mount shape: ./worktrees/<safe_branch>/<host_path>:/newspack-<prefix>/<name>
+            # Extract safe_branch (second path segment) and dedupe — one env may
+            # mount multiple worktrees that share the same safe_branch.
             while IFS= read -r line; do
-                # Extract repo and branch from worktree volume lines like: ./worktrees/repo/branch:/newspack-plugins/repo
-                wt=$(echo "$line" | grep -o 'worktrees/[^:]*' | sed 's|worktrees/||')
-                [[ -n "$wt" ]] && worktree_entries+=("$wt")
-            done < <(grep 'worktrees/' "$compose_file")
+                if [[ "$line" =~ \./worktrees/([^/]+)/[^:]*:/newspack-(plugins|themes|repos)/ ]]; then
+                    sb="${BASH_REMATCH[1]}"
+                    [[ " ${worktree_entries[*]} " == *" $sb "* ]] && continue
+                    worktree_entries+=("$sb")
+                fi
+            done < <(grep -E '\./worktrees/' "$compose_file")
         fi
         docker stop "$container_name" 2>/dev/null
         docker rm "$container_name" 2>/dev/null
@@ -486,9 +491,8 @@ MIGRATE
         # Remove compose file before worktrees so worktree.sh doesn't see them as env-bound.
         rm -f "$compose_file"
         # Remove worktrees that were mounted by this environment.
-        for wt in "${worktree_entries[@]}"; do
-            IFS='/' read -r wt_repo wt_branch <<< "$wt"
-            "$NABSPATH/bin/worktree.sh" remove --yes "$wt_repo" "$wt_branch"
+        for sb in "${worktree_entries[@]}"; do
+            "$NABSPATH/bin/worktree.sh" remove --yes "$sb"
         done
         echo "Destroyed environment '$env_name'"
         ;;
@@ -508,23 +512,31 @@ MIGRATE
             else
                 status="stopped"
             fi
-            # Collect worktrees as repo:branch pairs.
+            # Collect worktrees as repo:safe_branch pairs.
+            # Mount shape: ./worktrees/<safe_branch>/<host_path>:/newspack-<prefix>/<name>
             worktrees=""
-            while read -r repo; do
-                wt_path=$(grep "newspack-repos/$repo" "$f" | sed 's/^ *- //' | cut -d: -f1)
-                branch=$(echo "$wt_path" | sed "s|.*worktrees/${repo}/||")
-                [[ -n "$worktrees" ]] && worktrees="$worktrees,"
-                worktrees="${worktrees}${repo}:${branch}"
-            done < <(grep 'worktrees/' "$f" 2>/dev/null | sed 's|.*/newspack-repos/||')
+            worktree_pairs=()
+            seen_pairs=""
+            while IFS= read -r line; do
+                if [[ "$line" =~ \./worktrees/([^/]+)/[^:]*:/newspack-(plugins|themes|repos)/([^[:space:]]+) ]]; then
+                    sb="${BASH_REMATCH[1]}"
+                    nm="${BASH_REMATCH[3]}"
+                    pair="${nm}:${sb}"
+                    [[ " $seen_pairs " == *" $pair "* ]] && continue
+                    seen_pairs="$seen_pairs $pair"
+                    worktree_pairs+=("$pair")
+                    [[ -n "$worktrees" ]] && worktrees="${worktrees},"
+                    worktrees="${worktrees}${pair}"
+                fi
+            done < <(grep -E '\./worktrees/' "$f" 2>/dev/null)
             if [[ "$porcelain" == true ]]; then
                 printf '%s\t%s\thttps://%s/\t%s\n' "$name" "$status" "$domain" "$worktrees"
             else
                 echo "  $name ($status) https://${domain}/"
-                # Show worktrees mounted by this environment.
-                grep 'worktrees/' "$f" 2>/dev/null | sed 's|.*/newspack-repos/||' | while read -r repo; do
-                    wt_path=$(grep "newspack-repos/$repo" "$f" | sed 's/^ *- //' | cut -d: -f1)
-                    branch=$(echo "$wt_path" | sed "s|.*worktrees/${repo}/||")
-                    echo "    └ $repo ($branch)"
+                for pair in "${worktree_pairs[@]}"; do
+                    nm="${pair%:*}"
+                    sb="${pair#*:}"
+                    echo "    └ $nm ($sb)"
                 done
             fi
         done
