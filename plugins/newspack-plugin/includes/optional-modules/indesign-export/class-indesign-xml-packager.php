@@ -85,7 +85,10 @@ class InDesign_XML_Packager {
 				$this->rrmdir( $temp_dir );
 				return false;
 			}
-			file_put_contents( $post_dir . '/article.xml', $item['xml'] );
+			if ( false === file_put_contents( $post_dir . '/article.xml', $item['xml'] ) ) {
+				$this->rrmdir( $temp_dir );
+				return false;
+			}
 			if ( ! empty( $item['image_ids'] ) ) {
 				$this->copy_images_to( $item['image_ids'], $post_dir );
 			}
@@ -181,10 +184,9 @@ class InDesign_XML_Packager {
 			}
 			$target = $images_dir . '/' . $id . '.' . $ext;
 
-			// Local first.
+			// Local first. Fall through to HTTP if copy fails (e.g. permissions, disk full).
 			$local_path = $this->local_path_for_size( $id, $size );
-			if ( $local_path && is_readable( $local_path ) ) {
-				copy( $local_path, $target );
+			if ( $local_path && is_readable( $local_path ) && @copy( $local_path, $target ) ) {
 				continue;
 			}
 
@@ -196,8 +198,9 @@ class InDesign_XML_Packager {
 			if ( $url ) {
 				$response = wp_remote_get( $url, [ 'timeout' => 15 ] );
 				if ( ! is_wp_error( $response ) && 200 === wp_remote_retrieve_response_code( $response ) ) {
-					file_put_contents( $target, wp_remote_retrieve_body( $response ) );
-					continue;
+					if ( false !== file_put_contents( $target, wp_remote_retrieve_body( $response ) ) ) {
+						continue;
+					}
 				}
 			}
 
