@@ -1,27 +1,62 @@
 #!/bin/bash
 #
 # Local-only extension to bin/repos.sh. Copy to bin/repos.local.sh and edit
-# to add non-canonical (private or custom) plugins/themes that aren't part of
-# the public workspace.
+# to add non-canonical (private or custom) plugins/themes/repos that aren't
+# part of the public workspace.
 #
 # Sourced by bin/repos.sh after the canonical arrays are defined. Use `+=` to
-# extend them; do not redeclare. The local file is gitignored — your
-# additions stay local to your machine.
+# extend them; do not redeclare. The local file is gitignored — your additions
+# stay local to your machine.
 #
-# Names listed here must already exist locally at plugins/<name> or
-# themes/<name> (or be cloneable from github.com/Automattic/<name>.git via
-# clone-repos.sh). This file declares names; it does not fetch code.
+# There are three tiers, distinguished by where the code lives on disk:
+#
+#   Tier 1 — newspack_plugins / newspack_themes
+#     For plugins/themes you maintain INSIDE this workspace at plugins/<name>/
+#     or themes/<name>/. No separate git history; just a directory you keep
+#     alongside the monorepo's own tracked code.
+#
+#   Tier 2 — newspack_standalone_repos
+#     For separate git repos cloned at repos/<name>/. Each has its own remote
+#     and history. Use this for Newspack-adjacent repos (newspack-manager,
+#     newspack-community) or any private plugin you keep as its own repo.
+#     Available in containers at /newspack-repos/<name> automatically.
+#     To make one ACTIVE as a plugin in a specific env, run
+#       n env create <env> --worktree <name>:<branch>
+#     which mounts the worktree at /newspack-plugins/<name> (where it's picked
+#     up by link-repos.sh and symlinked into wp-content/plugins/).
+#
+# Names declared here must already exist locally at the expected path. This
+# file declares names; it does not fetch code.
 
+# Tier 1: custom plugins co-located with the monorepo at plugins/<name>/.
 # newspack_plugins+=(
+# 	"acme-internal-plugin"
+# )
+
+# Tier 2: standalone repos at repos/<name>/.
+#
+# Caveat: --worktree-ing a hub-only repo (e.g. newspack-manager, newspack-
+# manager-admin) into a main-site env will auto-link it into the main
+# site's wp-content/plugins/, where it doesn't belong. Only --worktree
+# repos that are plugins for the env you're creating.
+# newspack_standalone_repos+=(
 # 	"newspack-manager"
 # 	"newspack-manager-admin"
 # 	"newspack-pyrobase"
 # )
 
+# Themes (rare in practice):
 # newspack_themes+=(
-# 	"your-private-theme"
+# 	"acme-internal-theme"
 # )
 
+# Custom WooCommerce add-ons:
 # woocommerce_plugins+=(
 # 	"woocommerce-private-extension"
 # )
+
+# Note: containers bind-mount `./repos` to /newspack-repos. If the host
+# `repos/` directory doesn't exist when the container starts, Docker will
+# auto-create it (empty, owned by the user that started the container).
+# `repos/` is gitignored at the workspace root, so the empty dir won't
+# show up in `git status`.

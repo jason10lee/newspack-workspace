@@ -205,7 +205,7 @@ Use `ncd <name>` (install with `n cd-install`) for quick navigation between proj
 - Batcache for page caching via `advanced-cache.php`
 
 ### Xdebug
-Configured on port 9003 with IDE key `DOCKERDEBUG`. Path mapping: `/newspack-plugins/<project>` maps to local `plugins/<project>`, `/newspack-themes/<project>` maps to local `themes/<project>`.
+Configured on port 9003 with IDE key `DOCKERDEBUG`. Path mapping: `/newspack-plugins/<project>` maps to local `plugins/<project>` (or `repos/<project>` for standalone repos listed in `newspack_standalone_repos`), `/newspack-themes/<project>` maps to `themes/<project>`, `/newspack-repos/<project>` maps to `repos/<project>`.
 
 ## Isolated Environments for Parallel Development
 
@@ -268,6 +268,23 @@ n sh <name>                    # Shell into environment container
 - Worktrees override specific plugins (e.g., `newspack-plugin`) while sharing the rest from `./plugins/`
 - All env containers join a shared `newspack_envs` Docker bridge network with their domain as a DNS alias, enabling inter-container communication (e.g., hub/node setups)
 - `n env destroy` cleans up everything: container, DB, html dir, hosts entry, and worktrees
+
+### Standalone Repos (`newspack_standalone_repos`)
+
+Beyond the canonical monorepo plugins (`plugins/<name>/`) and themes (`themes/<name>/`), the workspace supports a third tier for **standalone repos**: separate git checkouts at `repos/<name>/` with their own history and remote. Typical uses: Newspack-adjacent repos like `newspack-manager` or `newspack-community`, and private/custom plugins you maintain as their own repos.
+
+Declare them in `bin/repos.local.sh` (gitignored — see `bin/repos.local.sh.sample`):
+```bash
+newspack_standalone_repos+=("newspack-community")
+```
+
+Two modes of use:
+- **Available** — the host's `./repos/` directory is bind-mounted into every container at `/newspack-repos/`. Container-side tools (`n build`, `n watch`, path translation) recognize standalone names automatically.
+- **Active in an env** — `n env create demo --worktree newspack-community:branch-name` creates a worktree of the standalone repo and mounts it at `/newspack-plugins/<name>` so `link-repos.sh` symlinks it into `wp-content/plugins/`.
+
+**Caveat:** `--worktree` always activates (the mount triggers auto-linking). Don't `--worktree` a hub-only repo (e.g. `newspack-manager`) into a main-site env — it'd land in the wrong `wp-content/plugins/`. Pick the right repo for the env.
+
+**Shared-worktree note:** `n env destroy` removes worktrees by branch name. If two environments share the same standalone-repo+branch, destroying one removes the source files for both. (Tier-1 has the same property.)
 
 ### Claude Code Plugin Skills
 
