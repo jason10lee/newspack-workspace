@@ -81,10 +81,12 @@ class InDesign_XML_Packager {
 			$post     = $item['post'];
 			$subdir   = sprintf( 'post-%d-%s', $post->ID, sanitize_title( $post->post_title ) );
 			$post_dir = $temp_dir . '/' . $subdir;
+			// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.directory_mkdir -- Writing inside wp-content/uploads/ is allowed; subdir needed for per-post layout.
 			if ( ! mkdir( $post_dir, 0755, true ) ) {
 				$this->rrmdir( $temp_dir );
 				return false;
 			}
+			// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents -- Target lives inside wp-content/uploads/ subdir resolved from wp_upload_dir().
 			if ( false === file_put_contents( $post_dir . '/article.xml', $item['xml'] ) ) {
 				$this->rrmdir( $temp_dir );
 				return false;
@@ -141,6 +143,7 @@ class InDesign_XML_Packager {
 				wp_delete_file( $path );
 			}
 		}
+		// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.directory_rmdir -- Removing temp dir we created inside wp-content/uploads/.
 		rmdir( $dir );
 	}
 
@@ -152,6 +155,7 @@ class InDesign_XML_Packager {
 	private function make_temp_dir() {
 		$upload_dir = wp_upload_dir();
 		$temp_dir   = $upload_dir['basedir'] . '/indesign_export_' . uniqid();
+		// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.directory_mkdir -- Writing inside wp-content/uploads/ is allowed.
 		if ( ! mkdir( $temp_dir, 0755, true ) ) {
 			return false;
 		}
@@ -168,6 +172,7 @@ class InDesign_XML_Packager {
 	 */
 	private function copy_images_to( $image_ids, $post_dir ) {
 		$images_dir = $post_dir . '/images';
+		// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.directory_mkdir -- Writing inside wp-content/uploads/ subdir.
 		if ( ! is_dir( $images_dir ) && ! mkdir( $images_dir, 0755, true ) ) {
 			return;
 		}
@@ -196,14 +201,17 @@ class InDesign_XML_Packager {
 				$url = wp_get_attachment_url( $id );
 			}
 			if ( $url ) {
+				// phpcs:ignore WordPressVIPMinimum.Performance.RemoteRequestTimeout.timeout_timeout -- 5s is too tight for binary image fetches that may be many MB.
 				$response = wp_remote_get( $url, [ 'timeout' => 15 ] );
 				if ( ! is_wp_error( $response ) && 200 === wp_remote_retrieve_response_code( $response ) ) {
+					// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents -- Target lives in wp-content/uploads/ subdir.
 					if ( false !== file_put_contents( $target, wp_remote_retrieve_body( $response ) ) ) {
 						continue;
 					}
 				}
 			}
 
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Operator-facing diagnostic; nothing in this path is user-actionable.
 			error_log( sprintf( '[InDesign XML export] Could not bundle attachment %d: neither local nor HTTP source available.', $id ) );
 		}
 	}
@@ -246,7 +254,7 @@ class InDesign_XML_Packager {
 	private function local_path_for_size( $attachment_id, $size ) {
 		if ( 'full' === $size || 'original' === $size ) {
 			$path = get_attached_file( $attachment_id );
-			return $path ?: null;
+			return $path ? $path : null;
 		}
 		$meta = wp_get_attachment_metadata( $attachment_id );
 		if ( ! empty( $meta['sizes'][ $size ]['file'] ) ) {
@@ -257,7 +265,7 @@ class InDesign_XML_Packager {
 		}
 		// Fall back to full.
 		$path = get_attached_file( $attachment_id );
-		return $path ?: null;
+		return $path ? $path : null;
 	}
 
 	/**
