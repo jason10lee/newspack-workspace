@@ -224,13 +224,20 @@ n setup --env myenv --yes     # fully configured Newspack site
 n env create <name> [options]  # Create environment config
   --worktree <repo>:<branch>   #   Mount a worktree (repeatable for multiple repos)
   --domain <domain>            #   Custom domain (default: <name>.test)
+  --isolated-db                #   Use a private MariaDB sidecar with lower_case_table_names=1
+                               #     (needed for envs that create pyrobase tables via $wpdb at runtime; see NEWS-2286)
   --up                         #   Start the environment immediately after creation
 n env up <name> [--build]      # Start environment (creates DB, installs WP, sets up SSL)
 n env up --all [--build]       # Start all existing environments at once
 n env down <name>              # Stop environment
 n env destroy <name>           # Remove environment, DB, worktrees, and files
-n env list                     # List environments with status, URLs, and worktrees
-n env list --porcelain         # Machine-readable tab-separated output (name, status, url, worktrees)
+n env list                     # List environments with status, URLs, and worktrees;
+                               # isolated-db envs flagged with [isolated-db]
+n env list --porcelain         # Machine-readable tab-separated output:
+                               #   name, status, url, worktrees, db_kind
+                               # NOTE: db_kind column added 2026-05-20 (NEWS-2286 — breaking
+                               # change for strict-column-count consumers; appended at the
+                               # end so positional consumers of cols 1-4 still work).
 n env cleanup                  # Interactive bulk cleanup of environments
 ```
 

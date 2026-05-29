@@ -42,3 +42,20 @@ log_info() { echo -e "${NP_BLUE}[INFO]${NP_NC} ${1}"; }
 log_success() { echo -e "${NP_GREEN}[SUCCESS]${NP_NC} ${1}"; }
 log_warning() { echo -e "${NP_YELLOW}[WARNING]${NP_NC} ${1}"; }
 log_error() { echo -e "${NP_RED}[ERROR]${NP_NC} ${1}"; }
+
+# Get the isolated-db sidecar service name (db_lowercase_<safe>) for an env's
+# compose file. Returns empty if the env uses the shared db. Detection is by
+# the 2-space-indented service-key line written by `n env create --isolated-db`.
+# If the compose file's indentation changes, this regex must change in lockstep.
+sidecar_service_for_env() {
+    grep -oE '^  db_lowercase_[a-zA-Z0-9_]+:' "$1" 2>/dev/null | head -1 | tr -d ' :'
+}
+
+# Normalize an env name to a docker-safe form for service / container / data-dir
+# names: fold dashes AND dots to underscores. Mirrors the equivalence enforced
+# by the create-time collision check; the dot fold is what makes
+# `n env create foo.bar --isolated-db` work (validate_env_name permits dots,
+# but the detection regex above intentionally excludes them).
+env_safe_name() {
+    echo "$1" | tr -- '-.' '_'
+}
