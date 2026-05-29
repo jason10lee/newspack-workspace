@@ -35,6 +35,8 @@ class Newspack_Test_InDesign_XML_Converter extends WP_UnitTestCase {
 	public function tear_down() {
 		parent::tear_down();
 		unset( $GLOBALS['_test_cap_coauthors'] );
+		// Failure-safe: clear any filters individual tests added.
+		remove_all_filters( 'newspack_indesign_export_excluded_blocks' );
 	}
 
 	/**
@@ -435,9 +437,14 @@ class Newspack_Test_InDesign_XML_Converter extends WP_UnitTestCase {
 
 	/**
 	 * Filter newspack_indesign_export_excluded_blocks adds custom block types.
+	 *
+	 * The custom block wraps a real paragraph so the container fallback in
+	 * render_block() would render its inner content if the filter weren't
+	 * applied — making this a load-bearing test of the exclusion, not just
+	 * an assertion about empty containers.
 	 */
 	public function test_excluded_blocks_filter_applies() {
-		$content = "<!-- wp:my/custom -->\n<div>secret</div>\n<!-- /wp:my/custom -->\n<!-- wp:paragraph -->\n<p>kept</p>\n<!-- /wp:paragraph -->";
+		$content = "<!-- wp:my/custom -->\n<div class=\"wp-block-my-custom\"><!-- wp:paragraph --><p>secret</p><!-- /wp:paragraph --></div>\n<!-- /wp:my/custom -->\n\n<!-- wp:paragraph -->\n<p>kept</p>\n<!-- /wp:paragraph -->";
 		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
 
 		add_filter(
@@ -452,8 +459,6 @@ class Newspack_Test_InDesign_XML_Converter extends WP_UnitTestCase {
 
 		$this->assertStringNotContainsString( 'secret', $xml );
 		$this->assertStringContainsString( '<para>kept</para>', $xml );
-
-		remove_all_filters( 'newspack_indesign_export_excluded_blocks' );
 	}
 
 	/**
