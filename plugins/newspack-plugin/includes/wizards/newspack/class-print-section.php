@@ -92,6 +92,7 @@ class Print_Section extends Wizard_Section {
 	public function api_get_print_settings() {
 		return [
 			'module_enabled_print' => Optional_Modules::is_optional_module_active( InDesign_Exporter::MODULE_NAME ),
+			'format'               => self::get_format(),
 		];
 	}
 
@@ -102,19 +103,27 @@ class Print_Section extends Wizard_Section {
 	 * @return array
 	 */
 	public function api_update_print_settings( $request ) {
-		$module_enabled_print = $request->get_param( 'module_enabled_print' );
-		if ( ! is_bool( $module_enabled_print ) ) {
-			return new \WP_Error( 'invalid_param', __( 'Invalid parameter for module_enabled_print.', 'newspack' ), [ 'status' => 400 ] );
+		if ( $request->has_param( 'module_enabled_print' ) ) {
+			$module_enabled_print = $request->get_param( 'module_enabled_print' );
+			if ( ! is_bool( $module_enabled_print ) ) {
+				return new \WP_Error( 'invalid_param', __( 'Invalid parameter for module_enabled_print.', 'newspack' ), [ 'status' => 400 ] );
+			}
+
+			if ( $module_enabled_print ) {
+				Optional_Modules::activate_optional_module( InDesign_Exporter::MODULE_NAME );
+			} else {
+				Optional_Modules::deactivate_optional_module( InDesign_Exporter::MODULE_NAME );
+			}
 		}
 
-		if ( $module_enabled_print ) {
-			Optional_Modules::activate_optional_module( InDesign_Exporter::MODULE_NAME );
-		} else {
-			Optional_Modules::deactivate_optional_module( InDesign_Exporter::MODULE_NAME );
+		if ( $request->has_param( 'format' ) ) {
+			$format = $request->get_param( 'format' );
+			if ( ! in_array( $format, [ 'tagged-text', 'xml' ], true ) ) {
+				return new \WP_Error( 'invalid_param', __( 'Invalid parameter for format.', 'newspack' ), [ 'status' => 400 ] );
+			}
+			update_option( self::SETTING_FORMAT, $format );
 		}
 
-		return [
-			'module_enabled_print' => $module_enabled_print,
-		];
+		return $this->api_get_print_settings();
 	}
 }

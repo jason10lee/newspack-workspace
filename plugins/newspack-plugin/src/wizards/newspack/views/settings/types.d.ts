@@ -106,4 +106,5 @@ type JetpackSSOSettings = Partial< {
  */
 type PrintData = {
 	module_enabled_print: boolean;
+	format: 'tagged-text' | 'xml';
 };
