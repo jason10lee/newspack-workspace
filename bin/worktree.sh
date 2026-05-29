@@ -23,14 +23,26 @@ sanitize_branch() {
 case $1 in
     add)
         # Usage: worktree.sh add <branch>                 # tier 1 (workspace)
+        #    or: worktree.sh add <repo> <branch>          # legacy tier 1 (repo informational)
         #    or: worktree.sh add <branch> --repo <name>   # tier 2 (standalone repo)
-        branch="$2"
+        shift  # consume "add"
         repo=""
-        if [[ "$3" == "--repo" && -n "$4" ]]; then
-            repo="$4"
-        fi
-        if [[ -z "$branch" ]]; then
+        positionals=()
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --repo) repo="$2"; shift 2 ;;
+                *) positionals+=("$1"); shift ;;
+            esac
+        done
+        if [[ ${#positionals[@]} -eq 1 ]]; then
+            branch="${positionals[0]}"
+        elif [[ ${#positionals[@]} -eq 2 && -z "$repo" ]]; then
+            # Legacy two-arg form: add <repo> <branch>. The repo arg is informational
+            # for tier 1 (there's one workspace repo); use the second positional as branch.
+            branch="${positionals[1]}"
+        else
             echo "Usage: n worktree add <branch> [--repo <name>]"
+            echo "   or: n worktree add <repo> <branch>  (legacy; repo arg ignored for tier 1)"
             exit 1
         fi
         validate_name "$branch" "branch"
@@ -96,20 +108,27 @@ case $1 in
         ;;
     remove)
         # Usage: worktree.sh remove <branch> [--yes]                  # tier 1
+        #    or: worktree.sh remove <repo> <branch> [--yes]           # legacy tier 1
         #    or: worktree.sh remove <branch> --repo <name> [--yes]    # tier 2
         skip_confirm=false
         shift  # consume "remove"
-        branch=""
         repo=""
+        positionals=()
         while [[ $# -gt 0 ]]; do
             case "$1" in
                 --yes) skip_confirm=true; shift ;;
                 --repo) repo="$2"; shift 2 ;;
-                *) [[ -z "$branch" ]] && branch="$1"; shift ;;
+                *) positionals+=("$1"); shift ;;
             esac
         done
-        if [[ -z "$branch" ]]; then
+        if [[ ${#positionals[@]} -eq 1 ]]; then
+            branch="${positionals[0]}"
+        elif [[ ${#positionals[@]} -eq 2 && -z "$repo" ]]; then
+            # Legacy: remove <repo> <branch>. Repo arg is informational for tier 1.
+            branch="${positionals[1]}"
+        else
             echo "Usage: n worktree remove <branch> [--repo <name>] [--yes]"
+            echo "   or: n worktree remove <repo> <branch> [--yes]  (legacy; repo arg ignored for tier 1)"
             exit 1
         fi
         safe_branch=$(sanitize_branch "$branch")
