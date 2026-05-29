@@ -1,8 +1,10 @@
 #!/bin/bash
 #
 # Resolves a project name (e.g. "newspack-plugin") to its container-side
-# path. In the monorepo layout, plugins live at /newspack-plugins/<name>
-# and themes at /newspack-themes/<name>.
+# path. Three possible locations:
+#   /newspack-plugins/<name> — monorepo plugins (incl. --worktreed standalone)
+#   /newspack-themes/<name>  — monorepo themes
+#   /newspack-repos/<name>   — standalone repos that aren't currently --worktreed
 #
 # Usage:
 #   source /var/scripts/resolve-project-path.sh
@@ -11,6 +13,7 @@
 
 PLUGINS_PATH="/newspack-plugins"
 THEMES_PATH="/newspack-themes"
+REPOS_PATH="/newspack-repos"
 
 resolve_project_path() {
     local name="$1"
@@ -18,6 +21,8 @@ resolve_project_path() {
         echo "$PLUGINS_PATH/$name"
     elif [ -d "$THEMES_PATH/$name" ]; then
         echo "$THEMES_PATH/$name"
+    elif [ -d "$REPOS_PATH/$name" ]; then
+        echo "$REPOS_PATH/$name"
     else
         echo ""
     fi
@@ -30,6 +35,9 @@ get_all_project_dirs() {
         [ -d "$d" ] && dirs+=("$d")
     done
     for d in "$THEMES_PATH"/*/; do
+        [ -d "$d" ] && dirs+=("$d")
+    done
+    for d in "$REPOS_PATH"/*/; do
         [ -d "$d" ] && dirs+=("$d")
     done
     printf '%s\n' "${dirs[@]}"

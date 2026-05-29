@@ -16,11 +16,24 @@ if [ ! -d "${WP_PATH}" ]; then
 fi
 
 # Symlink all plugins from /newspack-plugins/ into wp-content/plugins/.
+# `/newspack-plugins/` covers both monorepo plugins and --worktreed standalone
+# repos. `/newspack-repos/` is mount-only (available but not auto-linked).
 for dir in "$PLUGINS_PATH"/*/; do
 	name=$(basename "$dir")
 	link="$WP_PATH/plugins/$name"
-	if [ -e "${link}" ]; then
-		echo "$name already symlinked"
+	if [ -L "${link}" ]; then
+		existing=$(readlink "$link")
+		if [ "$existing" = "$dir" ]; then
+			echo "$name already symlinked"
+		else
+			# Slug collision: another source already claims this name. Don't
+			# overwrite or crash-loop; surface the conflict and move on.
+			echo "[link-repos] warning: slug collision on '$name'" >&2
+			echo "[link-repos]   existing: $link -> $existing" >&2
+			echo "[link-repos]   skipping: $dir" >&2
+		fi
+	elif [ -e "${link}" ]; then
+		echo "[link-repos] warning: $link exists and is not a symlink; skipping $dir" >&2
 	else
 		echo "Symlinking plugin $name"
 		ln -s "$dir" "$link" || true
