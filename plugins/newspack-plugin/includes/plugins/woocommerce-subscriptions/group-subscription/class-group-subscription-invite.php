@@ -375,6 +375,16 @@ class Group_Subscription_Invite {
 		if ( ! $subscription || ! Group_Subscription::is_group_subscription( $subscription ) ) {
 			return new \WP_Error( 'newspack_group_subscription_invite_invalid_subscription', __( 'Invalid subscription.', 'newspack-plugin' ) );
 		}
+		if ( ! $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES ) ) {
+			return new \WP_Error(
+				'newspack_group_subscription_invite_inactive',
+				sprintf(
+					/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+					__( 'This %s is no longer active.', 'newspack-plugin' ),
+					Group_Subscription::get_label_lower( 'singular' )
+				)
+			);
+		}
 		if ( ! $email ) {
 			return new \WP_Error( 'newspack_group_subscription_invite_invalid_email', __( 'Invalid email address.', 'newspack-plugin' ) );
 		}
