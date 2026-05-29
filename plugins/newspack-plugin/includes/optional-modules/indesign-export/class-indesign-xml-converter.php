@@ -639,6 +639,14 @@ class InDesign_XML_Converter {
 			);
 		}
 
+		// Step 1.5: Strip any remaining HTML tags (non-whitelisted inline marks
+		// like <mark>, <span>, etc.), keeping their inner text. This prevents
+		// raw tag markup from leaking into the XML output and rendering as
+		// literal angle brackets in InDesign. We use a tag-shaped regex (NOT
+		// wp_strip_all_tags) because wp_strip_all_tags also removes NUL bytes,
+		// which would destroy our placeholder tokens.
+		$html = preg_replace( '/<[^>]*>/', '', $html );
+
 		// Step 2: escape everything else (any remaining HTML becomes literal text).
 		$escaped = $this->escape_text( $html );
 

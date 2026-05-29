@@ -255,7 +255,7 @@ class Newspack_Test_InDesign_XML_Converter extends WP_UnitTestCase {
 	 * around the post create so this test exercises the converter's own escape
 	 * logic rather than WordPress's sanitization pipeline.
 	 */
-	public function test_paragraph_escapes_disallowed_inline_html() {
+	public function test_paragraph_strips_disallowed_inline_html() {
 		kses_remove_filters();
 		$content = "<!-- wp:paragraph -->\n<p>Naughty <script>alert(1)</script> text.</p>\n<!-- /wp:paragraph -->";
 		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
@@ -263,8 +263,29 @@ class Newspack_Test_InDesign_XML_Converter extends WP_UnitTestCase {
 
 		$xml = $this->converter->convert_post( $post_id );
 
+		// Tag markup stripped (no raw or escaped tag leaks into XML).
 		$this->assertStringNotContainsString( '<script>', $xml );
-		$this->assertStringContainsString( '&lt;script&gt;', $xml );
+		$this->assertStringNotContainsString( '&lt;script&gt;', $xml );
+		$this->assertStringNotContainsString( '</script>', $xml );
+		// Surrounding text preserved; inner text remains (XML is import-only,
+		// not executed — kses already runs upstream for the normal write path).
+		$this->assertStringContainsString( 'Naughty', $xml );
+		$this->assertStringContainsString( 'text.', $xml );
+	}
+
+	/**
+	 * Non-whitelisted inline tags (e.g. <mark>, <span>) are stripped to their
+	 * inner text — markup doesn't leak into the XML.
+	 */
+	public function test_paragraph_strips_mark_tag_keeps_inner_text() {
+		$content = "<!-- wp:paragraph -->\n<p>Before <mark style=\"background-color:#f2e011\" class=\"has-inline-color\">highlighted bit</mark> after.</p>\n<!-- /wp:paragraph -->";
+		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		$this->assertStringContainsString( '<para>Before highlighted bit after.</para>', $xml );
+		$this->assertStringNotContainsString( '<mark', $xml );
+		$this->assertStringNotContainsString( '&lt;mark', $xml );
 	}
 
 	/**
