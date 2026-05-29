@@ -134,7 +134,11 @@ class Group_Subscription_MyAccount {
 				wp_safe_redirect(
 					add_query_arg(
 						[
-							'message'  => __( 'You do not have permission to manage this group.', 'newspack-plugin' ),
+							'message'  => sprintf(
+								/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+								__( 'You do not have permission to manage this %s.', 'newspack-plugin' ),
+								Group_Subscription::get_label_lower( 'singular' )
+							),
 							'is_error' => true,
 						],
 						wc_get_account_endpoint_url( 'dashboard' )
@@ -241,8 +245,8 @@ class Group_Subscription_MyAccount {
 
 	/**
 	 * Whether the subscription is in a state that accepts manager-driven changes
-	 * (invite, cancel-invite, remove-member). Terminal statuses block all writes
-	 * — there's no point inviting someone to a sub that no longer grants access.
+	 * (invite, remove-member). Terminal statuses block these writes. Cancel-invite
+	 * is exempt (permission-only) so stale invites can be cleaned up afterward.
 	 *
 	 * @param int|\WC_Subscription $subscription Subscription or ID.
 	 *
@@ -329,7 +333,11 @@ class Group_Subscription_MyAccount {
 	 */
 	private static function verify_permission( $subscription_id, $redirect_url, $active_tab, $error_message = null ): void {
 		if ( ! $error_message ) {
-			$error_message = __( 'You do not have permission to manage members for this group subscription.', 'newspack-plugin' );
+			$error_message = sprintf(
+				/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+				__( 'You do not have permission to manage members for this %s.', 'newspack-plugin' ),
+				Group_Subscription::get_label_lower( 'singular' )
+			);
 		}
 		$request = new \WP_REST_Request();
 		$request->set_param( 'subscription_id', $subscription_id );
@@ -385,9 +393,10 @@ class Group_Subscription_MyAccount {
 			$redirect_url,
 			'invites',
 			sprintf(
-				// translators: %s: The invited email address.
-				__( '%s has been invited to become a member of this group subscription.', 'newspack-plugin' ),
-				$email
+				/* translators: %1$s: invited email address; %2$s: lowercase singular group label. */
+				__( '%1$s has been invited to become a member of this %2$s.', 'newspack-plugin' ),
+				$email,
+				Group_Subscription::get_label_lower( 'singular' )
 			)
 		);
 	}
