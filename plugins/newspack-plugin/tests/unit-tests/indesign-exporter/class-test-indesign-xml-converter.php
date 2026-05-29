@@ -552,4 +552,60 @@ class Newspack_Test_InDesign_XML_Converter extends WP_UnitTestCase {
 
 		$this->assertStringNotContainsString( '<figure', $xml );
 	}
+
+	/**
+	 * Featured image is the first <figure> in <body>, before any paragraphs.
+	 */
+	public function test_featured_image_emits_at_top_of_body() {
+		$attachment_id = self::factory()->attachment->create_object(
+			'hero.jpg',
+			0,
+			[
+				'post_mime_type' => 'image/jpeg',
+				'post_excerpt'   => 'Hero image',
+			]
+		);
+		$post_id = self::factory()->post->create(
+			[
+				'post_title'   => 'Title',
+				'post_content' => "<!-- wp:paragraph -->\n<p>Body.</p>\n<!-- /wp:paragraph -->",
+			]
+		);
+		set_post_thumbnail( $post_id, $attachment_id );
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		// Featured figure must appear before the body paragraph in the output.
+		$figure_pos = strpos( $xml, '<figure id="' . $attachment_id . '">' );
+		$para_pos   = strpos( $xml, '<para>Body.</para>' );
+		$this->assertNotFalse( $figure_pos );
+		$this->assertNotFalse( $para_pos );
+		$this->assertLessThan( $para_pos, $figure_pos );
+	}
+
+	/**
+	 * Featured image is not duplicated if the post body already contains it.
+	 */
+	public function test_featured_image_not_duplicated_when_inline() {
+		$attachment_id = self::factory()->attachment->create_object(
+			'shared.jpg',
+			0,
+			[
+				'post_mime_type' => 'image/jpeg',
+				'post_excerpt'   => 'Shared',
+			]
+		);
+		$content = sprintf(
+			"<!-- wp:image {\"id\":%d} -->\n<figure class=\"wp-block-image\"><img src=\"shared.jpg\" class=\"wp-image-%d\"/></figure>\n<!-- /wp:image -->",
+			$attachment_id,
+			$attachment_id
+		);
+		$post_id = self::factory()->post->create( [ 'post_content' => $content ] );
+		set_post_thumbnail( $post_id, $attachment_id );
+
+		$xml = $this->converter->convert_post( $post_id );
+
+		// The figure for $attachment_id should appear exactly once.
+		$this->assertSame( 1, substr_count( $xml, '<figure id="' . $attachment_id . '">' ) );
+	}
 }
