@@ -32,12 +32,13 @@ build_standalone_repo() {
     echo "Building standalone repo $dir"
 
     # PHP deps if present. CI mode skips dev deps for parity with the JS
-    # path's --frozen-lockfile behaviour.
+    # path's --frozen-lockfile behaviour. Failures propagate so they don't
+    # silently turn into green builds.
     if [ -f "$dir/composer.json" ]; then
         if [ "$MODE" = "ci" ]; then
-            composer install --working-dir "$dir" --no-dev
+            composer install --working-dir "$dir" --no-dev || return 1
         else
-            composer install --working-dir "$dir"
+            composer install --working-dir "$dir" || return 1
         fi
     fi
 
@@ -103,13 +104,15 @@ case $WHAT_TO_BUILD in
             is_standalone_repo "$(basename "$dir")" && continue
             composer install --working-dir "$dir"
         done < <(get_all_project_dirs)
-        # Build pnpm workspace packages.
-        pnpm run build
-        # Build standalone repos individually (they aren't workspace members).
+        # Build pnpm workspace packages and standalone repos. Track failures so a
+        # broken build doesn't silently pass CI through the loop.
+        rc=0
+        pnpm run build || rc=1
         for r in "${newspack_standalone_repos[@]}"; do
             dir=$(resolve_project_path "$r")
-            [ -n "$dir" ] && build_standalone_repo "$dir"
+            [ -n "$dir" ] && { build_standalone_repo "$dir" || rc=1; }
         done
+        exit "$rc"
         ;;
     *)
         dir="$(find_project "$WHAT_TO_BUILD")"
