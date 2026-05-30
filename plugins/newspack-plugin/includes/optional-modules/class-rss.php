@@ -473,7 +473,7 @@ class RSS {
 							);
 							foreach ( $selected_tags as $tag_id => $tag_name ) :
 								?>
-								<option value="<?php echo esc_attr( $tag_id ); ?>" selected="selected"><?php echo esc_html( $tag_name ); ?></option>
+								<option value="<?php echo esc_attr( $tag_id ); ?>" selected="selected"><?php echo esc_html( Private_Tags::maybe_append_private_label( $tag_id, $tag_name ) ); ?></option>
 								<?php
 							endforeach;
 						}
@@ -1156,6 +1156,9 @@ class RSS {
 		if ( $settings['use_tags_tags'] ) {
 			$cats         = get_the_terms( $post, 'category' );
 			$cats         = ( ! is_array( $cats ) ) ? [] : $cats;
+			// Private tags are already stripped from this post_tag lookup by
+			// Private_Tags::filter_feed_terms (hooked globally on get_the_terms in
+			// feed context). Do not add explicit private-tag filtering here.
 			$tags         = get_the_terms( $post, 'post_tag' );
 			$tags         = ( ! is_array( $tags ) ) ? [] : $tags;
 			$all_terms    = array_merge( $cats, $tags );
@@ -1458,7 +1461,9 @@ xmlns:media="http://search.yahoo.com/mrss/"
 			foreach ( $terms as $term_id => $term_name ) {
 				$results[] = [
 					'id'   => $term_id,
-					'text' => $term_name,
+					'text' => 'post_tag' === $taxonomy
+						? Private_Tags::maybe_append_private_label( $term_id, $term_name )
+						: $term_name,
 				];
 			}
 		}
