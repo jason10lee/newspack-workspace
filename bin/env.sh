@@ -549,23 +549,27 @@ MIGRATE
         fi
         # Remove compose file before worktrees so worktree.sh doesn't see them as env-bound.
         rm -f "$compose_file"
-        # Remove worktrees that were mounted by this environment. The branch
-        # here is the mount-derived (safe) form from parse_worktree_mount —
-        # the stable filesystem identifier, not the live git branch. This is
-        # deliberate: if the worktree was retargeted to a different branch
-        # via `git checkout` after env creation, we still want destroy to
-        # remove the worktree directory the env was bound to, not whatever
-        # branch is currently checked out there.
+        # Remove worktrees that were mounted by this environment. wt_branch is
+        # the mount-derived (safe) form from parse_worktree_mount — the stable
+        # filesystem identifier, not the live git branch.
         #
-        # Known follow-up: for monorepo worktrees the safe form (e.g. feat-foo)
-        # won't match the real branch (feat/foo) in worktree.sh's final
-        # `git branch -D`, so the local branch ref is left dangling after the
-        # worktree dir is removed. Harmless (re-create reuses it) but accrues
-        # across create/destroy cycles. A proper fix removes the dir by safe
-        # name and deletes the branch by its resolved real name separately.
+        # worktree.sh remove re-sanitizes whatever branch it's given to locate
+        # the directory, but deletes the git ref by the raw argument. So to also
+        # clear the local branch (which the safe form can't match — feat-foo vs
+        # feat/foo), we pass the resolved real branch. We only do so when it
+        # sanitizes back to the bound directory: if the worktree was retargeted
+        # to a different branch via `git checkout` after env creation, the real
+        # branch maps to a different dir, so we fall back to the safe form to
+        # guarantee the directory the env was actually bound to still gets
+        # removed (the retargeted branch ref may then orphan — a rarer case).
         for entry in "${worktree_entries[@]}"; do
             IFS='|' read -r wt_repo wt_branch <<< "$entry"
-            "$NABSPATH/bin/worktree.sh" remove --yes "$wt_repo" "$wt_branch"
+            real_branch=$(resolve_unsanitized_branch "$wt_branch")
+            if [[ "$(echo "$real_branch" | tr '/' '-')" == "$wt_branch" ]]; then
+                "$NABSPATH/bin/worktree.sh" remove --yes "$wt_repo" "$real_branch"
+            else
+                "$NABSPATH/bin/worktree.sh" remove --yes "$wt_repo" "$wt_branch"
+            fi
         done
         echo "Destroyed environment '$env_name'"
         ;;
