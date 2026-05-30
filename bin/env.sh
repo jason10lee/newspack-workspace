@@ -549,23 +549,34 @@ MIGRATE
         fi
         # Remove compose file before worktrees so worktree.sh doesn't see them as env-bound.
         rm -f "$compose_file"
-        # Remove worktrees that were mounted by this environment. wt_branch is
-        # the mount-derived (safe) form from parse_worktree_mount — the stable
-        # filesystem identifier, not the live git branch.
+        # Remove worktrees that were mounted by this environment. For monorepo
+        # mounts wt_branch is the mount-derived (safe) form from
+        # parse_worktree_mount — the stable filesystem identifier, not the live
+        # git branch. (Legacy repos-shape mounts carry the already-unsanitized
+        # branch instead; they have no slash-vs-dash mismatch, so they fall
+        # straight through the safe-form branch below and delete correctly.)
         #
         # worktree.sh remove re-sanitizes whatever branch it's given to locate
         # the directory, but deletes the git ref by the raw argument. So to also
         # clear the local branch (which the safe form can't match — feat-foo vs
-        # feat/foo), we pass the resolved real branch. We only do so when it
-        # sanitizes back to the bound directory: if the worktree was retargeted
-        # to a different branch via `git checkout` after env creation, the real
-        # branch maps to a different dir, so we fall back to the safe form to
-        # guarantee the directory the env was actually bound to still gets
-        # removed (the retargeted branch ref may then orphan — a rarer case).
+        # feat/foo), we pass the resolved real branch — but only when the dir →
+        # branch mapping is unambiguous: the live branch must sanitize back to
+        # the bound dir AND be the *only* local branch that does. This avoids
+        # force-deleting the wrong ref if the worktree was retargeted via
+        # `git checkout` to a different branch — including a colliding one that
+        # sanitizes to the same dir name (e.g. feat/foo-bar vs feat-foo/bar).
+        # In any ambiguous or retargeted case we fall back to the safe form,
+        # which still removes the bound directory (the real ref may then orphan
+        # — strictly better than deleting the wrong branch). The fully robust
+        # fix persists the original branch at env-creation time (see #154).
         for entry in "${worktree_entries[@]}"; do
             IFS='|' read -r wt_repo wt_branch <<< "$entry"
             real_branch=$(resolve_unsanitized_branch "$wt_branch")
-            if [[ "$(echo "$real_branch" | tr '/' '-')" == "$wt_branch" ]]; then
+            sanitized_matches=0
+            while IFS= read -r candidate; do
+                [[ "$(echo "$candidate" | tr '/' '-')" == "$wt_branch" ]] && sanitized_matches=$((sanitized_matches + 1))
+            done < <(git -C "$NABSPATH" for-each-ref --format='%(refname:short)' refs/heads 2>/dev/null)
+            if [[ "$(echo "$real_branch" | tr '/' '-')" == "$wt_branch" && "$sanitized_matches" -eq 1 ]]; then
                 "$NABSPATH/bin/worktree.sh" remove --yes "$wt_repo" "$real_branch"
             else
                 "$NABSPATH/bin/worktree.sh" remove --yes "$wt_repo" "$wt_branch"
