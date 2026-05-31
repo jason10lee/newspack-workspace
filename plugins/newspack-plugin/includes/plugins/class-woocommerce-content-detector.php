@@ -145,14 +145,91 @@ class WooCommerce_Content_Detector {
 
 	/**
 	 * Follow core/template-part and core/block references found in markup.
-	 * Stub — implemented in a later task.
 	 *
 	 * @param string $markup  Block markup.
 	 * @param array  $visited Reference set.
 	 * @return bool
 	 */
 	private static function expand_references( $markup, &$visited ) {
+		$has_part = str_contains( $markup, '<!-- wp:template-part' );
+		// 'wp:block ' (with the trailing space) matches only core/block: block names
+		// are slash-separated namespace/name, so a space after 'wp:block' appears
+		// only when the block name is exactly 'block' (core/block, always serialized
+		// with a ref attr). Avoids parsing markup that has no references.
+		$has_pattern = str_contains( $markup, '<!-- wp:block ' );
+		if ( ( ! $has_part && ! $has_pattern ) || ! function_exists( 'parse_blocks' ) ) {
+			return false;
+		}
+		return self::scan_blocks( parse_blocks( $markup ), $visited );
+	}
+
+	/**
+	 * Recurse a parsed block tree, resolving template-part and synced-pattern
+	 * references. The visited set guards reference cycles; $depth bounds runaway
+	 * innerBlocks nesting (which carries no reference identity to track).
+	 *
+	 * @param array $blocks  Parsed blocks.
+	 * @param array $visited Reference set ("type:id").
+	 * @param int   $depth   Current innerBlocks recursion depth.
+	 * @return bool
+	 */
+	private static function scan_blocks( $blocks, &$visited, $depth = 0 ) {
+		if ( $depth > 100 ) {
+			return false;
+		}
+		foreach ( $blocks as $block ) {
+			$name = isset( $block['blockName'] ) ? $block['blockName'] : '';
+
+			if ( 'core/block' === $name ) {
+				$content = self::resolve_synced_pattern( $block, $visited );
+				if ( null !== $content && self::markup_has_woocommerce( $content, $visited ) ) {
+					return true;
+				}
+			} elseif ( 'core/template-part' === $name ) {
+				$content = self::resolve_template_part( $block, $visited );
+				if ( null !== $content && self::markup_has_woocommerce( $content, $visited ) ) {
+					return true;
+				}
+			}
+
+			if ( ! empty( $block['innerBlocks'] ) && self::scan_blocks( $block['innerBlocks'], $visited, $depth + 1 ) ) {
+				return true;
+			}
+		}
 		return false;
+	}
+
+	/**
+	 * Resolve a core/block (synced pattern / reusable block) to its content.
+	 *
+	 * @param array $block   The core/block block.
+	 * @param array $visited Reference set.
+	 * @return string|null Content, or null if unresolvable or already visited.
+	 */
+	private static function resolve_synced_pattern( $block, &$visited ) {
+		$ref = isset( $block['attrs']['ref'] ) ? (int) $block['attrs']['ref'] : 0;
+		if ( ! $ref ) {
+			return null;
+		}
+		$key = 'block:' . $ref;
+		if ( isset( $visited[ $key ] ) ) {
+			return null;
+		}
+		$visited[ $key ] = true;
+		$post            = get_post( $ref );
+		return ( $post instanceof \WP_Post && 'wp_block' === $post->post_type ) ? $post->post_content : null;
+	}
+
+	/**
+	 * Resolve a core/template-part block to its content.
+	 * Stub — implemented in a later task.
+	 *
+	 * @param array $block   The template-part block.
+	 * @param array $visited Reference set.
+	 * @return string|null
+	 */
+	private static function resolve_template_part( $block, &$visited ) {
+		return null;
 	}
 
 	/**
