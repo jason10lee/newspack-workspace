@@ -346,6 +346,64 @@ class Newspack_Test_WooCommerce_Content_Detector extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A WooCommerce block inside a template part — referenced via core/template-part
+	 * in the FSE template global — is detected by following the part reference into
+	 * the separately-stored wp_template_part post.
+	 *
+	 * This exercises the resolve_template_part() → get_block_template() branch: the
+	 * global contains only a template-part reference (no inline WC block), so a true
+	 * result can only come from resolving the reference into the part's content.
+	 */
+	public function test_detects_wc_block_via_template_part_resolution() {
+		switch_theme( 'twentytwentyfour' );
+		if ( ! function_exists( 'wp_is_block_theme' ) || ! wp_is_block_theme() ) {
+			switch_theme( WP_DEFAULT_THEME );
+			$this->markTestSkipped( 'No block theme available in this environment.' );
+		}
+
+		// Create a wp_template_part post whose content contains a WooCommerce block.
+		// get_block_template() queries by post_name + wp_theme taxonomy term name.
+		$theme   = get_stylesheet();
+		$slug    = 'np-test-wc-part';
+		$part_id = self::factory()->post->create(
+			[
+				'post_type'    => 'wp_template_part',
+				'post_status'  => 'publish',
+				'post_name'    => $slug,
+				'post_content' => '<!-- wp:woocommerce/product-category /-->',
+				'post_title'   => 'NP Test WC Part',
+			]
+		);
+		// Assign the active theme's wp_theme taxonomy term so get_block_template()
+		// can find this part via the "<theme>//<slug>" ID it constructs.
+		wp_set_object_terms( $part_id, $theme, 'wp_theme' );
+
+		// Seed the FSE template global with ONLY a template-part reference — no
+		// inline WooCommerce block.  A true result must come from following the ref.
+		$GLOBALS['_wp_current_template_content'] = sprintf(
+			'<!-- wp:template-part {"slug":"%s","theme":"%s"} /-->',
+			$slug,
+			$theme
+		);
+
+		$clean = self::factory()->post->create(
+			[
+				'post_type'    => 'page',
+				'post_content' => '<p>clean</p>',
+			]
+		);
+		$this->go_to( get_permalink( $clean ) );
+		WooCommerce_Content_Detector::reset_memo();
+		$result = WooCommerce_Content_Detector::current_request_has_woocommerce_content();
+
+		// Cleanup before assertion so the theme switch runs even on failure.
+		unset( $GLOBALS['_wp_current_template_content'] );
+		switch_theme( WP_DEFAULT_THEME );
+
+		$this->assertTrue( $result );
+	}
+
+	/**
 	 * The result is memoized: a second call does not re-run the sources. Asserted
 	 * via a spy on the widget_block option read (which the widget source performs
 	 * once on a clean page) — the count must not increase on the second call.
