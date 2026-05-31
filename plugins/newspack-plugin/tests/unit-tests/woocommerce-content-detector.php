@@ -258,7 +258,7 @@ class Newspack_Test_WooCommerce_Content_Detector extends WP_UnitTestCase {
 			[
 				'post_type'    => 'wp_block',
 				'post_content' => 'A',
-			] 
+			]
 		);
 		$b = self::factory()->post->create(
 			[
@@ -284,5 +284,99 @@ class Newspack_Test_WooCommerce_Content_Detector extends WP_UnitTestCase {
 		$this->go_to( get_permalink( $page ) );
 		WooCommerce_Content_Detector::reset_memo();
 		$this->assertFalse( WooCommerce_Content_Detector::current_request_has_woocommerce_content() );
+	}
+
+	/**
+	 * A non-WP_Post queried object (e.g. a term archive) is handled safely by
+	 * scan_queried_post and, with no other WooCommerce content, is not detected.
+	 */
+	public function test_non_wp_post_queried_object_is_not_detected() {
+		$cat  = self::factory()->category->create( [ 'name' => 'np-test-cat' ] );
+		$post = self::factory()->post->create(
+			[
+				'post_type'    => 'post',
+				'post_content' => '<p>plain</p>',
+			]
+		);
+		wp_set_post_categories( $post, [ $cat ] );
+		$this->go_to( get_category_link( $cat ) );
+		WooCommerce_Content_Detector::reset_memo();
+		// get_queried_object() is a WP_Term here, not a WP_Post.
+		$this->assertFalse( WooCommerce_Content_Detector::current_request_has_woocommerce_content() );
+	}
+
+	/**
+	 * If a source throws, detection fails open (returns true) and logs via
+	 * newspack_log so a persistent failure is observable.
+	 */
+	public function test_fails_open_and_logs_on_error() {
+		$clean = self::factory()->post->create(
+			[
+				'post_type'    => 'page',
+				'post_content' => '<p>clean</p>',
+			]
+		);
+		$this->go_to( get_permalink( $clean ) );
+		// Ensure the widget source is reached, then make its option read throw.
+		wp_set_sidebars_widgets(
+			[
+				'sidebar-1'           => [ 'block-2' ],
+				'wp_inactive_widgets' => [],
+			]
+		);
+		add_filter(
+			'option_widget_block',
+			// Intentionally throws (never returns) to exercise the detector's fail-open path.
+			function () {
+				throw new \RuntimeException( 'boom' ); // phpcs:ignore WordPressVIPMinimum.Hooks.AlwaysReturnInFilter.MissingReturnStatement
+			}
+		);
+		$logged_code = null;
+		add_action(
+			'newspack_log',
+			function ( $code ) use ( &$logged_code ) {
+				$logged_code = $code;
+			},
+			10,
+			1
+		);
+		WooCommerce_Content_Detector::reset_memo();
+		$this->assertTrue( WooCommerce_Content_Detector::current_request_has_woocommerce_content() );
+		$this->assertSame( 'newspack_perfmatters_wc_detection_error', $logged_code );
+	}
+
+	/**
+	 * The result is memoized: a second call does not re-run the sources. Asserted
+	 * via a spy on the widget_block option read (which the widget source performs
+	 * once on a clean page) — the count must not increase on the second call.
+	 */
+	public function test_result_is_memoized() {
+		$clean = self::factory()->post->create(
+			[
+				'post_type'    => 'page',
+				'post_content' => '<p>clean</p>',
+			]
+		);
+		$this->go_to( get_permalink( $clean ) );
+		wp_set_sidebars_widgets(
+			[
+				'sidebar-1'           => [ 'block-2' ],
+				'wp_inactive_widgets' => [],
+			]
+		);
+		$reads = 0;
+		add_filter(
+			'option_widget_block',
+			function ( $value ) use ( &$reads ) {
+				$reads++;
+				return $value;
+			}
+		);
+		WooCommerce_Content_Detector::reset_memo();
+		WooCommerce_Content_Detector::current_request_has_woocommerce_content();
+		$after_first = $reads;
+		WooCommerce_Content_Detector::current_request_has_woocommerce_content();
+		$this->assertSame( $after_first, $reads, 'Second call must not re-read options (memoized).' );
+		$this->assertGreaterThan( 0, $after_first, 'Sanity: the widget source ran on the first call.' );
 	}
 }
