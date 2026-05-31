@@ -327,8 +327,8 @@ class Newspack_Test_WooCommerce_Content_Detector extends WP_UnitTestCase {
 		add_filter(
 			'option_widget_block',
 			// Intentionally throws (never returns) to exercise the detector's fail-open path.
-			function () {
-				throw new \RuntimeException( 'boom' ); // phpcs:ignore WordPressVIPMinimum.Hooks.AlwaysReturnInFilter.MissingReturnStatement
+			function () { // phpcs:ignore WordPressVIPMinimum.Hooks.AlwaysReturnInFilter.MissingReturnStatement
+				throw new \RuntimeException( 'boom' );
 			}
 		);
 		$logged_code = null;
