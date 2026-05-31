@@ -170,12 +170,40 @@ class WooCommerce_Content_Detector {
 	}
 
 	/**
-	 * Source: active block widgets. Stub — implemented in a later task.
+	 * Source: active block widgets. Scans only widgets assigned to active
+	 * sidebars; wp_inactive_widgets are deliberately skipped so orphaned widgets
+	 * cannot veto the Perfmatters strip site-wide.
 	 *
 	 * @param array $visited Reference set.
 	 * @return bool
 	 */
 	private static function scan_active_block_widgets( &$visited ) {
+		$sidebars = wp_get_sidebars_widgets();
+		if ( empty( $sidebars ) || ! is_array( $sidebars ) ) {
+			return false;
+		}
+		$instances = get_option( 'widget_block', [] );
+		if ( empty( $instances ) || ! is_array( $instances ) ) {
+			return false;
+		}
+		foreach ( $sidebars as $sidebar_id => $widget_ids ) {
+			// Skip the inactive store: orphaned widgets must not veto the strip.
+			if ( 'wp_inactive_widgets' === $sidebar_id || empty( $widget_ids ) || ! is_array( $widget_ids ) ) {
+				continue;
+			}
+			foreach ( $widget_ids as $widget_id ) {
+				if ( ! preg_match( '/^block-(\d+)$/', (string) $widget_id, $matches ) ) {
+					continue;
+				}
+				$index = (int) $matches[1];
+				if ( empty( $instances[ $index ]['content'] ) ) {
+					continue;
+				}
+				if ( self::markup_has_woocommerce( $instances[ $index ]['content'], $visited ) ) {
+					return true;
+				}
+			}
+		}
 		return false;
 	}
 

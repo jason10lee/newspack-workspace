@@ -86,4 +86,49 @@ class Newspack_Test_WooCommerce_Content_Detector extends WP_UnitTestCase {
 		$this->assertTrue( WooCommerce_Content_Detector::current_request_has_woocommerce_content() );
 		unregister_post_type( 'np_test_cpt' );
 	}
+
+	/**
+	 * A WooCommerce block in a widget assigned to an ACTIVE sidebar is detected.
+	 */
+	public function test_detects_wc_block_in_active_block_widget() {
+		$clean = self::factory()->post->create( [ 'post_type' => 'page', 'post_content' => '<p>clean</p>' ] );
+		$this->go_to( get_permalink( $clean ) );
+		update_option(
+			'widget_block',
+			[
+				2 => [ 'content' => '<!-- wp:paragraph --><p>nope</p><!-- /wp:paragraph -->' ],
+				3 => [ 'content' => '<!-- wp:woocommerce/product-category /-->' ],
+			]
+		);
+		wp_set_sidebars_widgets(
+			[
+				'sidebar-1'           => [ 'block-3' ],
+				'wp_inactive_widgets' => [],
+			]
+		);
+		WooCommerce_Content_Detector::reset_memo();
+		$this->assertTrue( WooCommerce_Content_Detector::current_request_has_woocommerce_content() );
+	}
+
+	/**
+	 * The SAME WooCommerce widget, present only in wp_inactive_widgets, is NOT
+	 * detected (locks in the active-only scope — orphaned widgets must not veto
+	 * the strip site-wide).
+	 */
+	public function test_inactive_block_widget_is_not_detected() {
+		$clean = self::factory()->post->create( [ 'post_type' => 'page', 'post_content' => '<p>clean</p>' ] );
+		$this->go_to( get_permalink( $clean ) );
+		update_option(
+			'widget_block',
+			[ 3 => [ 'content' => '<!-- wp:woocommerce/product-category /-->' ] ]
+		);
+		wp_set_sidebars_widgets(
+			[
+				'sidebar-1'           => [],
+				'wp_inactive_widgets' => [ 'block-3' ],
+			]
+		);
+		WooCommerce_Content_Detector::reset_memo();
+		$this->assertFalse( WooCommerce_Content_Detector::current_request_has_woocommerce_content() );
+	}
 }
