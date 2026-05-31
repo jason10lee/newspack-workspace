@@ -221,15 +221,30 @@ class WooCommerce_Content_Detector {
 	}
 
 	/**
-	 * Resolve a core/template-part block to its content.
-	 * Stub — implemented in a later task.
+	 * Resolve a core/template-part block to its content. Resolution is recursive
+	 * via markup_has_woocommerce (a part may include another part).
 	 *
 	 * @param array $block   The template-part block.
 	 * @param array $visited Reference set.
-	 * @return string|null
+	 * @return string|null Content, or null if unresolvable or already visited.
 	 */
 	private static function resolve_template_part( $block, &$visited ) {
-		return null;
+		if ( ! function_exists( 'get_block_template' ) ) {
+			return null;
+		}
+		$slug = isset( $block['attrs']['slug'] ) ? $block['attrs']['slug'] : '';
+		if ( '' === $slug ) {
+			return null;
+		}
+		$theme = isset( $block['attrs']['theme'] ) ? $block['attrs']['theme'] : get_stylesheet();
+		$id    = $theme . '//' . $slug;
+		$key   = 'part:' . $id;
+		if ( isset( $visited[ $key ] ) ) {
+			return null;
+		}
+		$visited[ $key ] = true;
+		$template        = get_block_template( $id, 'wp_template_part' );
+		return ( $template && ! empty( $template->content ) ) ? $template->content : null;
 	}
 
 	/**
@@ -285,12 +300,23 @@ class WooCommerce_Content_Detector {
 	}
 
 	/**
-	 * Source: the resolved FSE template. Stub — implemented in a later task.
+	 * Source: the resolved FSE template.
 	 *
 	 * @param array $visited Reference set.
 	 * @return bool
 	 */
 	private static function scan_fse_template( &$visited ) {
-		return false;
+		if ( ! function_exists( 'wp_is_block_theme' ) || ! wp_is_block_theme() ) {
+			return false;
+		}
+		// WordPress populates this global in locate_block_template() on the
+		// template_include filter — before wp_enqueue_scripts (priority 99) runs.
+		// Guard the empty/unset case (a classic/hybrid route on a block theme may
+		// leave it empty): treat as a clean miss, not an error.
+		// NOTE: underscore-prefixed core internal; re-verify on WP upgrades.
+		if ( empty( $GLOBALS['_wp_current_template_content'] ) ) {
+			return false;
+		}
+		return self::markup_has_woocommerce( $GLOBALS['_wp_current_template_content'], $visited );
 	}
 }

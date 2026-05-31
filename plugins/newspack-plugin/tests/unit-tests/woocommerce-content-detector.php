@@ -198,6 +198,58 @@ class Newspack_Test_WooCommerce_Content_Detector extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A WooCommerce block in the resolved FSE template content is detected.
+	 */
+	public function test_detects_wc_block_in_fse_template() {
+		// twentytwentyfour is a block theme bundled with the WP test scaffold;
+		// scan_fse_template gates on wp_is_block_theme(), so any block theme works.
+		switch_theme( 'twentytwentyfour' );
+		if ( ! function_exists( 'wp_is_block_theme' ) || ! wp_is_block_theme() ) {
+			switch_theme( WP_DEFAULT_THEME );
+			$this->markTestSkipped( 'No block theme available in this environment.' );
+		}
+		$clean = self::factory()->post->create(
+			[
+				'post_type'    => 'page',
+				'post_content' => '<p>clean</p>',
+			]
+		);
+		$this->go_to( get_permalink( $clean ) );
+		$GLOBALS['_wp_current_template_content'] = '<!-- wp:woocommerce/product-category /-->';
+		WooCommerce_Content_Detector::reset_memo();
+		$result = WooCommerce_Content_Detector::current_request_has_woocommerce_content();
+		unset( $GLOBALS['_wp_current_template_content'] );
+		switch_theme( WP_DEFAULT_THEME );
+		$this->assertTrue( $result );
+	}
+
+	/**
+	 * An empty template-content global is a clean miss for the FSE source, not
+	 * an error.
+	 */
+	public function test_empty_fse_template_global_is_not_detected() {
+		// twentytwentyfour is a block theme bundled with the WP test scaffold;
+		// scan_fse_template gates on wp_is_block_theme(), so any block theme works.
+		switch_theme( 'twentytwentyfour' );
+		if ( ! function_exists( 'wp_is_block_theme' ) || ! wp_is_block_theme() ) {
+			switch_theme( WP_DEFAULT_THEME );
+			$this->markTestSkipped( 'No block theme available in this environment.' );
+		}
+		$clean = self::factory()->post->create(
+			[
+				'post_type'    => 'page',
+				'post_content' => '<p>clean</p>',
+			]
+		);
+		$this->go_to( get_permalink( $clean ) );
+		unset( $GLOBALS['_wp_current_template_content'] );
+		WooCommerce_Content_Detector::reset_memo();
+		$result = WooCommerce_Content_Detector::current_request_has_woocommerce_content();
+		switch_theme( WP_DEFAULT_THEME );
+		$this->assertFalse( $result );
+	}
+
+	/**
 	 * A cyclic synced-pattern reference with no WooCommerce content terminates
 	 * (cycle guard) and returns false rather than looping forever.
 	 */
