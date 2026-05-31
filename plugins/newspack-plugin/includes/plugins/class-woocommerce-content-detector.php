@@ -63,6 +63,19 @@ class WooCommerce_Content_Detector {
 	 * so the Perfmatters strip is vetoed and assets are kept — never strip on
 	 * doubt.
 	 *
+	 * Scope: this detects WooCommerce content embedded in otherwise-non-WooCommerce
+	 * requests (a block/shortcode on a page, CPT, widget, or FSE template). It does
+	 * NOT try to recognize native WooCommerce routes (shop, cart, checkout, account,
+	 * single product, product taxonomies) — Perfmatters keeps WooCommerce assets on
+	 * those itself, gating its strip on `is_woocommerce()/is_cart()/is_checkout()/
+	 * is_account_page()/is_product()/is_product_category()/is_shop()`. So returning
+	 * false on those routes is correct; the strip never runs there.
+	 *
+	 * Must be called once the main query and the FSE template are resolved (it reads
+	 * `get_queried_object()` and `$_wp_current_template_content`) and memoizes for
+	 * the request. The sole caller runs on `perfmatters_disable_woocommerce_scripts`
+	 * (wp_enqueue_scripts, priority 99), which satisfies that ordering.
+	 *
 	 * @return bool
 	 */
 	public static function current_request_has_woocommerce_content() {
@@ -76,16 +89,23 @@ class WooCommerce_Content_Detector {
 				|| self::scan_active_block_widgets( $visited )
 				|| self::scan_fse_template( $visited );
 		} catch ( \Throwable $e ) {
-			// Fail open: keep WooCommerce assets. Logged via newspack_log so a
-			// *persistent* failure (perf win silently off site-wide) is
-			// observable in Newspack Manager, not just local logs.
-			Logger::newspack_log(
-				'newspack_perfmatters_wc_detection_error',
-				'WooCommerce content detection failed; keeping WooCommerce assets (fail-open).',
-				[ 'error' => $e->getMessage() ],
-				'error'
-			);
+			// Fail open: keep WooCommerce assets. Set the memo BEFORE the (fallible)
+			// log call and guard the log, so a misbehaving `newspack_log` listener
+			// can't escape this catch and re-introduce the hard failure during
+			// wp_enqueue_scripts that fail-open exists to prevent.
 			self::$memo = true;
+			try {
+				// newspack_log surfaces a *persistent* failure (perf win silently
+				// off site-wide) in Newspack Manager, not just local logs.
+				Logger::newspack_log(
+					'newspack_perfmatters_wc_detection_error',
+					'WooCommerce content detection failed; keeping WooCommerce assets (fail-open).',
+					[ 'error' => $e->getMessage() ],
+					'error'
+				);
+			} catch ( \Throwable $log_error ) {
+				// Intentionally swallowed: fail-open must hold even if logging throws.
+			}
 		}
 
 		return self::$memo;
