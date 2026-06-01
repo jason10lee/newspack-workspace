@@ -25,10 +25,21 @@ find_project() {
     echo "$path"
 }
 
-# Translate a container path under /newspack-{plugins,themes}/<name> to the
-# pnpm filter selector (the workspace package's directory name).
+# Resolve the pnpm `--filter` selector for a project dir. pnpm filters by the
+# package's *name*, which can differ from the directory name (e.g.
+# plugins/newspack-plugin → "newspack", plugins/newspack-blocks →
+# "@automattic/newspack-blocks"). Read the real name from package.json; fall
+# back to the basename if it can't be read.
 package_filter_for_dir() {
-    basename "$1"
+    local pj="$1/package.json" name=""
+    if [ -f "$pj" ]; then
+        name=$(node -p "require('$pj').name" 2>/dev/null)
+    fi
+    if [ -n "$name" ]; then
+        echo "$name"
+    else
+        basename "$1"
+    fi
 }
 
 # Build a standalone repo using its own toolchain (it isn't part of the
