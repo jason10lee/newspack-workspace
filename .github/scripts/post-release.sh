@@ -3,15 +3,20 @@
 # Post-release branch maintenance for the monorepo, run after the `release` job.
 #
 # After a release on the `release` branch:
-#   - reset the single-serving `alpha` branch onto `release` (when the release
-#     came from an alpha merge), or merge `release` into `alpha` otherwise;
+#   - reset the single-serving `alpha` branch onto `release` (when alpha's
+#     history is fully released), or merge `release` into `alpha` otherwise;
 #   - merge `release` back into the repository's default branch so they stay in
 #     sync, notifying Slack on conflict.
+#
+# workspace:* preservation is handled by .github/scripts/finalize-package-versions.cjs,
+# which runs after multi-semantic-release (the "Sync package.json versions" step
+# in release.yml) and reverts msr's dependency concretization in its own commit,
+# so no dependency restoration is needed here.
 #
 # This lives in the monorepo (not packages/scripts, which mirrors the legacy
 # newspack-scripts repo and is overwritten by the daily sync) and targets the
 # repo's actual default branch rather than the hard-coded `trunk` the legacy
-# script used. Pure git — no package manager required.
+# script used.
 
 set -euo pipefail
 
@@ -20,9 +25,6 @@ set -euo pipefail
 DEFAULT_BRANCH=$(git remote show origin | sed -n 's/.*HEAD branch: //p')
 DEFAULT_BRANCH=${DEFAULT_BRANCH:-main}
 
-# The last commit here is the automated release commit; the one before it
-# carries the merge info used to decide whether the release came from alpha.
-SECOND_TO_LAST_COMMIT_MSG=$(git log -n 1 --skip 1 --pretty=format:"%s")
 LATEST_VERSION_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "release")
 
 # Notify Slack about a failed post-release merge into $1, if Slack is configured.
@@ -42,15 +44,27 @@ notify_slack() {
 }
 
 git pull origin release
-git checkout alpha
+git fetch origin alpha
 
-if echo "$SECOND_TO_LAST_COMMIT_MSG" | grep -q '^Merge .*alpha'; then
-  echo "[post-release] Release came from the alpha branch. Resetting alpha onto release."
-  # The alpha branch is single-serving; discard its history after a release.
+git checkout -B alpha origin/alpha
+
+# Decide alpha-branch maintenance by whether alpha holds any commit that release
+# does not:
+#   - alpha fully contained in release  => the release came from an alpha
+#     promotion (alpha's history is now released), so reset alpha onto release;
+#   - alpha has its own commits          => a hotfix landed on release, or alpha
+#     moved on, so merge release into alpha to preserve those commits.
+#
+# This ancestry test is the correct condition — reset only when no alpha work
+# would be lost — and is robust to however many per-package version commits a
+# release stacks, unlike a fixed HEAD~N offset (which silently misclassifies
+# multi-package releases).
+if git merge-base --is-ancestor origin/alpha release; then
+  echo "[post-release] alpha is fully contained in release; resetting alpha onto release."
   git reset --hard release --
-  git push --force origin alpha
+  git push --force-with-lease=alpha:origin/alpha origin alpha
 else
-  echo "[post-release] Release came from a non-alpha branch (e.g. a hotfix). Merging release into alpha."
+  echo "[post-release] alpha has unreleased commits; merging release into alpha."
   if git merge --no-ff release -m "chore(release): merge in release $LATEST_VERSION_TAG"; then
     git push origin alpha
   else
