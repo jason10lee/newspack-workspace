@@ -614,6 +614,13 @@ MIGRATE
             docker exec "$container_name" wp --allow-root rewrite flush --hard >/dev/null 2>&1
             docker exec "$container_name" chown "$run_user":"$run_user" /var/www/html/.htaccess 2>/dev/null || true
         fi
+        # Provision Composer vendor/ for the migrated monorepo plugins, so a
+        # later `n setup` / plugin activation doesn't fatal on a missing
+        # vendor/autoload.php (the foundation-smoke failure mode). Idempotent;
+        # skips plugins whose vendor/ is already present. On failure it warns
+        # (actionably) rather than tearing down an otherwise-usable env.
+        docker exec "$container_name" bash /var/scripts/ensure-vendor.sh || \
+            echo "Warning: vendor provisioning reported errors (see above); affected plugins may fatal on activation. Try 'n ci-build all'."
         # Reload Apache to pick up SSL config (it's running by now).
         docker exec "$container_name" apachectl graceful 2>/dev/null
         echo "Environment '$env_name' is ready at https://${domain}/"
