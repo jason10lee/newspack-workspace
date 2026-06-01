@@ -5,6 +5,67 @@ source /var/scripts/resolve-project-path.sh
 
 set -e
 
+# Non-matching globs expand to nothing rather than a literal pattern. Without
+# this, an empty/absent /newspack-plugins mount left the loop iterating the
+# literal "/newspack-plugins/*/" and created a stray "*" symlink.
+shopt -s nullglob
+
+# Create a symlink at $link pointing to $src, or repoint it if it's a stale
+# /newspack-repos mirror of a plugin/theme now authoritative under plugins/ or
+# themes/. A symlink to any OTHER target is treated as a genuine slug collision
+# and left alone. Non-symlink files are never clobbered.
+link_or_repoint() {
+	local src="$1" link="$2" name existing
+	name=$(basename "$src")
+	if [ -L "${link}" ]; then
+		existing=$(readlink "$link")
+		if [ "$existing" = "$src" ]; then
+			echo "$name already symlinked"
+		elif [ "${existing#"${REPOS_PATH}"/}" != "$existing" ]; then
+			# Existing link points into /newspack-repos: a pre-migration mirror.
+			# The monorepo copy is authoritative and (checked by the caller)
+			# non-empty, so repoint to it.
+			echo "Repointing $name: $existing -> $src"
+			rm -f "$link"
+			ln -s "$src" "$link" || true
+		else
+			echo "[link-repos] warning: slug collision on '$name'" >&2
+			echo "[link-repos]   existing: $link -> $existing" >&2
+			echo "[link-repos]   skipping: $src" >&2
+		fi
+	elif [ -e "${link}" ]; then
+		echo "[link-repos] warning: $link exists and is not a symlink; skipping $src" >&2
+	else
+		echo "Symlinking $name"
+		ln -s "$src" "$link" || true
+	fi
+}
+
+# A migration stub: an empty placeholder dir under plugins/ or themes/ for a
+# plugin not yet migrated out of repos/. Skip it so it never shadows the
+# authoritative repos/ copy (which an existing symlink still points at).
+is_empty_dir() {
+	[ -z "$(ls -A "$1" 2>/dev/null)" ]
+}
+
+# Skip an empty migration stub, and self-heal: if a prior run linked wp-content
+# straight INTO the empty stub (e.g. an older link-repos before this guard
+# existed), drop that broken link. A link to the authoritative /newspack-repos
+# copy is deliberately left intact.
+skip_empty_stub() {
+	local src="$1" link="$2" name existing; name=$(basename "$src")
+	if [ -L "$link" ]; then
+		existing=$(readlink "$link")
+		# Compare ignoring a trailing slash (the loop's glob yields "…/name/",
+		# but a link may have been written either way).
+		if [ "${existing%/}" = "${src%/}" ]; then
+			echo "[link-repos] removing stale empty-stub link $name"
+			rm -f "$link"
+		fi
+	fi
+	echo "[link-repos] skipping empty $name (migration stub; using repos/ copy)"
+}
+
 WP_PATH=$1
 if [ -z "$WP_PATH" ]; then
 	WP_PATH="/var/www/html/wp-content"
@@ -18,59 +79,34 @@ fi
 # Symlink all plugins from /newspack-plugins/ into wp-content/plugins/.
 # `/newspack-plugins/` covers both monorepo plugins and --worktreed standalone
 # repos. `/newspack-repos/` is mount-only (available but not auto-linked).
+# A migrated plugin whose wp-content link still points at the pre-migration
+# /newspack-repos mirror is repointed to the authoritative plugins/ copy;
+# empty migration stubs are skipped so they don't shadow that mirror.
 for dir in "$PLUGINS_PATH"/*/; do
 	name=$(basename "$dir")
-	link="$WP_PATH/plugins/$name"
-	if [ -L "${link}" ]; then
-		existing=$(readlink "$link")
-		if [ "$existing" = "$dir" ]; then
-			echo "$name already symlinked"
-		else
-			# Slug collision: another source already claims this name. Don't
-			# overwrite or crash-loop; surface the conflict and move on.
-			echo "[link-repos] warning: slug collision on '$name'" >&2
-			echo "[link-repos]   existing: $link -> $existing" >&2
-			echo "[link-repos]   skipping: $dir" >&2
-		fi
-	elif [ -e "${link}" ]; then
-		echo "[link-repos] warning: $link exists and is not a symlink; skipping $dir" >&2
-	else
-		echo "Symlinking plugin $name"
-		ln -s "$dir" "$link" || true
+	if is_empty_dir "$dir"; then
+		skip_empty_stub "$dir" "$WP_PATH/plugins/$name"
+		continue
 	fi
+	link_or_repoint "$dir" "$WP_PATH/plugins/$name"
 done
 
 # Symlink themes. The classic theme contains child themes as subdirectories.
 for dir in "$THEMES_PATH"/*/; do
 	name=$(basename "$dir")
+	if is_empty_dir "$dir"; then
+		skip_empty_stub "$dir" "$WP_PATH/themes/$name"
+		continue
+	fi
 	if [ "$name" = "newspack-theme" ]; then
 		# Classic theme: symlink each child theme directory.
 		for child in "$dir"newspack-*/; do
 			[ -d "$child" ] || continue
-			child_name=$(basename "$child")
-			link="$WP_PATH/themes/$child_name"
-			if [ -L "${link}" ]; then
-				echo "$child_name already symlinked"
-			else
-				echo "Symlinking theme $child_name"
-				ln -s "$child" "$link" || true
-			fi
+			link_or_repoint "$child" "$WP_PATH/themes/$(basename "$child")"
 		done
 		# Also symlink the base theme directory itself.
-		link="$WP_PATH/themes/$name"
-		if [ -L "${link}" ]; then
-			echo "$name already symlinked"
-		else
-			echo "Symlinking theme $name"
-			ln -s "${dir}newspack-theme" "$link" || true
-		fi
+		link_or_repoint "${dir}newspack-theme" "$WP_PATH/themes/$name"
 	else
-		link="$WP_PATH/themes/$name"
-		if [ -L "${link}" ]; then
-			echo "$name already symlinked"
-		else
-			echo "Symlinking theme $name"
-			ln -s "$dir" "$link" || true
-		fi
+		link_or_repoint "$dir" "$WP_PATH/themes/$name"
 	fi
 done
