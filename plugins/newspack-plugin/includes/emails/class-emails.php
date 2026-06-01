@@ -251,9 +251,23 @@ class Emails {
 	/**
 	 * Send an HTML email.
 	 *
-	 * @param string $config_name Email config name.
-	 * @param string $to Recipient's email addesss.
-	 * @param array  $placeholders Dynamic content substitutions.
+	 * AUTO-SEND path — triggered by site events (registration, payment,
+	 * subscription renewal, etc.). Requires the email's underlying
+	 * post to be in `publish` status: an inactive/draft email must
+	 * not fire on triggered events. For the deliberate admin
+	 * preview operation, see {@see self::send_test_email()} —
+	 * NPPD-1547 split the two entry points because the shared
+	 * `'publish' === status` guard incidentally blocked test-send
+	 * for inactive emails, conflating auto-trigger gating with
+	 * admin-deliberate-action semantics.
+	 *
+	 * @param string|int $config_name Email config name (string), or
+	 *                                Email post ID (int) for the
+	 *                                post-id path shared with
+	 *                                send_test_email.
+	 * @param string     $to          Recipient's email address.
+	 * @param array      $placeholders Dynamic content substitutions.
+	 * @return bool wp_mail() result, or false if any prerequisite failed.
 	 */
 	public static function send_email( $config_name, $to, $placeholders = [] ) {
 		if ( ! self::supports_emails() ) {
@@ -289,19 +303,141 @@ class Emails {
 			}
 		}
 
-		$switched_locale = \switch_to_locale( \get_user_locale( \wp_get_current_user() ) );
-
 		if ( 'string' === gettype( $config_name ) ) {
+			// String path: looked up by type name. Used by every
+			// production auto-trigger (RAS verification, magic
+			// links, payment receipts, etc.). No HTML-payload check
+			// — the string path uses template files, not stored
+			// post content.
 			$email_config = self::get_email_config_by_type( $config_name );
+			if ( ! $to || ! $email_config || 'publish' !== $email_config['status'] ) {
+				return false;
+			}
 		} elseif ( 'integer' === gettype( $config_name ) ) {
-			$email_config = self::serialize_email( null, $config_name );
-			$config_name  = \get_post_meta( $config_name, self::EMAIL_CONFIG_NAME_META, true );
+			// Post-id path: shared with send_test_email() via
+			// validate_send_prerequisites(). Auto-send additionally
+			// requires 'publish' status; test-send does not.
+			$resolved = self::validate_send_prerequisites( $config_name, $to );
+			if ( is_wp_error( $resolved ) ) {
+				return false;
+			}
+			if ( 'publish' !== $resolved['config']['status'] ) {
+				return false;
+			}
+			$email_config = $resolved['config'];
+			$config_name  = $resolved['name'];
 		} else {
 			return false;
 		}
-		if ( ! $to || ! $email_config || 'publish' !== $email_config['status'] ) {
-			return false;
+
+		return self::dispatch_email( $email_config, $config_name, $to, $placeholders );
+	}
+
+	/**
+	 * Send a test email for the given post.
+	 *
+	 * TEST-SEND path — the deliberate admin operation of previewing
+	 * an email's actual rendered output. Distinct from the auto-send
+	 * path ({@see self::send_email()}) which fires on triggered
+	 * events and requires the email to be in `publish` status.
+	 *
+	 * NPPD-1547: before this split, test-send went through send_email()
+	 * and inherited its `'publish' === status` guard, blocking
+	 * test-send for inactive emails. That conflation was incidental
+	 * — git blame shows the guard was introduced for the auto-send
+	 * path with no test-send-specific design intent. Splitting the
+	 * entry points makes the distinction explicit and means the
+	 * test-send code path skips ONLY the status check, retaining
+	 * every other prerequisite (Newspack_Newsletters present,
+	 * recipient non-empty, post resolves, HTML payload saved).
+	 *
+	 * @param int    $post_id Email post id.
+	 * @param string $to      Recipient email address.
+	 * @return true|WP_Error True on successful dispatch; WP_Error
+	 *                       with appropriate status code on failure.
+	 */
+	public static function send_test_email( $post_id, $to ) {
+		$resolved = self::validate_send_prerequisites( $post_id, $to );
+		if ( is_wp_error( $resolved ) ) {
+			return $resolved;
 		}
+		$sent = self::dispatch_email( $resolved['config'], $resolved['name'], $to, [] );
+		if ( ! $sent ) {
+			return new \WP_Error(
+				'newspack_test_email_dispatch_failed',
+				esc_html__( 'Test email could not be dispatched. Check your mail configuration.', 'newspack-plugin' ),
+				[ 'status' => 500 ]
+			);
+		}
+		return true;
+	}
+
+	/**
+	 * Validate the shared prerequisites for sending an email via the
+	 * post-id path. Used by both send_email()'s post-id branch and
+	 * send_test_email() so future shared guards (rate limiting,
+	 * recipient format validation, etc.) need to land in one place.
+	 *
+	 * DOES NOT check post status — the caller layers its own status
+	 * check on top when appropriate. send_email() requires
+	 * `'publish'`; send_test_email() does not.
+	 *
+	 * @param int    $post_id Email post id.
+	 * @param string $to      Recipient email address.
+	 * @return array|WP_Error On success, [ 'config' => array,
+	 *                        'name' => string ]. On failure, WP_Error
+	 *                        identifying which prerequisite failed.
+	 */
+	private static function validate_send_prerequisites( $post_id, $to ) {
+		if ( ! self::supports_emails() ) {
+			return new \WP_Error(
+				'newspack_emails_unsupported',
+				esc_html__( 'Email sending requires the Newspack Newsletters plugin to be active.', 'newspack-plugin' ),
+				[ 'status' => 500 ]
+			);
+		}
+		if ( empty( $to ) ) {
+			return new \WP_Error(
+				'newspack_emails_empty_recipient',
+				esc_html__( 'A recipient is required.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
+			);
+		}
+		// `serialize_email()` returns false when the post doesn't
+		// exist OR when its EMAIL_HTML_META is missing/empty — i.e.
+		// the email editor has never saved content for this post.
+		// Both are legitimate "can't dispatch this" cases.
+		$email_config = self::serialize_email( null, $post_id );
+		if ( ! $email_config ) {
+			return new \WP_Error(
+				'newspack_emails_post_not_resolvable',
+				esc_html__( 'Email cannot be resolved from the provided post ID, or has no saved content.', 'newspack-plugin' ),
+				[ 'status' => 404 ]
+			);
+		}
+		return [
+			'config' => $email_config,
+			'name'   => (string) \get_post_meta( $post_id, self::EMAIL_CONFIG_NAME_META, true ),
+		];
+	}
+
+	/**
+	 * Dispatch an email via wp_mail() — locale-switching, header
+	 * construction, payload substitution, logging. Shared between
+	 * send_email() and send_test_email() so the wp_mail() call
+	 * surface is identical between auto-send and test-send.
+	 *
+	 * Callers are responsible for prerequisite validation before
+	 * reaching here.
+	 *
+	 * @param array  $email_config Serialized email config.
+	 * @param string $config_name  Resolved config name (logger context).
+	 * @param string $to           Recipient.
+	 * @param array  $placeholders Dynamic content substitutions.
+	 * @return bool wp_mail() result.
+	 */
+	private static function dispatch_email( $email_config, $config_name, $to, $placeholders ) {
+		$switched_locale = \switch_to_locale( \get_user_locale( \wp_get_current_user() ) );
 
 		$email_content_type = function() {
 			return 'text/html';
@@ -581,18 +717,30 @@ class Emails {
 	 * @param WP_REST_Request $request Request.
 	 */
 	public static function api_send_test_email( $request ) {
-		$was_sent = self::send_email(
-			$request->get_param( 'post_id' ),
-			$request->get_param( 'recipient' )
-		);
-		if ( $was_sent ) {
-			return \rest_ensure_response( [] );
-		} else {
+		$recipient = $request->get_param( 'recipient' );
+		$post_id   = $request->get_param( 'post_id' );
+
+		// Validate recipient format BEFORE entering the dispatch
+		// path. `sanitize_text_field` (the args' sanitize_callback)
+		// strips tags + trims whitespace but doesn't validate email
+		// format. Without `is_email()` here, a typo like
+		// 'not-an-email' reaches `wp_mail()` and silently fails — the
+		// publisher sees the generic dispatch error with no clue
+		// why. NPPD-1547 adds this guard alongside the test-send
+		// split so the failure mode is specific.
+		if ( ! is_email( $recipient ) ) {
 			return new \WP_Error(
-				'newspack_test_email_not_sent',
-				__( 'Test email was not sent.', 'newspack-plugin' )
+				'newspack_invalid_test_recipient',
+				esc_html__( 'Recipient must be a valid email address.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
 			);
 		}
+
+		$result = self::send_test_email( $post_id, $recipient );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return \rest_ensure_response( [] );
 	}
 
 	/**
