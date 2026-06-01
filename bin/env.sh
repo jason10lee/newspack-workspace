@@ -131,6 +131,16 @@ cleanup_partial_env_state() {
     done
 }
 
+# EXIT trap for `env create`: if the attempt fails anywhere after worktrees were
+# created (a bad option, a failed compose write), roll those worktrees back so
+# they don't orphan with no compose file for `n env destroy` to clean up. Only
+# acts on non-zero exits; cleared once the compose file exists (see below), so a
+# later `env up` failure never tears down an env that was successfully created.
+_create_cleanup_on_error() {
+    local rc=$?
+    [[ "$rc" -ne 0 ]] && cleanup_partial_env_state
+}
+
 case $1 in
     create)
         env_name="$2"
@@ -156,6 +166,9 @@ case $1 in
         # Track worktrees this attempt creates so failure cleanup is scoped.
         created_workspace_wts=()
         created_standalone_wts=()
+        # Roll back those worktrees on any failure from here until the compose
+        # file is written (trap cleared there).
+        trap _create_cleanup_on_error EXIT
         domain=""
         auto_up=false
         while [[ $# -gt 0 ]]; do
@@ -185,8 +198,7 @@ case $1 in
                         if [[ ! -d "$NABSPATH/$worktree_dir" ]]; then
                             echo "Creating standalone worktree at branch $wt_branch in $wt_repo..."
                             if ! "$NABSPATH/bin/worktree.sh" add "$wt_branch" --repo "$wt_repo"; then
-                                cleanup_partial_env_state
-                                exit 1
+                                exit 1  # EXIT trap rolls back any worktrees created so far
                             fi
                             created_standalone_wts+=("$wt_repo/$safe_branch")
                         fi
@@ -195,8 +207,7 @@ case $1 in
                         if [[ ! -d "$NABSPATH/worktrees/$safe_branch" ]]; then
                             echo "Creating worktree at branch $wt_branch..."
                             if ! "$NABSPATH/bin/worktree.sh" add "$wt_branch"; then
-                                cleanup_partial_env_state
-                                exit 1
+                                exit 1  # EXIT trap rolls back any worktrees created so far
                             fi
                             created_workspace_wts+=("$safe_branch")
                         fi
@@ -287,6 +298,9 @@ networks:
     external: true
 YAML
         echo "Created $compose_file (db: $db_name, domain: $domain, ip: $ip)"
+        # Env now exists (compose written); stop rolling back worktrees on exit so
+        # a later networking/`up` hiccup doesn't tear down a created environment.
+        trap - EXIT
         # Check networking prerequisites (macOS only — Linux routes all 127.x.x.x by default).
         if [[ "$(uname)" == "Darwin" ]] && ! ifconfig lo0 2>/dev/null | grep -q "$ip"; then
             if command -v newspack-manage-host >/dev/null 2>&1; then
