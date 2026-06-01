@@ -1,3 +1,10 @@
+## newspack-theme [2.22.3](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.22.2...newspack-theme@2.22.3) (2026-06-01)
+
+
+### Bug Fixes
+
+* **ci:** keep workspace:* out of release commits + robust alpha maintenance ([#157](https://github.com/Automattic/newspack-workspace/issues/157)) ([3107576](https://github.com/Automattic/newspack-workspace/commit/3107576c07c7fe7a1b38864244556b44f6369f6a))
+
 ## [2.22.2](https://github.com/Automattic/newspack-theme/compare/v2.22.1...v2.22.2) (2026-05-21)
 
 
