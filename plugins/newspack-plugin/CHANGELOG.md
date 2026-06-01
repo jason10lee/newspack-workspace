@@ -1,10 +1,3 @@
-## newspack [6.41.4-hotfix-group-subscription-invite-link-params.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.41.4-hotfix-group-subscription-invite-link-params.1...newspack@6.41.4-hotfix-group-subscription-invite-link-params.2) (2026-05-28)
-
-
-### Bug Fixes
-
-* revert unwanted chagnes ([24fcc41](https://github.com/Automattic/newspack-workspace/commit/24fcc414b3c3232b714e5524667b136bc3ed8f14))
-
 ## [6.41.3](https://github.com/Automattic/newspack-plugin/compare/v6.41.2...v6.41.3) (2026-05-25)
 
 

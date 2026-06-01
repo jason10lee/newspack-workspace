@@ -1,6 +1,6 @@
 {
 	"name": "newspack",
-	"version": "6.41.4-hotfix-group-subscription-invite-link-params.2",
+	"version": "6.41.3",
 	"description": "The Newspack plugin. https://newspack.com",
 	"bugs": {
 		"url": "https://github.com/Automattic/newspack-plugin/issues"
@@ -52,7 +52,7 @@
 	"devDependencies": {
 		"clsx": "^2.1.0",
 		"lodash": "^4.17.0",
-		"newspack-scripts": "5.9.8",
+		"newspack-scripts": "workspace:*",
 		"prop-types": "^15.8.0",
 		"react": "^18.0.0"
 	},
