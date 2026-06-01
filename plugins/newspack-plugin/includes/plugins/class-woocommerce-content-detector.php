@@ -104,7 +104,9 @@ class WooCommerce_Content_Detector {
 					'error'
 				);
 			} catch ( \Throwable $log_error ) {
-				// Intentionally swallowed: fail-open must hold even if logging throws.
+				// Last resort if a newspack_log listener throws: the local logger
+				// writes without dispatching an action, so fail-open still holds.
+				Logger::log( 'WooCommerce content detection fail-open log failed: ' . $log_error->getMessage(), 'NEWSPACK-PERFMATTERS', 'error' );
 			}
 		}
 
