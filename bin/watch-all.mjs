@@ -1,0 +1,204 @@
+#!/usr/bin/env node
+//
+// Global, lazy watch dispatcher for the monorepo.
+//
+// Run from the monorepo root (via `pnpm run watch`, which `n watch` invokes in
+// the container). One chokidar process watches build-relevant source files
+// across every plugin, theme and package. The FIRST time a unit's source
+// changes, the dispatcher reacts based on that unit's package.json scripts:
+//
+//   - has a `watch` script  -> spawn the unit's own `npm run watch` once. That
+//     persistent webpack watcher (wp-scripts start) then owns every later
+//     rebuild for the unit incrementally, so the dispatcher steps back. This is
+//     identical to `n watch <unit>` and keeps the module graph warm.
+//   - no `watch`, has `build` -> run a debounced, serialized one-shot
+//     `pnpm --filter <path> run --if-present build` on each change.
+//   - neither -> log once and skip (nothing to compile).
+//
+// Webpack watchers are spawned lazily, only for units actually edited this
+// session -- never all of them up front.
+//
+import chokidar from 'chokidar';
+import { spawn } from 'node:child_process';
+import readline from 'node:readline';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
+const ROOT = process.cwd();
+const AREAS = [ 'plugins', 'themes', 'packages' ];
+// Source files worth reacting to. PHP is interpreted (no build step) and is
+// served live off the bind mount, so it is intentionally excluded.
+const BUILD_RELEVANT = /\.(jsx?|tsx?|scss|css)$/;
+// Directories never worth watching: VCS, dependencies and build outputs.
+const IGNORED_DIR = /(^|\/)(node_modules|vendor|\.git|dist|build)(\/|$)/;
+const DEBOUNCE_MS = 300;
+
+// Per-unit lifecycle state: 'warm' (own watcher running), 'oneshot' (no watch
+// script, building on demand) or 'skip' (nothing to build).
+const unitState = new Map();
+const warmChildren = new Map(); // unit key -> spawned `npm run watch` child.
+const debounceTimers = new Map(); // unit key -> pending one-shot timer.
+const buildQueue = []; // units awaiting a serialized one-shot build.
+let building = false;
+
+function log( message ) {
+	process.stdout.write( `[watch-all] ${ message }\n` );
+}
+
+// Map a changed path (relative to ROOT, e.g. plugins/newspack-popups/src/x.js)
+// to its workspace unit.
+function resolveUnit( relPath ) {
+	const [ area, name ] = relPath.split( '/' );
+	if ( ! AREAS.includes( area ) || ! name ) {
+		return null;
+	}
+	return {
+		key: `${ area }/${ name }`,
+		name,
+		dir: path.join( ROOT, area, name ),
+		// pnpm path filter -- the package name often differs from the directory
+		// name (e.g. plugins/newspack-plugin is the `newspack` package), so a
+		// path filter is the only reliable selector.
+		filter: `./${ area }/${ name }`,
+	};
+}
+
+function readScripts( dir ) {
+	try {
+		return JSON.parse( readFileSync( path.join( dir, 'package.json' ), 'utf8' ) ).scripts || {};
+	} catch {
+		return {};
+	}
+}
+
+// Forward a child's output line-by-line, tagged with the unit name so
+// interleaved watcher output stays readable.
+function prefixStream( stream, label ) {
+	readline.createInterface( { input: stream } ).on( 'line', ( line ) => {
+		process.stdout.write( `[${ label }] ${ line }\n` );
+	} );
+}
+
+function spawnWarmWatcher( unit ) {
+	log( `${ unit.name }: starting incremental watcher (npm run watch)` );
+	// detached so the child leads its own process group; killing -pid on
+	// shutdown takes down npm and the webpack process it spawns together.
+	const child = spawn( 'npm', [ 'run', 'watch' ], { cwd: unit.dir, detached: true } );
+	warmChildren.set( unit.key, child );
+	prefixStream( child.stdout, unit.name );
+	prefixStream( child.stderr, unit.name );
+	child.on( 'exit', ( code ) => {
+		log( `${ unit.name }: watcher exited (code ${ code }); will re-arm on next change` );
+		warmChildren.delete( unit.key );
+		unitState.delete( unit.key ); // allow a fresh spawn if it died.
+	} );
+}
+
+function scheduleOneShotBuild( unit ) {
+	clearTimeout( debounceTimers.get( unit.key ) );
+	debounceTimers.set(
+		unit.key,
+		setTimeout( () => {
+			debounceTimers.delete( unit.key );
+			if ( ! buildQueue.some( ( queued ) => queued.key === unit.key ) ) {
+				buildQueue.push( unit );
+			}
+			drainBuildQueue();
+		}, DEBOUNCE_MS )
+	);
+}
+
+// One build at a time, to bound CPU when several no-watch units change at once.
+function drainBuildQueue() {
+	if ( building ) {
+		return;
+	}
+	const unit = buildQueue.shift();
+	if ( ! unit ) {
+		return;
+	}
+	building = true;
+	log( `${ unit.name }: building (one-shot)` );
+	const child = spawn(
+		'pnpm',
+		[ '--filter', unit.filter, 'run', '--if-present', 'build' ],
+		{ cwd: ROOT, stdio: 'inherit' }
+	);
+	child.on( 'exit', ( code ) => {
+		log( `${ unit.name }: build ${ code === 0 ? 'done' : `failed (code ${ code })` }` );
+		building = false;
+		drainBuildQueue();
+	} );
+}
+
+function onChange( relPath ) {
+	if ( ! BUILD_RELEVANT.test( relPath ) ) {
+		return;
+	}
+	const unit = resolveUnit( relPath );
+	if ( ! unit ) {
+		return;
+	}
+	let state = unitState.get( unit.key );
+	if ( state === undefined ) {
+		// First change for this unit -- classify it from its package.json scripts.
+		const scripts = readScripts( unit.dir );
+		state = scripts.watch ? 'warm' : scripts.build ? 'oneshot' : 'skip';
+		unitState.set( unit.key, state );
+		if ( state === 'warm' ) {
+			spawnWarmWatcher( unit );
+			return;
+		}
+		if ( state === 'skip' ) {
+			log( `${ unit.name }: no watch/build script -- skipping (build manually with \`n build ${ unit.name }\`)` );
+			return;
+		}
+	}
+	if ( state !== 'oneshot' ) {
+		return; // warm watcher owns rebuilds; skipped units have nothing to do.
+	}
+	// One-shot units have no incremental watcher to own their output, so a build
+	// that writes build-relevant files (e.g. copied .scss) would re-trigger
+	// itself endlessly. Gate on src/ -- build outputs land in dist/build/etc.,
+	// never in src/ -- so only genuine source edits drive a rebuild.
+	if ( ! relPath.startsWith( `${ unit.key }/src/` ) ) {
+		return;
+	}
+	scheduleOneShotBuild( unit );
+}
+
+function shutdown() {
+	log( 'shutting down watchers' );
+	for ( const child of warmChildren.values() ) {
+		try {
+			process.kill( -child.pid, 'SIGTERM' );
+		} catch {
+			// Child already gone -- nothing to clean up.
+		}
+	}
+	process.exit( 0 );
+}
+
+const watcher = chokidar.watch( AREAS, {
+	cwd: ROOT,
+	// pnpm symlinks workspace packages back under plugin dirs (e.g.
+	// plugins/newspack-plugin/packages/components -> packages/components). Without
+	// this, one edit fires twice -- once per path -- and the symlinked copy is
+	// misattributed to the wrong unit. All real sources live under real dirs.
+	followSymlinks: false,
+	ignored: ( testPath ) => IGNORED_DIR.test( testPath ),
+	ignoreInitial: true,
+	awaitWriteFinish: { stabilityThreshold: 200, pollInterval: 50 },
+} );
+
+watcher
+	.on( 'add', onChange )
+	.on( 'change', onChange )
+	.on( 'ready', () => {
+		log( 'watching plugins/, themes/, packages/ for source changes' );
+		log( 'each unit\'s watcher starts on its first edit (Ctrl-C to stop)' );
+	} )
+	.on( 'error', ( error ) => log( `watcher error: ${ error.message }` ) );
+
+process.on( 'SIGINT', shutdown );
+process.on( 'SIGTERM', shutdown );

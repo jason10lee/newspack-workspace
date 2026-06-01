@@ -148,10 +148,24 @@ n test-js                           # Run JS tests
 
 ### Development
 ```bash
-n watch                       # Watch mode for current project
+n watch                       # From a repo folder (or `n watch <name>`): watch & rebuild that one project
+n watch                       # From the root: watch every plugin/theme/package and rebuild the changed unit
 n composer <cmd>              # Run composer in current project
 n npm <cmd>                   # Run npm in current project
 ```
+
+`n watch` with no project (run from the monorepo root) starts a single global
+dispatcher that watches source files across `plugins/`, `themes/` and
+`packages/`. Webpack watchers are spawned **lazily**: the first time you edit a
+unit, that unit's own incremental watcher (`wp-scripts start`) is started and
+owns its rebuilds from then on — so only units you actually touch get a watcher,
+never all of them at once. Units without a `watch` script fall back to a one-off
+`build` per change; units with neither are skipped.
+
+When you're iterating hard on a single project, prefer `n watch <name>` (or
+`n watch` from inside it): the warm webpack watcher rebuilds incrementally in
+well under a second, whereas the global watch pays a fresh build the first time
+it sees each unit.
 
 ### WordPress CLI
 ```bash
