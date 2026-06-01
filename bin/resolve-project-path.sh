@@ -42,8 +42,9 @@ resolve_project_path() {
 }
 
 # For scripts that iterate all monorepo projects (e.g. `n ci-build all`).
-# Standalone repos/ checkouts are intentionally excluded here: build-repos.sh
-# builds declared standalone repos in a separate pass (see its `all` branch).
+# Standalone repos/ checkouts are intentionally excluded: they're external and
+# often distributed/pre-built, so they build on demand via `n build <name>`
+# rather than in bulk.
 get_all_project_dirs() {
     local dirs=()
     for d in "$PLUGINS_PATH"/*/; do

@@ -117,23 +117,17 @@ fi
 
 case $WHAT_TO_BUILD in
     all)
-        # Composer install per workspace project that ships its own composer.json.
-        # Skip standalone repos here — the loop below builds the declared ones
-        # (PHP + JS) via build_standalone_repo.
+        # Composer install per monorepo project that ships its own composer.json.
+        # Standalone repos/ checkouts are not built here — they're external and
+        # often distributed/pre-built; build one on demand with `n build <name>`.
         while IFS= read -r dir; do
             [ -d "$dir" ] || continue
             [ -f "$dir/composer.json" ] || continue
-            is_standalone_repo "$(basename "$dir")" && continue
             composer install --working-dir "$dir"
         done < <(get_all_project_dirs)
-        # Build pnpm workspace packages and standalone repos. Track failures so a
-        # broken build doesn't silently pass CI through the loop.
+        # Propagate a failed build so it doesn't silently pass CI.
         rc=0
         pnpm run build || rc=1
-        for r in "${newspack_standalone_repos[@]}"; do
-            dir=$(resolve_project_path "$r")
-            [ -n "$dir" ] && { build_standalone_repo "$dir" || rc=1; }
-        done
         exit "$rc"
         ;;
     *)
