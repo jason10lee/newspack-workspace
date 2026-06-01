@@ -98,12 +98,15 @@ case $1 in
     list)
         cd "$NABSPATH" || exit 1
         git worktree list
-        # Also enumerate worktrees of standalone repos (tier 2).
+        # Also enumerate worktrees of standalone repos (tier 2). Standalone
+        # checkouts live at repos/{plugins,themes}/<name> (typed); resolve the
+        # actual path via get_repo_host_path rather than assuming a flat repos/.
         for r in "${newspack_standalone_repos[@]}"; do
-            [[ -e "$NABSPATH/repos/$r/.git" ]] || continue
+            r_path=$(get_repo_host_path "$r")
+            [[ -n "$r_path" && -e "$NABSPATH/$r_path/.git" ]] || continue
             echo ""
             echo "[$r]"
-            (cd "$NABSPATH/repos/$r" && git worktree list)
+            (cd "$NABSPATH/$r_path" && git worktree list)
         done
         ;;
     remove)
