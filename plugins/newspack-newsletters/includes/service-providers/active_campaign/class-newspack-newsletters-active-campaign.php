@@ -1,6 +1,5 @@
 <?php
-
-0/**
+/**
  * Service Provider: ActiveCampaign Implementation
  *
  * @package Newspack
