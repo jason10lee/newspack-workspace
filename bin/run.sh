@@ -39,6 +39,13 @@ fi
 chmod +x /var/scripts/*.sh
 /var/scripts/link-repos.sh
 
+# Provision Composer vendor/ for migrated monorepo plugins so activating one
+# doesn't fatal on a missing vendor/autoload.php. Mirrors the host-side check
+# `n env up` runs for isolated envs, covering the main site / `n start` too.
+# The `|| echo` guard matters because this file runs under `set -e` — a composer
+# hiccup must warn, not abort container startup. Idempotent (skips present vendor/).
+/var/scripts/ensure-vendor.sh || echo "Warning: vendor provisioning reported errors; some plugins may fatal on activation. Run 'n ci-build all'."
+
 # Memcached
 cp /var/scripts/object-cache.php /var/www/html/wp-content/
 
