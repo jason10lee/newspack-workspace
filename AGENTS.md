@@ -117,6 +117,20 @@ n stop            # Stop containers
 n restart         # Stop and start
 ```
 
+#### Customizing the main dev stack (docker-compose.override.yml)
+
+`n start` invokes Compose with an explicit `-f`, which disables Compose's automatic loading of an override file. To customize the **main** dev container (extra bind mounts, env vars, ports, etc.) without editing the tracked `docker-compose.yml`, create a `docker-compose.override.yml` at the workspace root. When present, `n start` appends it (`-f docker-compose.override.yml`) so its settings merge over the base stack; when absent, nothing changes. The file is gitignored, so it stays a per-developer customization.
+
+Example – add a host directory as a bind mount on the `wordpress` service:
+```yaml
+services:
+  wordpress:
+    volumes:
+      - /Users/me/some-local-dir:/var/www/extra
+```
+
+This override applies only to the main stack (`newspack_dev`). Isolated environments (`n env`) do **not** load it; they layer their own generated `docker-compose.env-*.yml` files instead, so a root override can't clobber env-specific config.
+
 ### First-Time Setup
 ```bash
 cp default.env .env           # Create local config
