@@ -101,7 +101,7 @@ class Newspack_Test_WooCommerce_Content_Detector extends WP_UnitTestCase {
 			[
 				'post_type'    => 'page',
 				'post_content' => '<p>clean</p>',
-			] 
+			]
 		);
 		$this->go_to( get_permalink( $clean ) );
 		update_option(
@@ -131,7 +131,7 @@ class Newspack_Test_WooCommerce_Content_Detector extends WP_UnitTestCase {
 			[
 				'post_type'    => 'page',
 				'post_content' => '<p>clean</p>',
-			] 
+			]
 		);
 		$this->go_to( get_permalink( $clean ) );
 		update_option(
@@ -324,13 +324,11 @@ class Newspack_Test_WooCommerce_Content_Detector extends WP_UnitTestCase {
 				'wp_inactive_widgets' => [],
 			]
 		);
-		add_filter(
-			'option_widget_block',
-			// Intentionally throws (never returns) to exercise the detector's fail-open path.
-			function () { // phpcs:ignore WordPressVIPMinimum.Hooks.AlwaysReturnInFilter.MissingReturnStatement
-				throw new \RuntimeException( 'boom' );
-			}
-		);
+		// Intentionally throws (never returns) to exercise the detector's fail-open path.
+		$throwing_filter = function () { // phpcs:ignore WordPressVIPMinimum.Hooks.AlwaysReturnInFilter.MissingReturnStatement
+			throw new \RuntimeException( 'boom' );
+		};
+		add_filter( 'option_widget_block', $throwing_filter );
 		$logged_code = null;
 		add_action(
 			'newspack_log',
@@ -341,8 +339,14 @@ class Newspack_Test_WooCommerce_Content_Detector extends WP_UnitTestCase {
 			1
 		);
 		WooCommerce_Content_Detector::reset_memo();
-		$this->assertTrue( WooCommerce_Content_Detector::current_request_has_woocommerce_content() );
-		$this->assertSame( 'newspack_perfmatters_wc_detection_error', $logged_code );
+		try {
+			$this->assertTrue( WooCommerce_Content_Detector::current_request_has_woocommerce_content() );
+			$this->assertSame( 'newspack_perfmatters_wc_detection_error', $logged_code );
+		} finally {
+			// Remove the throwing filter so it can't make later tests order-dependent,
+			// even if an assertion above fails.
+			remove_filter( 'option_widget_block', $throwing_filter );
+		}
 	}
 
 	/**

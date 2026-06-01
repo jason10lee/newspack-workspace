@@ -194,10 +194,15 @@ class WooCommerce_Content_Detector {
 	 * @param array $visited Reference set ("type:id").
 	 * @param int   $depth   Current innerBlocks recursion depth.
 	 * @return bool
+	 * @throws \RuntimeException If the block nesting depth limit is exceeded (caught
+	 *                           by the entry point's fail-open handler).
 	 */
 	private static function scan_blocks( $blocks, &$visited, $depth = 0 ) {
 		if ( $depth > 100 ) {
-			return false;
+			// Runaway nesting is unexpected; fail open via the caller's catch
+			// (keep assets + log) rather than silently under-detecting and
+			// letting Perfmatters strip the assets.
+			throw new \RuntimeException( 'WooCommerce content detection exceeded the maximum block nesting depth.' );
 		}
 		foreach ( $blocks as $block ) {
 			$name = isset( $block['blockName'] ) ? $block['blockName'] : '';
