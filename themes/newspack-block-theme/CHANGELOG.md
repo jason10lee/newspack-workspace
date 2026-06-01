@@ -1,3 +1,10 @@
+## newspack-block-theme [1.28.2](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.28.1...newspack-block-theme@1.28.2) (2026-06-01)
+
+
+### Bug Fixes
+
+* **ci:** keep workspace:* out of release commits + robust alpha maintenance ([#157](https://github.com/Automattic/newspack-workspace/issues/157)) ([3107576](https://github.com/Automattic/newspack-workspace/commit/3107576c07c7fe7a1b38864244556b44f6369f6a))
+
 ## [1.28.1](https://github.com/Automattic/newspack-block-theme/compare/v1.28.0...v1.28.1) (2026-05-18)
 
 
