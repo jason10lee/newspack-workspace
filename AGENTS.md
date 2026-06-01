@@ -100,6 +100,7 @@ Understanding how plugins interact is crucial for cross-plugin changes:
 - **PHP**: WordPress-Extra, WordPress-Docs, WordPress-VIP-Go standards. Short array syntax `[]` is allowed. Yoda conditions not required.
 - **JavaScript/TypeScript**: ESLint via `newspack-scripts`
 - **SCSS**: Stylelint via `newspack-scripts`
+- **Formatting**: Prettier — specifically the `wp-prettier` fork (the WordPress house style needs `parenSpacing`, e.g. `( value )`), pinned workspace-wide via a `pnpm` override so editors and CI use the same engine. Canonical config is `newspack-scripts/config/prettier.config.js`. See [docs/code-formatting.md](docs/code-formatting.md) for the editor settings required to keep IDE formatting and CI lint in agreement.
 - **Commits**: Conventional commits (`<type>(<scope>): <subject>`) enforced via commitlint. Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`. Releases are automated via semantic-release: `feat` triggers a minor release, `fix` triggers a patch release.
 - Pre-commit hooks run lint-staged automatically (requires `pnpm install` at the workspace root). Direct pushes to `main` are blocked.
 - Reference issue numbers in commits and PR descriptions.
