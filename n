@@ -454,6 +454,34 @@ case $1 in
     setup-newspack-network)
         docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/setup-newspack-network.sh"
         ;;
+    setup-repos)
+        shift
+        repos_container="$TARGET_CONTAINER"
+        while [[ $# -gt 0 ]]; do
+            if [[ "$1" == "--env" ]]; then
+                if [[ $# -lt 2 || "$2" == --* ]]; then
+                    echo "Error: --env requires an environment name." >&2
+                    echo "Usage: n setup-repos [--env ENV_NAME]" >&2
+                    exit 1
+                fi
+                repos_container=$(echo "newspack_env_${2}" | tr '-' '_')
+                shift 2
+            else
+                echo "Unknown argument: $1" >&2
+                echo "Usage: n setup-repos [--env ENV_NAME]" >&2
+                exit 1
+            fi
+        done
+        # Clone happens on the host (gh carries the auth for the private repos)
+        # into the shared repos/plugins/ dir; build + symlink happen in the
+        # container via the standard repos/ paths. Abort if the clone failed so
+        # we don't try to build a checkout that isn't there.
+        "$NABSPATH/bin/setup-repos.sh" || exit $?
+        for managed in "${managed_plugins[@]}"; do
+            docker exec $DOCKER_IT $USER_COMMAND "$repos_container" sh -c "/var/scripts/build-repos.sh $managed"
+        done
+        docker exec $DOCKER_IT $USER_COMMAND "$repos_container" sh -c "/var/scripts/link-repos.sh"
+        ;;
     worktree)
         "$NABSPATH/bin/worktree.sh" "${@:2}"
         ;;
@@ -508,6 +536,8 @@ case $1 in
         echo "  setup-newspack-network       Set up Newspack Network Docker environment."
         echo ""
         echo "Repository Management:"
+        echo "  setup-repos [--env name]     Clone the private managed plugins (newspack-manager,"
+        echo "                               newspack-manager-admin) into repos/plugins/ and build them."
         echo "  pull                         Pull the latest changes for all repositories."
         echo "  branch [name]                Switch all repositories to the specified branch."
         echo "  trunk                        Switch all repositories to the trunk branch."

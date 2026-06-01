@@ -23,6 +23,14 @@ newspack_themes=(
 	"newspack-block-theme"
 )
 
+# Plugins that live in their own private repos outside this monorepo, so a fresh
+# checkout has no copy of them. `n setup-repos` clones these into repos/plugins/
+# (auth via gh) where the standard repos/ convention picks them up.
+managed_plugins=(
+	"newspack-manager"
+	"newspack-manager-admin"
+)
+
 woocommerce_plugins=(
 	"woocommerce"
 	"woocommerce-gateway-stripe"
