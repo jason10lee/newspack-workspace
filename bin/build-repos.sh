@@ -11,6 +11,13 @@ if ! command -v pnpm >/dev/null 2>&1; then
     corepack enable pnpm >/dev/null
 fi
 
+# Run pnpm non-interactively. Without this, `pnpm install` aborts with
+# ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY when it wants to purge a
+# node_modules dir created by a different setup — there's no TTY to confirm, so
+# the whole build bails before anything compiles. CI=true makes pnpm assume a
+# non-interactive environment and proceed.
+export CI=true
+
 find_project() {
     local path=$(resolve_project_path "$1")
     if [ -z "$path" ]; then path=$(resolve_project_path "newspack-$1"); fi
