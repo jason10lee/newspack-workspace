@@ -532,6 +532,15 @@ MIGRATE
         # (actionably) rather than tearing down an otherwise-usable env.
         docker exec "$container_name" bash /var/scripts/ensure-vendor.sh || \
             echo "Warning: vendor provisioning reported errors (see above); affected plugins may fatal on activation. Try 'n ci-build all'."
+        # Warn (don't fail) if the newspack theme isn't built. Its style.css is a
+        # gitignored build artifact; activating an unbuilt theme (e.g. via
+        # `n setup`) fatals the whole site with "stylesheet is missing". The JS/SCSS
+        # build is slow and is `n ci-build all`'s job, not env-up's — so surface
+        # this early and actionably rather than building here.
+        if docker exec "$container_name" test -d /newspack-themes/newspack-theme \
+           && ! docker exec "$container_name" test -f /newspack-themes/newspack-theme/newspack-theme/style.css; then
+            echo "Warning: newspack-theme is not built (style.css missing). Activating it (e.g. 'n setup') will fatal the site — run 'n ci-build all' first."
+        fi
         # Reload Apache to pick up SSL config (it's running by now).
         docker exec "$container_name" apachectl graceful 2>/dev/null
         echo "Environment '$env_name' is ready at https://${domain}/"
