@@ -13,19 +13,35 @@ use Newspack\WooCommerce_Content_Detector;
 class Newspack_Test_WooCommerce_Content_Detector extends WP_UnitTestCase {
 
 	/**
-	 * Reset the detector's per-request memo before each test.
+	 * The `products` shortcode callback registered before a test (if any),
+	 * captured so the class restores the global shortcode registry as it found it.
+	 * Widget/option mutations don't need snapshotting — WP_UnitTestCase wraps each
+	 * test in a DB transaction that is rolled back on tearDown — but the shortcode
+	 * registry ($shortcode_tags) is not DB-backed, so it is restored explicitly.
+	 *
+	 * @var callable|null
+	 */
+	private $prior_products_shortcode = null;
+
+	/**
+	 * Reset the detector's per-request memo and snapshot the shortcode registry.
 	 */
 	public function setUp(): void {
 		parent::setUp();
 		WooCommerce_Content_Detector::reset_memo();
+		$this->prior_products_shortcode = $GLOBALS['shortcode_tags']['products'] ?? null;
 	}
 
 	/**
-	 * Reset the memo and unregister shortcodes registered during a test.
+	 * Reset the memo and restore the `products` shortcode to its pre-test state.
 	 */
 	public function tearDown(): void {
 		WooCommerce_Content_Detector::reset_memo();
 		remove_shortcode( 'products' );
+		if ( null !== $this->prior_products_shortcode ) {
+			add_shortcode( 'products', $this->prior_products_shortcode );
+		}
+		$this->prior_products_shortcode = null;
 		parent::tearDown();
 	}
 
