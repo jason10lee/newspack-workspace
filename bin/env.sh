@@ -42,17 +42,33 @@ ip_for_env() {
     grep -o '127\.0\.0\.[0-9]*' "$1" | head -1
 }
 
+# Resolve the unsanitized git branch name for a worktree directory.
+# Display-only — never use the result as a filesystem identifier. Falls back
+# to the safe (directory-name) form when the worktree is missing or its branch
+# ref can't be resolved (e.g., detached HEAD).
+resolve_unsanitized_branch() {
+    local wt_dir="$1"
+    local safe_branch="$2"
+    local resolved
+    resolved=$(git -C "$wt_dir" branch --show-current 2>/dev/null)
+    [[ -n "$resolved" ]] && echo "$resolved" || echo "$safe_branch"
+}
+
 # Emit per-worktree metadata for a generated compose file.
 # Output: tab-separated tuples of <repo>\t<branch>\t<safe_branch>\t<host_path>
 #   repo        — project name (e.g. newspack-plugin, newspack-community)
-#   branch      — original branch (from metadata comment, or sanitized fallback)
+#   branch      — original branch, resolved in priority order: `# newspack-wt:`
+#                 metadata comment (ground truth, survives worktree deletion),
+#                 then the worktree's live branch (resolve_unsanitized_branch),
+#                 then the sanitized directory-name fallback.
 #   safe_branch — sanitized directory-name form (slashes -> dashes)
-#   host_path   — host-side dir relative to workspace root (plugins/X, themes/X, repos/X)
-# Reads `# newspack-wt:` comments (commit 4+) as ground truth for the original
-# branch; falls back to safe_branch from the mount path when comments are absent
-# (e.g., compose files generated before metadata existed). Emits a one-time note
-# to stderr when falling back, unless `--quiet` is passed (used by read-only
-# callers like env list, where the note would repeat per-env).
+#   host_path   — host-side dir relative to workspace root:
+#                   tier 1:              plugins/X or themes/X
+#                   tier 2 (standalone): repos/plugins/X or repos/themes/X
+# Anchored grep (start-of-line "- ") so commented-out volume lines can't
+# false-match. Emits a one-time stderr note when a mount has no metadata
+# comment, unless `--quiet` is passed (used by read-only callers like
+# `env list`, where the note would otherwise repeat per-env).
 parse_env_worktrees() {
     local compose_file="$1"
     local quiet="${2:-}"
@@ -68,7 +84,7 @@ parse_env_worktrees() {
 
     local warned_fallback=false warned_legacy=false
     while IFS= read -r line; do
-        local repo="" safe_branch="" host=""
+        local repo="" safe_branch="" host="" wt_dir=""
         # Legacy mount shape (pre-PR-#154): ./worktrees/<repo>/<branch>:/newspack-repos/<name>
         # The destroy / list helpers can't safely manage these; warn once per
         # compose file and skip. Affected envs need manual cleanup (`n env destroy`
@@ -85,15 +101,26 @@ parse_env_worktrees() {
         if [[ "$line" =~ \./worktrees/standalone/([^/]+)/([^:]+):/newspack-(plugins|themes)/([^[:space:]]+) ]]; then
             repo="${BASH_REMATCH[1]}"
             safe_branch="${BASH_REMATCH[2]}"
-            host="repos/${BASH_REMATCH[1]}"
+            # Typed host dir (repos/plugins/X or repos/themes/X), by existence —
+            # not via the registry: we're parsing an already-created env, so the
+            # checkout's location shouldn't depend on the repo still being
+            # declared in repos.local.sh. Default to plugins/ (the common case)
+            # if the checkout is gone, so the repos/ tier discriminator still holds.
+            if [[ -d "$NABSPATH/repos/themes/$repo" ]]; then
+                host="repos/themes/$repo"
+            else
+                host="repos/plugins/$repo"
+            fi
+            wt_dir="$NABSPATH/worktrees/standalone/$repo/$safe_branch"
         elif [[ "$line" =~ \./worktrees/([^/]+)/([^:]+):/newspack-(plugins|themes)/([^[:space:]]+) ]]; then
             safe_branch="${BASH_REMATCH[1]}"
             repo="${BASH_REMATCH[4]}"
             host="${BASH_REMATCH[2]}"
+            wt_dir="$NABSPATH/worktrees/$safe_branch"
         else
             continue
         fi
-        local branch="$safe_branch" found=false i
+        local branch="" found=false i
         for i in "${!comment_repos[@]}"; do
             if [[ "${comment_repos[$i]}" == "$repo" ]]; then
                 branch="${comment_branches[$i]}"
@@ -101,9 +128,15 @@ parse_env_worktrees() {
                 break
             fi
         done
-        if [[ "$found" != true && "$warned_fallback" != true && "$quiet" != "--quiet" ]]; then
-            echo "[env] note: $(basename "$compose_file") lacks newspack-wt metadata; using sanitized branch names" >&2
-            warned_fallback=true
+        if [[ "$found" != true ]]; then
+            # No metadata comment (e.g. a compose file generated before metadata
+            # existed): recover the live branch from the worktree, falling back
+            # to the sanitized directory name.
+            branch=$(resolve_unsanitized_branch "$wt_dir" "$safe_branch")
+            if [[ "$warned_fallback" != true && "$quiet" != "--quiet" ]]; then
+                echo "[env] note: $(basename "$compose_file") lacks newspack-wt metadata; recovering branch names from worktrees" >&2
+                warned_fallback=true
+            fi
         fi
         printf '%s\t%s\t%s\t%s\n' "$repo" "$branch" "$safe_branch" "$host"
     done < <(grep -E '^[[:space:]]*-[[:space:]]+\./worktrees/' "$compose_file")
@@ -126,7 +159,11 @@ cleanup_partial_env_state() {
         local s2_repo="${wt%%/*}"
         local s2_wt="$NABSPATH/worktrees/standalone/$wt"
         if [[ -d "$s2_wt" ]]; then
-            (cd "$NABSPATH/repos/$s2_repo" && git worktree remove --force "$s2_wt" 2>/dev/null) || true
+            # Standalone checkout lives at repos/{plugins,themes}/<repo> (typed).
+            local s2_repo_path
+            s2_repo_path=$(get_repo_host_path "$s2_repo")
+            [[ -z "$s2_repo_path" ]] && s2_repo_path="repos/$s2_repo"
+            (cd "$NABSPATH/$s2_repo_path" && git worktree remove --force "$s2_wt" 2>/dev/null) || true
         fi
     done
 }
@@ -649,6 +686,10 @@ MIGRATE
         echo "Environment '$env_name' is ready at https://${domain}/"
         # Copy built assets from canonical source into mounted worktrees.
         if [[ "$auto_build" == true ]]; then
+            # Anchored grep (start-of-line "- ") so commented-out volume lines
+            # can't false-match and trigger spurious copies. host is typed
+            # (plugins/X, themes/X, or repos/{plugins,themes}/X), so src points
+            # at the canonical built source for both tiers.
             while IFS=$'\t' read -r repo _branch safe_branch host; do
                 src="$NABSPATH/$host"
                 if [[ "$host" == repos/* ]]; then
@@ -765,7 +806,11 @@ MIGRATE
         fi
         # Remove compose file before worktrees so worktree.sh doesn't see them as env-bound.
         rm -f "$compose_file"
-        # Remove worktrees that were mounted by this environment.
+        # Remove worktrees that were mounted by this environment. wt_branch is
+        # the original branch (from `# newspack-wt:` metadata, else recovered
+        # live), so worktree.sh sanitizes it back to the exact directory it
+        # created and deletes the real branch ref — sidestepping the dangling-
+        # ref accrual that arises when only the safe (sanitized) form is known.
         for tuple in "${worktree_tuples[@]}"; do
             IFS=$'\t' read -r wt_repo wt_branch _safe wt_host <<< "$tuple"
             if [[ "$wt_host" == repos/* ]]; then
@@ -799,6 +844,8 @@ MIGRATE
                 status="stopped"
             fi
             # Collect worktrees as repo:branch pairs via the shared helper.
+            # parse_env_worktrees already resolves branch to its display form
+            # (metadata comment, else live git), so no extra recovery is needed.
             worktrees=""
             worktree_pairs=()
             while IFS=$'\t' read -r repo branch _safe _host; do

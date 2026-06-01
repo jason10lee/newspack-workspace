@@ -42,9 +42,9 @@ package_filter_for_dir() {
     fi
 }
 
-# Build a standalone repo using its own toolchain (it isn't part of the
-# pnpm workspace, so `pnpm --filter` won't find it). Respects lockfiles,
-# treats missing package.json as a no-op success.
+# Build a standalone repos/ checkout using its own toolchain (it isn't part of
+# the pnpm workspace, so `pnpm --filter` won't find it). Respects lockfiles,
+# treats a missing composer.json/package.json as a no-op success.
 build_standalone_repo() {
     local dir="$1"
     echo "Building standalone repo $dir"
@@ -106,7 +106,11 @@ cd "$MONOREPO_ROOT"
 # Workspace install: pnpm resolves `workspace:*` deps (e.g. newspack-scripts)
 # and links shared bins into each package's node_modules/.bin.
 if [ "$MODE" = "ci" ]; then
-    pnpm install --frozen-lockfile
+    # CI=true keeps pnpm non-interactive so a one-time node_modules re-layout
+    # (e.g. after a hoist-pattern change in .npmrc) auto-purges instead of
+    # blocking on a confirmation prompt -- `n` runs pnpm via `docker exec`
+    # without a TTY in non-interactive contexts, where that prompt aborts.
+    CI=true pnpm install --frozen-lockfile
 else
     pnpm install
 fi
@@ -114,8 +118,8 @@ fi
 case $WHAT_TO_BUILD in
     all)
         # Composer install per workspace project that ships its own composer.json.
-        # Skip standalone repos here — build_standalone_repo handles their PHP
-        # and JS install/build below.
+        # Skip standalone repos here — the loop below builds the declared ones
+        # (PHP + JS) via build_standalone_repo.
         while IFS= read -r dir; do
             [ -d "$dir" ] || continue
             [ -f "$dir/composer.json" ] || continue
@@ -134,10 +138,10 @@ case $WHAT_TO_BUILD in
         ;;
     *)
         dir="$(find_project "$WHAT_TO_BUILD")"
-        # Resolve the name (may have been auto-prefixed with newspack-) to
-        # decide tier; check both raw and prefixed forms.
-        name="$(basename "$dir")"
-        if is_standalone_repo "$name"; then
+        # Standalone repos build with their own toolchain. find_project resolves
+        # via resolve_project_path, which only yields a repos/ path for declared
+        # standalone repos, so a repos/ path here is already registry-gated.
+        if [[ "$dir" == "$REPOS_PATH"/* ]]; then
             build_standalone_repo "$dir"
         else
             pkg=$(package_filter_for_dir "$dir")

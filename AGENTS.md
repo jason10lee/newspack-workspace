@@ -15,6 +15,7 @@ newspack-workspace is the Newspack monorepo. It contains all product plugins, th
 - `plugins/<name>/` - Product plugins (12 total).
 - `themes/<name>/` - Themes (newspack-theme, newspack-block-theme).
 - `packages/<name>/` - Shared libraries (scripts, components, colors, icons).
+- `repos/plugins/<name>/`, `repos/themes/<name>/` - Standalone/local plugin and theme checkouts that live outside the monorepo (e.g. private or customer-specific plugins, `newspack-manager`, licensed WooCommerce extensions). The `repos/plugins` and `repos/themes` directories are tracked (`.gitkeep`); anything you drop inside them is gitignored. Mounted at `/newspack-repos` and symlinked into the active site (`wp-content/plugins/`, `wp-content/themes/`) by `bin/link-repos.sh`. **Any directory works with no registration** - `n` commands (`n build`, `n composer`, `n watch`, cwd-detection) discover `repos/` checkouts by path, so there's no need to edit `bin/repos.sh`. If a name also exists in the monorepo `plugins/`/`themes/`, the **tracked copy wins** and the `repos/` duplicate is skipped. Workflow: drop a real checkout in (clone/unzip directly, or `git worktree add`), build it, then `n restart`/`n start` to pick it up. A symlink *inside* `repos/` pointing outside the workspace will dangle in the container - use a real directory.
 
 Each directory is a standalone WordPress plugin/theme that can be zipped and installed independently.
 
@@ -205,7 +206,7 @@ Use `ncd <name>` (install with `n cd-install`) for quick navigation between proj
 - Batcache for page caching via `advanced-cache.php`
 
 ### Xdebug
-Configured on port 9003 with IDE key `DOCKERDEBUG`. Path mapping: `/newspack-plugins/<project>` maps to local `plugins/<project>` (or `repos/<project>` for standalone repos listed in `newspack_standalone_repos`), `/newspack-themes/<project>` maps to `themes/<project>`, `/newspack-repos/<project>` maps to `repos/<project>`.
+Configured on port 9003 with IDE key `DOCKERDEBUG`. Path mapping: `/newspack-plugins/<project>` maps to local `plugins/<project>` (or `repos/plugins/<project>` for a standalone repo `--worktree`d into an env), `/newspack-themes/<project>` maps to `themes/<project>`, and `/newspack-repos/plugins/<project>` / `/newspack-repos/themes/<project>` map to `repos/plugins/<project>` / `repos/themes/<project>`.
 
 ## Isolated Environments for Parallel Development
 
@@ -278,7 +279,9 @@ n sh <name>                    # Shell into environment container
 
 ### Standalone Repos (`newspack_standalone_repos`)
 
-Beyond the canonical monorepo plugins (`plugins/<name>/`) and themes (`themes/<name>/`), the workspace supports a third tier for **standalone repos**: separate git checkouts at `repos/<name>/` with their own history and remote. Typical uses: Newspack-adjacent repos like `newspack-manager` or `newspack-community`, and private/custom plugins you maintain as their own repos.
+Beyond the canonical monorepo plugins (`plugins/<name>/`) and themes (`themes/<name>/`), the workspace supports a third tier for **standalone repos**: separate git checkouts at `repos/plugins/<name>/` or `repos/themes/<name>/` with their own history and remote. Typical uses: Newspack-adjacent repos like `newspack-manager` or `newspack-community`, and private/custom plugins you maintain as their own repos.
+
+As described under [Directory Structure](#directory-structure), a checkout dropped into `repos/plugins/<name>/` or `repos/themes/<name>/` is auto-mounted and symlinked into the active site **by directory existence — no registration needed**. The `newspack_standalone_repos` registry is a separate, optional layer: declaring a name opts it into the **`n`-tooling surface** (`n build`/`test`/`watch` targeting, which gate on declaration) and the **env/worktree standalone tier**.
 
 Declare them in `bin/repos.local.sh` (gitignored — see `bin/repos.local.sh.sample`):
 ```bash
@@ -286,8 +289,8 @@ newspack_standalone_repos+=("newspack-community")
 ```
 
 Two modes of use:
-- **Available** — the host's `./repos/` directory is bind-mounted into every container at `/newspack-repos/`. Container-side tools (`n build`, `n watch`, path translation) recognize standalone names automatically.
-- **Active in an env** — `n env create demo --worktree newspack-community:branch-name` creates a worktree of the standalone repo and mounts it at `/newspack-plugins/<name>` so `link-repos.sh` symlinks it into `wp-content/plugins/`.
+- **Available** — the host's `./repos/` directory is bind-mounted into every container at `/newspack-repos/`. A checkout at `repos/plugins/<name>/` (or `repos/themes/<name>/`) is auto-linked into the active site, and `n` discovers it by path for cwd-detection. Declaring it additionally enables `n build`/`watch` targeting by name.
+- **Active in an env** — `n env create demo --worktree newspack-community:branch-name` creates a worktree of the (declared) standalone repo and mounts it at `/newspack-plugins/<name>` so `link-repos.sh` symlinks it into `wp-content/plugins/`.
 
 **Caveat:** `--worktree` always activates (the mount triggers auto-linking). Don't `--worktree` a hub-only repo (e.g. `newspack-manager`) into a main-site env — it'd land in the wrong `wp-content/plugins/`. Pick the right repo for the env.
 

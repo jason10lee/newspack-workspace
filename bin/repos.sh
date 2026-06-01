@@ -87,7 +87,17 @@ get_repo_host_path() {
 	done
 	for r in "${newspack_standalone_repos[@]}"; do
 		if [[ "$r" == "$name" ]]; then
-			echo "repos/$name"
+			# Standalone repos live under repos/{plugins,themes}/<name> (typed,
+			# matching the monorepo layout). The registry entry is just the name,
+			# so probe for the actual subdir against the workspace root ($NABSPATH,
+			# set by the n script for host-side callers). Default to plugins/ when
+			# neither exists yet (e.g. before the checkout is in place); standalone
+			# themes are the rare case.
+			if [[ -n "$NABSPATH" && -d "$NABSPATH/repos/themes/$name" ]]; then
+				echo "repos/themes/$name"
+			else
+				echo "repos/plugins/$name"
+			fi
 			return
 		fi
 	done
