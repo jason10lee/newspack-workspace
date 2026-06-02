@@ -4,8 +4,8 @@
  * settings + gating, the shared label helper, and cache invalidation).
  *
  * Frontend filters live in test-private-tags-frontend.php; integrations (GAM, Yoast,
- * REST, admin) live in test-private-tags-integrations.php. Split by behavior area so
- * each file stays small enough for Copilot's per-file review limit.
+ * REST, admin) live in test-private-tags-integrations.php. Split by behavior area to
+ * keep each test file focused and reasonably sized.
  *
  * @package Newspack\Tests
  */

@@ -64,19 +64,10 @@ trait Private_Tags_Test_Helper {
 	 * @param array<string, bool> $settings Settings to persist (merged into defaults).
 	 */
 	protected function set_private_tags_settings( array $settings ) {
-		$defaults = [
-			'all'            => false,
-			'archives'       => false,
-			'feeds'          => false,
-			'feed_terms'     => false,
-			'tag_links'      => false,
-			'tag_clouds'     => false,
-			'css_classes'    => false,
-			'gam_targeting'  => false,
-			'yoast_metadata' => false,
-			'yoast_sitemap'  => false,
-		];
-		update_option( 'newspack_private_tags_settings', array_merge( $defaults, $settings ) );
+		// sanitize_settings() whitelists the canonical setting keys and fills any
+		// missing ones with false, so we don't duplicate the key list here (which
+		// could drift as new behaviors are added).
+		update_option( 'newspack_private_tags_settings', Private_Tags::sanitize_settings( $settings ) );
 		$ref  = new ReflectionClass( Private_Tags::class );
 		$prop = $ref->getProperty( 'settings' );
 		$prop->setAccessible( true );
