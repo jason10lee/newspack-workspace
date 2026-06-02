@@ -1,9 +1,36 @@
-## newspack-theme [2.22.3](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.22.2...newspack-theme@2.22.3) (2026-06-01)
+# newspack-theme [2.23.0](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.22.3...newspack-theme@2.23.0) (2026-06-01)
 
 
 ### Bug Fixes
 
-* **ci:** keep workspace:* out of release commits + robust alpha maintenance ([#157](https://github.com/Automattic/newspack-workspace/issues/157)) ([3107576](https://github.com/Automattic/newspack-workspace/commit/3107576c07c7fe7a1b38864244556b44f6369f6a))
+* **a11y:** respect prefers-reduced-motion user preference ([#2687](https://github.com/Automattic/newspack-workspace/issues/2687)) ([ded8b91](https://github.com/Automattic/newspack-workspace/commit/ded8b9148ec896ff7b75935ff42b0aa0701f620a)), closes [#2622](https://github.com/Automattic/newspack-workspace/issues/2622)
+* correct checkout button block padding ([#2686](https://github.com/Automattic/newspack-workspace/issues/2686)) ([7d9d132](https://github.com/Automattic/newspack-workspace/commit/7d9d132d65eefc33fa8e4bf8eb65c5d7a94c2667))
+* hide empty paragraphs to prevent unexpected spacing ([#2708](https://github.com/Automattic/newspack-workspace/issues/2708)) ([66a854f](https://github.com/Automattic/newspack-workspace/commit/66a854fa59726061e2324a1ce30fb444abc8572a))
+* remove extra spacing on linked images ([#2709](https://github.com/Automattic/newspack-workspace/issues/2709)) ([0ff2a2c](https://github.com/Automattic/newspack-workspace/commit/0ff2a2c381052a3b77d56a0d3921a9aa4e4f7ffd))
+* replace display:none with visually-hidden styles in pagination text ([#2688](https://github.com/Automattic/newspack-workspace/issues/2688)) ([b78fb2f](https://github.com/Automattic/newspack-workspace/commit/b78fb2f39e31f551363aeabf1f546173617ff9b7)), closes [#2526](https://github.com/Automattic/newspack-workspace/issues/2526)
+* **template-tags:** resolve loading/fetchpriority conflict in post thumbnail ([74e375a](https://github.com/Automattic/newspack-workspace/commit/74e375a7b9b021d6d633e378bae19592b79a1c47)), closes [#2392](https://github.com/Automattic/newspack-workspace/issues/2392)
+
+
+### Features
+
+* add support for alternative Google Font sources ([#2693](https://github.com/Automattic/newspack-workspace/issues/2693)) ([af61cc3](https://github.com/Automattic/newspack-workspace/commit/af61cc3d76552afe1e289bc529b97b7a59040f6a)), closes [#1976](https://github.com/Automattic/newspack-workspace/issues/1976)
+
+# [2.23.0-alpha.1](https://github.com/Automattic/newspack-theme/compare/v2.22.2...v2.23.0-alpha.1) (2026-05-21)
+
+
+### Bug Fixes
+
+* **a11y:** respect prefers-reduced-motion user preference ([#2687](https://github.com/Automattic/newspack-theme/issues/2687)) ([43922fb](https://github.com/Automattic/newspack-theme/commit/43922fbdea196f47893fb6dd3d7a4cfc705ba5a4)), closes [#2622](https://github.com/Automattic/newspack-theme/issues/2622)
+* correct checkout button block padding ([#2686](https://github.com/Automattic/newspack-theme/issues/2686)) ([6434d5d](https://github.com/Automattic/newspack-theme/commit/6434d5d84e65723e9fc25d09817dd405fd535fdd))
+* hide empty paragraphs to prevent unexpected spacing ([#2708](https://github.com/Automattic/newspack-theme/issues/2708)) ([f2a22d4](https://github.com/Automattic/newspack-theme/commit/f2a22d46e7e8282832071bdeb3d3e066a256eebc))
+* remove extra spacing on linked images ([#2709](https://github.com/Automattic/newspack-theme/issues/2709)) ([07995e3](https://github.com/Automattic/newspack-theme/commit/07995e32824170bc63a08942a72887d998dc492d))
+* replace display:none with visually-hidden styles in pagination text ([#2688](https://github.com/Automattic/newspack-theme/issues/2688)) ([c53305a](https://github.com/Automattic/newspack-theme/commit/c53305ac328e4707270c9281505a304b7e6e5c30)), closes [#2526](https://github.com/Automattic/newspack-theme/issues/2526)
+* **template-tags:** resolve loading/fetchpriority conflict in post thumbnail ([c5343ed](https://github.com/Automattic/newspack-theme/commit/c5343ede08379ce3a421ba61b00dc31ba89fe6fe)), closes [#2392](https://github.com/Automattic/newspack-theme/issues/2392)
+
+
+### Features
+
+* add support for alternative Google Font sources ([#2693](https://github.com/Automattic/newspack-theme/issues/2693)) ([9233c15](https://github.com/Automattic/newspack-theme/commit/9233c150498ea61cf7c0ae8816f416e7383f9611)), closes [#1976](https://github.com/Automattic/newspack-theme/issues/1976)
 
 ## [2.22.2](https://github.com/Automattic/newspack-theme/compare/v2.22.1...v2.22.2) (2026-05-21)
 
