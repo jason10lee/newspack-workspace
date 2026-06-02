@@ -384,9 +384,9 @@ class Private_Tags {
 	 * Self-gates on is_enabled() so callers outside the feature flag (e.g. the
 	 * RSS module) can call it unconditionally.
 	 *
-	 * @param int    $term_id   The tag term ID.
-	 * @param string $term_name The tag name to (maybe) label.
-	 * @return string
+	 * @param int|string $term_id   The tag term ID (get_terms 'id=>name' yields string keys).
+	 * @param mixed      $term_name The tag name to (maybe) label; returned unchanged if not a string.
+	 * @return mixed The labeled string, or $term_name unchanged when no label applies.
 	 */
 	public static function maybe_append_private_label( $term_id, $term_name ) {
 		if ( ! self::is_enabled() || ! is_string( $term_name ) ) {

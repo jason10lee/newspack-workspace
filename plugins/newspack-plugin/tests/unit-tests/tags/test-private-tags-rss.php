@@ -213,7 +213,7 @@ class Test_Private_Tags_RSS extends WP_UnitTestCase {
 			[
 				'all'        => false,
 				'feed_terms' => false,
-			] 
+			]
 		);
 		$private = $this->make_private_tag( 'Beastie' );
 		$terms   = $this->get_terms_array( [ $private ] );
@@ -235,7 +235,7 @@ class Test_Private_Tags_RSS extends WP_UnitTestCase {
 			[
 				'all'        => true,
 				'feed_terms' => false,
-			] 
+			]
 		);
 		$private = $this->make_private_tag( 'Beastie' );
 		$terms   = $this->get_terms_array( [ $private ] );

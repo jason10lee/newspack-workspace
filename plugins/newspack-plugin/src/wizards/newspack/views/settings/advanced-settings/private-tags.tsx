@@ -19,7 +19,7 @@ const PUBLIC_TOGGLES = [
 ];
 
 const INTEGRATION_TOGGLES = [
-	{ key: 'css_classes', label: __( 'Remove private tags from CSS body classes', 'newspack-plugin' ) },
+	{ key: 'css_classes', label: __( 'Remove private tags from CSS classes', 'newspack-plugin' ) },
 	{ key: 'gam_targeting', label: __( 'Exclude private tags from Google Ad Manager targeting', 'newspack-plugin' ) },
 	{ key: 'yoast_metadata', label: __( 'Exclude private tags from Yoast SEO metadata', 'newspack-plugin' ) },
 	{ key: 'yoast_sitemap', label: __( 'Exclude private tags from Yoast XML sitemaps', 'newspack-plugin' ) },
