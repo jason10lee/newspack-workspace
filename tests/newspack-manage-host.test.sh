@@ -44,4 +44,10 @@ H3="$FIX/hosts3"; printf '127.0.0.7 fooXtest\n' > "$H3"
 NEWSPACK_MANAGE_HOST_HOSTS_FILE="$H3" bash "$WRAP" host-add 127.0.0.8 foo.test
 ok "dot-escaped dedup adds foo.test despite fooXtest present" "$(grep -c '^127.0.0.8 foo.test$' "$H3")" "1"
 
+# Dotted env name (e.g. foo.bar for --isolated-db) must be accepted and marked,
+# matching _common.sh's validate_env_name contract.
+H4="$FIX/hosts4"; : > "$H4"
+NEWSPACK_MANAGE_HOST_HOSTS_FILE="$H4" bash "$WRAP" host-add 127.0.0.5 dotted.test foo.bar
+ok "accepts dotted env name and writes its marker" "$(grep -c '^127.0.0.5 dotted.test # newspack-env:foo.bar$' "$H4")" "1"
+
 echo ""; echo "RESULT: $pass passed, $fail failed"; [ "$fail" -eq 0 ]

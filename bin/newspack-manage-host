@@ -40,8 +40,11 @@ validate_local_domain() {
 }
 
 validate_env_name() {
-    if [[ ! "$1" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-        echo "Error: invalid env name '$1' (alphanumeric, hyphens, underscores only)" >&2
+    # Matches _common.sh's validate_env_name (dots allowed, e.g. foo.bar for
+    # --isolated-db envs). Still excludes whitespace/newlines, so the marker
+    # cannot inject a second /etc/hosts line.
+    if [[ ! "$1" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+        echo "Error: invalid env name '$1' (alphanumeric, dots, hyphens, underscores only)" >&2
         exit 1
     fi
 }

@@ -23,6 +23,9 @@ env_hosts_sed_expr() {
 }
 
 # Remove every line for <domain> from an arbitrary file (no sudo). Pure.
+# Test/utility helper: env.sh's removal path uses env_hosts_remove (privileged),
+# which re-derives the same expression via env_hosts_sed_expr, so the two stay in
+# sync. This non-sudo variant exists for unit testing the matching behavior.
 env_hosts_strip() {
     local domain="${1:-}" file="${2:-}"
     [ -n "$domain" ] && [ -f "$file" ] || return 1
