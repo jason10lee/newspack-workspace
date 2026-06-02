@@ -275,6 +275,7 @@ n sh <name>                    # Shell into environment container
 - Each env gets its own database (`wordpress_<name>`) in the shared MariaDB server
 - Each env gets a unique `WP_CACHE_KEY_SALT` to prevent memcached key collisions
 - Worktrees override specific plugins (e.g., `newspack-plugin`) while sharing the rest from `./plugins/`
+- An env's auto-provisioned plugin `vendor/` is **runtime-only** (`composer install --no-dev`), which is all plugin activation needs. To get dev dependencies (PHPUnit etc.) for running a plugin's tests *inside* the container, run `n build <plugin>` or `n ci-build`. (`n test-php` itself is unaffected — it uses the container's global `phpunit`.)
 - All env containers join a shared `newspack_envs` Docker bridge network with their domain as a DNS alias, enabling inter-container communication (e.g., hub/node setups)
 - `n env destroy` cleans up everything: container, DB, html dir, hosts entry, and worktrees
 - Managed `/etc/hosts` lines carry a `# newspack-env:<name>` marker so `n env destroy` and `n env cleanup` can reliably remove them (and never touch your own entries). After updating the workspace, re-run `./bin/setup-networking.sh` to reinstall the `newspack-manage-host` wrapper that writes the marker; until then new entries are unmarked but functional and destroy falls back to removing by domain.
