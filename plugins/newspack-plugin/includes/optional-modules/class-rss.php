@@ -1156,9 +1156,10 @@ class RSS {
 		if ( $settings['use_tags_tags'] ) {
 			$cats         = get_the_terms( $post, 'category' );
 			$cats         = ( ! is_array( $cats ) ) ? [] : $cats;
-			// Private tags are already stripped from this post_tag lookup by
-			// Private_Tags::filter_feed_terms (hooked globally on get_the_terms in
-			// feed context). Do not add explicit private-tag filtering here.
+			// When the 'feed_terms' behavior is enabled, Private_Tags::filter_feed_terms
+			// (hooked globally on get_the_terms in feed context) already strips private
+			// tags from this post_tag lookup — so don't add separate filtering here. When
+			// that setting is off, private tags intentionally remain in the <tags> element.
 			$tags         = get_the_terms( $post, 'post_tag' );
 			$tags         = ( ! is_array( $tags ) ) ? [] : $tags;
 			$all_terms    = array_merge( $cats, $tags );

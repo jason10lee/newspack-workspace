@@ -1060,15 +1060,17 @@ class Private_Tags {
 			return $terms;
 		}
 
-		// array_values re-indexes after array_filter — consistent with the sibling
-		// filters (filter_tag_cloud, filter_ad_targeting, filter_reader_activity) and
-		// avoids handing gappy keys to any get_the_terms consumer in feed context.
-		// Non-WP_Term entries are left intact.
+		// Flip to an int-keyed lookup set so membership is O(1) per term via isset(),
+		// rather than O(private_tags) via in_array() — a feed can carry many terms.
+		// array_values re-indexes after array_filter, consistent with the sibling
+		// filters (filter_tag_cloud, filter_ad_targeting, filter_reader_activity);
+		// non-WP_Term entries are left intact.
+		$private_lookup = array_flip( $private_ids );
 		return array_values(
 			array_filter(
 				$terms,
-				function( $term ) use ( $private_ids ) {
-					return ! ( $term instanceof WP_Term ) || ! in_array( (int) $term->term_id, $private_ids, true );
+				function( $term ) use ( $private_lookup ) {
+					return ! ( $term instanceof WP_Term ) || ! isset( $private_lookup[ (int) $term->term_id ] );
 				}
 			)
 		);
