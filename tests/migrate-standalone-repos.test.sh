@@ -143,6 +143,25 @@ printf 'services:\n  x:\n    volumes:\n      - ./repos:/newspack-repos\n' > "$FI
 printf 'services:\n  y:\n    volumes:\n      - ./html:/var/www/html\n' > "$FIX/docker-compose.env-beta.yml"
 ok "lists envs that bind-mount ./repos" "$(msr_affected_envs | tr '\n' ',')" "alpha,"
 
+echo "== pre-flight container gate =="
+# Override the docker mounts seam with fixtures (no docker needed).
+msr_container_mounts() { printf 'whole\t%s\n' "$MSR_ROOT/repos"; }
+ok "whole ./repos mount blocks any name" "$(msr_blocking_containers anything | tr '\n' ',')" "whole,"
+msr_container_mounts() { printf 'sub\t%s\n' "$MSR_ROOT/repos/other"; }
+ok "repos/<name> mount blocks that name" "$(msr_blocking_containers other | tr '\n' ',')" "sub,"
+ok "repos/<name> mount does not block a different name" "$(msr_blocking_containers movable2 | tr '\n' ',')" ""
+# A move is refused (before any mv) when a blocker is present.
+msr_container_mounts() { printf 'pin\t%s\n' "$MSR_ROOT/repos"; }
+mkdir -p "$FIX/repos/pinned/.git"; printf '<?php' > "$FIX/repos/pinned/x.php"
+gate_out=$(msr_do_move pinned plugin 2>&1); gate_rc=$?
+ok "move refused when pinned (rc=1)" "$gate_rc" "1"
+ok "refuse prints docker stop" "$(echo "$gate_out" | grep -c 'docker stop')" "1"
+ok "pinned NOT moved while blocked" "$([ -d "$FIX/repos/pinned" ] && echo yes || echo no)" "yes"
+# With no blockers, the move proceeds.
+msr_container_mounts() { return 0; }
+msr_do_move pinned plugin >/dev/null 2>&1
+ok "move proceeds when unpinned" "$([ -d "$FIX/repos/plugins/pinned/.git" ] && echo yes || echo no)" "yes"
+
 echo ""
 echo "RESULT: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

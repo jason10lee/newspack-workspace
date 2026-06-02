@@ -27,6 +27,22 @@ Outcomes per repo:
 | `REPORT` | A typed copy already exists *and* a stale bare `repos/<name>` remains (partial prior migration) — inspect/remove by hand. |
 | `SKIP` | Already on the typed layout. |
 
+## Before applying: free the directory
+
+A repo can't be moved while it's pinned open. `--apply` runs a **pre-flight check**
+and refuses (printing the exact `docker stop`) when a running container
+bind-mounts the whole `./repos` or the target repo — on macOS, Docker's file
+sharing makes the host `mv` fail with `Permission denied` otherwise. Most envs
+mount the whole `./repos`, so in practice **all running envs must be stopped**
+before a migration:
+
+```bash
+docker stop <names printed by the tool>   # or: n stop / n env down <name>
+```
+
+Also make sure **no shell or editor session is `cd`'d into `repos/<name>`** (the
+directory you're moving) — including the terminal you run the tool from.
+
 ## Apply
 
 ```bash
