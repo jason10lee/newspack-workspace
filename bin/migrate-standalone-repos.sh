@@ -112,10 +112,68 @@ msr_classify() {
     echo "duplicate-clean"
 }
 
-main() {
-    echo "migrate-standalone-repos: not yet implemented" >&2
-    return 1
+# One human-readable plan line for a target.
+msr_plan_line() {
+    local name="$1" c; c="$(msr_classify "$name")"
+    case "$c" in
+        genuine-standalone:*)       echo "MOVE     $name  repos/$name -> $(msr_target_relpath "$name" "${c#genuine-standalone:}")" ;;
+        duplicate-clean)            echo "REMOVE   $name  (clean monorepo duplicate -> trash)" ;;
+        unsafe:*)                   echo "REFUSE   $name  (${c#unsafe:})" ;;
+        stale-bare-alongside-typed) echo "REPORT   $name  (typed copy exists; stale bare repos/$name remains — inspect/remove by hand)" ;;
+        already-typed)              echo "SKIP     $name  (already typed)" ;;
+        absent)                     echo "MISSING  $name  (no repos/$name)" ;;
+    esac
 }
+
+# Enumerate bare repos/<name> dirs (excludes plugins/, themes/, trash, dotfiles).
+msr_list_bare() {
+    local d name
+    for d in "$MSR_ROOT"/repos/*/; do
+        [ -d "$d" ] || continue
+        name="$(basename "$d")"
+        case "$name" in plugins|themes|.*) continue ;; esac
+        echo "$name"
+    done
+}
+
+main() {
+    local apply=false targets=() n
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --apply) apply=true; shift ;;
+            --all)   shift; while IFS= read -r n; do targets+=("$n"); done < <(msr_list_bare) ;;
+            -*)      echo "Unknown option: $1" >&2; return 2 ;;
+            *)       targets+=("$1"); shift ;;
+        esac
+    done
+    if [ "${#targets[@]}" -eq 0 ]; then
+        echo "Usage: migrate-standalone-repos.sh [<name>...] [--all] [--apply]" >&2
+        return 2
+    fi
+    # Workspace-root sanity guard (review F4): a mis-resolved MSR_ROOT would make
+    # every duplicate look like a genuine standalone and silently MOVE it.
+    if [ ! -d "$MSR_ROOT/plugins" ] || [ ! -d "$MSR_ROOT/themes" ]; then
+        echo "ERROR: $MSR_ROOT has no plugins/ + themes/ — not a workspace root (set NABSPATH)" >&2
+        return 2
+    fi
+    # Dedupe targets (a name passed explicitly and via --all). Repo names carry
+    # no spaces, so word-split re-collection is safe.
+    targets=($(printf '%s\n' ${targets[@]+"${targets[@]}"} | awk '!seen[$0]++'))
+
+    echo "Plan (workspace: $MSR_ROOT):"
+    local name
+    for name in "${targets[@]}"; do msr_plan_line "$name"; done
+
+    if [ "$apply" != true ]; then
+        echo ""
+        echo "Dry run. Re-run with --apply to execute. Removals back up to $MSR_TRASH_DIR first."
+        return 0
+    fi
+    msr_apply "${targets[@]}"
+}
+
+# Replaced in Tasks 7–8.
+msr_apply() { echo "apply: not yet implemented" >&2; return 1; }
 
 # Only run main when executed directly, not when sourced by tests.
 if [ "${BASH_SOURCE[0]}" = "${0}" ]; then

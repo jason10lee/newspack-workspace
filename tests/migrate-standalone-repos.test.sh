@@ -93,6 +93,20 @@ ok "unsafe divergent content" "$(msr_classify dupfork)" "unsafe:divergent-conten
 mkdir -p "$FIX/repos/plugins/bothy/.git" "$FIX/repos/bothy/.git"
 ok "stale bare alongside typed" "$(msr_classify bothy)" "stale-bare-alongside-typed"
 
+echo "== dry-run plan (no fs changes) =="
+# Root guard needs plugins/ + themes/ to exist (created by earlier fixtures).
+mkdir -p "$FIX/repos/dryplug/.git"; printf '<?php' > "$FIX/repos/dryplug/x.php"
+out=$(NABSPATH="$FIX" "$BIN/migrate-standalone-repos.sh" dryplug 2>&1)
+ok "dry-run names the move target" "$(echo "$out" | grep -c 'dryplug.*repos/plugins/dryplug')" "1"
+ok "dry-run is non-destructive (bare still present)" "$([ -d "$FIX/repos/dryplug" ] && echo yes)" "yes"
+ok "dry-run did NOT create the typed path" "$([ -d "$FIX/repos/plugins/dryplug" ] && echo yes || echo no)" "no"
+ok "dry-run prints the apply hint" "$(echo "$out" | grep -c -- '--apply')" "1"
+# Root guard: a root lacking plugins/+themes/ must exit 2.
+RGUARD="$(mktemp -d)"; mkdir -p "$RGUARD/repos/x"
+NABSPATH="$RGUARD" "$BIN/migrate-standalone-repos.sh" x >/dev/null 2>&1
+ok "root guard exits 2 when not a workspace" "$?" "2"
+rm -rf "$RGUARD"
+
 echo ""
 echo "RESULT: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
