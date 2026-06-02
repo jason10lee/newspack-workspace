@@ -523,6 +523,24 @@ networks:
 MIGRATE
             echo "Migrated $env_name: added shared network (domain: $domain)"
         fi
+        # Migrate older worktree envs: also mount each tier-1 worktree at the pnpm
+        # workspace-member path so `n build` builds the worktree in place. The
+        # helper only returns members that are MISSING, so this is idempotent.
+        member_lines=$(worktree_member_lines_to_add "$compose_file")
+        if [[ -n "$member_lines" ]]; then
+            while IFS= read -r member_line; do
+                [ -n "$member_line" ] || continue
+                # The serving line shares the same "<wt_dir>:" prefix; insert the
+                # member line right after it. (Only the serving line matches here —
+                # the member line isn't in the file yet, by construction.)
+                member_wt_dir="${member_line#*- }"; member_wt_dir="${member_wt_dir%%:*}"
+                awk -v ins="$member_line" -v pfx="- ${member_wt_dir}:/newspack-" '
+                    { print }
+                    index($0, pfx) { print ins }
+                ' "$compose_file" > "${compose_file}.tmp" && mv "${compose_file}.tmp" "$compose_file"
+            done <<< "$member_lines"
+            echo "Migrated $env_name: added workspace-member mount(s) for in-place worktree builds"
+        fi
         # Re-read domain after potential migration.
         domain=$(domain_for_env "$compose_file")
         # Ensure loopback alias exists (macOS only — Linux routes all 127.x.x.x by default).
