@@ -274,6 +274,18 @@ class Emails {
 			return false;
 		}
 
+		// Normalize numeric-string post IDs to int BEFORE the
+		// gettype()-based branching below. Without this, a caller
+		// passing a digit-only string (e.g. from $_POST, post meta,
+		// or a cast-naive integration) would be routed to the
+		// string-name branch and silently fail because
+		// get_email_config_by_type() looks up type names, not IDs.
+		// Only digit-only strings are normalized — sender-name-style
+		// strings stay strings.
+		if ( is_string( $config_name ) && '' !== $config_name && ctype_digit( $config_name ) ) {
+			$config_name = (int) $config_name;
+		}
+
 		self::maybe_run_ras_acc_template_migration();
 
 		// Switch locale around the FULL send operation, not just
@@ -472,13 +484,22 @@ class Emails {
 	 */
 	private static function validate_send_prerequisites( $post_id, $to ) {
 		// Caller-input checks first (cheap, common failure modes).
-		if ( empty( $post_id ) || ! is_numeric( $post_id ) || (int) $post_id <= 0 ) {
+		// is_numeric() is too loose — accepts '1.5', '1e3', '1.7e308'
+		// which then (int)-cast to 1, 1000, or PHP_INT_MAX silently,
+		// potentially resolving the wrong post. Require an actual
+		// integer-shaped value (int type OR a digit-only string),
+		// then normalize to int so downstream calls operate on a
+		// well-typed positive integer.
+		$is_int_shaped = is_int( $post_id )
+			|| ( is_string( $post_id ) && '' !== $post_id && ctype_digit( $post_id ) );
+		if ( ! $is_int_shaped || (int) $post_id <= 0 ) {
 			return new \WP_Error(
 				'newspack_emails_invalid_post_id',
 				esc_html__( 'A valid email post ID is required.', 'newspack-plugin' ),
 				[ 'status' => 400 ]
 			);
 		}
+		$post_id = (int) $post_id;
 		if ( empty( $to ) ) {
 			return new \WP_Error(
 				'newspack_emails_empty_recipient',
@@ -580,14 +601,23 @@ class Emails {
 			$headers[] = sprintf( 'Reply-To: %s <%s>', $email_config['from_name'], $email_config['reply_to_email'] );
 		}
 
+		// try/finally so the wp_mail_content_type filter is removed
+		// even if wp_mail() (or a filter it triggers) throws —
+		// otherwise the html-content-type filter persists for every
+		// subsequent wp_mail() call in the same request, silently
+		// converting plain-text mails (password resets, WP core
+		// notifications) to html.
 		add_filter( 'wp_mail_content_type', $email_content_type );
-		$email_send_result = wp_mail( // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.wp_mail_wp_mail
-			$to,
-			$email_config['subject'],
-			self::get_email_payload( $config_name, $placeholders ),
-			$headers
-		);
-		remove_filter( 'wp_mail_content_type', $email_content_type );
+		try {
+			$email_send_result = wp_mail( // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.wp_mail_wp_mail
+				$to,
+				$email_config['subject'],
+				self::get_email_payload( $config_name, $placeholders ),
+				$headers
+			);
+		} finally {
+			remove_filter( 'wp_mail_content_type', $email_content_type );
+		}
 
 		// Log dispatch outcome, not the attempt. The old
 		// unconditional "Sending..." log produced misleading

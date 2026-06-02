@@ -479,6 +479,86 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Tight post_id validation: is_numeric() is too loose — it
+	 * accepts floats like '1.5' and scientific notation like '1e3'
+	 * which then truncate-cast to ints (1, 1000) and resolve to
+	 * the wrong post. Require integer-shaped input.
+	 *
+	 * Each value must be rejected with newspack_emails_invalid_post_id.
+	 */
+	public function test_test_send_rejects_non_integer_shaped_post_id() {
+		$admin = self::login_as_admin();
+		try {
+			// Values is_numeric() accepts but ctype_digit rejects.
+			// Each must surface newspack_emails_invalid_post_id (400).
+			$non_integer_shapes = [
+				'1.5',
+				'1e3',
+				'1.7e308',
+				'-5',
+				'abc',
+				'12abc',
+				' 5 ',
+				'',
+				null,
+			];
+
+			foreach ( $non_integer_shapes as $bad_post_id ) {
+				// Friendly label for assertion-failure output. null
+				// and '' don't survive sprintf %s cleanly otherwise.
+				$label  = null === $bad_post_id ? 'NULL' : ( '' === $bad_post_id ? "''" : "'{$bad_post_id}'" );
+				$result = Emails::send_test_email( $bad_post_id, 'tester@example.com' );
+				self::assertInstanceOf(
+					WP_Error::class,
+					$result,
+					"post_id {$label} must be rejected"
+				);
+				self::assertSame(
+					'newspack_emails_invalid_post_id',
+					$result->get_error_code(),
+					"post_id {$label} wrong error code"
+				);
+			}
+		} finally {
+			self::logout_admin( $admin );
+		}
+	}
+
+	/**
+	 * Digit-only string post_id normalizes to int and routes to the
+	 * post-id branch correctly. Locks in the send_email
+	 * gettype()-branching hardening: numeric-string callers (from
+	 * $_POST, post meta, cast-naive integrations) no longer silently
+	 * fall through to the string-name branch.
+	 */
+	public function test_send_test_email_accepts_numeric_string_post_id() {
+		$test_email      = self::get_test_email( 'test-email-config' );
+		$original_status = get_post_status( $test_email['post_id'] );
+		wp_update_post(
+			[
+				'ID'          => $test_email['post_id'],
+				'post_status' => 'draft',
+			]
+		);
+
+		$admin = self::login_as_admin();
+		try {
+			// Cast post_id to a string to simulate what a $_POST
+			// or untyped REST param would deliver pre-absint.
+			$result = Emails::send_test_email( (string) $test_email['post_id'], 'tester@example.com' );
+			self::assertTrue( $result, 'Numeric-string post_id must be accepted (normalized to int internally).' );
+		} finally {
+			self::logout_admin( $admin );
+			wp_update_post(
+				[
+					'ID'          => $test_email['post_id'],
+					'post_status' => $original_status,
+				]
+			);
+		}
+	}
+
+	/**
 	 * Subscriber-level user calling the REST route is blocked by
 	 * api_permissions_check (the route's permission_callback).
 	 */
