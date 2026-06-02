@@ -140,14 +140,17 @@ msr_list_bare() {
     done
 }
 
-# Names of envs whose compose file bind-mounts ./repos (so a relink/restart is
-# needed after a migration). Scans envs/*/docker-compose*.yml under the root.
+# Names of envs whose compose file bind-mounts the whole ./repos dir (so a
+# relink/restart is needed after a migration). Env composes live at the root as
+# docker-compose.env-<name>.yml; the env name is the filename infix.
 msr_affected_envs() {
-    local f name
-    for f in "$MSR_ROOT"/envs/*/docker-compose*.yml; do
+    local f base name
+    for f in "$MSR_ROOT"/docker-compose.env-*.yml; do
         [ -f "$f" ] || continue
         if grep -qE '^[[:space:]]*-[[:space:]]*\./repos:/newspack-repos' "$f"; then
-            name="$(basename "$(dirname "$f")")"
+            base="$(basename "$f")"          # docker-compose.env-<name>.yml
+            name="${base#docker-compose.env-}"
+            name="${name%.yml}"
             echo "$name"
         fi
     done

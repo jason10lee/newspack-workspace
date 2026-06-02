@@ -138,9 +138,9 @@ ok "unsafe left in place" "$([ -d "$FIX/repos/unsafe1" ] && echo yes || echo no)
 ok "apply reports REFUSED" "$(echo "$out" | grep -c 'REFUSED  *unsafe1')" "1"
 
 echo "== msr_affected_envs =="
-mkdir -p "$FIX/envs/alpha" "$FIX/envs/beta"
-printf 'services:\n  x:\n    volumes:\n      - ./repos:/newspack-repos\n' > "$FIX/envs/alpha/docker-compose.yml"
-printf 'services:\n  y:\n    volumes:\n      - ./html:/var/www/html\n' > "$FIX/envs/beta/docker-compose.yml"
+# Real convention: root-level docker-compose.env-<name>.yml (not envs/<name>/).
+printf 'services:\n  x:\n    volumes:\n      - ./repos:/newspack-repos\n' > "$FIX/docker-compose.env-alpha.yml"
+printf 'services:\n  y:\n    volumes:\n      - ./html:/var/www/html\n' > "$FIX/docker-compose.env-beta.yml"
 ok "lists envs that bind-mount ./repos" "$(msr_affected_envs | tr '\n' ',')" "alpha,"
 
 echo ""
