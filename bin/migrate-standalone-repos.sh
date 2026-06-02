@@ -156,6 +156,50 @@ msr_affected_envs() {
     done
 }
 
+# IO seam: emit "<container>\t<host-source-path>" for every bind mount of every
+# running container. Overridable in tests; empty/no-op when docker is absent.
+msr_container_mounts() {
+    command -v docker >/dev/null 2>&1 || return 0
+    local c src
+    for c in $(docker ps --format '{{.Names}}' 2>/dev/null); do
+        docker inspect "$c" --format '{{range .Mounts}}{{println .Source}}{{end}}' 2>/dev/null \
+            | while IFS= read -r src; do
+                [ -n "$src" ] && printf '%s\t%s\n' "$c" "$src"
+            done
+    done
+}
+
+# Running containers that pin repos/<name>: those bind-mounting the whole
+# ./repos dir, or repos/<name> (or a path under it). Echoes container names.
+msr_blocking_containers() {
+    # Separate declarations: a single `local a=$1 b=$a` expands all words before
+    # assigning, so `$name` would be unbound under set -u.
+    local name="$1" repos target tab
+    repos="$MSR_ROOT/repos"
+    target="$MSR_ROOT/repos/$name"
+    tab="$(printf '\t')"
+    msr_container_mounts | while IFS="$tab" read -r c src; do
+        case "$src" in
+            "$repos"|"$repos/"|"$target"|"$target"/*) echo "$c" ;;
+        esac
+    done | sort -u
+}
+
+# Pre-flight: refuse to mutate repos/<name> while a running container pins it
+# (a host rename/move is denied by macOS Docker's file sharing). Prints the
+# exact `docker stop` to run. Returns non-zero when blocked.
+msr_assert_unpinned() {
+    local name="$1" blockers
+    blockers="$(msr_blocking_containers "$name" | tr '\n' ' ')"
+    if [ -n "${blockers// /}" ]; then
+        echo "  REFUSED $name: running container(s) pin repos/$name — stop them first:" >&2
+        echo "    docker stop ${blockers% }" >&2
+        echo "    (also ensure no shell/session is cd'd into repos/$name)" >&2
+        return 1
+    fi
+    return 0
+}
+
 main() {
     local apply=false targets=() n
     while [ $# -gt 0 ]; do
@@ -204,6 +248,7 @@ main() {
 # verify. On verify failure, roll the move back and return non-zero.
 msr_do_move() {
     local name="$1" kind="$2" rel src dst
+    msr_assert_unpinned "$name" || return 1
     rel="$(msr_target_relpath "$name" "$kind")"
     src="$MSR_ROOT/repos/$name"; dst="$MSR_ROOT/$rel"
     # Capture the linked-worktree set BEFORE the move. The linked worktrees
@@ -254,6 +299,7 @@ msr_apply() {
 # repos/. Never rm repo content outright — the trash copy is the safety net.
 msr_do_remove() {
     local name="$1" ts dest
+    msr_assert_unpinned "$name" || return 1
     ts="$(date -u +%Y%m%dT%H%M%SZ)"
     dest="$MSR_TRASH_DIR/$ts"
     mkdir -p "$dest"
