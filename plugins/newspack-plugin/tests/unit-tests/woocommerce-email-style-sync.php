@@ -49,6 +49,7 @@ class Newspack_Test_WooCommerce_Email_Style_Sync extends WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
 		delete_option( WooCommerce_Email_Style_Sync::FIRST_RUN_DONE_OPTION );
+		delete_option( WooCommerce_Email_Style_Sync::LAST_SYNCED_BASE_COLOR_OPTION );
 		delete_option( 'woocommerce_email_base_color' );
 		delete_option( 'woocommerce_email_header_image' );
 		remove_theme_mod( 'primary_color_hex' );
@@ -71,17 +72,17 @@ class Newspack_Test_WooCommerce_Email_Style_Sync extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		delete_option( WooCommerce_Email_Style_Sync::FIRST_RUN_DONE_OPTION );
+		delete_option( WooCommerce_Email_Style_Sync::LAST_SYNCED_BASE_COLOR_OPTION );
 		delete_option( 'woocommerce_email_base_color' );
 		delete_option( 'woocommerce_email_header_image' );
 		remove_theme_mod( 'primary_color_hex' );
 		remove_theme_mod( 'custom_logo' );
 
-		// Narrow removal of the specific callback this class registers,
+		// Narrow removal of the specific callbacks this class registers,
 		// not remove_all_filters — that would nuke any sibling caller's
 		// registration on the same hook.
 		remove_filter( 'newspack_wc_email_style_sync_enabled', '__return_false' );
 		remove_filter( 'newspack_wc_emails_available', '__return_true' );
-		remove_all_filters( 'newspack_wc_email_style_sync_wc_default_base_color' );
 
 		// Restore the hook we removed in set_up() so subsequent tests
 		// run against the same hook table as the rest of the suite.
@@ -132,9 +133,10 @@ class Newspack_Test_WooCommerce_Email_Style_Sync extends WP_UnitTestCase {
 	}
 
 	public function test_maybe_sync_on_first_run_skips_when_customized() {
-		// Publisher already has a value in the option row — could be a
-		// real customization or could be a WC migration write. Either
-		// way, the row-presence check treats it as customization.
+		// Publisher set their own value (`#deadbe` doesn't match any known
+		// WC default — neither the hardcoded historicals nor any value
+		// EmailColors would return). Value-equality check correctly
+		// identifies this as a real customization, so the sync skips.
 		update_option( 'woocommerce_email_base_color', '#deadbe' );
 		set_theme_mod( 'primary_color_hex', '#112233' );
 
@@ -193,15 +195,10 @@ class Newspack_Test_WooCommerce_Email_Style_Sync extends WP_UnitTestCase {
 	 * brand color.
 	 */
 	public function test_first_run_writes_base_color_when_stored_value_matches_wc_default() {
-		// Use the filter to control "WC default" without depending on
-		// WC's @internal EmailColors class.
-		add_filter(
-			'newspack_wc_email_style_sync_wc_default_base_color',
-			static function () {
-				return '#8526ff';
-			}
-		);
-		// Seed the stored value as WC default (Katie's bug case).
+		// `#8526ff` is in the hardcoded historical WC defaults list, so
+		// no filter setup needed — the customization check recognizes it
+		// as a WC-wrote-this value regardless of whether the @internal
+		// EmailColors class is available in the test runtime.
 		update_option( 'woocommerce_email_base_color', '#8526ff' );
 		set_theme_mod( 'primary_color_hex', '#003da5' );
 
@@ -210,22 +207,20 @@ class Newspack_Test_WooCommerce_Email_Style_Sync extends WP_UnitTestCase {
 		$this->assertSame(
 			'#003da5',
 			get_option( 'woocommerce_email_base_color' ),
-			'Stored value matches WC default → not customized → sync should write the Newspack brand color.'
+			'Stored value matches a known WC default → not customized → sync should write the Newspack brand color.'
 		);
 	}
 
 	/**
 	 * Real publisher customization is still protected. Stored value
-	 * differs from WC's default → treat as customized → skip the write.
+	 * differs from every known WC default → treat as customized → skip
+	 * the write.
 	 */
 	public function test_first_run_skips_base_color_when_stored_value_differs_from_wc_default() {
-		add_filter(
-			'newspack_wc_email_style_sync_wc_default_base_color',
-			static function () {
-				return '#8526ff';
-			}
-		);
-		// Publisher's deliberate customization — differs from WC default.
+		// Publisher's deliberate customization — `#deadbe` is not in any
+		// of the hardcoded historicals (`#7f54b3`, `#720eec`, `#8526ff`)
+		// and EmailColors is unavailable in test runtime, so the check
+		// correctly identifies this as customization.
 		update_option( 'woocommerce_email_base_color', '#deadbe' );
 		set_theme_mod( 'primary_color_hex', '#003da5' );
 
@@ -234,7 +229,7 @@ class Newspack_Test_WooCommerce_Email_Style_Sync extends WP_UnitTestCase {
 		$this->assertSame(
 			'#deadbe',
 			get_option( 'woocommerce_email_base_color' ),
-			'Stored value differs from WC default → customized → must not overwrite.'
+			'Stored value differs from every known WC default → customized → must not overwrite.'
 		);
 	}
 
@@ -264,14 +259,9 @@ class Newspack_Test_WooCommerce_Email_Style_Sync extends WP_UnitTestCase {
 	 * existed). This locks in the per-option behavior.
 	 */
 	public function test_first_run_skips_header_image_but_still_writes_base_color() {
-		add_filter(
-			'newspack_wc_email_style_sync_wc_default_base_color',
-			static function () {
-				return '#8526ff';
-			}
-		);
 		// header_image populated (publisher uploaded their logo), but
-		// base_color is at WC default (i.e. WC settings-save wrote it).
+		// base_color is at WC default `#8526ff` (i.e. WC settings-save
+		// wrote it). The hardcoded historicals catch this value.
 		update_option( 'woocommerce_email_header_image', 'https://example.test/existing-logo.png' );
 		update_option( 'woocommerce_email_base_color', '#8526ff' );
 		set_theme_mod( 'primary_color_hex', '#003da5' );
@@ -288,6 +278,138 @@ class Newspack_Test_WooCommerce_Email_Style_Sync extends WP_UnitTestCase {
 			'#003da5',
 			get_option( 'woocommerce_email_base_color' ),
 			'Base color gets the Newspack primary — header_image customization does not block the color sync.'
+		);
+	}
+
+	/**
+	 * Empty-string row is treated as "no customization" (same as row
+	 * absent). Some WC code paths register options with `''` defaults
+	 * and persist that on first settings save; treating that as
+	 * customization would silently bypass the brand-color sync.
+	 */
+	public function test_first_run_writes_base_color_when_row_is_empty_string() {
+		update_option( 'woocommerce_email_base_color', '' );
+		set_theme_mod( 'primary_color_hex', '#003da5' );
+
+		WooCommerce_Email_Style_Sync::maybe_sync_on_first_run();
+
+		$this->assertSame(
+			'#003da5',
+			get_option( 'woocommerce_email_base_color' ),
+			'Empty-string row → not customization → sync writes the Newspack brand color.'
+		);
+	}
+
+	/**
+	 * Hardcoded historical WC defaults (`#7f54b3` pre-9.6.1, `#720eec`
+	 * 9.6.1+ legacy) are recognized as "WC wrote this" even when WC's
+	 *
+	 * @internal EmailColors class isn't available. This is the safety
+	 * net for older WC installs.
+	 */
+	public function test_first_run_recognizes_hardcoded_historical_wc_defaults() {
+		foreach ( [ '#7f54b3', '#720eec' ] as $historical_default ) {
+			update_option( 'woocommerce_email_base_color', $historical_default );
+			delete_option( WooCommerce_Email_Style_Sync::FIRST_RUN_DONE_OPTION );
+			delete_option( WooCommerce_Email_Style_Sync::LAST_SYNCED_BASE_COLOR_OPTION );
+			set_theme_mod( 'primary_color_hex', '#003da5' );
+
+			WooCommerce_Email_Style_Sync::maybe_sync_on_first_run();
+
+			$this->assertSame(
+				'#003da5',
+				get_option( 'woocommerce_email_base_color' ),
+				sprintf( 'Historical WC default %s must be recognized → sync writes Newspack brand color.', $historical_default )
+			);
+		}
+	}
+
+	/**
+	 * Provenance: `sync_base_color()` records the value it wrote in
+	 * `LAST_SYNCED_BASE_COLOR_OPTION`. Subsequent `sync_styles()`
+	 * invocations compare against this marker to detect publisher edits.
+	 */
+	public function test_first_run_records_provenance_marker_when_writing() {
+		set_theme_mod( 'primary_color_hex', '#003da5' );
+
+		WooCommerce_Email_Style_Sync::maybe_sync_on_first_run();
+
+		$this->assertSame(
+			'#003da5',
+			get_option( WooCommerce_Email_Style_Sync::LAST_SYNCED_BASE_COLOR_OPTION ),
+			'After a successful first-run write, the provenance marker must record what we wrote.'
+		);
+	}
+
+	/**
+	 * Provenance: when first-run SKIPS due to publisher customization,
+	 * the current stored value gets recorded as the provenance baseline
+	 * — so subsequent `sync_styles()` calls correctly identify any
+	 * further publisher edits as edits (not as "this is what we wrote").
+	 */
+	public function test_first_run_records_provenance_marker_when_skipping_due_to_customization() {
+		update_option( 'woocommerce_email_base_color', '#deadbe' );
+		set_theme_mod( 'primary_color_hex', '#003da5' );
+
+		WooCommerce_Email_Style_Sync::maybe_sync_on_first_run();
+
+		$this->assertSame(
+			'#deadbe',
+			get_option( WooCommerce_Email_Style_Sync::LAST_SYNCED_BASE_COLOR_OPTION ),
+			'Provenance marker must seed to the publisher value on first-run skip, so sync_styles() can detect future edits as edits.'
+		);
+	}
+
+	/**
+	 * Ongoing path: `sync_styles()` skips when the publisher has edited
+	 * `woocommerce_email_base_color` via WC > Settings > Emails after our
+	 * last write. The stored value no longer matches the provenance
+	 * marker; respect the publisher's customization.
+	 */
+	public function test_sync_styles_skips_when_stored_differs_from_provenance_marker() {
+		// Simulate prior sync: we wrote `#aaaaaa` and recorded it.
+		update_option( 'woocommerce_email_base_color', '#aaaaaa' );
+		update_option( WooCommerce_Email_Style_Sync::LAST_SYNCED_BASE_COLOR_OPTION, '#aaaaaa' );
+		// Publisher then edits to their own value via WC > Settings.
+		update_option( 'woocommerce_email_base_color', '#cafe00' );
+		// Theme changes after that publisher edit.
+		set_theme_mod( 'primary_color_hex', '#bbbbbb' );
+
+		WooCommerce_Email_Style_Sync::sync_styles();
+
+		$this->assertSame(
+			'#cafe00',
+			get_option( 'woocommerce_email_base_color' ),
+			'Stored value differs from the provenance marker → publisher edited via WC > Settings → sync_styles() must skip.'
+		);
+		$this->assertSame(
+			'#aaaaaa',
+			get_option( WooCommerce_Email_Style_Sync::LAST_SYNCED_BASE_COLOR_OPTION ),
+			'Provenance marker must not be updated on the skip path.'
+		);
+	}
+
+	/**
+	 * Ongoing path: `sync_styles()` proceeds when the stored value still
+	 * matches the provenance marker — the publisher hasn't touched it
+	 * since our last write, so the new theme color is safe to apply.
+	 */
+	public function test_sync_styles_proceeds_when_stored_matches_provenance_marker() {
+		update_option( 'woocommerce_email_base_color', '#aaaaaa' );
+		update_option( WooCommerce_Email_Style_Sync::LAST_SYNCED_BASE_COLOR_OPTION, '#aaaaaa' );
+		set_theme_mod( 'primary_color_hex', '#bbbbbb' );
+
+		WooCommerce_Email_Style_Sync::sync_styles();
+
+		$this->assertSame(
+			'#bbbbbb',
+			get_option( 'woocommerce_email_base_color' ),
+			'Stored matches marker → publisher untouched → sync_styles() writes the new theme color.'
+		);
+		$this->assertSame(
+			'#bbbbbb',
+			get_option( WooCommerce_Email_Style_Sync::LAST_SYNCED_BASE_COLOR_OPTION ),
+			'Provenance marker updates to the new written value.'
 		);
 	}
 }
