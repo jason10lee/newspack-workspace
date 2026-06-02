@@ -4,6 +4,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/repos.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/ssl-trust.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/env-hosts.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/worktree-mounts.sh"
 
 # Sanitize env name for use as a database name (replace dashes with underscores).
 db_name_for_env() {
@@ -261,7 +262,7 @@ case $1 in
                         fi
                         worktree_dir="./worktrees/$safe_branch/$wt_host_path"
                     fi
-                    worktree_volumes="$worktree_volumes      - $worktree_dir:$wt_container_path
+                    worktree_volumes="${worktree_volumes}$(worktree_volume_lines "$worktree_dir" "$wt_container_path" "$wt_host_path")
 "
                     # Persist original branch + repo so destroy/list don't have to
                     # reconstruct from sanitized paths (commit 5 reads this).
