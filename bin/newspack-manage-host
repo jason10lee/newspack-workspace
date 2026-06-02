@@ -11,11 +11,16 @@
 
 set -euo pipefail
 
+# Hosts file path. Overridable for tests via an env var; sudo's env_reset means
+# this override does NOT survive a sudo invocation, so the privileged path always
+# uses /etc/hosts. Tests invoke the wrapper directly (no sudo) with the override.
+HOSTS_FILE="${NEWSPACK_MANAGE_HOST_HOSTS_FILE:-/etc/hosts}"
+
 usage() {
     echo "Usage:"
     echo "  $0 alias-add <127.0.0.X>"
     echo "  $0 alias-remove <127.0.0.X>"
-    echo "  $0 host-add <127.0.0.X> <domain.test>"
+    echo "  $0 host-add <127.0.0.X> <domain.test> [env-name]"
     echo "  $0 host-remove <domain.test>"
     exit 1
 }
@@ -30,6 +35,16 @@ validate_loopback_ip() {
 validate_local_domain() {
     if [[ ! "$1" =~ ^[a-zA-Z0-9._-]+\.(test|local)$ ]]; then
         echo "Error: invalid domain '$1' (must end in .test or .local)" >&2
+        exit 1
+    fi
+}
+
+validate_env_name() {
+    # Matches _common.sh's validate_env_name (dots allowed, e.g. foo.bar for
+    # --isolated-db envs). Still excludes whitespace/newlines, so the marker
+    # cannot inject a second /etc/hosts line.
+    if [[ ! "$1" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+        echo "Error: invalid env name '$1' (alphanumeric, dots, hyphens, underscores only)" >&2
         exit 1
     fi
 }
@@ -49,17 +64,23 @@ case "$1" in
         [[ $# -lt 3 ]] && usage
         validate_loopback_ip "$2"
         validate_local_domain "$3"
-        # Don't add if already present.
-        if ! grep -q "[[:space:]]${3}$" /etc/hosts 2>/dev/null; then
-            echo "$2 $3" >> /etc/hosts
+        # Dedup tolerates a trailing marker: match domain followed by EOL or whitespace.
+        dedup_escaped="${3//./\\.}"
+        if ! grep -Eq "[[:space:]]${dedup_escaped}([[:space:]]|$)" "$HOSTS_FILE" 2>/dev/null; then
+            if [[ $# -ge 4 && -n "$4" ]]; then
+                validate_env_name "$4"
+                echo "$2 $3 # newspack-env:$4" >> "$HOSTS_FILE"
+            else
+                echo "$2 $3" >> "$HOSTS_FILE"
+            fi
         fi
         ;;
     host-remove)
         validate_local_domain "$2"
         escaped="${2//./\\.}"
-        # BSD sed first, fall back to GNU sed.
-        sed -i '' "/[[:space:]]${escaped}$/d" /etc/hosts 2>/dev/null || \
-            sed -i "/[[:space:]]${escaped}$/d" /etc/hosts
+        # Match the domain followed by EOL or a trailing marker; BSD sed first, GNU fallback.
+        sed_expr="/[[:space:]]${escaped}\\([[:space:]].*\\)\\{0,1\\}\$/d"
+        sed -i '' "$sed_expr" "$HOSTS_FILE" 2>/dev/null || sed -i "$sed_expr" "$HOSTS_FILE"
         ;;
     *)
         usage
