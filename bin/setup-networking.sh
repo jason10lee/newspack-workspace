@@ -23,7 +23,10 @@ provision_ssl() {
             if ! ssl_host_mkcert_present; then
                 if command -v brew >/dev/null 2>&1; then
                     echo "Installing mkcert via Homebrew..."
-                    brew install mkcert
+                    if ! brew install mkcert; then
+                        echo "Warning: 'brew install mkcert' failed; install mkcert manually, then re-run this script." >&2
+                        return 0
+                    fi
                 else
                     echo "mkcert is not installed and Homebrew was not found."
                     echo "Install mkcert (https://github.com/FiloSottile/mkcert#installation), then re-run this script."
