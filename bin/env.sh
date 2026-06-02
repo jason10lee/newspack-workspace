@@ -135,7 +135,7 @@ case $1 in
                     validate_name "$wt_repo" "repo"
                     validate_name "$wt_branch" "branch"
                     # Sanitize branch for directory name (feat/foo -> feat-foo).
-                    safe_branch=$(echo "$wt_branch" | tr '/' '-')
+                    safe_branch=$(sanitize_branch "$wt_branch")
                     # Create a monorepo worktree at this branch if it doesn't exist.
                     if [[ ! -d "$NABSPATH/worktrees/$safe_branch" ]]; then
                         echo "Creating worktree at branch $wt_branch..."
@@ -574,9 +574,9 @@ MIGRATE
             real_branch=$(resolve_unsanitized_branch "$wt_branch")
             sanitized_matches=0
             while IFS= read -r candidate; do
-                [[ "$(echo "$candidate" | tr '/' '-')" == "$wt_branch" ]] && sanitized_matches=$((sanitized_matches + 1))
+                [[ "$(sanitize_branch "$candidate")" == "$wt_branch" ]] && sanitized_matches=$((sanitized_matches + 1))
             done < <(git -C "$NABSPATH" for-each-ref --format='%(refname:short)' refs/heads 2>/dev/null)
-            if [[ "$(echo "$real_branch" | tr '/' '-')" == "$wt_branch" && "$sanitized_matches" -eq 1 ]]; then
+            if [[ "$(sanitize_branch "$real_branch")" == "$wt_branch" && "$sanitized_matches" -eq 1 ]]; then
                 "$NABSPATH/bin/worktree.sh" remove --yes "$wt_repo" "$real_branch"
             else
                 "$NABSPATH/bin/worktree.sh" remove --yes "$wt_repo" "$wt_branch"

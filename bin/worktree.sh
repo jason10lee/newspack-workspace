@@ -8,11 +8,6 @@ source "$(dirname "${BASH_SOURCE[0]}")/repos.sh"
 # contains the entire monorepo tree. The env system mounts specific
 # subdirectories (plugins/<name>, themes/<name>) into the container.
 
-# Sanitize a branch name for use as a directory: feat/foo -> feat-foo.
-sanitize_branch() {
-    echo "$1" | tr '/' '-'
-}
-
 case $1 in
     add)
         # Usage: worktree.sh add <branch>

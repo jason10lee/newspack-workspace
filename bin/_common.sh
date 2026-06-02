@@ -31,6 +31,14 @@ validate_port() {
     fi
 }
 
+# Sanitize a branch name for use as a directory name: feat/foo -> feat-foo.
+# Canonical transform shared by worktree.sh (worktree dir naming) and env.sh
+# (mount parsing + env-destroy branch resolution) so the rule can't drift
+# between call sites.
+sanitize_branch() {
+    echo "$1" | tr '/' '-'
+}
+
 # Logging helpers — mirror the colored output used by bin/site-setup.sh.
 NP_RED='\033[0;31m'
 NP_GREEN='\033[0;32m'
