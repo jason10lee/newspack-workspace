@@ -29,7 +29,10 @@ worktree_member_lines_to_add() {
     local line wt_dir host_path target
     while IFS= read -r line; do
         # tier-1 serving mount: ./worktrees/<sb>/(plugins|themes)/<name>:/newspack-(plugins|themes)/<name>
-        if [[ "$line" =~ -[[:space:]]+(\./worktrees/[^/:]+/((plugins|themes)/[^[:space:]:]+)):/newspack-(plugins|themes)/[^[:space:]:]+[[:space:]]*$ ]]; then
+        # Anchored at start-of-line (after optional whitespace) so a commented-out
+        # volume line (`# - ./worktrees/...`) can't false-match — mirrors the
+        # comment-safe anchoring in env.sh's parse_env_worktrees.
+        if [[ "$line" =~ ^[[:space:]]*-[[:space:]]+(\./worktrees/[^/:]+/((plugins|themes)/[^[:space:]:]+)):/newspack-(plugins|themes)/[^[:space:]:]+[[:space:]]*$ ]]; then
             wt_dir="${BASH_REMATCH[1]}"
             host_path="${BASH_REMATCH[2]}"
             target="${wt_dir}:/newspack-monorepo/${host_path}"
