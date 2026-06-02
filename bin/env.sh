@@ -3,6 +3,7 @@
 source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/repos.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/ssl-trust.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/env-hosts.sh"
 
 # Sanitize env name for use as a database name (replace dashes with underscores).
 db_name_for_env() {
@@ -412,15 +413,15 @@ YAML
         if [[ "$domain" != "$ip" ]] && ! grep -q "[[:space:]]${domain}" /etc/hosts 2>/dev/null; then
             if command -v newspack-manage-host >/dev/null 2>&1 && [[ "$domain" == *.test || "$domain" == *.local ]]; then
                 # Passwordless via the locked-down wrapper — works without a TTY.
-                sudo newspack-manage-host host-add "$ip" "$domain"
+                sudo newspack-manage-host host-add "$ip" "$domain" "$env_name"
             elif [ -t 0 ] && [ -t 1 ]; then
                 read -p "Add $domain to /etc/hosts? (Y/n): " choice
                 choice=$(echo "$choice" | tr '[:upper:]' '[:lower:]')
                 if [[ "$choice" != "n" ]]; then
-                    echo "$ip $domain" | sudo tee -a /etc/hosts > /dev/null
+                    echo "$ip $domain # newspack-env:${env_name}" | sudo tee -a /etc/hosts > /dev/null
                 fi
             else
-                echo "Note: add hosts entry before browser access: sudo sh -c 'echo \"$ip $domain\" >> /etc/hosts'"
+                echo "Note: add hosts entry before browser access: sudo sh -c 'echo \"$ip $domain # newspack-env:${env_name}\" >> /etc/hosts'"
             fi
         fi
         # Start the environment immediately or prompt.
@@ -537,15 +538,15 @@ MIGRATE
         if [[ -n "$domain" && "$domain" != "$ip" ]] && ! grep -q "[[:space:]]${domain}" /etc/hosts 2>/dev/null; then
             if command -v newspack-manage-host >/dev/null 2>&1 && [[ "$domain" == *.test || "$domain" == *.local ]]; then
                 # Passwordless via the locked-down wrapper — works without a TTY.
-                sudo newspack-manage-host host-add "$ip" "$domain"
+                sudo newspack-manage-host host-add "$ip" "$domain" "$env_name"
                 echo "Added $domain to /etc/hosts"
             elif [ -t 0 ] && [ -t 1 ]; then
                 echo "Adding $domain to /etc/hosts (requires sudo)..."
-                echo "$ip $domain" | sudo tee -a /etc/hosts > /dev/null
+                echo "$ip $domain # newspack-env:${env_name}" | sudo tee -a /etc/hosts > /dev/null
                 echo "Added $domain to /etc/hosts"
             else
                 echo "Warning: $domain not in /etc/hosts. Browser access won't work until added."
-                echo "Run: sudo sh -c 'echo \"$ip $domain\" >> /etc/hosts'"
+                echo "Run: sudo sh -c 'echo \"$ip $domain # newspack-env:${env_name}\" >> /etc/hosts'"
             fi
         fi
         # Source env files for DB credentials.
@@ -809,16 +810,24 @@ MIGRATE
                 echo "Removed data/newspack-dev_mysql_lowercase_${safe}/"
             fi
         fi
-        # Remove /etc/hosts entry (only for custom domains, not IP-based).
-        if [[ -n "$domain" && "$domain" != "$ip" ]] && grep -q "$domain" /etc/hosts 2>/dev/null; then
-            if command -v newspack-manage-host >/dev/null 2>&1 && [[ "$domain" == *.test || "$domain" == *.local ]]; then
-                sudo newspack-manage-host host-remove "$domain"
-            else
-                escaped_domain="${domain//./\\.}"
-                { sudo sed -i '' "/[[:space:]]${escaped_domain}$/d" /etc/hosts 2>/dev/null || \
-                  sudo sed -i "/[[:space:]]${escaped_domain}$/d" /etc/hosts; }
-            fi
-            echo "Removed $domain from /etc/hosts"
+        # Remove /etc/hosts entries for this env. Prefer marker-based removal
+        # (robust if the domain changed mid-life); fall back to the current domain.
+        removed_any=false
+        if grep -q "${NEWSPACK_HOSTS_MARKER}${env_name}$" /etc/hosts 2>/dev/null; then
+            while IFS= read -r marked_domain; do
+                [ -n "$marked_domain" ] || continue
+                if env_hosts_remove "$marked_domain"; then removed_any=true; fi
+            done < <(grep "${NEWSPACK_HOSTS_MARKER}${env_name}$" /etc/hosts 2>/dev/null | awk '{print $2}')
+        fi
+        if [[ "$removed_any" == false && -n "$domain" && "$domain" != "$ip" ]] \
+            && grep -q "[[:space:]]${domain}" /etc/hosts 2>/dev/null; then
+            if env_hosts_remove "$domain"; then removed_any=true; fi
+        fi
+        if [[ "$removed_any" == true ]]; then
+            echo "Removed /etc/hosts entries for env '$env_name'"
+        elif [[ -n "$domain" && "$domain" != "$ip" ]] && grep -q "[[:space:]]${domain}" /etc/hosts 2>/dev/null; then
+            echo "Warning: /etc/hosts entry for $domain may remain (no privileged removal ran)."
+            echo "Remove it with: sudo newspack-manage-host host-remove $domain"
         fi
         # Remove compose file before worktrees so worktree.sh doesn't see them as env-bound.
         rm -f "$compose_file"
