@@ -27,7 +27,7 @@ ssl_host_ca_trusted() {
 # Returns 0 (trusted) or 1 (untrusted/error) — normalises openssl verify's
 # non-zero exit codes (1 = cert error, 2 = untrusted issuer) to a single 1.
 ssl_cert_is_host_trusted() {
-    local cert="$1" caroot
+    local cert="${1:-}" caroot
     ssl_host_mkcert_present || return 1
     [ -f "$cert" ] || return 1
     caroot="$(mkcert -CAROOT 2>/dev/null)"
