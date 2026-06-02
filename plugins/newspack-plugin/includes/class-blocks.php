@@ -42,6 +42,7 @@ final class Blocks {
 			require_once NEWSPACK_ABSPATH . 'src/blocks/overlay-menu/panel/class-overlay-menu-panel-block.php';
 			require_once NEWSPACK_ABSPATH . 'src/blocks/overlay-search/class-overlay-search-block.php';
 			require_once NEWSPACK_ABSPATH . 'src/blocks/adaptive-container/class-adaptive-container-block.php';
+			require_once NEWSPACK_ABSPATH . 'src/blocks/adaptive-container/slot/class-adaptive-container-slot-block.php';
 			Social_Icons::init();
 		}
 		if ( Collections::is_module_active() ) {
