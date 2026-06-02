@@ -2,6 +2,7 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/repos.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/ssl-trust.sh"
 
 # Sanitize env name for use as a database name (replace dashes with underscores).
 db_name_for_env() {
@@ -599,12 +600,27 @@ MIGRATE
             echo "Error: failed to start container"
             exit 1
         fi
-        # Generate SSL certificate using host mkcert (trusted CA) and copy into container.
+        # Generate SSL certificate. Prefer host mkcert (host-trusted CA); fall back to
+        # the container's self-signed cert. Three trust states (see SSL-trust spec):
         echo "Setting up SSL for $domain..."
         certs_dir="$NABSPATH/envs/${env_name}/certs"
         mkdir -p "$certs_dir"
-        if command -v mkcert >/dev/null 2>&1 && [[ ! -f "$certs_dir/${domain}.pem" ]]; then
-            (cd "$certs_dir" && mkcert "$domain" 2>/dev/null)
+        if ssl_host_mkcert_present; then
+            if ! ssl_host_ca_trusted; then
+                echo "[env] warning: host mkcert is installed but its CA is not trusted —" >&2
+                echo "[env]          https://${domain} will be rejected by browsers until you" >&2
+                echo "[env]          run ./bin/setup-networking.sh (installs + trusts the CA)," >&2
+                echo "[env]          then re-run 'n env up ${env_name}'." >&2
+            fi
+            # Regenerate if absent OR not chained to the current host CA (stale/container cert).
+            if [[ ! -f "$certs_dir/${domain}.pem" ]] || ! ssl_cert_is_host_trusted "$certs_dir/${domain}.pem"; then
+                rm -f "$certs_dir/${domain}.pem" "$certs_dir/${domain}-key.pem"
+                (cd "$certs_dir" && mkcert "$domain" 2>/dev/null)
+            fi
+        else
+            echo "[env] warning: host mkcert not found — https://${domain} will be untrusted." >&2
+            echo "[env]          Run ./bin/setup-networking.sh (or: brew install mkcert && mkcert -install)," >&2
+            echo "[env]          then re-run 'n env up ${env_name}' to regenerate a trusted cert." >&2
         fi
         if [[ -f "$certs_dir/${domain}.pem" ]]; then
             docker cp "$certs_dir/${domain}.pem" "$container_name":/etc/ssl/certs/${domain}.pem

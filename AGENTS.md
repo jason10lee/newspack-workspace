@@ -121,6 +121,7 @@ n restart         # Stop and start
 ```bash
 cp default.env .env           # Create local config
 ./build-image.sh              # Build Docker image (PHP 8.3)
+./bin/setup-networking.sh     # macOS: passwordless networking + trusted SSL for envs
 ./build-image-82.sh           # Build PHP 8.2 image
 n start                       # Launch containers
 n install                     # Install WordPress
@@ -267,7 +268,7 @@ n sh <name>                    # Shell into environment container
 ```
 
 ### How It Works
-- Each env binds to a unique loopback IP (127.0.0.2+) on ports 80/443 with HTTPS via mkcert
+- Each env binds to a unique loopback IP (127.0.0.2+) on ports 80/443 with HTTPS via mkcert. Run `./bin/setup-networking.sh` once (macOS) to install mkcert and trust its CA — env certs are then trusted by your browser; without it, env HTTPS is untrusted and `env up` prints a warning with the fix.
 - Domain defaults to the loopback IP, overridable with `--domain`
 - `n start` pre-creates loopback aliases (127.0.0.2–100) so agents can create envs without sudo. If `newspack-manage-host` is installed (via `./bin/setup-networking.sh`), networking is set up without password prompts -- otherwise `sudo` is required
 - Each env mounts `envs/<name>/html/` as `/var/www/html` (isolated from `./html/`)
