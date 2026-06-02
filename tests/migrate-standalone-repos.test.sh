@@ -137,6 +137,12 @@ out=$(NABSPATH="$FIX" "$BIN/migrate-standalone-repos.sh" unsafe1 --apply 2>&1)
 ok "unsafe left in place" "$([ -d "$FIX/repos/unsafe1" ] && echo yes || echo no)" "yes"
 ok "apply reports REFUSED" "$(echo "$out" | grep -c 'REFUSED  *unsafe1')" "1"
 
+echo "== msr_affected_envs =="
+mkdir -p "$FIX/envs/alpha" "$FIX/envs/beta"
+printf 'services:\n  x:\n    volumes:\n      - ./repos:/newspack-repos\n' > "$FIX/envs/alpha/docker-compose.yml"
+printf 'services:\n  y:\n    volumes:\n      - ./html:/var/www/html\n' > "$FIX/envs/beta/docker-compose.yml"
+ok "lists envs that bind-mount ./repos" "$(msr_affected_envs | tr '\n' ',')" "alpha,"
+
 echo ""
 echo "RESULT: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

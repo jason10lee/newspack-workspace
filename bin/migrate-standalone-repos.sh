@@ -140,6 +140,19 @@ msr_list_bare() {
     done
 }
 
+# Names of envs whose compose file bind-mounts ./repos (so a relink/restart is
+# needed after a migration). Scans envs/*/docker-compose*.yml under the root.
+msr_affected_envs() {
+    local f name
+    for f in "$MSR_ROOT"/envs/*/docker-compose*.yml; do
+        [ -f "$f" ] || continue
+        if grep -qE '^[[:space:]]*-[[:space:]]*\./repos:/newspack-repos' "$f"; then
+            name="$(basename "$(dirname "$f")")"
+            echo "$name"
+        fi
+    done
+}
+
 main() {
     local apply=false targets=() n
     while [ $# -gt 0 ]; do
@@ -167,6 +180,14 @@ main() {
     echo "Plan (workspace: $MSR_ROOT):"
     local name
     for name in "${targets[@]}"; do msr_plan_line "$name"; done
+
+    # Relink reminder — printed in both dry-run and apply, once, after the plan.
+    local envs; envs="$(msr_affected_envs | tr '\n' ' ')"
+    if [ -n "${envs// /}" ]; then
+        echo ""
+        echo "Envs bind-mounting ./repos (relink + restart after applying): ${envs% }"
+        echo "  for each: n env restart <name>   # re-runs link-repos in the container"
+    fi
 
     if [ "$apply" != true ]; then
         echo ""
