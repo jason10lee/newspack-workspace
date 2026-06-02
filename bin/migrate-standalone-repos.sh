@@ -185,16 +185,38 @@ msr_blocking_containers() {
     done | sort -u
 }
 
-# Pre-flight: refuse to mutate repos/<name> while a running container pins it
-# (a host rename/move is denied by macOS Docker's file sharing). Prints the
-# exact `docker stop` to run. Returns non-zero when blocked.
+# Echo "<cmd>(<pid>)" for processes whose cwd IS the target repo dir
+# (best-effort; empty when lsof is unavailable). Overridable in tests.
+msr_cwd_rooted_procs() {
+    command -v lsof >/dev/null 2>&1 || return 0
+    lsof -a -d cwd -- "$MSR_ROOT/repos/$1" 2>/dev/null | awk 'NR>1 {print $1"("$2")"}' | sort -u
+}
+
+# Pre-flight: refuse to mutate repos/<name> while anything pins it — a running
+# container (macOS Docker denies the host rename), the caller's own shell, or
+# another process cwd-rooted in it (moving it leaves a phantom recreated dir).
+# Prints the fix. Returns non-zero when blocked.
 msr_assert_unpinned() {
-    local name="$1" blockers
+    local name="$1" blockers rooted pwd_real
+    # (1) The caller's shell must not be inside the dir being moved.
+    pwd_real="$(pwd -P 2>/dev/null)"
+    case "$pwd_real/" in
+        "$MSR_ROOT/repos/$name/"*)
+            echo "  REFUSED $name: your shell is inside repos/$name — cd out first (e.g. cd \"$MSR_ROOT\")" >&2
+            return 1 ;;
+    esac
+    # (2) No running container may bind-mount the whole ./repos or the target.
     blockers="$(msr_blocking_containers "$name" | tr '\n' ' ')"
     if [ -n "${blockers// /}" ]; then
         echo "  REFUSED $name: running container(s) pin repos/$name — stop them first:" >&2
         echo "    docker stop ${blockers% }" >&2
-        echo "    (also ensure no shell/session is cd'd into repos/$name)" >&2
+        return 1
+    fi
+    # (3) No other process may be cwd-rooted in the dir (e.g. an agent session).
+    rooted="$(msr_cwd_rooted_procs "$name" | tr '\n' ' ')"
+    if [ -n "${rooted// /}" ]; then
+        echo "  REFUSED $name: process(es) have cwd in repos/$name: ${rooted% }" >&2
+        echo "    run the migration from a session not rooted in repos/$name." >&2
         return 1
     fi
     return 0

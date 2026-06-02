@@ -41,7 +41,11 @@ docker stop <names printed by the tool>   # or: n stop / n env down <name>
 ```
 
 Also make sure **no shell or editor session is `cd`'d into `repos/<name>`** (the
-directory you're moving) — including the terminal you run the tool from.
+directory you're moving) — including the terminal you run the tool from. The
+pre-flight check enforces this too: it refuses if your shell's `cwd` is inside
+the target, or (best-effort, via `lsof`) if any other process is `cwd`-rooted
+there. Moving a directory that a live session is rooted in otherwise leaves an
+empty phantom dir recreated under the old path.
 
 ## Apply
 
