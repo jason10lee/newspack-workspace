@@ -19,6 +19,8 @@ newspack-workspace is the Newspack monorepo. It contains all product plugins, th
 
 Each directory is a standalone WordPress plugin/theme that can be zipped and installed independently.
 
+> **Migrating from the legacy `repos/<name>` layout?** Standalone checkouts used to live directly under `repos/<name>`; they now belong at `repos/plugins/<name>` / `repos/themes/<name>`. Use `bin/migrate-standalone-repos.sh` (dry-run by default) to relocate them safely — it classifies plugin vs theme, repairs worktrees, and backs up stale monorepo duplicates to trash. See [`docs/migrating-standalone-repos.md`](docs/migrating-standalone-repos.md).
+
 ### Plugins and Themes
 
 The Newspack product consists of these interconnected plugins and themes:
