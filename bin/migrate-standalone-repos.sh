@@ -54,6 +54,39 @@ msr_is_monorepo_tracked() {
     return 1
 }
 
+# Echo a reason if the checkout carries unique (unrecoverable-on-remove) git
+# state, else echo ''. Reasons: not-a-git-repo, dirty-working-tree,
+# unpushed-commits (a local branch tip not contained in any remote ref),
+# stash-entries. Detached-HEAD-only commits remain a known gap (recoverable via
+# the trash backup; documented in the operator guide).
+msr_unique_git_state() {
+    local dir="$1" tip
+    git -C "$dir" rev-parse --git-dir >/dev/null 2>&1 || { echo "not-a-git-repo"; return; }
+    if [ -n "$(git -C "$dir" status --porcelain 2>/dev/null)" ]; then echo "dirty-working-tree"; return; fi
+    while IFS= read -r tip; do
+        [ -z "$tip" ] && continue
+        if [ -z "$(git -C "$dir" branch -r --contains "$tip" 2>/dev/null)" ]; then
+            echo "unpushed-commits"; return
+        fi
+    done <<EOF
+$(git -C "$dir" for-each-ref --format='%(objectname)' refs/heads 2>/dev/null)
+EOF
+    [ -n "$(git -C "$dir" stash list 2>/dev/null)" ] && { echo "stash-entries"; return; }
+    echo ""
+}
+
+# 0 if repos/<name> tracked content is byte-identical to the monorepo copy
+# (ignoring .git). Confirms a name-collision is a true stale mirror, not a fork.
+msr_content_matches_monorepo() {
+    local name="$1" mono="" kind d
+    for kind in plugins themes; do
+        d="$MSR_ROOT/$kind/$name"
+        if [ -d "$d" ] && [ -n "$(ls -A "$d" 2>/dev/null)" ]; then mono="$d"; break; fi
+    done
+    [ -n "$mono" ] || return 1
+    diff -rq --exclude=.git "$MSR_ROOT/repos/$name" "$mono" >/dev/null 2>&1
+}
+
 main() {
     echo "migrate-standalone-repos: not yet implemented" >&2
     return 1
