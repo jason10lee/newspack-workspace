@@ -87,6 +87,31 @@ msr_content_matches_monorepo() {
     diff -rq --exclude=.git "$MSR_ROOT/repos/$name" "$mono" >/dev/null 2>&1
 }
 
+# Classify repos/<name> into exactly one outcome string:
+#   absent | already-typed | stale-bare-alongside-typed
+#   | genuine-standalone:<plugin|theme> | duplicate-clean | unsafe:<reason>
+msr_classify() {
+    local name="$1"
+    if [ -d "$MSR_ROOT/repos/plugins/$name" ] || [ -d "$MSR_ROOT/repos/themes/$name" ]; then
+        # A leftover bare copy alongside the typed one is a partial prior
+        # migration — surface it rather than silently SKIP.
+        [ -d "$MSR_ROOT/repos/$name" ] && { echo "stale-bare-alongside-typed"; return; }
+        echo "already-typed"; return
+    fi
+    if [ ! -d "$MSR_ROOT/repos/$name" ]; then
+        echo "absent"; return
+    fi
+    if ! msr_is_monorepo_tracked "$name"; then
+        echo "genuine-standalone:$(msr_detect_kind "$MSR_ROOT/repos/$name")"; return
+    fi
+    # Name collides with a monorepo plugin/theme — only a verified stale mirror
+    # is safe to remove.
+    local reason; reason="$(msr_unique_git_state "$MSR_ROOT/repos/$name")"
+    if [ -n "$reason" ]; then echo "unsafe:$reason"; return; fi
+    if ! msr_content_matches_monorepo "$name"; then echo "unsafe:divergent-content"; return; fi
+    echo "duplicate-clean"
+}
+
 main() {
     echo "migrate-standalone-repos: not yet implemented" >&2
     return 1

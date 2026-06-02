@@ -70,6 +70,29 @@ if msr_content_matches_monorepo dup; then ok "identical content -> match" yes ye
 printf 'different\n' > "$FIX/repos/dup/main.php"
 if msr_content_matches_monorepo dup; then ok "divergent content -> no match" yes no; else ok "divergent content -> no match" no no; fi
 
+echo "== msr_classify =="
+mkdir -p "$FIX/repos/standalone-plug/.git"; printf '<?php\n/* Plugin Name: X */' > "$FIX/repos/standalone-plug/x.php"
+ok "genuine standalone plugin" "$(msr_classify standalone-plug)" "genuine-standalone:plugin"
+mkdir -p "$FIX/repos/standalone-thm/.git"; printf 'Theme Name: T\n' > "$FIX/repos/standalone-thm/style.css"
+ok "genuine standalone theme" "$(msr_classify standalone-thm)" "genuine-standalone:theme"
+mkdir -p "$FIX/repos/plugins/already/.git"
+ok "already typed" "$(msr_classify already)" "already-typed"
+ok "absent" "$(msr_classify ghost)" "absent"
+git init -q --bare "$FIX/origin-dup.git"; git clone -q "$FIX/origin-dup.git" "$FIX/repos/dupclean" 2>/dev/null
+mkdir -p "$FIX/plugins/dupclean"; printf 'A\n' > "$FIX/plugins/dupclean/a.php"; printf 'A\n' > "$FIX/repos/dupclean/a.php"
+( cd "$FIX/repos/dupclean" && git add -A && git -c user.email=t@t -c user.name=t commit -q -m a && git push -q origin HEAD:main && git branch -q --set-upstream-to=origin/main ) 2>/dev/null
+ok "duplicate clean" "$(msr_classify dupclean)" "duplicate-clean"
+cp -R "$FIX/repos/dupclean" "$FIX/repos/dupdirty"; mkdir -p "$FIX/plugins/dupdirty"; printf 'A\n' > "$FIX/plugins/dupdirty/a.php"
+printf 'edit' >> "$FIX/repos/dupdirty/a.php"
+ok "unsafe dirty" "$(msr_classify dupdirty)" "unsafe:dirty-working-tree"
+git init -q --bare "$FIX/origin-fork.git"; git clone -q "$FIX/origin-fork.git" "$FIX/repos/dupfork" 2>/dev/null
+mkdir -p "$FIX/plugins/dupfork"; printf 'MONO\n' > "$FIX/plugins/dupfork/a.php"; printf 'FORK\n' > "$FIX/repos/dupfork/a.php"
+( cd "$FIX/repos/dupfork" && git add -A && git -c user.email=t@t -c user.name=t commit -q -m fork && git push -q origin HEAD:main && git branch -q --set-upstream-to=origin/main ) 2>/dev/null
+ok "unsafe divergent content" "$(msr_classify dupfork)" "unsafe:divergent-content"
+# F5: both typed AND bare exist -> stale-bare-alongside-typed
+mkdir -p "$FIX/repos/plugins/bothy/.git" "$FIX/repos/bothy/.git"
+ok "stale bare alongside typed" "$(msr_classify bothy)" "stale-bare-alongside-typed"
+
 echo ""
 echo "RESULT: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
