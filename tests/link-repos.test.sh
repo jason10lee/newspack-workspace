@@ -82,6 +82,40 @@ reset_wp; mkdir -p "$PLUGINS_PATH/stub"; ln -s "$REPOS_PATH/stub" "$WP/plugins/s
 ( set -e; skip_empty_stub "$PLUGINS_PATH/stub" "$WP/plugins/stub" ) >/dev/null 2>&1
 ok_link "repos mirror left intact" "$WP/plugins/stub" "$REPOS_PATH/stub"
 
+echo "== link_standalone =="
+SRC="$REPOS_PATH/plugins/bar"   # standalone source; loop passes it with trailing slash
+
+# new standalone link
+reset_wp; mkdir -p "$SRC"
+( set -e; link_standalone "$SRC/" "$WP/plugins/bar" plugins ) >/dev/null 2>&1
+ok_link "new standalone link" "$WP/plugins/bar" "$SRC"
+
+# idempotent: existing target has trailing slash, unchanged
+reset_wp; mkdir -p "$SRC"; ln -s "$SRC/" "$WP/plugins/bar"
+( set -e; link_standalone "$SRC/" "$WP/plugins/bar" plugins ) >/dev/null 2>&1
+ok_link "idempotent (trailing slash)" "$WP/plugins/bar" "$SRC"
+
+# idempotent: existing target has NO trailing slash, dir does -> still unchanged
+# (guards the ${existing%/}/${dir%/} comparison)
+reset_wp; mkdir -p "$SRC"; ln -s "$SRC" "$WP/plugins/bar"
+( set -e; link_standalone "$SRC/" "$WP/plugins/bar" plugins ) >/dev/null 2>&1
+ok_link "idempotent (no trailing slash)" "$WP/plugins/bar" "$SRC"
+
+# repoint stale pre-migration mirror (the regression we fixed)
+reset_wp; mkdir -p "$SRC"; ln -s "$REPOS_PATH/bar" "$WP/plugins/bar"
+( set -e; link_standalone "$SRC/" "$WP/plugins/bar" plugins ) >/dev/null 2>&1
+ok_link "repoints stale pre-migration mirror" "$WP/plugins/bar" "$SRC"
+
+# monorepo precedence: existing points into PLUGINS_PATH -> tracked wins, unchanged
+reset_wp; mkdir -p "$SRC" "$PLUGINS_PATH/bar"; ln -s "$PLUGINS_PATH/bar" "$WP/plugins/bar"
+( set -e; link_standalone "$SRC/" "$WP/plugins/bar" plugins ) >/dev/null 2>&1
+ok_link "monorepo precedence unchanged" "$WP/plugins/bar" "$PLUGINS_PATH/bar"
+
+# foreign target -> slug collision, unchanged
+reset_wp; mkdir -p "$SRC" "$FIX/elsewhere"; ln -s "$FIX/elsewhere" "$WP/plugins/bar"
+( set -e; link_standalone "$SRC/" "$WP/plugins/bar" plugins ) >/dev/null 2>&1 || true
+ok_link "foreign collision unchanged" "$WP/plugins/bar" "$FIX/elsewhere"
+
 # ---- (subsequent tasks append their test sections here) ----
 
 echo
