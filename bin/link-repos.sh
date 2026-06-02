@@ -41,6 +41,39 @@ link_or_repoint() {
 	fi
 }
 
+# Symlink a standalone repos/<kind>/<name> checkout into wp-content, or repoint
+# a stale pre-migration mirror. Mirrors link_or_repoint for the monorepo loop.
+# A link already pointing into the monorepo mount means the tracked copy won the
+# earlier loop and takes precedence. $dir carries a trailing slash (loop glob).
+link_standalone() {
+	local dir="$1" link="$2" kind="$3" name existing
+	name=$(basename "$dir")
+	if [ -L "${link}" ] || [ -e "${link}" ]; then
+		existing="$(readlink "${link}" 2>/dev/null)"
+		case "$existing" in
+			"$PLUGINS_PATH"/*|"$THEMES_PATH"/*)
+				echo "skipping repos/$kind/$name: tracked monorepo copy takes precedence" ;;
+			*)
+				if [ "${existing%/}" = "${dir%/}" ]; then
+					echo "$name already symlinked"
+				elif [ "${existing#"${REPOS_PATH}"/}" != "$existing" ]; then
+					# Stale pre-migration mirror under /newspack-repos (e.g. the flat
+					# repos/<name> before it moved to repos/{plugins,themes}/<name>).
+					echo "Repointing standalone $kind $name: $existing -> $dir"
+					rm -f "$link"
+					ln -s "$dir" "$link" || true
+				else
+					echo "[link-repos] warning: slug collision on '$name'" >&2
+					echo "[link-repos]   existing: $link -> $existing" >&2
+					echo "[link-repos]   skipping: $dir" >&2
+				fi ;;
+		esac
+	else
+		echo "Symlinking standalone $kind $name"
+		ln -s "$dir" "$link" || true
+	fi
+}
+
 # A migration stub: an empty placeholder dir under plugins/ or themes/ for a
 # plugin not yet migrated out of repos/. Skip it so it never shadows the
 # authoritative repos/ copy (which an existing symlink still points at).
@@ -131,37 +164,7 @@ main() {
 		for dir in "$src_base"/*/; do
 			[ -d "$dir" ] || continue
 			name=$(basename "$dir")
-			link="$WP_PATH/$kind/$name"
-			# -L also catches dangling symlinks that -e (which follows links) misses.
-			if [ -L "${link}" ] || [ -e "${link}" ]; then
-				# Distinguish a tracked monorepo copy (which takes precedence) from a
-				# plain idempotent re-run where this same repos/ link already exists,
-				# and from a stale pre-migration mirror that must be repointed.
-				existing="$(readlink "${link}" 2>/dev/null)"
-				case "$existing" in
-					"$PLUGINS_PATH"/*|"$THEMES_PATH"/*)
-						echo "skipping repos/$kind/$name: tracked monorepo copy takes precedence" ;;
-					*)
-						if [ "${existing%/}" = "${dir%/}" ]; then
-							echo "$name already symlinked"
-						elif [ "${existing#"${REPOS_PATH}"/}" != "$existing" ]; then
-							# Existing link points elsewhere under /newspack-repos: a stale
-							# pre-migration mirror (e.g. the flat repos/<name> before it
-							# moved to repos/{plugins,themes}/<name>). Repoint so migrated
-							# standalone checkouts self-heal instead of dangling.
-							echo "Repointing standalone $kind $name: $existing -> $dir"
-							rm -f "$link"
-							ln -s "$dir" "$link" || true
-						else
-							echo "[link-repos] warning: slug collision on '$name'" >&2
-							echo "[link-repos]   existing: $link -> $existing" >&2
-							echo "[link-repos]   skipping: $dir" >&2
-						fi ;;
-				esac
-			else
-				echo "Symlinking standalone $kind $name"
-				ln -s "$dir" "$link" || true
-			fi
+			link_standalone "$dir" "$WP_PATH/$kind/$name" "$kind"
 		done
 	done
 }
