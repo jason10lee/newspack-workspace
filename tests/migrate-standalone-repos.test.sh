@@ -162,6 +162,24 @@ msr_container_mounts() { return 0; }
 msr_do_move pinned plugin >/dev/null 2>&1
 ok "move proceeds when unpinned" "$([ -d "$FIX/repos/plugins/pinned/.git" ] && echo yes || echo no)" "yes"
 
+echo "== cwd gate =="
+mkdir -p "$FIX/repos/cwdtest/.git"; printf '<?php' > "$FIX/repos/cwdtest/x.php"
+# (1) Shell inside the target -> refuse (subprocess; $FIX won't match real containers).
+cwd_out=$( cd "$FIX/repos/cwdtest" && NABSPATH="$FIX" "$BIN/migrate-standalone-repos.sh" cwdtest --apply 2>&1 ); cwd_rc=$?
+ok "refuses when shell is inside target (rc=1)" "$cwd_rc" "1"
+ok "names cd out" "$(echo "$cwd_out" | grep -c 'cd out')" "1"
+ok "cwdtest NOT moved" "$([ -d "$FIX/repos/cwdtest" ] && echo yes || echo no)" "yes"
+# (2) Another process cwd-rooted (override the lsof seam) -> refuse, in-process.
+msr_container_mounts() { return 0; }
+msr_cwd_rooted_procs() { echo "node(123)"; }
+rooted_out=$(msr_do_move cwdtest plugin 2>&1); rooted_rc=$?
+ok "refuses when a process is cwd-rooted (rc=1)" "$rooted_rc" "1"
+ok "names the rooted proc" "$(echo "$rooted_out" | grep -c 'node(123)')" "1"
+# (3) Nothing rooted -> proceeds.
+msr_cwd_rooted_procs() { return 0; }
+msr_do_move cwdtest plugin >/dev/null 2>&1
+ok "proceeds when nothing rooted" "$([ -d "$FIX/repos/plugins/cwdtest/.git" ] && echo yes || echo no)" "yes"
+
 echo ""
 echo "RESULT: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
