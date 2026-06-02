@@ -981,6 +981,46 @@ MIGRATE
             echo "--- Destroying $name ---"
             "$NABSPATH/bin/env.sh" destroy "$name"
         done
+        # Sweep stale /etc/hosts entries left by past envs.
+        live_names=""; live_domains=""
+        for f in "$NABSPATH"/docker-compose.env-*.yml; do
+            [[ -f "$f" ]] || continue
+            ln=$(basename "$f" | sed 's/docker-compose\.env-//' | sed 's/\.yml//')
+            live_names="$live_names $ln"
+            ld=$(domain_for_env "$f")
+            [[ -n "$ld" ]] && live_domains="$live_domains $ld"
+        done
+        marked_orphans=(); legacy_candidates=()
+        while read -r kind dom; do
+            if [[ "$kind" == "marked-orphan" ]]; then marked_orphans+=("$dom"); fi
+            if [[ "$kind" == "legacy-candidate" ]]; then legacy_candidates+=("$dom"); fi
+        done < <(env_hosts_classify /etc/hosts "$live_names" "$live_domains")
+        # Marked orphans are unambiguously dead Newspack envs — remove automatically.
+        if [[ ${#marked_orphans[@]} -gt 0 ]]; then
+            for dom in "${marked_orphans[@]}"; do
+                if env_hosts_remove "$dom"; then
+                    echo "Removed stale /etc/hosts entry $dom (orphaned env)"
+                else
+                    echo "Warning: could not remove stale entry $dom (no privileged removal ran)."
+                fi
+            done
+        fi
+        # Unmarked candidates predate the marker — never auto-remove; confirm first.
+        if [[ ${#legacy_candidates[@]} -gt 0 ]]; then
+            echo ""
+            echo "Unmarked *.test/*.local /etc/hosts entries not matching any live env:"
+            printf '  %s\n' "${legacy_candidates[@]}"
+            if [ -t 0 ] && [ -t 1 ]; then
+                read -p "Remove these? (y/N): " prune_confirm
+                if [[ "$prune_confirm" =~ ^[Yy]$ ]]; then
+                    for dom in "${legacy_candidates[@]}"; do
+                        if env_hosts_remove "$dom"; then echo "Removed $dom"; else echo "Warning: could not remove $dom"; fi
+                    done
+                fi
+            else
+                echo "(left in place — re-run 'n env cleanup' interactively to remove, or remove manually)"
+            fi
+        fi
         ;;
     e2e-setup)
         shift
