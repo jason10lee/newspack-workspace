@@ -985,8 +985,8 @@ MIGRATE
         live_names=""; live_domains=""
         for f in "$NABSPATH"/docker-compose.env-*.yml; do
             [[ -f "$f" ]] || continue
-            ln=$(basename "$f" | sed 's/docker-compose\.env-//' | sed 's/\.yml//')
-            live_names="$live_names $ln"
+            name=$(basename "$f" | sed 's/docker-compose\.env-//' | sed 's/\.yml//')
+            live_names="$live_names $name"
             ld=$(domain_for_env "$f")
             [[ -n "$ld" ]] && live_domains="$live_domains $ld"
         done
@@ -1010,7 +1010,9 @@ MIGRATE
             echo ""
             echo "Unmarked *.test/*.local /etc/hosts entries not matching any live env:"
             printf '  %s\n' "${legacy_candidates[@]}"
-            if [ -t 0 ] && [ -t 1 ]; then
+            # Never auto-remove unmarked entries: --yes is treated like the
+            # non-interactive path (leave them; they may be the user's own).
+            if [[ "$cleanup_yes" != true ]] && [ -t 0 ] && [ -t 1 ]; then
                 read -p "Remove these? (y/N): " prune_confirm
                 if [[ "$prune_confirm" =~ ^[Yy]$ ]]; then
                     for dom in "${legacy_candidates[@]}"; do
