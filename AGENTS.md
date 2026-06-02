@@ -148,7 +148,7 @@ n test-js                           # Run JS tests
 
 ### Development
 ```bash
-n watch                       # From a repo folder (or `n watch <name>`): watch & rebuild that one project
+n watch <name>                # Watch & rebuild a single project (or run `n watch` from inside its folder)
 n watch                       # From the root: watch every plugin/theme/package and rebuild the changed unit
 n composer <cmd>              # Run composer in current project
 n npm <cmd>                   # Run npm in current project
