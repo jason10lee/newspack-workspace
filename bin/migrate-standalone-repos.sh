@@ -14,7 +14,33 @@ set -u
 MSR_ROOT="${NABSPATH:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 MSR_TRASH_DIR="$MSR_ROOT/repos/.migration-trash"
 
-# (msr_* functions added in later tasks.)
+# Detect plugin vs theme by content. Theme = root style.css carrying a
+# "Theme Name:" header (WP theme contract), or a root theme.json (FSE) that is
+# NOT corroborated as a plugin by a root PHP file declaring a "Plugin Name:"
+# header (some plugins ship a root theme.json). Everything else is a plugin.
+msr_detect_kind() {
+    local dir="$1"
+    if [ -f "$dir/style.css" ] && grep -qiE '^[[:space:]]*Theme Name:' "$dir/style.css" 2>/dev/null; then
+        echo "theme"; return
+    fi
+    if [ -f "$dir/theme.json" ]; then
+        local php has_plugin_header=false
+        for php in "$dir"/*.php; do
+            [ -f "$php" ] || continue   # literal glob when no .php files — skip
+            if grep -qiE '^[[:space:]]*\*?[[:space:]]*Plugin Name:' "$php" 2>/dev/null; then
+                has_plugin_header=true; break
+            fi
+        done
+        [ "$has_plugin_header" = false ] && { echo "theme"; return; }
+    fi
+    echo "plugin"
+}
+
+# Map name + kind to the typed host-relative path.
+msr_target_relpath() {
+    local name="$1" kind="$2"
+    if [ "$kind" = "theme" ]; then echo "repos/themes/$name"; else echo "repos/plugins/$name"; fi
+}
 
 main() {
     echo "migrate-standalone-repos: not yet implemented" >&2
