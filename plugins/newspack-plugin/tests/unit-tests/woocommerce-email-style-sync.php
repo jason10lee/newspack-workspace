@@ -81,6 +81,7 @@ class Newspack_Test_WooCommerce_Email_Style_Sync extends WP_UnitTestCase {
 		// registration on the same hook.
 		remove_filter( 'newspack_wc_email_style_sync_enabled', '__return_false' );
 		remove_filter( 'newspack_wc_emails_available', '__return_true' );
+		remove_all_filters( 'newspack_wc_email_style_sync_wc_default_base_color' );
 
 		// Restore the hook we removed in set_up() so subsequent tests
 		// run against the same hook table as the rest of the suite.
@@ -178,5 +179,115 @@ class Newspack_Test_WooCommerce_Email_Style_Sync extends WP_UnitTestCase {
 		$this->assertSame( false, get_option( 'woocommerce_email_base_color', false ) );
 		$this->assertSame( false, get_option( 'woocommerce_email_header_image', false ) );
 		$this->assertSame( false, get_option( WooCommerce_Email_Style_Sync::FIRST_RUN_DONE_OPTION, false ) );
+	}
+
+	/**
+	 * Regression lock for NPPD-1537 Katie-reported bug.
+	 *
+	 * WC's settings-page save persists every registered field on submit,
+	 * even unchanged ones — landing WC's current default (`#8526ff` on
+	 * sites with email_improvements active) in the option row. The old
+	 * row-presence guard treated that as publisher customization and
+	 * silently bypassed the sync. Per-option semantics fix: stored value
+	 * matches WC default → not customized → sync writes the Newspack
+	 * brand color.
+	 */
+	public function test_first_run_writes_base_color_when_stored_value_matches_wc_default() {
+		// Use the filter to control "WC default" without depending on
+		// WC's @internal EmailColors class.
+		add_filter(
+			'newspack_wc_email_style_sync_wc_default_base_color',
+			static function () {
+				return '#8526ff';
+			}
+		);
+		// Seed the stored value as WC default (Katie's bug case).
+		update_option( 'woocommerce_email_base_color', '#8526ff' );
+		set_theme_mod( 'primary_color_hex', '#003da5' );
+
+		WooCommerce_Email_Style_Sync::maybe_sync_on_first_run();
+
+		$this->assertSame(
+			'#003da5',
+			get_option( 'woocommerce_email_base_color' ),
+			'Stored value matches WC default → not customized → sync should write the Newspack brand color.'
+		);
+	}
+
+	/**
+	 * Real publisher customization is still protected. Stored value
+	 * differs from WC's default → treat as customized → skip the write.
+	 */
+	public function test_first_run_skips_base_color_when_stored_value_differs_from_wc_default() {
+		add_filter(
+			'newspack_wc_email_style_sync_wc_default_base_color',
+			static function () {
+				return '#8526ff';
+			}
+		);
+		// Publisher's deliberate customization — differs from WC default.
+		update_option( 'woocommerce_email_base_color', '#deadbe' );
+		set_theme_mod( 'primary_color_hex', '#003da5' );
+
+		WooCommerce_Email_Style_Sync::maybe_sync_on_first_run();
+
+		$this->assertSame(
+			'#deadbe',
+			get_option( 'woocommerce_email_base_color' ),
+			'Stored value differs from WC default → customized → must not overwrite.'
+		);
+	}
+
+	/**
+	 * Row-presence semantics on the header image are preserved. WC
+	 * doesn't write a default header image, so any value in the row is
+	 * either ours (from a previous sync iteration) or a real publisher
+	 * upload — either way, leave it alone.
+	 */
+	public function test_first_run_skips_when_header_image_already_set() {
+		update_option( 'woocommerce_email_header_image', 'https://example.test/existing-logo.png' );
+		set_theme_mod( 'custom_logo', $this->create_fake_logo_attachment_id() );
+
+		WooCommerce_Email_Style_Sync::maybe_sync_on_first_run();
+
+		$this->assertSame(
+			'https://example.test/existing-logo.png',
+			get_option( 'woocommerce_email_header_image' ),
+			'Header image row already populated → must not overwrite.'
+		);
+	}
+
+	/**
+	 * Per-option semantics: the two options are evaluated independently,
+	 * so a customized `header_image` does NOT block writing `base_color`
+	 * (the old row-presence guard would have skipped BOTH if either row
+	 * existed). This locks in the per-option behavior.
+	 */
+	public function test_first_run_skips_header_image_but_still_writes_base_color() {
+		add_filter(
+			'newspack_wc_email_style_sync_wc_default_base_color',
+			static function () {
+				return '#8526ff';
+			}
+		);
+		// header_image populated (publisher uploaded their logo), but
+		// base_color is at WC default (i.e. WC settings-save wrote it).
+		update_option( 'woocommerce_email_header_image', 'https://example.test/existing-logo.png' );
+		update_option( 'woocommerce_email_base_color', '#8526ff' );
+		set_theme_mod( 'primary_color_hex', '#003da5' );
+		set_theme_mod( 'custom_logo', $this->create_fake_logo_attachment_id() );
+
+		WooCommerce_Email_Style_Sync::maybe_sync_on_first_run();
+
+		$this->assertSame(
+			'https://example.test/existing-logo.png',
+			get_option( 'woocommerce_email_header_image' ),
+			'Header image stays — row-presence semantics apply per-option.'
+		);
+		$this->assertSame(
+			'#003da5',
+			get_option( 'woocommerce_email_base_color' ),
+			'Base color gets the Newspack primary — header_image customization does not block the color sync.'
+		);
 	}
 }

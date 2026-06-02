@@ -20,18 +20,31 @@
  * because WC core itself doesn't either; matching that bar.
  *
  * Migration safety (first-run only):
- *   When this class first runs on an existing site, it checks whether
- *   any of the WC email options it would write already exist in the
- *   DB. If they do, that's treated as pre-existing publisher state and
- *   we skip the first-run write — we mark first-run done and log via
- *   Newspack\Logger. After first-run, ongoing theme changes propagate
- *   freely via the Customizer / theme-switch hooks. Row-presence is the
- *   guard rather than value-comparison-against-WC-defaults because the
- *   WC defaults are not stable (WC 9.6.1 migrated the base color
- *   default), and any presence-based mistake is conservative:
- *   publishers who deliberately set the option to today's WC default
- *   are treated as customized and won't get the first-run sync, which
- *   is preferable to overwriting real customizations.
+ *   When this class first runs on an existing site, each option gets
+ *   its own customization check; per-option semantics because the two
+ *   options have different "publisher customization" signals:
+ *
+ *   - `woocommerce_email_base_color`: WC's own admin paths (settings-
+ *     page save, install migrations, the `email_improvements` feature
+ *     activation) routinely write WC's CURRENT default value into the
+ *     option row even when the publisher hasn't touched anything. A
+ *     row-presence check would treat those WC writes as "publisher
+ *     customization" and silently bypass the brand-color sync (the
+ *     NPPD-1537 bug). Instead we compare the stored value against WC's
+ *     current default at check time via
+ *     `EmailColors::get_default_colors()` — if they match, the row was
+ *     written by WC and we proceed with the sync; if they differ, the
+ *     publisher has a real customization and we skip. The check happens
+ *     at check time, so if WC ships a new default in a future version,
+ *     the comparison adapts automatically.
+ *
+ *   - `woocommerce_email_header_image`: row-presence semantics, because
+ *     WC has no default header image — any value in the row is either
+ *     ours from a previous sync or a publisher-uploaded logo. Either
+ *     way, leave it alone.
+ *
+ *   After first-run, ongoing theme changes propagate freely via the
+ *   Customizer / theme-switch hooks.
  *
  * Opt-out:
  *   Publishers can disable the sync entirely via the
@@ -89,18 +102,6 @@ class WooCommerce_Email_Style_Sync {
 	const LOGGER_HEADER = 'NEWSPACK-WC-EMAIL-SYNC';
 
 	/**
-	 * The WC option keys this class touches. Single source of truth for
-	 * `has_existing_customization()` (which checks row presence on these)
-	 * and the write methods (`sync_base_color`, `sync_header_image`).
-	 *
-	 * @var string[]
-	 */
-	const SYNCED_OPTION_KEYS = [
-		'woocommerce_email_base_color',
-		'woocommerce_email_header_image',
-	];
-
-	/**
 	 * Initialize hooks.
 	 *
 	 * @codeCoverageIgnore
@@ -118,16 +119,17 @@ class WooCommerce_Email_Style_Sync {
 
 	/**
 	 * First-run gate. Writes initial sync when this class first runs on a
-	 * site — but only if no existing customization is detected on the WC
-	 * email options we'd touch. If a customization IS detected, mark
-	 * the version as synced (so we don't re-check forever) and log via
-	 * Newspack\Logger; the customize_save_after / after_switch_theme
-	 * hooks remain active either way for future theme changes.
+	 * site — each of the two synced options gets its OWN customization
+	 * check because they have different "publisher customization" signals
+	 * (see class-level docblock). The customize_save_after /
+	 * after_switch_theme hooks remain active regardless of what happens
+	 * here, so future theme changes propagate independent of first-run
+	 * outcome.
 	 *
-	 * The presence check goes through `is_wc_emails_available()` (the
+	 * The WC presence check goes through `is_wc_emails_available()` (the
 	 * `newspack_wc_emails_available` filter) rather than calling
-	 * `class_exists( 'WC_Emails' )` directly — see that method's
-	 * docblock for the test-isolation reasoning.
+	 * `class_exists( 'WC_Emails' )` directly — see that method's docblock
+	 * for the test-isolation reasoning.
 	 */
 	public static function maybe_sync_on_first_run(): void {
 		if ( ! self::is_sync_enabled() ) {
@@ -142,25 +144,36 @@ class WooCommerce_Email_Style_Sync {
 
 		// Mark first-run done BEFORE attempting any writes. If a
 		// downstream `pre_update_option_*` filter throws inside
-		// sync_styles, we don't want to re-enter on every admin_init
+		// the sync paths, we don't want to re-enter on every admin_init
 		// and trap the admin in an exception loop.
 		update_option( self::FIRST_RUN_DONE_OPTION, true );
 
-		if ( self::has_existing_customization() ) {
+		// Per-option customization checks. NPPD-1537 originally used a
+		// single row-presence check across both options, but that
+		// silently bypassed the brand-color sync on most sites because
+		// WC routinely writes its own default value into
+		// `woocommerce_email_base_color` (via settings-page save, install
+		// migrations, `email_improvements` feature activation, etc.).
+		// See has_base_color_customization() / has_header_image_customization()
+		// for the per-option logic.
+		if ( self::has_base_color_customization() ) {
 			Logger::log(
-				'WC email style sync: skipping first-run write — one or more WC email options already hold pre-existing values, indicating publisher customization. Marking first-run done to avoid re-evaluation; future Customizer saves and theme switches will still propagate normally.',
+				'WC email style sync: skipping first-run base_color write — stored value differs from WC default, treating as publisher customization.',
 				self::LOGGER_HEADER,
 				'info'
 			);
-			return;
+		} else {
+			self::sync_base_color();
 		}
-
-		// First-run writes BOTH the base color and the header image.
-		// Subsequent customize_save_after / after_switch_theme calls
-		// only re-sync the base color via sync_styles() — see that
-		// method's docblock for why the logo is first-run-only.
-		self::sync_base_color();
-		self::sync_header_image();
+		if ( self::has_header_image_customization() ) {
+			Logger::log(
+				'WC email style sync: skipping first-run header_image write — option row already has a value (previous sync or publisher upload).',
+				self::LOGGER_HEADER,
+				'info'
+			);
+		} else {
+			self::sync_header_image();
+		}
 	}
 
 	/**
@@ -268,37 +281,100 @@ class WooCommerce_Email_Style_Sync {
 	}
 
 	/**
-	 * Detect whether the publisher has already customized any of the WC
-	 * email options we'd write. Treats the presence of ANY option row
-	 * as customization, regardless of value.
+	 * Has the publisher customized `woocommerce_email_base_color`?
 	 *
-	 * Trade-off explainer: comparing against a hardcoded "WC default"
-	 * is brittle — WC core has migrated `woocommerce_email_base_color`
-	 * defaults at least once (WC 9.6.1's
-	 * `wc_update_961_migrate_default_email_base_color` migration
-	 * persists `#720eec` into the option row, which is indistinguishable
-	 * from a publisher having explicitly set that value). Row-presence
-	 * is conservative: a publisher who deliberately set the option to
-	 * the current WC default gets treated as "customized" and won't
-	 * receive the Newspack brand color via first-run sync — but they
-	 * can either delete the option row or rely on the
-	 * customize_save_after / after_switch_theme propagation paths that
-	 * fire after first-run is marked done.
+	 * Value-equality against WC's current default rather than row
+	 * presence — because WC writes its own default value into the option
+	 * row through routine admin paths (settings-page save, install
+	 * migrations, `email_improvements` feature activation). A row-
+	 * presence check would treat all of those WC writes as "publisher
+	 * customization" and silently bypass our sync. Compare-at-check-time
+	 * against WC's current default sidesteps that:
 	 *
-	 * @return bool True if any of the synced option rows already exists in the DB.
+	 *   - Row absent → return false (not customized, sync writes).
+	 *   - Row present AND value matches WC default → return false (WC
+	 *     wrote its own default, treat as not customized, sync writes
+	 *     the publisher's brand color).
+	 *   - Row present AND value differs from WC default → return true
+	 *     (publisher has a real customization, sync skips).
+	 *
+	 * If WC's `EmailColors::get_default_colors()` is unavailable
+	 * (older WC, or WC removed the @internal class), fall back to
+	 * row-presence so we don't silently overwrite anything we can't
+	 * verify. That's the conservative behavior the class started with.
+	 *
+	 * @return bool
 	 */
-	private static function has_existing_customization(): bool {
-		foreach ( self::SYNCED_OPTION_KEYS as $option_name ) {
-			// `get_option( $name, false )` returns `false` only when
-			// the option row truly doesn't exist. For string-typed
-			// options (these are color hex / URL strings), there's no
-			// legitimate stored-false value, so the false return
-			// reliably means "row absent."
-			if ( false !== get_option( $option_name, false ) ) {
-				return true;
-			}
+	private static function has_base_color_customization(): bool {
+		$stored = get_option( 'woocommerce_email_base_color', false );
+		// `get_option( $name, false )` returns `false` only when the
+		// option row truly doesn't exist. For string-typed options
+		// (color hex strings), there's no legitimate stored-false
+		// value, so the false return reliably means "row absent."
+		if ( false === $stored ) {
+			return false;
 		}
-		return false;
+		$wc_default = self::get_wc_default_base_color();
+		if ( null === $wc_default ) {
+			// EmailColors API unavailable — can't tell whether the
+			// stored value is a WC default or a real customization,
+			// so be conservative and treat as customized.
+			return true;
+		}
+		return strtolower( (string) $stored ) !== strtolower( $wc_default );
+	}
+
+	/**
+	 * Has the publisher customized `woocommerce_email_header_image`?
+	 *
+	 * Row-presence semantics. WC doesn't write a default header image,
+	 * so any value in the row is either ours from a previous sync (the
+	 * `newspack_wc_email_style_sync_first_run_done` flag from a prior
+	 * sync iteration on the same site) or a publisher-uploaded logo via
+	 * WC > Settings > Emails. Either way: don't overwrite.
+	 *
+	 * @return bool
+	 */
+	private static function has_header_image_customization(): bool {
+		return false !== get_option( 'woocommerce_email_header_image', false );
+	}
+
+	/**
+	 * Get WC's current default for `woocommerce_email_base_color`.
+	 *
+	 * Reads from WC's `EmailColors::get_default_colors()` if available.
+	 * That class is marked `@internal` in WC; if WC ever removes or
+	 * renames it, we fall back to null and the per-option check above
+	 * conservatively treats the row as customized. The result is also
+	 * filterable so tests can force a value without needing the WC
+	 * class on the autoloader path.
+	 *
+	 * @return string|null WC's current default base color hex (e.g. '#8526ff'),
+	 *                     or null if WC's EmailColors API isn't available.
+	 */
+	private static function get_wc_default_base_color(): ?string {
+		$default = null;
+		if (
+			class_exists( '\Automattic\WooCommerce\Internal\Email\EmailColors' )
+			&& method_exists( '\Automattic\WooCommerce\Internal\Email\EmailColors', 'get_default_colors' )
+		) {
+			$colors  = \Automattic\WooCommerce\Internal\Email\EmailColors::get_default_colors();
+			$default = is_array( $colors ) && isset( $colors['base'] ) && is_string( $colors['base'] )
+				? $colors['base']
+				: null;
+		}
+		/**
+		 * Filters the WC default value for `woocommerce_email_base_color`
+		 * that the first-run customization check compares against. Return
+		 * null to force the conservative-fallback path (treat row-present
+		 * as customized regardless of stored value).
+		 *
+		 * Tests use this filter to control the comparison value without
+		 * needing WC's @internal EmailColors class on the autoload path.
+		 *
+		 * @param string|null $default Current WC default base color hex, or null if EmailColors is unavailable.
+		 */
+		return apply_filters( 'newspack_wc_email_style_sync_wc_default_base_color', $default );
 	}
 
 	/**
