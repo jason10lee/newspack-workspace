@@ -116,6 +116,36 @@ reset_wp; mkdir -p "$SRC" "$FIX/elsewhere"; ln -s "$FIX/elsewhere" "$WP/plugins/
 ( set -e; link_standalone "$SRC/" "$WP/plugins/bar" plugins ) >/dev/null 2>&1 || true
 ok_link "foreign collision unchanged" "$WP/plugins/bar" "$FIX/elsewhere"
 
+echo "== full-script main() orchestration =="
+reset_wp
+
+# monorepo plugin (fresh link)
+mkdir -p "$PLUGINS_PATH/mono-plug"; touch "$PLUGINS_PATH/mono-plug/x"
+# classic theme with a child theme + a style.css so it is not an empty stub
+mkdir -p "$THEMES_PATH/newspack-theme/newspack-child"; touch "$THEMES_PATH/newspack-theme/newspack-child/x"
+touch "$THEMES_PATH/newspack-theme/style.css"
+# standalone repo plugin (fresh link)
+mkdir -p "$REPOS_PATH/plugins/stand-plug"; touch "$REPOS_PATH/plugins/stand-plug/x"
+# standalone with a stale pre-migration mirror that must be repointed
+mkdir -p "$REPOS_PATH/plugins/stale-plug"; touch "$REPOS_PATH/plugins/stale-plug/x"
+ln -s "$REPOS_PATH/stale-plug" "$WP/plugins/stale-plug"
+# name present in BOTH monorepo and repos/ (monorepo wins)
+mkdir -p "$PLUGINS_PATH/dup"; touch "$PLUGINS_PATH/dup/x"
+mkdir -p "$REPOS_PATH/plugins/dup"; touch "$REPOS_PATH/plugins/dup/x"
+
+( main "$WP" ) >/dev/null 2>&1
+
+ok_link "main: monorepo plugin linked"   "$WP/plugins/mono-plug"   "$PLUGINS_PATH/mono-plug"
+ok_link "main: child theme linked"       "$WP/themes/newspack-child" "$THEMES_PATH/newspack-theme/newspack-child"
+ok_link "main: standalone repo linked"   "$WP/plugins/stand-plug"  "$REPOS_PATH/plugins/stand-plug"
+ok_link "main: stale mirror repointed"   "$WP/plugins/stale-plug"  "$REPOS_PATH/plugins/stale-plug"
+ok_link "main: dup -> monorepo wins"     "$WP/plugins/dup"         "$PLUGINS_PATH/dup"
+
+# idempotency: a second run must not churn the repointed/standalone links
+( main "$WP" ) >/dev/null 2>&1
+ok_link "main: idempotent stale-plug"    "$WP/plugins/stale-plug"  "$REPOS_PATH/plugins/stale-plug"
+ok_link "main: idempotent stand-plug"    "$WP/plugins/stand-plug"  "$REPOS_PATH/plugins/stand-plug"
+
 # ---- (subsequent tasks append their test sections here) ----
 
 echo
