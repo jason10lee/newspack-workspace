@@ -42,6 +42,18 @@ msr_target_relpath() {
     if [ "$kind" = "theme" ]; then echo "repos/themes/$name"; else echo "repos/plugins/$name"; fi
 }
 
+# 0 if <name> is a non-empty tracked monorepo dir (plugins/<name> or
+# themes/<name>). An empty migration stub does NOT count (link-repos treats
+# those as "use the repos/ copy").
+msr_is_monorepo_tracked() {
+    local name="$1" kind d
+    for kind in plugins themes; do
+        d="$MSR_ROOT/$kind/$name"
+        if [ -d "$d" ] && [ -n "$(ls -A "$d" 2>/dev/null)" ]; then return 0; fi
+    done
+    return 1
+}
+
 main() {
     echo "migrate-standalone-repos: not yet implemented" >&2
     return 1

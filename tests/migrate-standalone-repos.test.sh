@@ -37,6 +37,15 @@ printf '{}\n' > "$FIX/k-plug-themejson/theme.json"
 printf '<?php\n/**\n * Plugin Name: Blockz\n */\n' > "$FIX/k-plug-themejson/blockz.php"
 ok "theme.json + plugin header -> plugin" "$(msr_detect_kind "$FIX/k-plug-themejson")" "plugin"
 
+echo "== msr_is_monorepo_tracked =="
+mkdir -p "$FIX/plugins/tracked-plug"; printf 'x' > "$FIX/plugins/tracked-plug/f.php"
+mkdir -p "$FIX/themes/tracked-theme"; printf 'x' > "$FIX/themes/tracked-theme/style.css"
+mkdir -p "$FIX/plugins/empty-stub"   # empty migration stub — must NOT count
+if msr_is_monorepo_tracked tracked-plug;  then ok "tracked plugin -> yes" yes yes; else ok "tracked plugin -> yes" no yes; fi
+if msr_is_monorepo_tracked tracked-theme; then ok "tracked theme -> yes"  yes yes; else ok "tracked theme -> yes"  no yes; fi
+if msr_is_monorepo_tracked empty-stub;    then ok "empty stub -> no" yes no;  else ok "empty stub -> no" no no; fi
+if msr_is_monorepo_tracked nope;          then ok "absent -> no"     yes no;  else ok "absent -> no"     no no; fi
+
 echo ""
 echo "RESULT: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
