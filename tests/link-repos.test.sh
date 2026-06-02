@@ -106,10 +106,14 @@ reset_wp; mkdir -p "$SRC"; ln -s "$REPOS_PATH/bar" "$WP/plugins/bar"
 ( set -e; link_standalone "$SRC/" "$WP/plugins/bar" plugins ) >/dev/null 2>&1
 ok_link "repoints stale pre-migration mirror" "$WP/plugins/bar" "$SRC"
 
-# monorepo precedence: existing points into PLUGINS_PATH -> tracked wins, unchanged
+# monorepo precedence: existing points into PLUGINS_PATH -> tracked wins, unchanged.
+# Capture output too: the foreign-collision branch also leaves the link unchanged,
+# so the distinguishing signal is the precedence message on stdout.
 reset_wp; mkdir -p "$SRC" "$PLUGINS_PATH/bar"; ln -s "$PLUGINS_PATH/bar" "$WP/plugins/bar"
-( set -e; link_standalone "$SRC/" "$WP/plugins/bar" plugins ) >/dev/null 2>&1
+mp_out="$( ( set -e; link_standalone "$SRC/" "$WP/plugins/bar" plugins ) 2>&1 )"
 ok_link "monorepo precedence unchanged" "$WP/plugins/bar" "$PLUGINS_PATH/bar"
+case "$mp_out" in *"tracked monorepo copy takes precedence"*) mp=yes ;; *) mp=no ;; esac
+ok "monorepo precedence message" "$mp" "yes"
 
 # foreign target -> slug collision, unchanged
 reset_wp; mkdir -p "$SRC" "$FIX/elsewhere"; ln -s "$FIX/elsewhere" "$WP/plugins/bar"
@@ -133,13 +137,15 @@ ln -s "$REPOS_PATH/stale-plug" "$WP/plugins/stale-plug"
 mkdir -p "$PLUGINS_PATH/dup"; touch "$PLUGINS_PATH/dup/x"
 mkdir -p "$REPOS_PATH/plugins/dup"; touch "$REPOS_PATH/plugins/dup/x"
 
-( main "$WP" ) >/dev/null 2>&1
+main_out="$( ( main "$WP" ) 2>&1 )"
 
 ok_link "main: monorepo plugin linked"   "$WP/plugins/mono-plug"   "$PLUGINS_PATH/mono-plug"
 ok_link "main: child theme linked"       "$WP/themes/newspack-child" "$THEMES_PATH/newspack-theme/newspack-child"
 ok_link "main: standalone repo linked"   "$WP/plugins/stand-plug"  "$REPOS_PATH/plugins/stand-plug"
 ok_link "main: stale mirror repointed"   "$WP/plugins/stale-plug"  "$REPOS_PATH/plugins/stale-plug"
 ok_link "main: dup -> monorepo wins"     "$WP/plugins/dup"         "$PLUGINS_PATH/dup"
+case "$main_out" in *"skipping repos/plugins/dup: tracked monorepo copy takes precedence"*) dp=yes ;; *) dp=no ;; esac
+ok "main: dup precedence message" "$dp" "yes"
 
 # idempotency: a second run must not churn the repointed/standalone links
 ( main "$WP" ) >/dev/null 2>&1
