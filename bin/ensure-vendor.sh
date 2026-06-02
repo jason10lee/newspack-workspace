@@ -9,14 +9,21 @@
 # build-repos.sh's `all` path; this runs the same PHP-dependency step at env-up
 # time, WITHOUT the slow JS build, so a fresh env is never vendorless.
 #
+# Installs runtime deps only (--no-dev) — that's all plugin activation needs;
+# dev deps come from `n build`/`n ci-build`. On a composer failure it clears the
+# composer cache once and retries (see composer-recovery.sh), then on a final
+# failure removes the incomplete vendor/ so the next run starts clean.
 # Idempotent: skips any plugin whose vendor/autoload.php is already present.
 # Standalone repos (repos/<name>/) manage their own deps and are skipped.
 
 source /var/scripts/repos.sh
 source /var/scripts/resolve-project-path.sh
+source /var/scripts/composer-recovery.sh
 
 failed=()
 installed=0
+# Authoritative per-run reset of the cache-clear flag owned by composer-recovery.sh.
+COMPOSER_CACHE_CLEARED=false
 
 while IFS= read -r dir; do
 	[ -d "$dir" ] || continue
@@ -27,9 +34,13 @@ while IFS= read -r dir; do
 	# Already provisioned — nothing to do (keeps warm starts instant).
 	[ -f "$dir/vendor/autoload.php" ] && continue
 	echo "[ensure-vendor] installing composer deps for $name"
-	if composer install --working-dir "$dir" --no-interaction; then
+	if composer_install_with_recovery "$dir"; then
 		installed=$((installed + 1))
 	else
+		# Remove the incomplete tree so no half-written vendor/ persists and the
+		# next run retries cleanly rather than risk skipping a partial install.
+		rm -rf "$dir/vendor"
+		echo "[ensure-vendor] removed incomplete vendor/ for $name after failed install" >&2
 		failed+=("$name")
 	fi
 done < <(get_all_project_dirs)
