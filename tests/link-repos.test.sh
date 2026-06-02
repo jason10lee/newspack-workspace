@@ -65,6 +65,23 @@ reset_wp; mkdir -p "$PLUGINS_PATH/foo"; echo real > "$WP/plugins/foo"
 ( set -e; link_or_repoint "$PLUGINS_PATH/foo" "$WP/plugins/foo" ) >/dev/null 2>&1 || true
 ok "non-symlink not clobbered" "$( [ -L "$WP/plugins/foo" ] && echo symlink || echo file )" "file"
 
+echo "== is_empty_dir =="
+mkdir -p "$FIX/empty"
+mkdir -p "$FIX/nonempty"; touch "$FIX/nonempty/x"
+is_empty_dir "$FIX/empty";    ok "empty dir -> 0"     "$?" "0"
+is_empty_dir "$FIX/nonempty"; ok "non-empty dir -> 1" "$?" "1"
+
+echo "== skip_empty_stub =="
+# link points into the stub (== src) -> removed
+reset_wp; mkdir -p "$PLUGINS_PATH/stub"; ln -s "$PLUGINS_PATH/stub" "$WP/plugins/stub"
+( set -e; skip_empty_stub "$PLUGINS_PATH/stub" "$WP/plugins/stub" ) >/dev/null 2>&1
+ok "stub self-link removed" "$( [ -L "$WP/plugins/stub" ] && echo present || echo gone )" "gone"
+
+# link points to a /newspack-repos mirror -> left intact
+reset_wp; mkdir -p "$PLUGINS_PATH/stub"; ln -s "$REPOS_PATH/stub" "$WP/plugins/stub"
+( set -e; skip_empty_stub "$PLUGINS_PATH/stub" "$WP/plugins/stub" ) >/dev/null 2>&1
+ok_link "repos mirror left intact" "$WP/plugins/stub" "$REPOS_PATH/stub"
+
 # ---- (subsequent tasks append their test sections here) ----
 
 echo
