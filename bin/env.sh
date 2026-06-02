@@ -720,26 +720,33 @@ MIGRATE
         # Reload Apache to pick up SSL config (it's running by now).
         docker exec "$container_name" apachectl graceful 2>/dev/null
         echo "Environment '$env_name' is ready at https://${domain}/"
-        # Copy built assets from canonical source into mounted worktrees.
+        # Provision built assets for mounted worktrees.
         if [[ "$auto_build" == true ]]; then
-            # Anchored grep (start-of-line "- ") so commented-out volume lines
-            # can't false-match and trigger spurious copies. host is typed
-            # (plugins/X, themes/X, or repos/{plugins,themes}/X), so src points
-            # at the canonical built source for both tiers.
+            # Tier-1 (monorepo plugin/theme) worktrees are workspace members (mounted
+            # at /newspack-monorepo/<host>), so build them IN PLACE with one workspace
+            # install + a single multi-filter build — no copy, no staleness. Tier-2
+            # standalone worktrees aren't workspace members; keep the asset copy.
+            tier1_filters=""
             while IFS=$'\t' read -r repo _branch safe_branch host; do
-                src="$NABSPATH/$host"
-                if [[ "$host" == repos/* ]]; then
-                    dst="$NABSPATH/worktrees/standalone/$repo/$safe_branch"
+                if [[ "$host" == plugins/* || "$host" == themes/* ]]; then
+                    # Resolve the real pnpm package name from the worktree's package.json.
+                    pkg=$(docker exec "$container_name" node -p "require('/newspack-monorepo/${host}/package.json').name" 2>/dev/null)
+                    [[ -n "$pkg" ]] && tier1_filters="$tier1_filters --filter $pkg"
                 else
-                    dst="$NABSPATH/worktrees/$safe_branch/$host"
+                    src="$NABSPATH/$host"
+                    dst="$NABSPATH/worktrees/standalone/$repo/$safe_branch"
+                    echo "Copying built assets for $repo..."
+                    for dir in node_modules vendor dist build; do
+                        if [[ -d "$src/$dir" ]]; then
+                            cp -al "$src/$dir" "$dst/$dir" 2>/dev/null || cp -a "$src/$dir" "$dst/$dir"
+                        fi
+                    done
                 fi
-                echo "Copying built assets for $repo..."
-                for dir in node_modules vendor dist build; do
-                    if [[ -d "$src/$dir" ]]; then
-                        cp -al "$src/$dir" "$dst/$dir" 2>/dev/null || cp -a "$src/$dir" "$dst/$dir"
-                    fi
-                done
             done < <(parse_env_worktrees "$compose_file")
+            if [[ -n "$tier1_filters" ]]; then
+                echo "Building worktree plugin(s) in place:${tier1_filters}"
+                docker exec "$container_name" bash -c "cd /newspack-monorepo && pnpm install && pnpm${tier1_filters} run build"
+            fi
         fi
         ;;
     down)
