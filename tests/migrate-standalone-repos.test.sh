@@ -107,6 +107,18 @@ NABSPATH="$RGUARD" "$BIN/migrate-standalone-repos.sh" x >/dev/null 2>&1
 ok "root guard exits 2 when not a workspace" "$?" "2"
 rm -rf "$RGUARD"
 
+echo "== apply: move genuine standalone + repair worktree =="
+git init -q "$FIX/repos/movable" 2>/dev/null; ( cd "$FIX/repos/movable" && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m init ) 2>/dev/null
+printf '<?php' > "$FIX/repos/movable/m.php"
+( cd "$FIX/repos/movable" && git add -A && git -c user.email=t@t -c user.name=t commit -q -m add ) 2>/dev/null
+mkdir -p "$FIX/worktrees/movable"
+( cd "$FIX/repos/movable" && git worktree add -q "$FIX/worktrees/movable/feat" -b feat ) 2>/dev/null
+out=$(NABSPATH="$FIX" "$BIN/migrate-standalone-repos.sh" movable --apply 2>&1)
+ok "moved to typed path" "$([ -d "$FIX/repos/plugins/movable/.git" ] && echo yes || echo no)" "yes"
+ok "bare path gone" "$([ -e "$FIX/repos/movable" ] && echo yes || echo no)" "no"
+ok "linked worktree resolves after repair" "$(git -C "$FIX/worktrees/movable/feat" rev-parse --is-inside-work-tree 2>/dev/null)" "true"
+ok "worktree list points at new primary" "$(git -C "$FIX/repos/plugins/movable" worktree list 2>/dev/null | grep -c "$FIX/worktrees/movable/feat")" "1"
+
 echo ""
 echo "RESULT: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

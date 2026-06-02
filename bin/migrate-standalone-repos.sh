@@ -10,8 +10,12 @@
 set -u
 
 # Workspace root: honor NABSPATH (set by the n script); else derive from this
-# script's location (bin/..).
+# script's location (bin/..). Canonicalize with `pwd -P` so derived paths match
+# git's worktree-list output, which resolves symlinks (e.g. macOS /var ->
+# /private/var) — otherwise the move's "skip the primary worktree" comparison
+# fails and a clean move spuriously rolls back.
 MSR_ROOT="${NABSPATH:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+MSR_ROOT="$(cd "$MSR_ROOT" 2>/dev/null && pwd -P || echo "$MSR_ROOT")"
 MSR_TRASH_DIR="$MSR_ROOT/repos/.migration-trash"
 
 # Detect plugin vs theme by content. Theme = root style.css carrying a
@@ -172,8 +176,58 @@ main() {
     msr_apply "${targets[@]}"
 }
 
-# Replaced in Tasks 7–8.
-msr_apply() { echo "apply: not yet implemented" >&2; return 1; }
+# Move a genuine standalone to its typed path, repair any linked worktrees, and
+# verify. On verify failure, roll the move back and return non-zero.
+msr_do_move() {
+    local name="$1" kind="$2" rel src dst
+    rel="$(msr_target_relpath "$name" "$kind")"
+    src="$MSR_ROOT/repos/$name"; dst="$MSR_ROOT/$rel"
+    # Capture the linked-worktree set BEFORE the move. The linked worktrees
+    # themselves do NOT move (only this primary does), so their paths stay
+    # valid; we verify each still resolves after repair. Verifying against a
+    # post-move re-list would hide a dropped worktree. Strip the literal
+    # "worktree " prefix with sed (not awk $2) so paths with spaces survive.
+    local wts=() w
+    while IFS= read -r w; do
+        [ -z "$w" ] && continue
+        [ "$w" = "$src" ] && continue   # skip the primary itself
+        wts+=("$w")
+    done < <(git -C "$src" worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p')
+    mkdir -p "$(dirname "$dst")"
+    if ! mv "$src" "$dst"; then echo "  ERROR moving $name" >&2; return 1; fi
+    # Repair from the moved primary (fixes the primary's .git/worktrees/*/gitdir
+    # and each linked worktree's .git file).
+    git -C "$dst" worktree repair >/dev/null 2>&1 || true
+    local broken=0
+    for w in ${wts[@]+"${wts[@]}"}; do
+        git -C "$w" rev-parse --is-inside-work-tree >/dev/null 2>&1 || { broken=$((broken + 1)); echo "  unresolved: $w" >&2; }
+    done
+    if [ "$broken" -ne 0 ]; then
+        echo "  ERROR $name: $broken worktree(s) unresolved after repair; rolling back" >&2
+        mv "$dst" "$src"; git -C "$src" worktree repair >/dev/null 2>&1 || true
+        return 1
+    fi
+    echo "  MOVED  $name -> $rel (${#wts[@]} linked worktree(s) repaired)"
+}
+
+msr_apply() {
+    local name c rc=0
+    for name in "$@"; do
+        c="$(msr_classify "$name")"
+        case "$c" in
+            genuine-standalone:*)       msr_do_move "$name" "${c#genuine-standalone:}" || rc=1 ;;
+            duplicate-clean)            msr_do_remove "$name" || rc=1 ;;
+            unsafe:*)                   echo "  REFUSED $name (${c#unsafe:}) — handle manually" >&2 ;;
+            stale-bare-alongside-typed) echo "  REPORT $name (stale bare alongside typed — handle manually)" >&2 ;;
+            already-typed)              echo "  SKIP   $name (already typed)" ;;
+            absent)                     echo "  MISSING $name" >&2; rc=1 ;;
+        esac
+    done
+    return "$rc"
+}
+
+# Replaced in Task 8.
+msr_do_remove() { echo "remove: not yet implemented" >&2; return 1; }
 
 # Only run main when executed directly, not when sourced by tests.
 if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
