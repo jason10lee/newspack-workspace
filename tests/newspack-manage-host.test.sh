@@ -33,4 +33,15 @@ run host-remove plain.test
 ok "remove deletes unmarked line" "$(grep -c 'plain.test' "$H")" "0"
 ok "remove leaves suffix-collision line" "$(grep -c 'keep.test.extra' "$H")" "1"
 
+# Reject an env-name containing a newline injection attempt (validation boundary).
+H2="$FIX/hosts2"; : > "$H2"
+NEWSPACK_MANAGE_HOST_HOSTS_FILE="$H2" bash "$WRAP" host-add 127.0.0.5 inj.test "$(printf 'evil\n127.0.0.6 injected.test')" 2>/dev/null
+ok "rejects newline-injecting env-name (no line written)" "$(grep -c '.' "$H2")" "0"
+ok "rejects newline-injecting env-name (no injected line)" "$(grep -c 'injected.test' "$H2")" "0"
+
+# Dot-escaped dedup: a similarly-named line must NOT block adding the real domain.
+H3="$FIX/hosts3"; printf '127.0.0.7 fooXtest\n' > "$H3"
+NEWSPACK_MANAGE_HOST_HOSTS_FILE="$H3" bash "$WRAP" host-add 127.0.0.8 foo.test
+ok "dot-escaped dedup adds foo.test despite fooXtest present" "$(grep -c '^127.0.0.8 foo.test$' "$H3")" "1"
+
 echo ""; echo "RESULT: $pass passed, $fail failed"; [ "$fail" -eq 0 ]

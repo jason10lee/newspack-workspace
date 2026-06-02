@@ -39,6 +39,13 @@ validate_local_domain() {
     fi
 }
 
+validate_env_name() {
+    if [[ ! "$1" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+        echo "Error: invalid env name '$1' (alphanumeric, hyphens, underscores only)" >&2
+        exit 1
+    fi
+}
+
 [[ $# -lt 2 ]] && usage
 
 case "$1" in
@@ -55,8 +62,10 @@ case "$1" in
         validate_loopback_ip "$2"
         validate_local_domain "$3"
         # Dedup tolerates a trailing marker: match domain followed by EOL or whitespace.
-        if ! grep -Eq "[[:space:]]${3}([[:space:]]|$)" "$HOSTS_FILE" 2>/dev/null; then
+        dedup_escaped="${3//./\\.}"
+        if ! grep -Eq "[[:space:]]${dedup_escaped}([[:space:]]|$)" "$HOSTS_FILE" 2>/dev/null; then
             if [[ $# -ge 4 && -n "$4" ]]; then
+                validate_env_name "$4"
                 echo "$2 $3 # newspack-env:$4" >> "$HOSTS_FILE"
             else
                 echo "$2 $3" >> "$HOSTS_FILE"
@@ -67,8 +76,8 @@ case "$1" in
         validate_local_domain "$2"
         escaped="${2//./\\.}"
         # Match the domain followed by EOL or a trailing marker; BSD sed first, GNU fallback.
-        expr="/[[:space:]]${escaped}\\([[:space:]].*\\)\\{0,1\\}\$/d"
-        sed -i '' "$expr" "$HOSTS_FILE" 2>/dev/null || sed -i "$expr" "$HOSTS_FILE"
+        sed_expr="/[[:space:]]${escaped}\\([[:space:]].*\\)\\{0,1\\}\$/d"
+        sed -i '' "$sed_expr" "$HOSTS_FILE" 2>/dev/null || sed -i "$sed_expr" "$HOSTS_FILE"
         ;;
     *)
         usage
