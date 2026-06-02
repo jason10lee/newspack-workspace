@@ -133,12 +133,28 @@ for kind in plugins themes; do
 		# -L also catches dangling symlinks that -e (which follows links) misses.
 		if [ -L "${link}" ] || [ -e "${link}" ]; then
 			# Distinguish a tracked monorepo copy (which takes precedence) from a
-			# plain idempotent re-run where this same repos/ link already exists.
-			case "$(readlink "${link}" 2>/dev/null)" in
+			# plain idempotent re-run where this same repos/ link already exists,
+			# and from a stale pre-migration mirror that must be repointed.
+			existing="$(readlink "${link}" 2>/dev/null)"
+			case "$existing" in
 				"$PLUGINS_PATH"/*|"$THEMES_PATH"/*)
 					echo "skipping repos/$kind/$name: tracked monorepo copy takes precedence" ;;
 				*)
-					echo "$name already symlinked" ;;
+					if [ "${existing%/}" = "${dir%/}" ]; then
+						echo "$name already symlinked"
+					elif [ "${existing#"${REPOS_PATH}"/}" != "$existing" ]; then
+						# Existing link points elsewhere under /newspack-repos: a stale
+						# pre-migration mirror (e.g. the flat repos/<name> before it
+						# moved to repos/{plugins,themes}/<name>). Repoint so migrated
+						# standalone checkouts self-heal instead of dangling.
+						echo "Repointing standalone $kind $name: $existing -> $dir"
+						rm -f "$link"
+						ln -s "$dir" "$link" || true
+					else
+						echo "[link-repos] warning: slug collision on '$name'" >&2
+						echo "[link-repos]   existing: $link -> $existing" >&2
+						echo "[link-repos]   skipping: $dir" >&2
+					fi ;;
 			esac
 		else
 			echo "Symlinking standalone $kind $name"
