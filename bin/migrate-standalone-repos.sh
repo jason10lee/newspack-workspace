@@ -226,8 +226,21 @@ msr_apply() {
     return "$rc"
 }
 
-# Replaced in Task 8.
-msr_do_remove() { echo "remove: not yet implemented" >&2; return 1; }
+# Back up a clean duplicate to the trash dir (timestamped), then remove it from
+# repos/. Never rm repo content outright — the trash copy is the safety net.
+msr_do_remove() {
+    local name="$1" ts dest
+    ts="$(date -u +%Y%m%dT%H%M%SZ)"
+    dest="$MSR_TRASH_DIR/$ts"
+    mkdir -p "$dest"
+    if [ -e "$dest/$name" ]; then
+        echo "  ERROR trash dest already exists for $name; aborting" >&2; return 1
+    fi
+    if ! mv "$MSR_ROOT/repos/$name" "$dest/$name"; then
+        echo "  ERROR trashing $name" >&2; return 1
+    fi
+    echo "  REMOVED $name (backup: repos/.migration-trash/$ts/$name — restore: mv that path back to repos/$name)"
+}
 
 # Only run main when executed directly, not when sourced by tests.
 if [ "${BASH_SOURCE[0]}" = "${0}" ]; then

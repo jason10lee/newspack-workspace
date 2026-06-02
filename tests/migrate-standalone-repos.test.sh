@@ -119,6 +119,15 @@ ok "bare path gone" "$([ -e "$FIX/repos/movable" ] && echo yes || echo no)" "no"
 ok "linked worktree resolves after repair" "$(git -C "$FIX/worktrees/movable/feat" rev-parse --is-inside-work-tree 2>/dev/null)" "true"
 ok "worktree list points at new primary" "$(git -C "$FIX/repos/plugins/movable" worktree list 2>/dev/null | grep -c "$FIX/worktrees/movable/feat")" "1"
 
+echo "== apply: remove clean duplicate to trash =="
+git init -q --bare "$FIX/origin-rm.git"; git clone -q "$FIX/origin-rm.git" "$FIX/repos/rmdup" 2>/dev/null
+mkdir -p "$FIX/plugins/rmdup"; printf 'A\n' > "$FIX/plugins/rmdup/a.php"; printf 'A\n' > "$FIX/repos/rmdup/a.php"
+( cd "$FIX/repos/rmdup" && git add -A && git -c user.email=t@t -c user.name=t commit -q -m a && git push -q origin HEAD:main && git branch -q --set-upstream-to=origin/main ) 2>/dev/null
+out=$(NABSPATH="$FIX" "$BIN/migrate-standalone-repos.sh" rmdup --apply 2>&1)
+ok "bare duplicate removed" "$([ -e "$FIX/repos/rmdup" ] && echo yes || echo no)" "no"
+ok "backed up to trash" "$(ls -d "$FIX"/repos/.migration-trash/*/rmdup 2>/dev/null | wc -l | tr -d ' ')" "1"
+ok "monorepo copy untouched" "$([ -f "$FIX/plugins/rmdup/a.php" ] && echo yes || echo no)" "yes"
+
 echo ""
 echo "RESULT: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
