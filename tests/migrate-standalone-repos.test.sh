@@ -128,6 +128,15 @@ ok "bare duplicate removed" "$([ -e "$FIX/repos/rmdup" ] && echo yes || echo no)
 ok "backed up to trash" "$(ls -d "$FIX"/repos/.migration-trash/*/rmdup 2>/dev/null | wc -l | tr -d ' ')" "1"
 ok "monorepo copy untouched" "$([ -f "$FIX/plugins/rmdup/a.php" ] && echo yes || echo no)" "yes"
 
+echo "== apply: refuses unsafe, leaves it in place =="
+git init -q --bare "$FIX/origin-un.git"; git clone -q "$FIX/origin-un.git" "$FIX/repos/unsafe1" 2>/dev/null
+mkdir -p "$FIX/plugins/unsafe1"; printf 'A\n' > "$FIX/plugins/unsafe1/a.php"; printf 'A\n' > "$FIX/repos/unsafe1/a.php"
+( cd "$FIX/repos/unsafe1" && git add -A && git -c user.email=t@t -c user.name=t commit -q -m a && git push -q origin HEAD:main && git branch -q --set-upstream-to=origin/main ) 2>/dev/null
+printf 'uncommitted' > "$FIX/repos/unsafe1/dirty.txt"   # make it unsafe (dirty)
+out=$(NABSPATH="$FIX" "$BIN/migrate-standalone-repos.sh" unsafe1 --apply 2>&1)
+ok "unsafe left in place" "$([ -d "$FIX/repos/unsafe1" ] && echo yes || echo no)" "yes"
+ok "apply reports REFUSED" "$(echo "$out" | grep -c 'REFUSED  *unsafe1')" "1"
+
 echo ""
 echo "RESULT: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
