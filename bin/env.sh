@@ -813,11 +813,14 @@ MIGRATE
         # Remove /etc/hosts entries for this env. Prefer marker-based removal
         # (robust if the domain changed mid-life); fall back to the current domain.
         removed_any=false
-        if grep -q "${NEWSPACK_HOSTS_MARKER}${env_name}$" /etc/hosts 2>/dev/null; then
+        # env_name may contain dots (e.g. foo.bar); escape them so the marker
+        # grep treats them literally rather than as BRE any-char wildcards.
+        escaped_env_name="${env_name//./\\.}"
+        if grep -q "${NEWSPACK_HOSTS_MARKER}${escaped_env_name}$" /etc/hosts 2>/dev/null; then
             while IFS= read -r marked_domain; do
                 [ -n "$marked_domain" ] || continue
                 if env_hosts_remove "$marked_domain"; then removed_any=true; fi
-            done < <(grep "${NEWSPACK_HOSTS_MARKER}${env_name}$" /etc/hosts 2>/dev/null | awk '{print $2}')
+            done < <(grep "${NEWSPACK_HOSTS_MARKER}${escaped_env_name}$" /etc/hosts 2>/dev/null | awk '{print $2}')
         fi
         if [[ "$removed_any" == false && -n "$domain" && "$domain" != "$ip" ]] \
             && grep -q "[[:space:]]${domain}" /etc/hosts 2>/dev/null; then
