@@ -82,8 +82,16 @@ const ReaderRevenueEmailSidebar = compose( [
 			.then( () => {
 				createNotice( 'success', __( 'Test email sent!', 'newspack-plugin' ) );
 			} )
-			.catch( () => {
-				createNotice( 'error', __( 'Test email was not sent.', 'newspack-plugin' ) );
+			.catch( error => {
+				// Surface the server's specific message when present
+				// (NPPD-1547 added structured error codes / messages
+				// for each prerequisite failure: invalid recipient,
+				// missing HTML payload, trashed post, etc.). The
+				// `__( 'Test email was not sent.' )` generic is the
+				// fallback for unstructured errors (network failures,
+				// CORS, etc.) — those don't have a `.message` field.
+				const message = ( error && error.message ) || __( 'Test email was not sent.', 'newspack-plugin' );
+				createNotice( 'error', message );
 			} )
 			.finally( () => {
 				setInFlight( false );

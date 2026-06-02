@@ -174,6 +174,7 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 	 */
 	public function test_emails_status() {
 		$test_email = self::get_test_email( 'test-email-config' );
+		$original_status = get_post_status( $test_email['post_id'] );
 		wp_update_post(
 			[
 				'ID'          => $test_email['post_id'],
@@ -181,20 +182,39 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 			]
 		);
 
-		// AUTO-SEND: draft is blocked. Unchanged from pre-NPPD-1547.
-		self::assertFalse(
-			Emails::can_send_email( 'test-email-config' ),
-			'can_send_email() must return false for draft (auto-send gate).'
-		);
-		$auto_send_result = Emails::send_email( 'test-email-config', 'someone@example.com' );
-		self::assertFalse( $auto_send_result, 'send_email() must not dispatch for draft (auto-send gate).' );
+		try {
+			// AUTO-SEND: draft is blocked. Unchanged from pre-NPPD-1547.
+			self::assertFalse(
+				Emails::can_send_email( 'test-email-config' ),
+				'can_send_email() must return false for draft (auto-send gate).'
+			);
+			$auto_send_result = Emails::send_email( 'test-email-config', 'someone@example.com' );
+			self::assertFalse( $auto_send_result, 'send_email() must not dispatch for draft (auto-send gate).' );
 
-		// TEST-SEND: draft is allowed. The headline contract of NPPD-1547.
-		$test_send_result = Emails::send_test_email( $test_email['post_id'], 'someone@example.com' );
-		self::assertTrue(
-			$test_send_result,
-			'send_test_email() must return true for draft — the admin "Send test" operation is decoupled from the auto-send status gate.'
-		);
+			// TEST-SEND: draft is allowed. The headline contract of NPPD-1547.
+			// send_test_email requires manage_options at its entry point;
+			// log in as admin for the duration of the call.
+			$admin = self::login_as_admin();
+			try {
+				$test_send_result = Emails::send_test_email( $test_email['post_id'], 'someone@example.com' );
+				self::assertTrue(
+					$test_send_result,
+					'send_test_email() must return true for draft — the admin "Send test" operation is decoupled from the auto-send status gate.'
+				);
+			} finally {
+				self::logout_admin( $admin );
+			}
+		} finally {
+			// Restore the shared post so later tests see 'publish'
+			// status (this class skips parent::set_up(), so DB
+			// mutations leak across tests without explicit restore).
+			wp_update_post(
+				[
+					'ID'          => $test_email['post_id'],
+					'post_status' => $original_status,
+				]
+			);
+		}
 	}
 
 	/*
@@ -204,19 +224,19 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 	 * The split between auto-send and test-send is verified at the
 	 * status-gate level by `test_emails_status` above. The tests
 	 * below cover the rest of the test-send contract: prerequisite
-	 * failures surface specific WP_Error codes (not the previous
-	 * generic "Test email was not sent." string), and the
-	 * api_send_test_email handler validates recipient format before
-	 * the dispatch path.
+	 * failures surface specific newspack_emails_* WP_Error codes
+	 * (not the previous generic "Test email was not sent." string),
+	 * and capability + trash + recipient-format guards apply
+	 * uniformly whether send_test_email is reached via the REST
+	 * handler or via a direct PHP call.
 	 */
 
 	/**
 	 * Headline contract: test-send dispatches for a draft email.
-	 * Mirrors the second half of test_emails_status but isolates
-	 * the assertion so failure pinpoints the test-send path.
 	 */
 	public function test_test_send_works_for_draft() {
-		$test_email = self::get_test_email( 'test-email-config' );
+		$test_email      = self::get_test_email( 'test-email-config' );
+		$original_status = get_post_status( $test_email['post_id'] );
 		wp_update_post(
 			[
 				'ID'          => $test_email['post_id'],
@@ -224,129 +244,245 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 			]
 		);
 
-		$result = Emails::send_test_email( $test_email['post_id'], 'tester@example.com' );
+		$admin = self::login_as_admin();
+		try {
+			$result = Emails::send_test_email( $test_email['post_id'], 'tester@example.com' );
 
-		self::assertTrue( $result, 'send_test_email() must return true (not WP_Error) for a draft email with all other prereqs satisfied.' );
+			self::assertTrue( $result, 'send_test_email() must return true (not WP_Error) for a draft email with all other prereqs satisfied.' );
 
-		// Verify the email actually reached the (mocked) mailer with
-		// the correct recipient — guards against accidentally
-		// short-circuiting before dispatch_email is called.
-		$mailer = tests_retrieve_phpmailer_instance();
-		self::assertContains( 'tester@example.com', $mailer->get_sent()->to[0] );
+			// Verify the email actually reached the (mocked) mailer
+			// with the correct recipient — guards against accidentally
+			// short-circuiting before dispatch_email is called.
+			$mailer = tests_retrieve_phpmailer_instance();
+			self::assertContains( 'tester@example.com', $mailer->get_sent()->to[0] );
+		} finally {
+			self::logout_admin( $admin );
+			wp_update_post(
+				[
+					'ID'          => $test_email['post_id'],
+					'post_status' => $original_status,
+				]
+			);
+		}
 	}
 
 	/**
-	 * Recipient format validation lives at the api_send_test_email
-	 * handler (not at send_test_email itself), so the test routes
-	 * through the handler with a WP_REST_Request. Typo input like
-	 * 'not-an-email' must return 400 + newspack_invalid_test_recipient,
-	 * NOT silently reach wp_mail() and fail with the generic dispatch
-	 * error.
+	 * Recipient format validation now lives in
+	 * validate_send_prerequisites (the helper), not at the REST
+	 * handler. Both the api_send_test_email REST entry AND direct
+	 * send_test_email PHP calls reject typo input with the same
+	 * code (`newspack_emails_invalid_recipient`) and 400 status.
 	 */
-	public function test_test_send_rejects_non_email_recipient() {
+	public function test_test_send_rejects_non_email_recipient_via_rest() {
 		$test_email = self::get_test_email( 'test-email-config' );
 
-		$request = new WP_REST_Request( 'POST' );
-		$request->set_param( 'post_id', $test_email['post_id'] );
-		$request->set_param( 'recipient', 'not-an-email' );
+		$admin = self::login_as_admin();
+		try {
+			$request = new WP_REST_Request( 'POST' );
+			$request->set_param( 'post_id', $test_email['post_id'] );
+			$request->set_param( 'recipient', 'not-an-email' );
 
-		$response = Emails::api_send_test_email( $request );
+			$response = Emails::api_send_test_email( $request );
 
-		self::assertInstanceOf( WP_Error::class, $response );
-		self::assertSame( 'newspack_invalid_test_recipient', $response->get_error_code() );
-		self::assertSame( 400, $response->get_error_data()['status'] );
+			self::assertInstanceOf( WP_Error::class, $response );
+			self::assertSame( 'newspack_emails_invalid_recipient', $response->get_error_code() );
+			self::assertSame( 400, $response->get_error_data()['status'] );
+		} finally {
+			self::logout_admin( $admin );
+		}
+	}
+
+	/**
+	 * Direct PHP callers of send_test_email get the same recipient
+	 * validation as REST callers — guards against the "helper does
+	 * one thing, handler does another" gap that would let a future
+	 * internal caller bypass is_email().
+	 */
+	public function test_test_send_rejects_non_email_recipient_via_direct_php() {
+		$test_email = self::get_test_email( 'test-email-config' );
+
+		$admin = self::login_as_admin();
+		try {
+			$result = Emails::send_test_email( $test_email['post_id'], 'not-an-email' );
+
+			self::assertInstanceOf( WP_Error::class, $result );
+			self::assertSame( 'newspack_emails_invalid_recipient', $result->get_error_code() );
+			self::assertSame( 400, $result->get_error_data()['status'] );
+		} finally {
+			self::logout_admin( $admin );
+		}
 	}
 
 	/**
 	 * Supports_emails() returning false means Newspack_Newsletters is
-	 * not active. send_test_email must return WP_Error with
-	 * newspack_emails_unsupported.
+	 * not active. Acknowledged structural test-infra gap.
 	 *
-	 * STRUCTURAL LIMITATION: supports_emails() uses class_exists() on
-	 * Newspack_Newsletters; in the test bootstrap that class IS
-	 * loaded, and PHP doesn't allow un-loading a class within a
-	 * process. The false branch is not exercisable without either
-	 * (a) adding a filter to supports_emails() for test seam (a
-	 * production change with no callers outside tests), or (b)
-	 * runkit/uopz extensions (not standard test infra here).
-	 *
-	 * Skipped with explicit acknowledgement of the gap. The branch
-	 * is a one-line class_exists check with no other logic — value
-	 * of testing the false case is low relative to the production-
-	 * code-change cost of opening it up for mocking. Filed forward
-	 * as a potential testability follow-up.
+	 * The supports_emails() implementation uses class_exists() on Newspack_Newsletters;
+	 * the test bootstrap loads that class and PHP doesn't allow
+	 * un-loading. The false branch is not exercisable without either
+	 * adding a filter to supports_emails() for test seam (a
+	 * production change for testability) or runkit/uopz extensions.
+	 * Accepting reduced coverage on this single guard rather than
+	 * paying the production-code-change cost. Tracked separately as
+	 * "make supports_emails() check mockable for testing" follow-up.
 	 */
 	public function test_test_send_blocked_when_no_newspack_newsletters() {
-		$this->markTestSkipped( 'supports_emails() false branch is not exercisable without modifying production code (no filter on supports_emails) or runkit/uopz extensions.' );
+		$this->markTestSkipped( 'supports_emails() false branch is not exercisable without modifying production code or runkit/uopz extensions. Test infra investment we are choosing not to make in this PR; tracked as a follow-up.' );
 	}
 
 	/**
 	 * A post WITHOUT EMAIL_HTML_META cannot be dispatched.
-	 * serialize_email() guards this case by returning false when
-	 * the meta is missing/empty; validate_send_prerequisites surfaces
-	 * it as newspack_emails_post_not_resolvable.
+	 * validate_send_prerequisites surfaces it as
+	 * newspack_emails_html_payload_missing with 422 — distinct from
+	 * "post doesn't exist" (now newspack_emails_post_missing/404) so
+	 * the UI can prompt "save your draft first" vs. "the post is
+	 * gone".
 	 *
-	 * Uses its own throwaway post rather than the shared
-	 * `test-email-config` so the missing-meta state doesn't leak
-	 * into later tests in the file (this class deliberately doesn't
-	 * call parent::set_up(), so WP_UnitTestCase's transaction
-	 * rollback isn't in effect — DB changes survive across tests).
+	 * Uses its own throwaway post (different config name) so the
+	 * missing-meta state doesn't leak into other tests via the
+	 * shared get_emails() lookup.
 	 */
 	public function test_test_send_blocked_when_missing_html_payload() {
-		// Create a fresh email post with NO EMAIL_HTML_META — that's
-		// the state under test.
 		$post_id = wp_insert_post(
 			[
 				'post_type'   => Emails::POST_TYPE,
 				'post_status' => 'draft',
 				'post_title'  => 'NPPD-1547 missing-html test',
 				'meta_input'  => [
-					Emails::EMAIL_CONFIG_NAME_META => 'test-email-config',
-					// Intentionally no EMAIL_HTML_META.
+					Emails::EMAIL_CONFIG_NAME_META => 'nppd1547-missing-html',
 				],
 			]
 		);
 
-		$result = Emails::send_test_email( $post_id, 'tester@example.com' );
+		$admin = self::login_as_admin();
+		try {
+			$result = Emails::send_test_email( $post_id, 'tester@example.com' );
 
-		// Clean up before any assertion can fail and short-circuit
-		// the function — guarantees no leak even on assertion failure.
-		wp_delete_post( $post_id, true );
-
-		self::assertInstanceOf( WP_Error::class, $result );
-		self::assertSame( 'newspack_emails_post_not_resolvable', $result->get_error_code() );
-		self::assertSame( 404, $result->get_error_data()['status'] );
+			self::assertInstanceOf( WP_Error::class, $result );
+			self::assertSame( 'newspack_emails_html_payload_missing', $result->get_error_code() );
+			self::assertSame( 422, $result->get_error_data()['status'] );
+		} finally {
+			wp_delete_post( $post_id, true );
+			self::logout_admin( $admin );
+		}
 	}
 
 	/**
-	 * Empty recipient is blocked at the helper level (independent of
-	 * the api handler's is_email validation). Tests the
-	 * send_test_email entry point directly so the assertion isolates
-	 * the helper's behavior.
+	 * Post exists with HTML payload BUT no EMAIL_CONFIG_NAME_META.
+	 * Surfaces as newspack_emails_config_name_missing with 422.
+	 * Without this guard, dispatch_email would call
+	 * get_email_payload('') which returns false → array-access on
+	 * false → blank-bodied email sent to recipient. Now reachable
+	 * because send_test_email skips the publish gate, so drafts
+	 * with incomplete meta can route this far.
+	 */
+	public function test_test_send_blocked_when_config_name_missing() {
+		$post_id = wp_insert_post(
+			[
+				'post_type'   => Emails::POST_TYPE,
+				'post_status' => 'draft',
+				'post_title'  => 'NPPD-1547 missing-config-name test',
+				'meta_input'  => [
+					// Intentionally no EMAIL_CONFIG_NAME_META.
+					\Newspack_Newsletters::EMAIL_HTML_META => '<!doctype html><html><body>nppd-1547 stub</body></html>',
+				],
+			]
+		);
+
+		$admin = self::login_as_admin();
+		try {
+			$result = Emails::send_test_email( $post_id, 'tester@example.com' );
+
+			self::assertInstanceOf( WP_Error::class, $result );
+			self::assertSame( 'newspack_emails_config_name_missing', $result->get_error_code() );
+			self::assertSame( 422, $result->get_error_data()['status'] );
+		} finally {
+			wp_delete_post( $post_id, true );
+			self::logout_admin( $admin );
+		}
+	}
+
+	/**
+	 * Trashed posts cannot be test-sent. The publish-status gate
+	 * skip in NPPD-1547 is for the "draft / inactive but being
+	 * edited" case; a trashed post is intentionally removed and
+	 * shouldn't be sendable. Restoring from trash is a one-click
+	 * admin operation if the publisher really wants to test the
+	 * trashed content.
+	 */
+	public function test_test_send_blocked_for_trashed_post() {
+		$test_email      = self::get_test_email( 'test-email-config' );
+		$original_status = get_post_status( $test_email['post_id'] );
+		wp_update_post(
+			[
+				'ID'          => $test_email['post_id'],
+				'post_status' => 'trash',
+			]
+		);
+
+		$admin = self::login_as_admin();
+		try {
+			$result = Emails::send_test_email( $test_email['post_id'], 'tester@example.com' );
+
+			self::assertInstanceOf( WP_Error::class, $result );
+			self::assertSame( 'newspack_emails_post_trashed', $result->get_error_code() );
+			self::assertSame( 409, $result->get_error_data()['status'] );
+		} finally {
+			self::logout_admin( $admin );
+			wp_update_post(
+				[
+					'ID'          => $test_email['post_id'],
+					'post_status' => $original_status,
+				]
+			);
+		}
+	}
+
+	/**
+	 * Empty recipient surfaces newspack_emails_empty_recipient with
+	 * 400 — same code regardless of REST vs direct entry (no more
+	 * duplicate codes for the same state).
 	 */
 	public function test_test_send_blocked_when_recipient_empty() {
 		$test_email = self::get_test_email( 'test-email-config' );
 
-		$result = Emails::send_test_email( $test_email['post_id'], '' );
+		$admin = self::login_as_admin();
+		try {
+			$result = Emails::send_test_email( $test_email['post_id'], '' );
 
-		self::assertInstanceOf( WP_Error::class, $result );
-		self::assertSame( 'newspack_emails_empty_recipient', $result->get_error_code() );
-		self::assertSame( 400, $result->get_error_data()['status'] );
+			self::assertInstanceOf( WP_Error::class, $result );
+			self::assertSame( 'newspack_emails_empty_recipient', $result->get_error_code() );
+			self::assertSame( 400, $result->get_error_data()['status'] );
+		} finally {
+			self::logout_admin( $admin );
+		}
 	}
 
 	/**
-	 * Non-admin users cannot call the test-send endpoint. The
-	 * permission check is on the REST route's permission_callback
-	 * (api_permissions_check), which requires manage_options. Test
-	 * the callback directly with a subscriber-level user logged in
-	 * — calling api_send_test_email via PHP doesn't pass through
-	 * the route's permission_callback, but the callback itself is
-	 * what the REST framework runs.
+	 * Invalid post_id (0, negative, non-numeric) surfaces
+	 * newspack_emails_invalid_post_id with 400 — distinct from
+	 * "post doesn't exist" (404). 0 is the common case via
+	 * `absint(missing_param)`; this guard returns a structurally
+	 * correct 400 rather than the previous mis-classified 404.
 	 */
-	public function test_test_send_blocked_when_non_admin() {
-		// Don't use `$this->factory` — this class doesn't call
-		// parent::set_up(), so factory isn't initialized. Direct
-		// wp_insert_user avoids the dependency.
+	public function test_test_send_blocked_when_post_id_invalid() {
+		$admin = self::login_as_admin();
+		try {
+			$result = Emails::send_test_email( 0, 'tester@example.com' );
+
+			self::assertInstanceOf( WP_Error::class, $result );
+			self::assertSame( 'newspack_emails_invalid_post_id', $result->get_error_code() );
+			self::assertSame( 400, $result->get_error_data()['status'] );
+		} finally {
+			self::logout_admin( $admin );
+		}
+	}
+
+	/**
+	 * Subscriber-level user calling the REST route is blocked by
+	 * api_permissions_check (the route's permission_callback).
+	 */
+	public function test_test_send_blocked_when_non_admin_via_rest() {
 		$subscriber_id = wp_insert_user(
 			[
 				'user_login' => 'nppd1547_subscriber_' . uniqid(),
@@ -358,29 +494,69 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 		$prev_user = get_current_user_id();
 		wp_set_current_user( $subscriber_id );
 
-		$result = Emails::api_permissions_check( null );
+		try {
+			$result = Emails::api_permissions_check( null );
 
-		wp_set_current_user( $prev_user );
-		wp_delete_user( $subscriber_id );
-
-		self::assertInstanceOf( WP_Error::class, $result );
-		self::assertSame( 'newspack_rest_forbidden', $result->get_error_code() );
-		self::assertSame( 403, $result->get_error_data()['status'] );
+			self::assertInstanceOf( WP_Error::class, $result );
+			self::assertSame( 'newspack_rest_forbidden', $result->get_error_code() );
+			self::assertSame( 403, $result->get_error_data()['status'] );
+		} finally {
+			wp_set_current_user( $prev_user );
+			wp_delete_user( $subscriber_id );
+		}
 	}
 
 	/**
-	 * A post_id that doesn't exist surfaces as
-	 * newspack_emails_post_not_resolvable (same error code as
-	 * missing-HTML-payload, since both go through serialize_email's
-	 * false return). The test name distinguishes the SCENARIO even
-	 * though the error code is shared.
+	 * Subscriber-level user calling send_test_email DIRECTLY (not
+	 * via REST) is blocked by the cap check at the entry point of
+	 * send_test_email itself. Without the entry-point check, a
+	 * future PHP caller (CLI command, plugin hook) could bypass
+	 * the REST route's permission_callback and dispatch draft
+	 * emails from a low-privilege context. This test locks the
+	 * defense-in-depth contract.
+	 */
+	public function test_test_send_blocked_when_non_admin_via_direct_php() {
+		$test_email = self::get_test_email( 'test-email-config' );
+
+		$subscriber_id = wp_insert_user(
+			[
+				'user_login' => 'nppd1547_subscriber_direct_' . uniqid(),
+				'user_pass'  => 'test-password',
+				'user_email' => 'sub-direct-' . uniqid() . '@example.test',
+				'role'       => 'subscriber',
+			]
+		);
+		$prev_user = get_current_user_id();
+		wp_set_current_user( $subscriber_id );
+
+		try {
+			$result = Emails::send_test_email( $test_email['post_id'], 'tester@example.com' );
+
+			self::assertInstanceOf( WP_Error::class, $result );
+			self::assertSame( 'newspack_emails_forbidden', $result->get_error_code() );
+			self::assertSame( 403, $result->get_error_data()['status'] );
+		} finally {
+			wp_set_current_user( $prev_user );
+			wp_delete_user( $subscriber_id );
+		}
+	}
+
+	/**
+	 * Non-existent post_id surfaces newspack_emails_post_missing
+	 * with 404 — distinct from invalid-id-shape (400) and missing-
+	 * content (422). The split lets the UI route by failure mode.
 	 */
 	public function test_test_send_blocked_when_post_missing() {
-		$result = Emails::send_test_email( 9999999, 'tester@example.com' );
+		$admin = self::login_as_admin();
+		try {
+			$result = Emails::send_test_email( 9999999, 'tester@example.com' );
 
-		self::assertInstanceOf( WP_Error::class, $result );
-		self::assertSame( 'newspack_emails_post_not_resolvable', $result->get_error_code() );
-		self::assertSame( 404, $result->get_error_data()['status'] );
+			self::assertInstanceOf( WP_Error::class, $result );
+			self::assertSame( 'newspack_emails_post_missing', $result->get_error_code() );
+			self::assertSame( 404, $result->get_error_data()['status'] );
+		} finally {
+			self::logout_admin( $admin );
+		}
 	}
 
 	/**
@@ -389,11 +565,11 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 	 * lock-in, a future refactor that accidentally routes
 	 * send_email's post-id branch through send_test_email's
 	 * status-less path would silently start dispatching draft
-	 * emails on triggered events — a much worse failure mode than
-	 * the original bug (silent over-firing vs. silent under-firing).
+	 * emails on triggered events.
 	 */
 	public function test_auto_send_still_blocked_for_draft() {
-		$test_email = self::get_test_email( 'test-email-config' );
+		$test_email      = self::get_test_email( 'test-email-config' );
+		$original_status = get_post_status( $test_email['post_id'] );
 		wp_update_post(
 			[
 				'ID'          => $test_email['post_id'],
@@ -401,15 +577,58 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 			]
 		);
 
-		// Post-id path of send_email — the branch that shares
-		// validate_send_prerequisites with send_test_email. Auto-send
-		// must still apply the status check on top.
-		$post_id_result = Emails::send_email( $test_email['post_id'], 'tester@example.com' );
-		self::assertFalse( $post_id_result, 'send_email() post-id branch must remain status-gated.' );
+		try {
+			// Post-id path of send_email — the branch that shares
+			// validate_send_prerequisites with send_test_email. Auto-send
+			// must still apply the status check on top.
+			$post_id_result = Emails::send_email( $test_email['post_id'], 'tester@example.com' );
+			self::assertFalse( $post_id_result, 'send_email() post-id branch must remain status-gated.' );
 
-		// String path of send_email — the dominant auto-trigger
-		// surface. Status check is inline (not via the helper).
-		$string_result = Emails::send_email( 'test-email-config', 'tester@example.com' );
-		self::assertFalse( $string_result, 'send_email() string-name branch must remain status-gated.' );
+			// String path of send_email — the dominant auto-trigger
+			// surface. Status check is inline (not via the helper).
+			$string_result = Emails::send_email( 'test-email-config', 'tester@example.com' );
+			self::assertFalse( $string_result, 'send_email() string-name branch must remain status-gated.' );
+		} finally {
+			wp_update_post(
+				[
+					'ID'          => $test_email['post_id'],
+					'post_status' => $original_status,
+				]
+			);
+		}
+	}
+
+	/**
+	 * Login helper: create a fresh administrator user, set them
+	 * as current, return state needed for cleanup. Tests that
+	 * call send_test_email need to pair this with logout_admin()
+	 * in a try/finally block.
+	 *
+	 * @return array{0: int, 1: int} [ admin user id, previously-current user id ]
+	 */
+	private static function login_as_admin() {
+		$admin_id = wp_insert_user(
+			[
+				'user_login' => 'nppd1547_admin_' . uniqid(),
+				'user_pass'  => 'test-password',
+				'user_email' => 'admin-' . uniqid() . '@example.test',
+				'role'       => 'administrator',
+			]
+		);
+		$prev_user = get_current_user_id();
+		wp_set_current_user( $admin_id );
+		return [ $admin_id, $prev_user ];
+	}
+
+	/**
+	 * Restore the previously-current user and delete the admin
+	 * created by login_as_admin().
+	 *
+	 * @param array{0: int, 1: int} $session State returned by login_as_admin.
+	 */
+	private static function logout_admin( $session ) {
+		[ $admin_id, $prev_user ] = $session;
+		wp_set_current_user( $prev_user );
+		wp_delete_user( $admin_id );
 	}
 }

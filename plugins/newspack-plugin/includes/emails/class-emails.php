@@ -274,63 +274,93 @@ class Emails {
 			return false;
 		}
 
-		// Migrate to RAS-ACC email templates if migration option is not set AND there have been no manual updates to the templates.
-		if ( get_option( 'newspack_email_templates_migrated', '' ) !== 'v1' ) {
-			$migrated  = true;
-			$templates = get_posts(
-				[
-					'post_type'      => self::POST_TYPE,
-					'posts_per_page' => -1,
-					'post_status'    => 'publish',
-				]
-			);
+		self::maybe_run_ras_acc_template_migration();
 
-			foreach ( $templates as $template ) {
-				$publish_date       = get_the_date( 'Y-m-d H:i:s', $template->ID );
-				$last_modified_date = get_the_modified_date( 'Y-m-d H:i:s', $template->ID );
+		// Switch locale around the FULL send operation, not just
+		// dispatch. get_email_config_by_type's lazy-create path
+		// requires a template PHP file with __() calls; the locale
+		// active at that moment determines what gets persisted to
+		// the email post. Restoring symmetry via try/finally
+		// guarantees the locale is restored even if a wp_mail filter
+		// throws.
+		$switched_locale = \switch_to_locale( \get_user_locale( \wp_get_current_user() ) );
+		try {
+			if ( 'string' === gettype( $config_name ) ) {
+				// String path: looked up by type name. Used by every
+				// production auto-trigger (RAS verification, magic
+				// links, payment receipts, etc.). No HTML-payload check
+				// — the string path uses template files, not stored
+				// post content.
+				$email_config = self::get_email_config_by_type( $config_name );
+				if ( ! $to || ! $email_config || 'publish' !== $email_config['status'] ) {
+					return false;
+				}
+			} elseif ( 'integer' === gettype( $config_name ) ) {
+				// Post-id path: shared with send_test_email() via
+				// validate_send_prerequisites(). Auto-send additionally
+				// requires 'publish' status; test-send does not.
+				$resolved = self::validate_send_prerequisites( $config_name, $to );
+				if ( is_wp_error( $resolved ) ) {
+					return false;
+				}
+				if ( 'publish' !== $resolved['config']['status'] ) {
+					return false;
+				}
+				$email_config = $resolved['config'];
+				$config_name  = $resolved['name'];
+			} else {
+				return false;
+			}
 
-				// Template has not been modified, so trash the post so we can trigger a template update.
-				if ( $publish_date === $last_modified_date ) {
-					if ( ! wp_trash_post( $template->ID ) ) {
-						// Flag the migration as failed so we can trigger another attempt later.
-						$migrated = false;
-					}
+			return self::dispatch_email( $email_config, $config_name, $to, $placeholders );
+		} finally {
+			if ( $switched_locale ) {
+				\restore_previous_locale();
+			}
+		}
+	}
+
+	/**
+	 * Run the v1 RAS-ACC email-templates migration once per request if
+	 * it hasn't already completed. Extracted from `send_email()` so
+	 * `send_test_email()` runs the same migration — both entry points
+	 * are reachable from a fresh-install admin's first interaction
+	 * with the email system, and the migration is harmless to run on
+	 * any path (it's option-gated and idempotent).
+	 *
+	 * Trashing un-modified templates forces them to be regenerated
+	 * from the current source on the next read, picking up RAS-ACC
+	 * template updates without overwriting publisher edits.
+	 */
+	private static function maybe_run_ras_acc_template_migration() {
+		if ( 'v1' === get_option( 'newspack_email_templates_migrated', '' ) ) {
+			return;
+		}
+		$migrated  = true;
+		$templates = get_posts(
+			[
+				'post_type'      => self::POST_TYPE,
+				'posts_per_page' => -1,
+				'post_status'    => 'publish',
+			]
+		);
+
+		foreach ( $templates as $template ) {
+			$publish_date       = get_the_date( 'Y-m-d H:i:s', $template->ID );
+			$last_modified_date = get_the_modified_date( 'Y-m-d H:i:s', $template->ID );
+
+			// Template has not been modified, so trash the post so we can trigger a template update.
+			if ( $publish_date === $last_modified_date ) {
+				if ( ! wp_trash_post( $template->ID ) ) {
+					// Flag the migration as failed so we can trigger another attempt later.
+					$migrated = false;
 				}
 			}
-
-			if ( $migrated ) {
-				update_option( 'newspack_email_templates_migrated', 'v1' );
-			}
 		}
 
-		if ( 'string' === gettype( $config_name ) ) {
-			// String path: looked up by type name. Used by every
-			// production auto-trigger (RAS verification, magic
-			// links, payment receipts, etc.). No HTML-payload check
-			// — the string path uses template files, not stored
-			// post content.
-			$email_config = self::get_email_config_by_type( $config_name );
-			if ( ! $to || ! $email_config || 'publish' !== $email_config['status'] ) {
-				return false;
-			}
-		} elseif ( 'integer' === gettype( $config_name ) ) {
-			// Post-id path: shared with send_test_email() via
-			// validate_send_prerequisites(). Auto-send additionally
-			// requires 'publish' status; test-send does not.
-			$resolved = self::validate_send_prerequisites( $config_name, $to );
-			if ( is_wp_error( $resolved ) ) {
-				return false;
-			}
-			if ( 'publish' !== $resolved['config']['status'] ) {
-				return false;
-			}
-			$email_config = $resolved['config'];
-			$config_name  = $resolved['name'];
-		} else {
-			return false;
+		if ( $migrated ) {
+			update_option( 'newspack_email_templates_migrated', 'v1' );
 		}
-
-		return self::dispatch_email( $email_config, $config_name, $to, $placeholders );
 	}
 
 	/**
@@ -347,9 +377,17 @@ class Emails {
 	 * — git blame shows the guard was introduced for the auto-send
 	 * path with no test-send-specific design intent. Splitting the
 	 * entry points makes the distinction explicit and means the
-	 * test-send code path skips ONLY the status check, retaining
-	 * every other prerequisite (Newspack_Newsletters present,
-	 * recipient non-empty, post resolves, HTML payload saved).
+	 * test-send code path skips ONLY the draft/publish gate,
+	 * retaining every other prerequisite plus an explicit trash
+	 * exclusion (a trashed post is intentionally removed, not
+	 * "inactive").
+	 *
+	 * Includes its own `current_user_can( 'manage_options' )` check
+	 * even though the only current caller (api_send_test_email) is
+	 * already behind a REST permission_callback. send_test_email is
+	 * `public static` and the surface invites future internal
+	 * callers; locking the cap check inside the entry point
+	 * guarantees no path bypasses it.
 	 *
 	 * @param int    $post_id Email post id.
 	 * @param string $to      Recipient email address.
@@ -357,43 +395,88 @@ class Emails {
 	 *                       with appropriate status code on failure.
 	 */
 	public static function send_test_email( $post_id, $to ) {
-		$resolved = self::validate_send_prerequisites( $post_id, $to );
-		if ( is_wp_error( $resolved ) ) {
-			return $resolved;
-		}
-		$sent = self::dispatch_email( $resolved['config'], $resolved['name'], $to, [] );
-		if ( ! $sent ) {
+		if ( ! current_user_can( 'manage_options' ) ) {
 			return new \WP_Error(
-				'newspack_test_email_dispatch_failed',
-				esc_html__( 'Test email could not be dispatched. Check your mail configuration.', 'newspack-plugin' ),
-				[ 'status' => 500 ]
+				'newspack_emails_forbidden',
+				esc_html__( 'You cannot send test emails.', 'newspack-plugin' ),
+				[ 'status' => 403 ]
 			);
 		}
-		return true;
+
+		self::maybe_run_ras_acc_template_migration();
+
+		$switched_locale = \switch_to_locale( \get_user_locale( \wp_get_current_user() ) );
+		try {
+			$resolved = self::validate_send_prerequisites( $post_id, $to );
+			if ( is_wp_error( $resolved ) ) {
+				return $resolved;
+			}
+
+			// Trash exclusion. The status-gate skip is for draft/pending
+			// (the "inactive but still being edited" case); a trashed
+			// post is intentionally removed from publication and
+			// shouldn't be sendable even by an admin's deliberate
+			// action. Restoring from trash is a one-click admin
+			// operation if the publisher really wants to test-send
+			// a trashed post.
+			if ( 'trash' === ( $resolved['config']['status'] ?? '' ) ) {
+				return new \WP_Error(
+					'newspack_emails_post_trashed',
+					esc_html__( 'Cannot test-send a trashed email. Restore the email first.', 'newspack-plugin' ),
+					[ 'status' => 409 ]
+				);
+			}
+
+			$sent = self::dispatch_email( $resolved['config'], $resolved['name'], $to, [] );
+			if ( ! $sent ) {
+				return new \WP_Error(
+					'newspack_emails_test_dispatch_failed',
+					esc_html__( 'Test email could not be dispatched. Check your mail configuration.', 'newspack-plugin' ),
+					[ 'status' => 500 ]
+				);
+			}
+			return true;
+		} finally {
+			if ( $switched_locale ) {
+				\restore_previous_locale();
+			}
+		}
 	}
 
 	/**
 	 * Validate the shared prerequisites for sending an email via the
 	 * post-id path. Used by both send_email()'s post-id branch and
-	 * send_test_email() so future shared guards (rate limiting,
-	 * recipient format validation, etc.) need to land in one place.
+	 * send_test_email() so future shared guards (rate limiting, etc.)
+	 * land in one place.
+	 *
+	 * Checks (in order, cheapest first):
+	 * - $post_id is a positive integer
+	 * - $to is non-empty AND a valid email per is_email()
+	 * - Newspack Newsletters plugin is active
+	 * - Post resolves to a config with HTML payload
+	 * - Resolved config_name (EMAIL_CONFIG_NAME_META) is non-empty
 	 *
 	 * DOES NOT check post status — the caller layers its own status
 	 * check on top when appropriate. send_email() requires
-	 * `'publish'`; send_test_email() does not.
+	 * `'publish'`; send_test_email() excludes only `'trash'`.
+	 *
+	 * Error codes use the `newspack_emails_*` prefix consistently so
+	 * downstream consumers can group/filter on the namespace.
 	 *
 	 * @param int    $post_id Email post id.
 	 * @param string $to      Recipient email address.
 	 * @return array|WP_Error On success, [ 'config' => array,
 	 *                        'name' => string ]. On failure, WP_Error
-	 *                        identifying which prerequisite failed.
+	 *                        with `status` data field set to an
+	 *                        appropriate HTTP code.
 	 */
 	private static function validate_send_prerequisites( $post_id, $to ) {
-		if ( ! self::supports_emails() ) {
+		// Caller-input checks first (cheap, common failure modes).
+		if ( empty( $post_id ) || ! is_numeric( $post_id ) || (int) $post_id <= 0 ) {
 			return new \WP_Error(
-				'newspack_emails_unsupported',
-				esc_html__( 'Email sending requires the Newspack Newsletters plugin to be active.', 'newspack-plugin' ),
-				[ 'status' => 500 ]
+				'newspack_emails_invalid_post_id',
+				esc_html__( 'A valid email post ID is required.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
 			);
 		}
 		if ( empty( $to ) ) {
@@ -403,21 +486,61 @@ class Emails {
 				[ 'status' => 400 ]
 			);
 		}
-		// `serialize_email()` returns false when the post doesn't
-		// exist OR when its EMAIL_HTML_META is missing/empty — i.e.
-		// the email editor has never saved content for this post.
-		// Both are legitimate "can't dispatch this" cases.
+		if ( ! is_email( $to ) ) {
+			return new \WP_Error(
+				'newspack_emails_invalid_recipient',
+				esc_html__( 'Recipient must be a valid email address.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
+			);
+		}
+		// Infrastructure prereq: Newspack Newsletters provides the
+		// email-editor post type + meta keys. 412 (Precondition
+		// Failed) more accurately reflects "configuration prereq
+		// not satisfied" than 500 (server fault) — monitoring that
+		// pages on 5xx no longer fires for known-config states.
+		if ( ! self::supports_emails() ) {
+			return new \WP_Error(
+				'newspack_emails_unsupported',
+				esc_html__( 'Email sending requires the Newspack Newsletters plugin to be active.', 'newspack-plugin' ),
+				[ 'status' => 412 ]
+			);
+		}
+		// `serialize_email( null, $post_id )` returns false when the
+		// post doesn't exist OR when its EMAIL_HTML_META is missing.
+		// Distinguish via get_post() so the error codes (and HTTP
+		// status) point the publisher at the actionable cause.
+		if ( ! get_post( $post_id ) ) {
+			return new \WP_Error(
+				'newspack_emails_post_missing',
+				esc_html__( 'Email post does not exist.', 'newspack-plugin' ),
+				[ 'status' => 404 ]
+			);
+		}
 		$email_config = self::serialize_email( null, $post_id );
 		if ( ! $email_config ) {
 			return new \WP_Error(
-				'newspack_emails_post_not_resolvable',
-				esc_html__( 'Email cannot be resolved from the provided post ID, or has no saved content.', 'newspack-plugin' ),
-				[ 'status' => 404 ]
+				'newspack_emails_html_payload_missing',
+				esc_html__( 'Email has no saved content. Open the email in the editor and save before sending.', 'newspack-plugin' ),
+				[ 'status' => 422 ]
+			);
+		}
+		$config_name = (string) \get_post_meta( $post_id, self::EMAIL_CONFIG_NAME_META, true );
+		// EMAIL_CONFIG_NAME_META missing/empty would propagate through
+		// dispatch_email → get_email_payload('') → get_email_config_by_type('')
+		// returning false, producing a blank-bodied email. Now reachable
+		// post-NPPD-1547 because send_test_email skips the publish gate
+		// (drafts are likelier to have incomplete meta). Fail fast
+		// instead of dispatching empty content.
+		if ( '' === $config_name ) {
+			return new \WP_Error(
+				'newspack_emails_config_name_missing',
+				esc_html__( 'Email is not associated with a known config type. Cannot dispatch.', 'newspack-plugin' ),
+				[ 'status' => 422 ]
 			);
 		}
 		return [
 			'config' => $email_config,
-			'name'   => (string) \get_post_meta( $post_id, self::EMAIL_CONFIG_NAME_META, true ),
+			'name'   => $config_name,
 		];
 	}
 
@@ -437,7 +560,14 @@ class Emails {
 	 * @return bool wp_mail() result.
 	 */
 	private static function dispatch_email( $email_config, $config_name, $to, $placeholders ) {
-		$switched_locale = \switch_to_locale( \get_user_locale( \wp_get_current_user() ) );
+		// Locale-switching is performed by the caller (send_email /
+		// send_test_email) around the FULL send operation, including
+		// config resolution — get_email_config_by_type's lazy-create
+		// path requires a template PHP file with __() calls, and the
+		// locale active at that moment determines what gets persisted
+		// to the email post. Moving the switch into dispatch_email
+		// would mean first-time-template-creation runs under site
+		// default locale instead of the admin's.
 
 		$email_content_type = function() {
 			return 'text/html';
@@ -459,11 +589,18 @@ class Emails {
 		);
 		remove_filter( 'wp_mail_content_type', $email_content_type );
 
-		if ( $switched_locale ) {
-			\restore_previous_locale();
+		// Log dispatch outcome, not the attempt. The old
+		// unconditional "Sending..." log produced misleading
+		// success-shaped lines for wp_mail failures and routinely
+		// led incident investigation down the wrong path
+		// (concluding dispatch succeeded when wp_mail returned
+		// false). Distinguishing success/failure in the log
+		// matches the WP_Error contract callers see.
+		if ( $email_send_result ) {
+			Logger::log( 'Sent "' . $config_name . '" email to: ' . $to );
+		} else {
+			Logger::log( 'Failed to send "' . $config_name . '" email to: ' . $to );
 		}
-
-		Logger::log( 'Sending "' . $config_name . '" email to: ' . $to );
 
 		return $email_send_result;
 	}
@@ -717,26 +854,16 @@ class Emails {
 	 * @param WP_REST_Request $request Request.
 	 */
 	public static function api_send_test_email( $request ) {
-		$recipient = $request->get_param( 'recipient' );
-		$post_id   = $request->get_param( 'post_id' );
-
-		// Validate recipient format BEFORE entering the dispatch
-		// path. `sanitize_text_field` (the args' sanitize_callback)
-		// strips tags + trims whitespace but doesn't validate email
-		// format. Without `is_email()` here, a typo like
-		// 'not-an-email' reaches `wp_mail()` and silently fails — the
-		// publisher sees the generic dispatch error with no clue
-		// why. NPPD-1547 adds this guard alongside the test-send
-		// split so the failure mode is specific.
-		if ( ! is_email( $recipient ) ) {
-			return new \WP_Error(
-				'newspack_invalid_test_recipient',
-				esc_html__( 'Recipient must be a valid email address.', 'newspack-plugin' ),
-				[ 'status' => 400 ]
-			);
-		}
-
-		$result = self::send_test_email( $post_id, $recipient );
+		// All validation (post_id, recipient empty/format, supports
+		// emails, post resolves, HTML payload present, config name
+		// present) lives in send_test_email →
+		// validate_send_prerequisites. The handler is a thin
+		// pass-through so the REST and direct-PHP entry points
+		// produce identical error codes for identical inputs.
+		$result = self::send_test_email(
+			$request->get_param( 'post_id' ),
+			$request->get_param( 'recipient' )
+		);
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
