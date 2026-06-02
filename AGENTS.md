@@ -274,7 +274,7 @@ n sh <name>                    # Shell into environment container
 - Each env mounts `envs/<name>/html/` as `/var/www/html` (isolated from `./html/`)
 - Each env gets its own database (`wordpress_<name>`) in the shared MariaDB server
 - Each env gets a unique `WP_CACHE_KEY_SALT` to prevent memcached key collisions
-- Worktrees override specific plugins (e.g., `newspack-plugin`) while sharing the rest from `./plugins/`
+- Worktrees override specific plugins (e.g., `newspack-plugin`) while sharing the rest from `./plugins/`. A tier-1 (monorepo) worktree is mounted both at its serving path and at the pnpm workspace-member path (`/newspack-monorepo/<plugins|themes>/<name>`), so `n build <plugin>` builds the *worktree* copy in place (with `--build`, `n env up` builds it for you). Older envs gain this mount automatically on the next `n env up`.
 - An env's auto-provisioned plugin `vendor/` is **runtime-only** (`composer install --no-dev`), which is all plugin activation needs. To get dev dependencies (PHPUnit etc.) for running a plugin's tests *inside* the container, run `n build <plugin>` or `n ci-build`. (`n test-php` itself is unaffected — it uses the container's global `phpunit`.)
 - All env containers join a shared `newspack_envs` Docker bridge network with their domain as a DNS alias, enabling inter-container communication (e.g., hub/node setups)
 - `n env destroy` cleans up everything: container, DB, html dir, hosts entry, and worktrees
