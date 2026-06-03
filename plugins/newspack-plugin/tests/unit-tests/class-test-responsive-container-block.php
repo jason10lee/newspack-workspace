@@ -16,6 +16,14 @@ use Newspack\Blocks\Responsive_Container\Responsive_Container_Block;
 class Newspack_Test_Responsive_Container_Block extends WP_UnitTestCase {
 
 	/**
+	 * The test-only `wp_theme_json_data_theme` filter, kept so teardown can
+	 * remove exactly this callback rather than wiping the whole hook.
+	 *
+	 * @var callable|null
+	 */
+	private $theme_json_filter = null;
+
+	/**
 	 * Setup.
 	 */
 	public function set_up(): void {
@@ -29,7 +37,10 @@ class Newspack_Test_Responsive_Container_Block extends WP_UnitTestCase {
 	 */
 	public function tear_down(): void {
 		remove_all_filters( 'newspack_responsive_container_breakpoint' );
-		remove_all_filters( 'wp_theme_json_data_theme' );
+		if ( $this->theme_json_filter ) {
+			remove_filter( 'wp_theme_json_data_theme', $this->theme_json_filter );
+			$this->theme_json_filter = null;
+		}
 		wp_clean_theme_json_cache();
 		parent::tear_down();
 	}
@@ -40,17 +51,15 @@ class Newspack_Test_Responsive_Container_Block extends WP_UnitTestCase {
 	 * @param mixed $value Value to set for settings.custom.newspackResponsiveBreakpoint.
 	 */
 	private function set_theme_json_breakpoint( $value ): void {
-		add_filter(
-			'wp_theme_json_data_theme',
-			function ( $theme_json ) use ( $value ) {
-				return $theme_json->update_with(
-					[
-						'version'  => 2,
-						'settings' => [ 'custom' => [ 'newspackResponsiveBreakpoint' => $value ] ],
-					]
-				);
-			}
-		);
+		$this->theme_json_filter = function ( $theme_json ) use ( $value ) {
+			return $theme_json->update_with(
+				[
+					'version'  => 2,
+					'settings' => [ 'custom' => [ 'newspackResponsiveBreakpoint' => $value ] ],
+				]
+			);
+		};
+		add_filter( 'wp_theme_json_data_theme', $this->theme_json_filter );
 		wp_clean_theme_json_cache();
 	}
 

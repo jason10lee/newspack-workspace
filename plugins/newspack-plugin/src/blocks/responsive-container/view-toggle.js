@@ -23,8 +23,18 @@ export default function ViewToggle( { value, onChange } ) {
 	return (
 		<BlockControls>
 			<ToolbarGroup>
-				<ToolbarButton text={ __( 'Desktop', 'newspack-plugin' ) } isActive={ value === 'desktop' } onClick={ () => onChange( 'desktop' ) } />
-				<ToolbarButton text={ __( 'Mobile', 'newspack-plugin' ) } isActive={ value === 'mobile' } onClick={ () => onChange( 'mobile' ) } />
+				<ToolbarButton
+					text={ __( 'Desktop', 'newspack-plugin' ) }
+					label={ __( 'Desktop', 'newspack-plugin' ) }
+					isActive={ value === 'desktop' }
+					onClick={ () => onChange( 'desktop' ) }
+				/>
+				<ToolbarButton
+					text={ __( 'Mobile', 'newspack-plugin' ) }
+					label={ __( 'Mobile', 'newspack-plugin' ) }
+					isActive={ value === 'mobile' }
+					onClick={ () => onChange( 'mobile' ) }
+				/>
 			</ToolbarGroup>
 		</BlockControls>
 	);
