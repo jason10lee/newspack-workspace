@@ -18,15 +18,7 @@ import { __ } from '@wordpress/i18n';
  */
 import classnames from 'classnames';
 
-export type TabKey =
-	| 'audience'
-	| 'engagement'
-	| 'conversion'
-	| 'gates'
-	| 'prompts'
-	| 'subscribers'
-	| 'donors'
-	| 'advertising';
+export type TabKey = 'audience' | 'engagement' | 'conversion' | 'gates' | 'prompts' | 'subscribers' | 'donors' | 'advertising';
 
 export interface TabDef {
 	key: TabKey;
@@ -53,15 +45,10 @@ export interface TabNavigationProps {
 	className?: string;
 }
 
-const TabNavigation = ( {
-	activeTab,
-	visibility,
-	onTabChange,
-	className,
-}: TabNavigationProps ) => {
+const TabNavigation = ( { activeTab, visibility, onTabChange, className }: TabNavigationProps ) => {
 	const visibleTabs = ALL_TABS.filter( t => visibility[ t.key ] );
 	return (
-		<nav
+		<div
 			className={ classnames( 'newspack-insights__tabs', className ) }
 			role="tablist"
 			aria-label={ __( 'Insights sections', 'newspack-plugin' ) }
@@ -76,17 +63,14 @@ const TabNavigation = ( {
 						aria-selected={ isActive }
 						aria-controls={ `newspack-insights-panel-${ tab.key }` }
 						id={ `newspack-insights-tab-${ tab.key }` }
-						className={ classnames(
-							'newspack-insights__tab',
-							isActive && 'is-active'
-						) }
+						className={ classnames( 'newspack-insights__tab', isActive && 'is-active' ) }
 						onClick={ () => onTabChange( tab.key ) }
 					>
 						{ tab.label }
 					</button>
 				);
 			} ) }
-		</nav>
+		</div>
 	);
 };
 

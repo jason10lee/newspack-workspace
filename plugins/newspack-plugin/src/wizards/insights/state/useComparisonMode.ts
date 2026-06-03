@@ -19,8 +19,7 @@ import type { DateRange } from './useDateRange';
 
 const pad2 = ( n: number ) => String( n ).padStart( 2, '0' );
 
-const toISO = ( d: Date ): string =>
-	`${ d.getFullYear() }-${ pad2( d.getMonth() + 1 ) }-${ pad2( d.getDate() ) }`;
+const toISO = ( d: Date ): string => `${ d.getFullYear() }-${ pad2( d.getMonth() + 1 ) }-${ pad2( d.getDate() ) }`;
 
 const fromISO = ( s: string ): Date | null => {
 	const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec( s );
@@ -43,9 +42,7 @@ const daysBetween = ( a: Date, b: Date ): number => {
  *      previous = 2026-04-01 to 2026-04-30 (30 days, ending the day before
  *      current starts so the two windows don't overlap)
  */
-export const computePreviousRange = (
-	current: DateRange
-): DateRange | null => {
+export const computePreviousRange = ( current: DateRange ): DateRange | null => {
 	const start = fromISO( current.start );
 	const end = fromISO( current.end );
 	if ( ! start || ! end ) {
@@ -105,10 +102,7 @@ export interface UseComparisonModeReturn {
 	previousRange: DateRange | null;
 }
 
-const useComparisonMode = ( {
-	defaultEnabled,
-	currentRange,
-}: UseComparisonModeOptions ): UseComparisonModeReturn => {
+const useComparisonMode = ( { defaultEnabled, currentRange }: UseComparisonModeOptions ): UseComparisonModeReturn => {
 	const [ enabled, setEnabledState ] = useState< boolean >( () => {
 		const fromUrl = readUrl();
 		return fromUrl !== undefined ? fromUrl : defaultEnabled;
@@ -122,10 +116,7 @@ const useComparisonMode = ( {
 		setEnabledState( v );
 	}, [] );
 
-	const previousRange = useMemo(
-		() => ( enabled ? computePreviousRange( currentRange ) : null ),
-		[ enabled, currentRange ]
-	);
+	const previousRange = useMemo( () => ( enabled ? computePreviousRange( currentRange ) : null ), [ enabled, currentRange ] );
 
 	return { enabled, setEnabled, previousRange };
 };

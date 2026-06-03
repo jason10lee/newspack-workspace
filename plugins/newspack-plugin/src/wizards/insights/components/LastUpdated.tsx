@@ -59,10 +59,7 @@ const LastUpdated = ( { timestamp, className }: LastUpdatedProps ) => {
 	const label = formatRelative( ts, now );
 	const absolute = ts.toLocaleString();
 	return (
-		<span
-			className={ className ?? 'newspack-insights__last-updated' }
-			title={ absolute }
-		>
+		<span className={ className ?? 'newspack-insights__last-updated' } title={ absolute }>
 			{ label }
 		</span>
 	);

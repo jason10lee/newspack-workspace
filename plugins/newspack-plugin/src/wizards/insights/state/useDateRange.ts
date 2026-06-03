@@ -13,13 +13,7 @@
 import { __ } from '@wordpress/i18n';
 import { useCallback, useEffect, useState } from '@wordpress/element';
 
-export type DateRangePreset =
-	| 'last-7'
-	| 'last-30'
-	| 'last-90'
-	| 'this-month'
-	| 'last-month'
-	| 'custom';
+export type DateRangePreset = 'last-7' | 'last-30' | 'last-90' | 'this-month' | 'last-month' | 'custom';
 
 export interface DateRange {
 	preset: DateRangePreset;
@@ -43,17 +37,13 @@ export const DATE_RANGE_PRESETS: DateRangePresetDef[] = [
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-const isValidISODate = ( s: unknown ): s is string =>
-	typeof s === 'string' && ISO_DATE_RE.test( s );
+const isValidISODate = ( s: unknown ): s is string => typeof s === 'string' && ISO_DATE_RE.test( s );
 
-const isPreset = ( v: unknown ): v is DateRangePreset =>
-	typeof v === 'string' &&
-	DATE_RANGE_PRESETS.some( p => p.key === v );
+const isPreset = ( v: unknown ): v is DateRangePreset => typeof v === 'string' && DATE_RANGE_PRESETS.some( p => p.key === v );
 
 const pad2 = ( n: number ) => String( n ).padStart( 2, '0' );
 
-const toISO = ( d: Date ): string =>
-	`${ d.getFullYear() }-${ pad2( d.getMonth() + 1 ) }-${ pad2( d.getDate() ) }`;
+const toISO = ( d: Date ): string => `${ d.getFullYear() }-${ pad2( d.getMonth() + 1 ) }-${ pad2( d.getDate() ) }`;
 
 /**
  * Compute a range from a preset, anchored to today.
@@ -64,10 +54,7 @@ const toISO = ( d: Date ): string =>
  *
  * Returns null for 'custom' — the caller supplies start/end directly.
  */
-export const computeRangeForPreset = (
-	preset: DateRangePreset,
-	today: Date = new Date()
-): { start: string; end: string } | null => {
+export const computeRangeForPreset = ( preset: DateRangePreset, today: Date = new Date() ): { start: string; end: string } | null => {
 	if ( preset === 'custom' ) {
 		return null;
 	}

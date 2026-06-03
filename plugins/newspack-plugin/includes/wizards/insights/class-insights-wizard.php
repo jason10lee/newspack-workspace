@@ -85,24 +85,22 @@ class Insights_Wizard extends Wizard {
 		$thirty_ago = $today->modify( '-29 days' );
 
 		return [
-			/*
-			 * Tab visibility. Real computation (feature detection: GAM
-			 * dataset presence, scroll event presence, non-donation
-			 * subscription product count, donation activity count) needs
-			 * the BigQuery wrapper (NPPD-1598) plus Woo queries. Stubbed
-			 * to all-on for now per the prompt's scope note.
-			 */
-			'tabs'             => [
-				'audience'     => true,
-				'engagement'   => true,
-				'conversion'   => true,
-				'gates'        => true,
-				'prompts'      => true,
-				'subscribers'  => true,
-				'donors'       => true,
-				'advertising'  => true,
+			// Tab visibility. Real computation (feature detection: GAM
+			// dataset presence, scroll event presence, non-donation
+			// subscription product count, donation activity count) needs
+			// the BigQuery wrapper (NPPD-1598) plus Woo queries. Stubbed
+			// to all-on for now per the prompt's scope note.
+			'tabs'              => [
+				'audience'    => true,
+				'engagement'  => true,
+				'conversion'  => true,
+				'gates'       => true,
+				'prompts'     => true,
+				'subscribers' => true,
+				'donors'      => true,
+				'advertising' => true,
 			],
-			'defaultDateRange' => [
+			'defaultDateRange'  => [
 				'preset' => 'last-30',
 				'start'  => $thirty_ago->format( 'Y-m-d' ),
 				'end'    => $today->format( 'Y-m-d' ),

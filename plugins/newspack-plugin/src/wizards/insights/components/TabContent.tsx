@@ -34,11 +34,7 @@ export interface TabContentProps {
 }
 
 const Fallback = () => (
-	<div
-		className="newspack-insights__tab-fallback"
-		role="status"
-		aria-live="polite"
-	>
+	<div className="newspack-insights__tab-fallback" role="status" aria-live="polite">
 		{ __( 'Loading…', 'newspack-plugin' ) }
 	</div>
 );

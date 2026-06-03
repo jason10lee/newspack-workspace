@@ -9,9 +9,7 @@
 /**
  * Internal dependencies
  */
-import InsightsWizard, {
-	type InsightsBootConfig,
-} from './components/InsightsWizard';
+import InsightsWizard, { type InsightsBootConfig } from './components/InsightsWizard';
 import './style.scss';
 
 declare global {
@@ -33,8 +31,7 @@ const FALLBACK_CONFIG: InsightsBootConfig = {
 	},
 	defaultDateRange: ( () => {
 		const pad = ( n: number ) => String( n ).padStart( 2, '0' );
-		const toISO = ( d: Date ) =>
-			`${ d.getFullYear() }-${ pad( d.getMonth() + 1 ) }-${ pad( d.getDate() ) }`;
+		const toISO = ( d: Date ) => `${ d.getFullYear() }-${ pad( d.getMonth() + 1 ) }-${ pad( d.getDate() ) }`;
 		const today = new Date();
 		const thirtyAgo = new Date( today );
 		// Inclusive 30-day window ending today: today + 29 prior days = 30 days.
