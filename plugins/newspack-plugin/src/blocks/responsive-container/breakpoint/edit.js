@@ -38,14 +38,18 @@ export default function ResponsiveContainerBreakpointEdit( { attributes, clientI
 			const root = getBlockRootClientId( clientId );
 			return {
 				parentClientId: root,
-				siblings: getBlocks( root ),
+				// Guard against a missing root during transitions (e.g. template-part
+				// switches): getBlocks( falsy ) returns the top-level blocks, not [].
+				siblings: root ? getBlocks( root ) : [],
 				isEmpty: getBlockOrder( clientId ).length === 0,
 			};
 		},
 		[ clientId ]
 	);
 
-	const [ activeView, setView ] = useView( parentClientId );
+	// Key to our own clientId until the parent resolves, so transient state is
+	// never shared under a `null` key; useView re-subscribes when it changes.
+	const [ activeView, setView ] = useView( parentClientId || clientId );
 	const isActive = activeView === view;
 
 	const { selectBlock } = useDispatch( 'core/block-editor' );
@@ -55,7 +59,7 @@ export default function ResponsiveContainerBreakpointEdit( { attributes, clientI
 		// Move selection onto the breakpoint that is becoming visible (falling
 		// back to the container) so the toolbar always anchors to a visible block.
 		const target = siblings.find( block => block.attributes?.view === newView );
-		selectBlock( target ? target.clientId : parentClientId );
+		selectBlock( target ? target.clientId : parentClientId || clientId );
 	};
 
 	const className =
