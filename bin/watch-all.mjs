@@ -27,8 +27,11 @@ import path from 'node:path';
 const ROOT = process.cwd();
 const AREAS = [ 'plugins', 'themes', 'packages' ];
 // Source files worth reacting to. PHP is interpreted (no build step) and is
-// served live off the bind mount, so it is intentionally excluded.
-const BUILD_RELEVANT = /\.(jsx?|tsx?|scss|css)$/;
+// served live off the bind mount, so it is intentionally excluded. block.json
+// is included: it is imported by block entrypoints (`import metadata from
+// './block.json'`) and is a real webpack input, so a cold unit whose first edit
+// is block metadata must still start its watcher.
+const BUILD_RELEVANT = /\.(jsx?|tsx?|scss|css)$|(^|\/)block\.json$/;
 // Directories never worth watching: VCS, dependencies and build outputs.
 const IGNORED_DIR = /(^|\/)(node_modules|vendor|\.git|dist|build)(\/|$)/;
 const DEBOUNCE_MS = 300;
@@ -40,6 +43,10 @@ const warmChildren = new Map(); // unit key -> spawned `npm run watch` child.
 const debounceTimers = new Map(); // unit key -> pending one-shot timer.
 const buildQueue = []; // units awaiting a serialized one-shot build.
 let building = false;
+let activeBuild = null; // the in-flight one-shot build child, for shutdown.
+// One-shot units whose non-src change we've already explained, so the notice
+// (see onChange) is logged at most once per unit rather than on every edit.
+const oneShotNonSrcNoticed = new Set();
 
 function log( message ) {
 	process.stdout.write( `[watch-all] ${ message }\n` );
@@ -87,10 +94,25 @@ function spawnWarmWatcher( unit ) {
 	warmChildren.set( unit.key, child );
 	prefixStream( child.stdout, unit.name );
 	prefixStream( child.stderr, unit.name );
+	// Disarm only if this exact child is still the unit's tracked watcher, so a
+	// late event from a replaced child can't delete a freshly re-armed one. Both
+	// handlers may run for the same child (Node doesn't guarantee 'error' and
+	// 'exit' are exclusive); the identity check makes that idempotent.
+	const disarm = () => {
+		if ( warmChildren.get( unit.key ) === child ) {
+			warmChildren.delete( unit.key );
+			unitState.delete( unit.key ); // allow a fresh spawn on next change.
+		}
+	};
+	// Without an 'error' listener a failed spawn (ENOENT/EACCES) throws as an
+	// unhandled exception and takes the whole dispatcher down.
+	child.on( 'error', ( error ) => {
+		log( `${ unit.name }: failed to start watcher (${ error.message }); will re-arm on next change` );
+		disarm();
+	} );
 	child.on( 'exit', ( code ) => {
 		log( `${ unit.name }: watcher exited (code ${ code }); will re-arm on next change` );
-		warmChildren.delete( unit.key );
-		unitState.delete( unit.key ); // allow a fresh spawn if it died.
+		disarm();
 	} );
 }
 
@@ -119,15 +141,39 @@ function drainBuildQueue() {
 	}
 	building = true;
 	log( `${ unit.name }: building (one-shot)` );
+	// detached so the child leads its own process group; killing -pid on
+	// shutdown takes down pnpm and the build tooling it spawns together.
 	const child = spawn(
 		'pnpm',
 		[ '--filter', unit.filter, 'run', '--if-present', 'build' ],
-		{ cwd: ROOT, stdio: 'inherit' }
+		{ cwd: ROOT, stdio: 'inherit', detached: true }
 	);
-	child.on( 'exit', ( code ) => {
-		log( `${ unit.name }: build ${ code === 0 ? 'done' : `failed (code ${ code })` }` );
+	activeBuild = child;
+	// Release the queue whether the build finishes or fails to spawn; without
+	// the 'error' handler a spawn failure would leave `building` stuck true and
+	// silently wedge every later one-shot build. Guard against running twice:
+	// Node does not guarantee 'error' and 'exit' are mutually exclusive, and a
+	// double release would null a *later* build's activeBuild and start a second
+	// concurrent build, breaking the one-build-at-a-time invariant.
+	let released = false;
+	const release = () => {
+		if ( released ) {
+			return;
+		}
+		released = true;
+		if ( activeBuild === child ) {
+			activeBuild = null;
+		}
 		building = false;
 		drainBuildQueue();
+	};
+	child.on( 'error', ( error ) => {
+		log( `${ unit.name }: build failed to start (${ error.message })` );
+		release();
+	} );
+	child.on( 'exit', ( code ) => {
+		log( `${ unit.name }: build ${ code === 0 ? 'done' : `failed (code ${ code })` }` );
+		release();
 	} );
 }
 
@@ -160,8 +206,14 @@ function onChange( relPath ) {
 	// One-shot units have no incremental watcher to own their output, so a build
 	// that writes build-relevant files (e.g. copied .scss) would re-trigger
 	// itself endlessly. Gate on src/ -- build outputs land in dist/build/etc.,
-	// never in src/ -- so only genuine source edits drive a rebuild.
+	// never in src/ -- so only genuine source edits drive a rebuild. A one-shot
+	// unit whose sources live outside src/ (e.g. at the package root or in lib/)
+	// is unsupported by this gate; surface that once so it isn't silent.
 	if ( ! relPath.startsWith( `${ unit.key }/src/` ) ) {
+		if ( ! oneShotNonSrcNoticed.has( unit.key ) ) {
+			oneShotNonSrcNoticed.add( unit.key );
+			log( `${ unit.name }: ignoring change outside src/ (${ relPath }); one-shot builds only react to ${ unit.key }/src/` );
+		}
 		return;
 	}
 	scheduleOneShotBuild( unit );
@@ -169,11 +221,31 @@ function onChange( relPath ) {
 
 function shutdown() {
 	log( 'shutting down watchers' );
+	// Drop pending debounced builds so nothing new is spawned mid-shutdown.
+	for ( const timer of debounceTimers.values() ) {
+		clearTimeout( timer );
+	}
+	debounceTimers.clear();
 	for ( const child of warmChildren.values() ) {
 		try {
-			process.kill( -child.pid, 'SIGTERM' );
+			// Guard against an undefined pid when spawn failed before a child
+			// process existed (e.g. ENOENT).
+			if ( child.pid ) {
+				process.kill( -child.pid, 'SIGTERM' );
+			}
 		} catch {
 			// Child already gone -- nothing to clean up.
+		}
+	}
+	// Kill the in-flight one-shot build's process group too. Like the warm
+	// watchers it is spawned detached, so -pid takes down pnpm and the build
+	// tooling it spawns together (a direct kill would leave those descendants
+	// orphaned on the programmatic SIGTERM path).
+	if ( activeBuild && activeBuild.pid ) {
+		try {
+			process.kill( -activeBuild.pid, 'SIGTERM' );
+		} catch {
+			// Already exited -- nothing to clean up.
 		}
 	}
 	process.exit( 0 );
