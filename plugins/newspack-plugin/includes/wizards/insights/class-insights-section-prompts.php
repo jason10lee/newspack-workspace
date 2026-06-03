@@ -36,6 +36,9 @@ class Insights_Section_Prompts {
 	 * arrive (NPPD-1607).
 	 */
 	public static function init() {
+		if ( ! Insights_Wizard::is_enabled() ) {
+			return;
+		}
 		self::register_hooks();
 	}
 

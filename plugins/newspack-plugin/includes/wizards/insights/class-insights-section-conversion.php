@@ -35,6 +35,9 @@ class Insights_Section_Conversion {
 	 * arrive (NPPD-1609).
 	 */
 	public static function init() {
+		if ( ! Insights_Wizard::is_enabled() ) {
+			return;
+		}
 		self::register_hooks();
 	}
 

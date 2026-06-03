@@ -35,6 +35,9 @@ class Insights_Section_Donors {
 	 * arrive (NPPD-1617).
 	 */
 	public static function init() {
+		if ( ! Insights_Wizard::is_enabled() ) {
+			return;
+		}
 		self::register_hooks();
 	}
 

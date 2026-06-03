@@ -46,6 +46,44 @@ class Insights_Wizard extends Wizard {
 	public $parent_menu = 'newspack-dashboard';
 
 	/**
+	 * Checks if the feature is enabled.
+	 *
+	 * True when:
+	 * - NEWSPACK_INSIGHTS_ENABLED is defined and true.
+	 *
+	 * Feature-flagged for gradual rollout.
+	 * Remove this gate once fully released.
+	 *
+	 * @return bool True if the feature is enabled, false otherwise.
+	 */
+	public static function is_enabled() {
+		/**
+		 * Enables the Newspack Insights feature.
+		 *
+		 * @constant NEWSPACK_INSIGHTS_ENABLED
+		 * @type     bool
+		 * @default  Insights feature disabled
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_INSIGHTS_ENABLED', true );
+		 */
+		return defined( 'NEWSPACK_INSIGHTS_ENABLED' ) && NEWSPACK_INSIGHTS_ENABLED;
+	}
+
+	/**
+	 * Constructor.
+	 *
+	 * Bails before parent registration when the feature flag is disabled,
+	 * so no menu item, asset enqueue, or admin hooks are registered.
+	 */
+	public function __construct() {
+		if ( ! self::is_enabled() ) {
+			return;
+		}
+		parent::__construct();
+	}
+
+	/**
 	 * Get the name for this wizard.
 	 *
 	 * @return string

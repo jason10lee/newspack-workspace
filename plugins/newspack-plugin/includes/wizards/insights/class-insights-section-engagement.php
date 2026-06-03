@@ -34,6 +34,9 @@ class Insights_Section_Engagement {
 	 * arrive (NPPD-1624).
 	 */
 	public static function init() {
+		if ( ! Insights_Wizard::is_enabled() ) {
+			return;
+		}
 		self::register_hooks();
 	}
 

@@ -34,6 +34,9 @@ class Insights_Section_Audience {
 	 * arrive (NPPD-1608).
 	 */
 	public static function init() {
+		if ( ! Insights_Wizard::is_enabled() ) {
+			return;
+		}
 		self::register_hooks();
 	}
 

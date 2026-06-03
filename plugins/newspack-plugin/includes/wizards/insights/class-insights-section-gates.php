@@ -35,6 +35,9 @@ class Insights_Section_Gates {
 	 * arrive (NPPD-1604).
 	 */
 	public static function init() {
+		if ( ! Insights_Wizard::is_enabled() ) {
+			return;
+		}
 		self::register_hooks();
 	}
 
