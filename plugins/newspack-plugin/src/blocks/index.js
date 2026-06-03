@@ -25,8 +25,8 @@ import * as overlayMenu from './overlay-menu';
 import * as overlayMenuTrigger from './overlay-menu/trigger';
 import * as overlayMenuPanel from './overlay-menu/panel';
 import * as overlaySearch from './overlay-search';
-import * as adaptiveContainer from './adaptive-container';
-import * as adaptiveContainerSlot from './adaptive-container/slot';
+import * as responsiveContainer from './responsive-container';
+import * as responsiveContainerBreakpoint from './responsive-container/breakpoint';
 
 /**
  * Block Scripts
@@ -51,8 +51,8 @@ export const blocks = [
 	overlayMenuTrigger,
 	overlayMenuPanel,
 	overlaySearch,
-	adaptiveContainer,
-	adaptiveContainerSlot,
+	responsiveContainer,
+	responsiveContainerBreakpoint,
 ];
 
 const readerActivationBlocks = [ 'newspack/reader-registration', 'newspack/my-account-button' ];
@@ -71,10 +71,10 @@ const blockThemeBlocks = [
 	'newspack/overlay-menu-panel',
 	'newspack/my-account-button',
 	'newspack/overlay-search',
-	'newspack/adaptive-container',
-	'newspack/adaptive-container-slot',
+	'newspack/responsive-container',
+	'newspack/responsive-container-breakpoint',
 ];
-const siteEditorOnlyBlocks = [ 'newspack/adaptive-container', 'newspack/adaptive-container-slot' ];
+const siteEditorOnlyBlocks = [ 'newspack/responsive-container', 'newspack/responsive-container-breakpoint' ];
 
 /**
  * Function to register an individual block.
