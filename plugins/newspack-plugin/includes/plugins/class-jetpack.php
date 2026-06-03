@@ -328,7 +328,7 @@ class Jetpack {
 	 * Filters out the Subscriptions (Newsletter) module from Jetpack's active-modules list at read time.
 	 * The module reports as inactive even if its slug is present in the jetpack_active_modules option.
 	 *
-	 * @param array $modules Array with modules slugs.
+	 * @param array $modules Array of module slugs.
 	 * @return array
 	 */
 	public static function remove_subscriptions_from_active( $modules ) {
