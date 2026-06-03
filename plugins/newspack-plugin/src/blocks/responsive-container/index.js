@@ -33,10 +33,13 @@ export const settings = {
 		__( 'mobile', 'newspack-plugin' ),
 		__( 'desktop', 'newspack-plugin' ),
 	],
-	description: __( 'Show one set of blocks on desktop and another on mobile, swapping automatically at a breakpoint.', 'newspack-plugin' ),
+	description: __(
+		'A container that shows one set of blocks on desktop and another on mobile, swapping automatically at a breakpoint. Ideal for responsive headers and footers.',
+		'newspack-plugin'
+	),
 	edit: Edit,
 	save: () => (
-		<div { ...useBlockProps.save() }>
+		<div { ...useBlockProps.save( { className: 'newspack-responsive-container' } ) }>
 			<InnerBlocks.Content />
 		</div>
 	),
