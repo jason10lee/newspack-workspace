@@ -1,3 +1,10 @@
+## newspack [6.42.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.42.1...newspack@6.42.2) (2026-06-03)
+
+
+### Bug Fixes
+
+* **group-subscription:** update params; avoid secondary My Account redirect ([#151](https://github.com/Automattic/newspack-workspace/issues/151)) ([c5f6249](https://github.com/Automattic/newspack-workspace/commit/c5f6249ac76a717ff0def63081f45d490c560b19))
+
 ## newspack [6.42.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.42.0...newspack@6.42.1) (2026-06-03)
 
 
