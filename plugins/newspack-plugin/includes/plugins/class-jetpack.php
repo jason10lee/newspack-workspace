@@ -155,6 +155,10 @@ class Jetpack {
 		add_filter( 'jetpack_active_modules', [ __CLASS__, 'remove_google_analytics_from_active' ], 10, 2 );
 		add_filter( 'jetpack_get_available_modules', [ __CLASS__, 'remove_google_analytics_from_available' ] );
 
+		// Disables Subscriptions (Newsletter). Jetpack 15.9 auto-enables this; Newspack publishers use newspack-newsletters.
+		add_filter( 'jetpack_active_modules', [ __CLASS__, 'remove_subscriptions_from_active' ], 10, 2 );
+		add_filter( 'jetpack_get_available_modules', [ __CLASS__, 'remove_subscriptions_from_available' ] );
+
 		// Set Jetpack default modules on Newspack setup.
 		add_action( 'add_option_newspack_setup_complete', [ __CLASS__, 'set_default_modules' ], 10, 2 );
 		add_action( 'update_option_newspack_setup_complete', [ __CLASS__, 'set_default_modules' ], 10, 2 );
@@ -316,6 +320,29 @@ class Jetpack {
 	public static function remove_google_analytics_from_available( $modules ) {
 		if ( isset( $modules['google-analytics'] ) ) {
 			unset( $modules['google-analytics'] );
+		}
+		return $modules;
+	}
+
+	/**
+	 * Disables Subscriptions (Newsletter) module. Users will not be able to activate it.
+	 *
+	 * @param array $modules Array with modules slugs.
+	 * @return array
+	 */
+	public static function remove_subscriptions_from_active( $modules ) {
+		return array_diff( $modules, array( 'subscriptions' ) );
+	}
+
+	/**
+	 * Remove Subscriptions (Newsletter) from available modules.
+	 *
+	 * @param array $modules The array of available modules.
+	 * @return array
+	 */
+	public static function remove_subscriptions_from_available( $modules ) {
+		if ( isset( $modules['subscriptions'] ) ) {
+			unset( $modules['subscriptions'] );
 		}
 		return $modules;
 	}
