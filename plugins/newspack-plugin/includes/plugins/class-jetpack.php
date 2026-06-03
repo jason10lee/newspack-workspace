@@ -325,7 +325,8 @@ class Jetpack {
 	}
 
 	/**
-	 * Disables Subscriptions (Newsletter) module. Users will not be able to activate it.
+	 * Filters out the Subscriptions (Newsletter) module from Jetpack's active-modules list at read time.
+	 * The module reports as inactive even if its slug is present in the jetpack_active_modules option.
 	 *
 	 * @param array $modules Array with modules slugs.
 	 * @return array
