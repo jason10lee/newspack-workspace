@@ -756,41 +756,48 @@ domReady( () => {
 	const triggerDonationForm = ( layout, frequency, amount, other = null ) => {
 		let form;
 		document.querySelectorAll( '.wpbnbd.wpbnbd--platform-wc form' ).forEach( donationForm => {
-			const frequencyInput = donationForm.querySelector( `input[name="donation_frequency"][value="${ frequency }"]` );
-			if ( ! frequencyInput ) {
-				return;
-			}
 			if ( layout === 'tiered' ) {
-				const frequencyButton = document.querySelector( `button[data-frequency-slug="${ frequency }"]` );
+				// Tiered forms render a single hidden `donation_frequency` input whose value
+				// is locked to the block's default frequency, so we can't gate on that input
+				// matching the URL `frequency`. Instead, look for the tiered frequency tab,
+				// which is unique to the tiered layout (frequency-based uses `data-tab-id`).
+				const frequencyButton = donationForm.querySelector( `button[data-frequency-slug="${ frequency }"]` );
 				if ( ! frequencyButton ) {
 					return;
 				}
+				// Clicking the tab synchronously updates each tier submit button's `name`
+				// and `value` attributes (see src/blocks/donate/tiers-based/view.ts), so we
+				// can query for the matching submit button immediately afterwards.
 				frequencyButton.click();
 				const submitButton = donationForm.querySelector( `button[type="submit"][name="donation_value_${ frequency }"][value="${ amount }"]` );
 				if ( ! submitButton ) {
 					return;
 				}
 				submitButton.click();
-			} else {
-				const amountInput =
-					layout === 'untiered'
-						? donationForm.querySelector( `input[name="donation_value_${ frequency }_untiered"]` )
-						: donationForm.querySelector( `input[name="donation_value_${ frequency }"][value="${ amount }"]` );
-				if ( frequencyInput && amountInput ) {
-					frequencyInput.checked = true;
-					if ( layout === 'untiered' ) {
-						amountInput.value = amount;
-					} else if ( amount === 'other' ) {
-						amountInput.click();
-						const otherInput = donationForm.querySelector( `input[name="donation_value_${ frequency }_other"]` );
-						if ( otherInput && other ) {
-							otherInput.value = other;
-						}
-					} else {
-						amountInput.checked = true;
+				return;
+			}
+			const frequencyInput = donationForm.querySelector( `input[name="donation_frequency"][value="${ frequency }"]` );
+			if ( ! frequencyInput ) {
+				return;
+			}
+			const amountInput =
+				layout === 'untiered'
+					? donationForm.querySelector( `input[name="donation_value_${ frequency }_untiered"]` )
+					: donationForm.querySelector( `input[name="donation_value_${ frequency }"][value="${ amount }"]` );
+			if ( frequencyInput && amountInput ) {
+				frequencyInput.checked = true;
+				if ( layout === 'untiered' ) {
+					amountInput.value = amount;
+				} else if ( amount === 'other' ) {
+					amountInput.click();
+					const otherInput = donationForm.querySelector( `input[name="donation_value_${ frequency }_other"]` );
+					if ( otherInput && other ) {
+						otherInput.value = other;
 					}
-					form = donationForm;
+				} else {
+					amountInput.checked = true;
 				}
+				form = donationForm;
 			}
 		} );
 		if ( form ) {
