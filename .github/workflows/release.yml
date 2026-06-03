@@ -137,14 +137,13 @@ jobs:
       WP_ORG_PASSWORD: ${{ secrets.WP_ORG_PASSWORD }}
 
   release-wporg-scaip:
-    name: WP.org / super-cool-ad-inserter-plugin
+    name: WP.org / super-cool-ad-inserter
     if: github.ref == 'refs/heads/release'
     needs: release
     uses: ./.github/workflows/_release-wporg.yml
     with:
-      plugin-name: super-cool-ad-inserter-plugin
-      plugin-path: plugins/super-cool-ad-inserter-plugin
-      wporg-slug: super-cool-ad-inserter
+      plugin-name: super-cool-ad-inserter
+      plugin-path: plugins/super-cool-ad-inserter
     secrets:
       WP_ORG_USERNAME: ${{ secrets.WP_ORG_USERNAME }}
       WP_ORG_PASSWORD: ${{ secrets.WP_ORG_PASSWORD }}
