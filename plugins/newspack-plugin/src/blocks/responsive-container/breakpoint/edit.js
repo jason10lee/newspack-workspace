@@ -70,7 +70,7 @@ export default function ResponsiveContainerBreakpointEdit( { attributes, clientI
 		<>
 			<ViewToggle value={ activeView } onChange={ switchView } />
 			<div { ...blockProps }>
-				<InnerBlocks templateLock={ false } renderAppender={ isEmpty ? InnerBlocks.ButtonBlockAppender : undefined } />
+				<InnerBlocks templateLock={ false } renderAppender={ isEmpty ? InnerBlocks.ButtonBlockAppender : false } />
 			</div>
 		</>
 	);
