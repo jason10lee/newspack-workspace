@@ -74,7 +74,13 @@ export default function ResponsiveContainerBreakpointEdit( { attributes, clientI
 		<>
 			<ViewToggle value={ activeView } onChange={ switchView } />
 			<div { ...blockProps }>
-				<InnerBlocks templateLock={ false } renderAppender={ isEmpty ? InnerBlocks.ButtonBlockAppender : false } />
+				<InnerBlocks
+					templateLock={ false }
+					// Show the placeholder appender only while empty; once the breakpoint
+					// has content, fall back to the default appender (undefined) so more
+					// blocks can still be added in place.
+					renderAppender={ isEmpty ? InnerBlocks.ButtonBlockAppender : undefined }
+				/>
 			</div>
 		</>
 	);
