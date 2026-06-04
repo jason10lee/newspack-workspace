@@ -35,6 +35,18 @@ export interface DonorsSnapshot {
  */
 export type BillingModel = 'recurring' | 'one_time';
 
+/**
+ * A rate metric whose denominator may legitimately be zero. The UI
+ * uses `computable` to decide between rendering the value and a
+ * "no data yet" empty state, and surfaces `denominator` inline as
+ * context when the value is real but the cohort is small.
+ */
+export interface DonorsRateValue {
+	value: number;
+	computable: boolean;
+	denominator: number;
+}
+
 export interface DonorsTierVariationRow {
 	variation_id: number;
 	label: string;
@@ -72,10 +84,20 @@ export interface DonorsWindow {
 	recurring_revenue: number;
 	total_revenue: number;
 	average_gift: number;
-	/** Null when the prior-window lapsed cohort is empty ("no data yet"). */
-	lapsed_donor_recovery_rate: number | null;
-	/** Null when no recurring donors were active at the window start. */
-	recurring_donor_retention: number | null;
+	/**
+	 * Lapsed-donor recovery rate.
+	 *
+	 * `computable: false` when the prior-window lapsed cohort is
+	 * empty (no donors to recover) — UI renders an empty state.
+	 * `denominator` is surfaced in the subtitle so small-cohort 0%
+	 * reads as "0% (0 of N donors)" rather than bare 0%.
+	 */
+	lapsed_donor_recovery_rate: DonorsRateValue;
+	/**
+	 * Recurring-donor retention. Same shape and UI contract as
+	 * `lapsed_donor_recovery_rate`.
+	 */
+	recurring_donor_retention: DonorsRateValue;
 	donations_by_tier: DonorsTierRow[];
 }
 

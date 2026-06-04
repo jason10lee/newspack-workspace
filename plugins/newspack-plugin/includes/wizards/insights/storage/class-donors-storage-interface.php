@@ -143,40 +143,55 @@ interface Donors_Storage_Interface {
 	/**
 	 * Of donors who lapsed in the prior window of equal length
 	 * preceding `[start, end]`, the fraction who made a new completed
-	 * donation order in `[start, end]`. Range `[0, 1]`.
-	 *
-	 * Returns `null` (not 0) when no donors lapsed in the prior window,
-	 * so the UI can distinguish "no data yet" from a real 0% rate.
+	 * donation order in `[start, end]`.
 	 *
 	 * Prior window = `[start - duration, start - 1 second]` where
 	 * `duration = end - start`.
 	 *
+	 * Return shape:
+	 *   [
+	 *     'value'       => float, // recovered / lapsed, range [0,1], 0 when not computable
+	 *     'computable'  => bool,  // false when denominator is 0 (no lapsed cohort)
+	 *     'denominator' => int,   // size of the prior-window lapsed cohort
+	 *   ]
+	 *
+	 * The UI uses `computable` to render a "no data yet" empty state
+	 * instead of a misleading 0%, and surfaces `denominator` inline so
+	 * publishers can read "0% (0 of 3 donors)" rather than bare "0%"
+	 * when the math is real but the cohort is small.
+	 *
 	 * @param DateTimeInterface $start Current window start.
 	 * @param DateTimeInterface $end   Current window end.
-	 * @return float|null Null when the prior-window lapsed cohort is empty.
+	 * @return array{value: float, computable: bool, denominator: int}
 	 */
-	public function get_lapsed_donor_recovery_rate( DateTimeInterface $start, DateTimeInterface $end ): ?float;
+	public function get_lapsed_donor_recovery_rate( DateTimeInterface $start, DateTimeInterface $end ): array;
 
 	/**
 	 * Of recurring donation subscriptions that were active at the
 	 * window start, the fraction whose owner customer still has at
 	 * least one active recurring donation subscription right now.
 	 *
-	 * Returns `null` (not 0) when no recurring donors were active at
-	 * the window start, so the UI can distinguish "no data yet" from
-	 * a real 0% retention.
-	 *
 	 * "Active at start" = `_schedule_start <= :start` AND
 	 * (`_schedule_cancelled` empty OR > :start). The end check is
 	 * "currently active" (NOW), not "active at :end" — a v1
 	 * simplification documented inline on the query.
 	 *
+	 * Return shape:
+	 *   [
+	 *     'value'       => float, // still_active / active_at_start, range [0,1], 0 when not computable
+	 *     'computable'  => bool,  // false when denominator is 0 (no recurring donors at start)
+	 *     'denominator' => int,   // distinct customers active at window start
+	 *   ]
+	 *
+	 * See {@see get_lapsed_donor_recovery_rate()} for the UI contract
+	 * on `computable` and `denominator`.
+	 *
 	 * @param DateTimeInterface $start Current window start.
 	 * @param DateTimeInterface $end   Current window end (used for
 	 *                                 cache-key disambiguation only).
-	 * @return float|null Null when no recurring donors were active at start.
+	 * @return array{value: float, computable: bool, denominator: int}
 	 */
-	public function get_recurring_donor_retention( DateTimeInterface $start, DateTimeInterface $end ): ?float;
+	public function get_recurring_donor_retention( DateTimeInterface $start, DateTimeInterface $end ): array;
 
 	/**
 	 * Per-product donor performance breakdown. One entry per parent

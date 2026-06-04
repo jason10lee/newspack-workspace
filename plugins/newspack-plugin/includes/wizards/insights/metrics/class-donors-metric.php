@@ -37,7 +37,7 @@ class Donors_Metric {
 	 *
 	 * @var string
 	 */
-	const CACHE_PREFIX = 'newspack_insights_tab7_v4:';
+	const CACHE_PREFIX = 'newspack_insights_tab7_v5:';
 
 	/**
 	 * Cache TTL for windowed and snapshot metrics (30 min).
@@ -264,15 +264,17 @@ class Donors_Metric {
 	/**
 	 * Lapsed donor recovery rate.
 	 *
-	 * Null when the prior-window lapsed cohort is empty — UI uses this
-	 * to render a "no data yet" empty state instead of a misleading 0%.
+	 * Returns the explicit `{value, computable, denominator}` shape
+	 * from storage. UI renders an empty state when `computable` is
+	 * false and surfaces `denominator` inline so small-cohort 0%
+	 * reads as "0% (0 of N donors)" rather than bare 0%.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return float|null
+	 * @return array{value: float, computable: bool, denominator: int}
 	 */
-	public function get_lapsed_donor_recovery_rate( DateTimeInterface $start, DateTimeInterface $end ): ?float {
-		$value = $this->cached(
+	public function get_lapsed_donor_recovery_rate( DateTimeInterface $start, DateTimeInterface $end ): array {
+		return (array) $this->cached(
 			'lapsed_donor_recovery_rate',
 			$this->window_key( $start, $end ),
 			self::TTL_HEAVY,
@@ -280,21 +282,20 @@ class Donors_Metric {
 				return $this->storage->get_lapsed_donor_recovery_rate( $start, $end );
 			}
 		);
-		return null === $value ? null : (float) $value;
 	}
 
 	/**
 	 * Recurring donor retention.
 	 *
-	 * Null when no recurring donors were active at the window start —
-	 * UI uses this to render a "no data yet" empty state.
+	 * See {@see get_lapsed_donor_recovery_rate()} for the response
+	 * shape and UI contract.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return float|null
+	 * @return array{value: float, computable: bool, denominator: int}
 	 */
-	public function get_recurring_donor_retention( DateTimeInterface $start, DateTimeInterface $end ): ?float {
-		$value = $this->cached(
+	public function get_recurring_donor_retention( DateTimeInterface $start, DateTimeInterface $end ): array {
+		return (array) $this->cached(
 			'recurring_donor_retention',
 			$this->window_key( $start, $end ),
 			self::TTL_HEAVY,
@@ -302,7 +303,6 @@ class Donors_Metric {
 				return $this->storage->get_recurring_donor_retention( $start, $end );
 			}
 		);
-		return null === $value ? null : (float) $value;
 	}
 
 	/**

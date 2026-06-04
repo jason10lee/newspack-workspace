@@ -4,12 +4,19 @@
  * Donor retention metrics. Both rates are derived from cohorts that
  * may legitimately not exist yet on a fresh or young site (no donors
  * lapsed in the prior window; no recurring donors active at the
- * window start), so the storage returns `null` for those cases. The
- * UI distinguishes "no data yet" (null) from a real 0%:
+ * window start), and even when they do exist the cohort can be small
+ * enough that a real 0% reads as catastrophic without context.
  *
- *   both null   → single section-wide explanatory card
- *   one null    → render the card that has data + a note on the other
- *   both numbers → render both normally
+ * Storage returns `{ value, computable, denominator }` for each rate
+ * so the UI can:
+ *
+ *   both !computable    → single section-wide explanatory card
+ *   one !computable     → keep the card with data + per-card empty
+ *                         note on the other (preserves grid alignment)
+ *   both computable     → render the rate as a card, with the
+ *                         denominator surfaced inline ("0% of 2 donors")
+ *                         so small-cohort 0% reads as honest math
+ *                         rather than a catastrophe.
  *
  * - Lapsed donor recovery rate: of donors who lapsed in the prior
  *   window of equal length, the fraction who made a new donation in
@@ -21,13 +28,14 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
  */
-import type { DonorsWindow } from '../../api/donors';
+import type { DonorsRateValue, DonorsWindow } from '../../api/donors';
 import MetricCard from '../components/MetricCard';
+import { formatNumber } from '../components/format';
 
 export interface RetentionSectionProps {
 	current: DonorsWindow;
@@ -40,11 +48,20 @@ const RECOVERY_DESCRIPTION = () => __( 'Donors who lapsed in the previous timefr
 const RETENTION_LABEL = () => __( 'Recurring donor retention', 'newspack-plugin' );
 const RETENTION_DESCRIPTION = () => __( 'Recurring donors active at the start of this timeframe who are still active now', 'newspack-plugin' );
 
+const cohortSubtitle = ( denominator: number ): string =>
+	sprintf(
+		/* translators: %s: cohort denominator size, e.g. "of 2 donors" */
+		__( 'of %s', 'newspack-plugin' ),
+		sprintf(
+			/* translators: %s: count of donors in the comparison cohort */
+			_n( '%s donor', '%s donors', denominator, 'newspack-plugin' ),
+			formatNumber( denominator )
+		)
+	);
+
 const RetentionSection = ( { current, previous }: RetentionSectionProps ) => {
-	const recoveryRate = current.lapsed_donor_recovery_rate;
-	const retentionRate = current.recurring_donor_retention;
-	const recoveryHasData = typeof recoveryRate === 'number';
-	const retentionHasData = typeof retentionRate === 'number';
+	const recovery: DonorsRateValue = current.lapsed_donor_recovery_rate;
+	const retention: DonorsRateValue = current.recurring_donor_retention;
 
 	const sectionProps = {
 		className: 'newspack-insights__section newspack-insights__section--retention',
@@ -57,7 +74,7 @@ const RetentionSection = ( { current, previous }: RetentionSectionProps ) => {
 		</h2>
 	);
 
-	if ( ! recoveryHasData && ! retentionHasData ) {
+	if ( ! recovery.computable && ! retention.computable ) {
 		return (
 			<section { ...sectionProps }>
 				{ heading }
@@ -75,35 +92,37 @@ const RetentionSection = ( { current, previous }: RetentionSectionProps ) => {
 		<section { ...sectionProps }>
 			{ heading }
 			<div className="newspack-insights__metric-grid">
-				{ recoveryHasData ? (
+				{ recovery.computable ? (
 					<MetricCard
 						label={ RECOVERY_LABEL() }
-						value={ recoveryRate as number }
+						value={ recovery.value }
 						format="percent"
-						previousValue={ previous?.lapsed_donor_recovery_rate }
+						previousValue={ previous?.lapsed_donor_recovery_rate?.computable ? previous.lapsed_donor_recovery_rate.value : null }
+						secondary={ cohortSubtitle( recovery.denominator ) }
 						description={ RECOVERY_DESCRIPTION() }
 					/>
 				) : (
 					<div className="newspack-insights__metric-card newspack-insights__metric-card--empty">
 						<div className="newspack-insights__metric-card-label">{ RECOVERY_LABEL() }</div>
 						<p className="newspack-insights__metric-card-empty-note">
-							{ __( 'No donors lapsed in the previous timeframe yet.', 'newspack-plugin' ) }
+							{ __( 'No donors lapsed in the prior timeframe yet.', 'newspack-plugin' ) }
 						</p>
 					</div>
 				) }
-				{ retentionHasData ? (
+				{ retention.computable ? (
 					<MetricCard
 						label={ RETENTION_LABEL() }
-						value={ retentionRate as number }
+						value={ retention.value }
 						format="percent"
-						previousValue={ previous?.recurring_donor_retention }
+						previousValue={ previous?.recurring_donor_retention?.computable ? previous.recurring_donor_retention.value : null }
+						secondary={ cohortSubtitle( retention.denominator ) }
 						description={ RETENTION_DESCRIPTION() }
 					/>
 				) : (
 					<div className="newspack-insights__metric-card newspack-insights__metric-card--empty">
 						<div className="newspack-insights__metric-card-label">{ RETENTION_LABEL() }</div>
 						<p className="newspack-insights__metric-card-empty-note">
-							{ __( 'No recurring donors were active at the start of this timeframe.', 'newspack-plugin' ) }
+							{ __( 'No recurring donors at the start of this timeframe.', 'newspack-plugin' ) }
 						</p>
 					</div>
 				) }
