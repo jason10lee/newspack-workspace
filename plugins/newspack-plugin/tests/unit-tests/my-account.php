@@ -38,7 +38,7 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 	}
 
 	/**
-	 * is_account_page() is true on the native account page and false elsewhere.
+	 * Native is_account_page() is true on the account page and false elsewhere.
 	 */
 	public function test_is_account_page_native() {
 		if ( My_Account::woocommerce_owns_shell() ) {
@@ -58,8 +58,8 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 	}
 
 	/**
-	 * get_endpoint_url() returns the base permalink for the empty endpoint and a
-	 * sub-path for a named endpoint.
+	 * Native get_endpoint_url() returns the base permalink for the empty endpoint
+	 * and a sub-path for a named endpoint.
 	 */
 	public function test_get_endpoint_url_native() {
 		if ( My_Account::woocommerce_owns_shell() ) {
@@ -79,7 +79,7 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 	}
 
 	/**
-	 * get_or_create_page() creates a page once and reuses it afterward.
+	 * Native get_or_create_page() creates a page once and reuses it afterward.
 	 */
 	public function test_get_or_create_page_native() {
 		if ( My_Account::woocommerce_owns_shell() ) {
@@ -126,7 +126,7 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 	}
 
 	/**
-	 * get_endpoints() returns the core endpoint slugs.
+	 * Core get_endpoints() returns the expected slugs.
 	 */
 	public function test_get_endpoints_core() {
 		$endpoints = My_Account::get_endpoints();
@@ -135,7 +135,7 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 	}
 
 	/**
-	 * get_tabs() returns ordered slug => label entries including core tabs.
+	 * Native get_tabs() returns ordered slug => label entries including core tabs.
 	 */
 	public function test_get_tabs() {
 		$tabs = My_Account::get_tabs();
