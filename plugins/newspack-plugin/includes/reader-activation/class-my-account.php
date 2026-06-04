@@ -457,9 +457,11 @@ class My_Account {
 
 		ob_start();
 		echo '<div class="newspack-my-account newspack-ui">';
+		echo '<div class="woocommerce">';
 		self::render_navigation();
 		echo '<div class="newspack-my-account__content woocommerce-MyAccount-content">';
 		self::render_content();
+		echo '</div>';
 		echo '</div>';
 		echo '</div>';
 		return ob_get_clean();
