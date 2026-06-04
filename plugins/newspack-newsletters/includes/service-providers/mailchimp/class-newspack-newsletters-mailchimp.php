@@ -1247,7 +1247,7 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 					// rollback to (object) [] (whole audience) which is the
 					// state the reset left us in anyway.
 					try {
-						$existing = $mc->get( "campaigns/$mc_campaign_id", [ 'fields' => 'recipients' ] );
+						$existing = $this->validate( $mc->get( "campaigns/$mc_campaign_id", [ 'fields' => 'recipients' ] ) );
 						if ( is_array( $existing ) && ! empty( $existing['recipients']['list_id'] ) ) {
 							$prior_segment_opts  = $existing['recipients']['segment_opts'] ?? [];
 							$rollback_recipients = [
