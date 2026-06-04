@@ -109,6 +109,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/class-comment-display-name.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-action-scheduler.php';
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/class-integrations.php';
+		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/class-my-account.php';
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/class-promoted-fields.php';
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/class-session-hydration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/data-events/class-utils.php';
