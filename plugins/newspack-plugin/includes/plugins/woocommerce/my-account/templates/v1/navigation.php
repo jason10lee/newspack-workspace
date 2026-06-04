@@ -91,7 +91,7 @@ if ( function_exists( 'wc_memberships_for_teams' ) ) {
 					$is_current_item = wc_is_current_account_menu_item( $endpoint ) || My_Account_UI_V1::is_subscription_page( $endpoint );
 					?>
 					<li class="<?php echo esc_attr( wc_get_account_menu_item_classes( $endpoint ) ); ?>">
-						<a href="<?php echo esc_url( wc_get_account_endpoint_url( $endpoint ) ); ?>" <?php echo $is_current_item ? 'aria-current="page"' : ''; ?> class="newspack-ui__button newspack-ui__button--small <?php echo $is_current_item ? 'newspack-ui__button--accent' : 'newspack-ui__button--ghost'; ?>">
+						<a href="<?php echo esc_url( \Newspack\My_Account::get_endpoint_url( $endpoint ) ); ?>" <?php echo $is_current_item ? 'aria-current="page"' : ''; ?> class="newspack-ui__button newspack-ui__button--small <?php echo $is_current_item ? 'newspack-ui__button--accent' : 'newspack-ui__button--ghost'; ?>">
 							<?php echo esc_html( $label ); ?>
 						</a>
 					</li>
@@ -108,7 +108,7 @@ if ( function_exists( 'wc_memberships_for_teams' ) ) {
 				</li>
 			<?php endforeach; ?>
 			<li class="<?php echo esc_attr( wc_get_account_menu_item_classes( 'customer-logout' ) ); ?>">
-				<a href="<?php echo esc_url( wp_logout_url( wc_get_account_endpoint_url( 'customer-logout' ) ) ); ?>" class="newspack-ui__button newspack-ui__button--small newspack-ui__button--ghost">
+				<a href="<?php echo esc_url( wp_logout_url( home_url( '/' ) ) ); ?>" class="newspack-ui__button newspack-ui__button--small newspack-ui__button--ghost">
 					<?php _e( 'Sign out', 'newspack-plugin' ); ?>
 					<?php Newspack_UI_Icons::print_svg( 'logout' ); ?>
 				</a>
