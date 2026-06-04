@@ -680,9 +680,10 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 	 * variations shape. Mirrors the Tab 6 pattern but with Tab 7's
 	 * five-metric column set.
 	 *
-	 * Each parent's variations are sorted by active_recurring_donors
+	 * Each parent's variations are sorted by lifetime_donation_revenue
 	 * DESC. The outer list is sorted by aggregated
-	 * active_recurring_donors DESC and truncated to top 50.
+	 * lifetime_donation_revenue DESC and truncated to top 50 — same
+	 * "largest products first" convention as Tab 6's performance table.
 	 *
 	 * @param array<int, array<string, mixed>> $rows Merged per-variation rows.
 	 * @return array<int, array<string, mixed>>
@@ -749,7 +750,7 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 				usort(
 					$entry['variations'],
 					static function ( $a, $b ) {
-						return $b['active_recurring_donors'] <=> $a['active_recurring_donors'];
+						return $b['lifetime_donation_revenue'] <=> $a['lifetime_donation_revenue'];
 					}
 				);
 			}
@@ -760,7 +761,7 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 		usort(
 			$out,
 			static function ( $a, $b ) {
-				return $b['active_recurring_donors'] <=> $a['active_recurring_donors'];
+				return $b['lifetime_donation_revenue'] <=> $a['lifetime_donation_revenue'];
 			}
 		);
 		return array_slice( $out, 0, 50 );

@@ -716,7 +716,7 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 				usort(
 					$entry['variations'],
 					static function ( $a, $b ) {
-						return $b['active_recurring_donors'] <=> $a['active_recurring_donors'];
+						return $b['lifetime_donation_revenue'] <=> $a['lifetime_donation_revenue'];
 					}
 				);
 			}

@@ -4,7 +4,12 @@
  * Donations by tier — table identical in shape to Tab 6's Performance
  * by product, with nested variation rows. Parent rows aggregate the
  * SUM of their variations; standalone products render as a single
- * row. Top 50 parents/standalones server-side.
+ * row. Sorted by lifetime_donation_revenue DESC, top 50 server-side.
+ *
+ * Most columns are window-scoped to the date picker, but Lifetime
+ * Revenue is all-time. A caption above the table makes that mixed
+ * temporal scope explicit so publishers don't read the columns as
+ * uniformly scoped.
  */
 
 /**
@@ -46,6 +51,12 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 			<h2 id="newspack-insights-donors-performance-heading" className="newspack-insights__section-heading">
 				{ __( 'Donations by tier', 'newspack-plugin' ) }
 			</h2>
+			<p className="newspack-insights__section-caption">
+				{ __(
+					'Active recurring donors, new donors, one-time gifts, and recurring revenue are scoped to the selected timeframe. Lifetime revenue is the all-time total per product.',
+					'newspack-plugin'
+				) }
+			</p>
 			<div className="newspack-insights__table-wrap">
 				<table className="newspack-insights__table">
 					<thead>
