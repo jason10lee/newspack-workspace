@@ -4,9 +4,7 @@
  *
  * Implements {@see Storage_Interface} against the pre-HPOS WooCommerce
  * order storage: orders/subscriptions live in `{prefix}posts` (typed by
- * `post_type`) and their metadata in `{prefix}postmeta`. The product
- * lookup table `{prefix}wc_order_product_lookup` is populated by Woo
- * Analytics regardless of backend, so it joins identically here.
+ * `post_type`) and their metadata in `{prefix}postmeta`.
  *
  * Mirrors the HPOS implementation method-by-method, with the per-row
  * differences documented in the schema doc:
@@ -21,6 +19,15 @@
  *   wc_orders.total_amount        postmeta._order_total (DECIMAL string)
  *   wc_orders.parent_order_id     posts.post_parent
  *   wc_orders_meta.*              postmeta.*
+ *
+ * Line-item tables `{prefix}woocommerce_order_items` and
+ * `{prefix}woocommerce_order_itemmeta` are NOT HPOS-specific — they
+ * pre-date HPOS and continue to hold line items for every order type
+ * on both backends. Subscription-side queries here use them for the
+ * same reason as in {@see HPOS_Storage}: production data confirms
+ * `{prefix}wc_order_product_lookup` only ever holds shop_order rows
+ * (Block Club Chicago: 39,461 shop_order / 0 shop_subscription;
+ * Richland Source: 13,279 / 0).
  *
  * @package Newspack
  */
@@ -115,10 +122,13 @@ class Legacy_Storage implements Storage_Interface {
 			FROM {$prefix}posts p
 			JOIN {$prefix}postmeta cust
 				ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
-			JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = p.ID
+			JOIN {$prefix}woocommerce_order_items oi
+				ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
+			JOIN {$prefix}woocommerce_order_itemmeta oim
+				ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
 			WHERE p.post_type = 'shop_subscription'
 			  AND p.post_status = 'wc-active'
-			  AND opl.product_id NOT IN ($donations)";
+			  AND oim.meta_value NOT IN ($donations)";
 
 		return (int) $wpdb->get_var( $sql );
 	}
@@ -143,9 +153,12 @@ class Legacy_Storage implements Storage_Interface {
 					ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
 				JOIN {$prefix}postmeta start
 					ON start.post_id = p.ID AND start.meta_key = '_schedule_start'
-				JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = p.ID
+				JOIN {$prefix}woocommerce_order_items oi
+					ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
+				JOIN {$prefix}woocommerce_order_itemmeta oim
+					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
 				WHERE p.post_type = 'shop_subscription'
-				  AND opl.product_id NOT IN ($donations)
+				  AND oim.meta_value NOT IN ($donations)
 				GROUP BY cust.meta_value
 			) AS first_subs
 			WHERE first_subs.first_start BETWEEN %s AND %s",
@@ -176,10 +189,13 @@ class Legacy_Storage implements Storage_Interface {
 					ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
 				JOIN {$prefix}postmeta cancelled
 					ON cancelled.post_id = p.ID AND cancelled.meta_key = '_schedule_cancelled'
-				JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = p.ID
+				JOIN {$prefix}woocommerce_order_items oi
+					ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
+				JOIN {$prefix}woocommerce_order_itemmeta oim
+					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
 				WHERE p.post_type = 'shop_subscription'
 				  AND p.post_status IN ('wc-cancelled', 'wc-expired')
-				  AND opl.product_id NOT IN ($donations)
+				  AND oim.meta_value NOT IN ($donations)
 				  AND cancelled.meta_value BETWEEN %s AND %s
 				  AND cancelled.meta_value != ''
 			) AS cancellations
@@ -188,10 +204,13 @@ class Legacy_Storage implements Storage_Interface {
 				FROM {$prefix}posts p2
 				JOIN {$prefix}postmeta cust2
 					ON cust2.post_id = p2.ID AND cust2.meta_key = '_customer_user'
-				JOIN {$prefix}wc_order_product_lookup opl2 ON opl2.order_id = p2.ID
+				JOIN {$prefix}woocommerce_order_items oi2
+					ON oi2.order_id = p2.ID AND oi2.order_item_type = 'line_item'
+				JOIN {$prefix}woocommerce_order_itemmeta oim2
+					ON oim2.order_item_id = oi2.order_item_id AND oim2.meta_key = '_product_id'
 				WHERE p2.post_type = 'shop_subscription'
 				  AND p2.post_status = 'wc-active'
-				  AND opl2.product_id NOT IN ($donations)
+				  AND oim2.meta_value NOT IN ($donations)
 			)",
 			$this->fmt( $start ),
 			$this->fmt( $end )
@@ -210,6 +229,8 @@ class Legacy_Storage implements Storage_Interface {
 
 		// Same CASE-on-period logic as HPOS, but the total amount is
 		// retrieved via _order_total postmeta (stored as DECIMAL string).
+		// DISTINCT id-subselect dedupes subscriptions with more than one
+		// non-donation line item so MRR isn't multiplied.
 		$sql = "SELECT SUM(
 				CASE
 					WHEN bp.meta_value = 'month' AND bi.meta_value = '1' THEN CAST(tot.meta_value AS DECIMAL(15,2))
@@ -227,10 +248,16 @@ class Legacy_Storage implements Storage_Interface {
 				ON bi.post_id = p.ID AND bi.meta_key = '_billing_interval'
 			JOIN {$prefix}postmeta tot
 				ON tot.post_id = p.ID AND tot.meta_key = '_order_total'
-			JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = p.ID
 			WHERE p.post_type = 'shop_subscription'
 			  AND p.post_status = 'wc-active'
-			  AND opl.product_id NOT IN ($donations)";
+			  AND p.ID IN (
+				SELECT DISTINCT oi.order_id
+				FROM {$prefix}woocommerce_order_items oi
+				JOIN {$prefix}woocommerce_order_itemmeta oim
+					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+				WHERE oi.order_item_type = 'line_item'
+				  AND oim.meta_value NOT IN ($donations)
+			  )";
 
 		return (float) $wpdb->get_var( $sql );
 	}
@@ -391,17 +418,22 @@ class Legacy_Storage implements Storage_Interface {
 		$prefix    = $wpdb->prefix;
 		$donations = $this->id_list( $this->donation_product_ids );
 
+		// One row per active subscription line item; the React layer groups
+		// client-side and computes box-plot quartiles.
 		$sql = "SELECT
 				prod.post_title AS product_name,
 				TIMESTAMPDIFF(DAY, start.meta_value, NOW()) AS tenure_days
 			FROM {$prefix}posts p
 			JOIN {$prefix}postmeta start
 				ON start.post_id = p.ID AND start.meta_key = '_schedule_start'
-			JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = p.ID
-			JOIN {$prefix}posts prod ON prod.ID = opl.product_id
+			JOIN {$prefix}woocommerce_order_items oi
+				ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
+			JOIN {$prefix}woocommerce_order_itemmeta oim
+				ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+			JOIN {$prefix}posts prod ON prod.ID = CAST(oim.meta_value AS UNSIGNED)
 			WHERE p.post_type = 'shop_subscription'
 			  AND p.post_status = 'wc-active'
-			  AND opl.product_id NOT IN ($donations)
+			  AND oim.meta_value NOT IN ($donations)
 			  AND start.meta_value != ''
 			  AND start.meta_value < NOW()";
 
@@ -428,6 +460,8 @@ class Legacy_Storage implements Storage_Interface {
 		$prefix    = $wpdb->prefix;
 		$donations = $this->id_list( $this->donation_product_ids );
 
+		// DISTINCT id-subselect for the non-donation filter so a multi-line-item
+		// subscription is counted once and its _order_total isn't summed twice.
 		$row = $wpdb->get_row(
 			"SELECT
 				COUNT(*) AS upcoming_count,
@@ -437,10 +471,16 @@ class Legacy_Storage implements Storage_Interface {
 				ON next.post_id = p.ID AND next.meta_key = '_schedule_next_payment'
 			JOIN {$prefix}postmeta tot
 				ON tot.post_id = p.ID AND tot.meta_key = '_order_total'
-			JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = p.ID
 			WHERE p.post_type = 'shop_subscription'
 			  AND p.post_status = 'wc-active'
-			  AND opl.product_id NOT IN ($donations)
+			  AND p.ID IN (
+				SELECT DISTINCT oi.order_id
+				FROM {$prefix}woocommerce_order_items oi
+				JOIN {$prefix}woocommerce_order_itemmeta oim
+					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+				WHERE oi.order_item_type = 'line_item'
+				  AND oim.meta_value NOT IN ($donations)
+			  )
 			  AND next.meta_value BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 30 DAY)",
 			ARRAY_A
 		);
@@ -463,18 +503,23 @@ class Legacy_Storage implements Storage_Interface {
 		$prefix    = $wpdb->prefix;
 		$donations = $this->id_list( $this->donation_product_ids );
 
+		// DISTINCT id-subselect for the non-donation filter so a
+		// multi-line-item subscription doesn't show up as multiple retries.
 		$sql = $wpdb->prepare(
 			"SELECT
 				COUNT(*) AS retry_attempts,
 				SUM(CASE WHEN sub.post_status = 'wc-active' THEN 1 ELSE 0 END) AS recoveries
 			FROM (
-				SELECT p.ID AS subscription_id
+				SELECT DISTINCT p.ID AS subscription_id
 				FROM {$prefix}posts p
 				JOIN {$prefix}postmeta retry
 					ON retry.post_id = p.ID AND retry.meta_key = '_schedule_payment_retry'
-				JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = p.ID
+				JOIN {$prefix}woocommerce_order_items oi
+					ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
+				JOIN {$prefix}woocommerce_order_itemmeta oim
+					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
 				WHERE p.post_type = 'shop_subscription'
-				  AND opl.product_id NOT IN ($donations)
+				  AND oim.meta_value NOT IN ($donations)
 				  AND retry.meta_value BETWEEN %s AND %s
 				  AND retry.meta_value != ''
 			) AS retries
@@ -502,6 +547,11 @@ class Legacy_Storage implements Storage_Interface {
 		$prefix    = $wpdb->prefix;
 		$donations = $this->id_list( $this->donation_product_ids );
 
+		// Each subscription line item is counted toward the product it
+		// references. Multi-product subs contribute to each product's
+		// counts and amounts; SUM uses the subscription's _order_total so
+		// the per-product active_value is attributed once per product
+		// (a documented v1 simplification).
 		$sql = "SELECT
 				prod.ID AS product_id,
 				prod.post_title AS product_name,
@@ -512,10 +562,13 @@ class Legacy_Storage implements Storage_Interface {
 			FROM {$prefix}posts p
 			JOIN {$prefix}postmeta tot
 				ON tot.post_id = p.ID AND tot.meta_key = '_order_total'
-			JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = p.ID
-			JOIN {$prefix}posts prod ON prod.ID = opl.product_id
+			JOIN {$prefix}woocommerce_order_items oi
+				ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
+			JOIN {$prefix}woocommerce_order_itemmeta oim
+				ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+			JOIN {$prefix}posts prod ON prod.ID = CAST(oim.meta_value AS UNSIGNED)
 			WHERE p.post_type = 'shop_subscription'
-			  AND opl.product_id NOT IN ($donations)
+			  AND oim.meta_value NOT IN ($donations)
 			GROUP BY prod.ID, prod.post_title
 			ORDER BY active_subs DESC
 			LIMIT 50";
@@ -551,6 +604,9 @@ class Legacy_Storage implements Storage_Interface {
 		$prefix    = $wpdb->prefix;
 		$donations = $this->id_list( $this->donation_product_ids );
 
+		// DISTINCT id-subselect on the non-donation filter so a sub with
+		// multiple line items doesn't get counted multiple times under the
+		// same reason.
 		$sql = $wpdb->prepare(
 			"SELECT
 				COALESCE(reason.meta_value, 'unknown') AS cancellation_reason,
@@ -560,10 +616,16 @@ class Legacy_Storage implements Storage_Interface {
 				ON reason.post_id = p.ID AND reason.meta_key = 'newspack_subscriptions_cancellation_reason'
 			JOIN {$prefix}postmeta cancelled
 				ON cancelled.post_id = p.ID AND cancelled.meta_key = '_schedule_cancelled'
-			JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = p.ID
 			WHERE p.post_type = 'shop_subscription'
 			  AND p.post_status IN ('wc-cancelled', 'wc-expired')
-			  AND opl.product_id NOT IN ($donations)
+			  AND p.ID IN (
+				SELECT DISTINCT oi.order_id
+				FROM {$prefix}woocommerce_order_items oi
+				JOIN {$prefix}woocommerce_order_itemmeta oim
+					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+				WHERE oi.order_item_type = 'line_item'
+				  AND oim.meta_value NOT IN ($donations)
+			  )
 			  AND cancelled.meta_value BETWEEN %s AND %s
 			GROUP BY cancellation_reason
 			ORDER BY count DESC",
