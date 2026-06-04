@@ -56,6 +56,39 @@ class My_Account {
 	}
 
 	/**
+	 * Get the native account page ID, creating the page if it does not exist.
+	 *
+	 * Only used when WooCommerce is not active.
+	 *
+	 * @return int Page ID.
+	 */
+	public static function get_or_create_page() {
+		$page_id = (int) \get_option( self::PAGE_ID_OPTION, 0 );
+		if ( $page_id && 'page' === \get_post_type( $page_id ) ) {
+			return $page_id;
+		}
+
+		$page_id = \wp_insert_post(
+			[
+				'post_type'      => 'page',
+				'post_title'     => \esc_html__( 'My Account', 'newspack-plugin' ),
+				'post_content'   => '[newspack_my_account]',
+				'post_status'    => 'publish',
+				'comment_status' => 'closed',
+				'ping_status'    => 'closed',
+			]
+		);
+
+		if ( \is_numeric( $page_id ) && $page_id ) {
+			\update_option( self::PAGE_ID_OPTION, (int) $page_id );
+			\update_post_meta( $page_id, 'newspack_hide_page_title', true );
+			return (int) $page_id;
+		}
+
+		return 0;
+	}
+
+	/**
 	 * Whether the current request is the My Account page (or one of its
 	 * endpoints).
 	 *

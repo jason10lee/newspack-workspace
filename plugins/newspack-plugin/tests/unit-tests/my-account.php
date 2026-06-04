@@ -77,4 +77,25 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 
 		delete_option( My_Account::PAGE_ID_OPTION );
 	}
+
+	/**
+	 * get_or_create_page() creates a page once and reuses it afterward.
+	 */
+	public function test_get_or_create_page_native() {
+		if ( My_Account::woocommerce_owns_shell() ) {
+			$this->markTestSkipped( 'WooCommerce is active; native path not exercised.' );
+		}
+		delete_option( My_Account::PAGE_ID_OPTION );
+
+		$page_id = My_Account::get_or_create_page();
+		$this->assertGreaterThan( 0, $page_id );
+		$this->assertSame( 'page', get_post_type( $page_id ) );
+		$this->assertStringContainsString( '[newspack_my_account]', get_post( $page_id )->post_content );
+
+		// Second call must not create a new page.
+		$this->assertSame( $page_id, My_Account::get_or_create_page() );
+
+		wp_delete_post( $page_id, true );
+		delete_option( My_Account::PAGE_ID_OPTION );
+	}
 }
