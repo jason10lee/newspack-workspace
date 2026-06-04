@@ -20,4 +20,61 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 		$this->assertTrue( method_exists( 'Newspack\My_Account', 'is_account_page' ) );
 		$this->assertTrue( method_exists( 'Newspack\My_Account', 'get_endpoint_url' ) );
 	}
+
+	/**
+	 * Native page ID comes from the Newspack option when Woo is absent.
+	 */
+	public function test_get_page_id_native() {
+		if ( My_Account::woocommerce_owns_shell() ) {
+			$this->markTestSkipped( 'WooCommerce is active; native path not exercised.' );
+		}
+		$page_id = self::factory()->post->create( [ 'post_type' => 'page' ] );
+		update_option( My_Account::PAGE_ID_OPTION, $page_id );
+
+		$this->assertSame( $page_id, My_Account::get_page_id() );
+
+		delete_option( My_Account::PAGE_ID_OPTION );
+		$this->assertSame( 0, My_Account::get_page_id() );
+	}
+
+	/**
+	 * is_account_page() is true on the native account page and false elsewhere.
+	 */
+	public function test_is_account_page_native() {
+		if ( My_Account::woocommerce_owns_shell() ) {
+			$this->markTestSkipped( 'WooCommerce is active; native path not exercised.' );
+		}
+		$page_id  = self::factory()->post->create( [ 'post_type' => 'page' ] );
+		$other_id = self::factory()->post->create( [ 'post_type' => 'page' ] );
+		update_option( My_Account::PAGE_ID_OPTION, $page_id );
+
+		$this->go_to( get_permalink( $page_id ) );
+		$this->assertTrue( My_Account::is_account_page() );
+
+		$this->go_to( get_permalink( $other_id ) );
+		$this->assertFalse( My_Account::is_account_page() );
+
+		delete_option( My_Account::PAGE_ID_OPTION );
+	}
+
+	/**
+	 * get_endpoint_url() returns the base permalink for the empty endpoint and a
+	 * sub-path for a named endpoint.
+	 */
+	public function test_get_endpoint_url_native() {
+		if ( My_Account::woocommerce_owns_shell() ) {
+			$this->markTestSkipped( 'WooCommerce is active; native path not exercised.' );
+		}
+		$page_id = self::factory()->post->create( [ 'post_type' => 'page' ] );
+		update_option( My_Account::PAGE_ID_OPTION, $page_id );
+
+		$base = My_Account::get_endpoint_url();
+		$this->assertSame( get_permalink( $page_id ), $base );
+
+		$edit = My_Account::get_endpoint_url( 'edit-account' );
+		$this->assertStringContainsString( 'edit-account', $edit );
+		$this->assertStringStartsWith( rtrim( get_permalink( $page_id ), '/' ), rtrim( $edit, '/' ) );
+
+		delete_option( My_Account::PAGE_ID_OPTION );
+	}
 }
