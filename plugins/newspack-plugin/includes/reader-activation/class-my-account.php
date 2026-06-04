@@ -25,6 +25,12 @@ class My_Account {
 	const PAGE_ID_OPTION = 'newspack_my_account_page_id';
 
 	/**
+	 * Core endpoint slug constants.
+	 */
+	const ENDPOINT_EDIT_ACCOUNT   = 'edit-account';
+	const ENDPOINT_DELETE_ACCOUNT = 'newspack-delete-account';
+
+	/**
 	 * Whether WooCommerce owns the My Account shell.
 	 *
 	 * @return bool
@@ -40,6 +46,8 @@ class My_Account {
 		\add_action( 'init', [ __CLASS__, 'register_shortcode' ] );
 		if ( ! self::woocommerce_owns_shell() ) {
 			\add_filter( 'page_template', [ __CLASS__, 'page_template' ], 11 );
+			\add_action( 'init', [ __CLASS__, 'register_endpoints' ], 6 );
+			\add_filter( 'query_vars', [ __CLASS__, 'add_query_vars' ] );
 		}
 	}
 
@@ -138,6 +146,64 @@ class My_Account {
 			return \user_trailingslashit( $url );
 		}
 		return \add_query_arg( $endpoint, $value, $permalink );
+	}
+
+	/**
+	 * Get the registered endpoint slugs => labels for the native shell.
+	 *
+	 * Core tabs plus any integration-declared endpoints. Filterable so
+	 * integrations and sites can extend the set.
+	 *
+	 * @return array<string,string> slug => label.
+	 */
+	public static function get_endpoints() {
+		$endpoints = [
+			self::ENDPOINT_EDIT_ACCOUNT   => \__( 'Account details', 'newspack-plugin' ),
+			self::ENDPOINT_DELETE_ACCOUNT => \__( 'Delete account', 'newspack-plugin' ),
+		];
+		/**
+		 * Filters the My Account endpoint slugs => labels (native shell).
+		 *
+		 * @param array<string,string> $endpoints slug => label.
+		 */
+		return \apply_filters( 'newspack_my_account_endpoints', $endpoints );
+	}
+
+	/**
+	 * Register rewrite endpoints for the native shell.
+	 */
+	public static function register_endpoints() {
+		foreach ( array_keys( self::get_endpoints() ) as $slug ) {
+			\add_rewrite_endpoint( $slug, EP_PAGES );
+		}
+	}
+
+	/**
+	 * Add the endpoint slugs to the public query vars.
+	 *
+	 * @param array $vars Query vars.
+	 * @return array
+	 */
+	public static function add_query_vars( $vars ) {
+		foreach ( array_keys( self::get_endpoints() ) as $slug ) {
+			$vars[] = $slug;
+		}
+		return $vars;
+	}
+
+	/**
+	 * Get the current endpoint slug from the query, or '' for the dashboard.
+	 *
+	 * @return string
+	 */
+	public static function get_current_endpoint() {
+		global $wp;
+		foreach ( array_keys( self::get_endpoints() ) as $slug ) {
+			if ( isset( $wp->query_vars[ $slug ] ) ) {
+				return $slug;
+			}
+		}
+		return '';
 	}
 
 	/**

@@ -112,4 +112,25 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 		$html = do_shortcode( '[newspack_my_account]' );
 		$this->assertStringContainsString( 'newspack-my-account', $html );
 	}
+
+	/**
+	 * Core endpoints are registered as query vars when Woo is absent.
+	 */
+	public function test_query_vars_native() {
+		if ( My_Account::woocommerce_owns_shell() ) {
+			$this->markTestSkipped( 'WooCommerce is active; native path not exercised.' );
+		}
+		$vars = My_Account::add_query_vars( [] );
+		$this->assertContains( 'edit-account', $vars );
+		$this->assertContains( 'newspack-delete-account', $vars );
+	}
+
+	/**
+	 * get_endpoints() returns the core endpoint slugs.
+	 */
+	public function test_get_endpoints_core() {
+		$endpoints = My_Account::get_endpoints();
+		$this->assertArrayHasKey( 'edit-account', $endpoints );
+		$this->assertArrayHasKey( 'newspack-delete-account', $endpoints );
+	}
 }
