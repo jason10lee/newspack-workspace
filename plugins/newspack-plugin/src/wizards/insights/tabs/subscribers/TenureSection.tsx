@@ -82,7 +82,9 @@ const TenureSection = ( { rows }: TenureSectionProps ) => {
 				<h2 id="newspack-insights-tenure-heading" className="newspack-insights__section-heading">
 					{ __( 'Subscriber tenure', 'newspack-plugin' ) }
 				</h2>
-				<p className="newspack-insights__section-empty">{ __( 'No active subscribers to summarize yet.', 'newspack-plugin' ) }</p>
+				<p className="newspack-insights__section-empty">
+					{ __( 'No subscribers yet — tenure data will appear once subscriptions exist.', 'newspack-plugin' ) }
+				</p>
 			</section>
 		);
 	}

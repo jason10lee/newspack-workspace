@@ -36,7 +36,7 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 				<h2 id="newspack-insights-performance-heading" className="newspack-insights__section-heading">
 					{ __( 'Performance by product', 'newspack-plugin' ) }
 				</h2>
-				<p className="newspack-insights__section-empty">{ __( 'No subscription product activity to report.', 'newspack-plugin' ) }</p>
+				<p className="newspack-insights__section-empty">{ __( 'No subscription products configured yet.', 'newspack-plugin' ) }</p>
 			</section>
 		);
 	}
@@ -49,6 +49,9 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 			<h2 id="newspack-insights-performance-heading" className="newspack-insights__section-heading">
 				{ __( 'Performance by product', 'newspack-plugin' ) }
 			</h2>
+			<p className="newspack-insights__section-caption">
+				{ __( 'Active subscriptions per product (subscriptions, not unique customers). A customer with two active subscriptions counts in both products’ rows.', 'newspack-plugin' ) }
+			</p>
 			<div className="newspack-insights__table-wrap">
 				<table className="newspack-insights__table">
 					<thead>
