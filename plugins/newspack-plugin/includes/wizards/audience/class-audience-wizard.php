@@ -482,10 +482,11 @@ class Audience_Wizard extends Wizard {
 	public function api_get_reader_activation_settings() {
 		return rest_ensure_response(
 			[
-				'config'               => Reader_Activation::get_settings(),
-				'prerequisites_status' => Reader_Activation::get_prerequisites_status(),
-				'memberships'          => self::get_memberships_settings(),
-				'can_esp_sync'         => Reader_Activation\Contact_Sync::has_one_syncable_integration( true ),
+				'config'                         => Reader_Activation::get_settings(),
+				'prerequisites_status'           => Reader_Activation::get_prerequisites_status(),
+				'memberships'                    => self::get_memberships_settings(),
+				'can_esp_sync'                   => Reader_Activation\Contact_Sync::has_one_syncable_integration( true ),
+				'verification_required_by_gates' => Reader_Activation::get_verification_required_gates(),
 			]
 		);
 	}
@@ -505,10 +506,11 @@ class Audience_Wizard extends Wizard {
 
 		return rest_ensure_response(
 			[
-				'config'               => Reader_Activation::get_settings(),
-				'prerequisites_status' => Reader_Activation::get_prerequisites_status(),
-				'memberships'          => self::get_memberships_settings(),
-				'can_esp_sync'         => Reader_Activation\Contact_Sync::has_one_syncable_integration( true ),
+				'config'                         => Reader_Activation::get_settings(),
+				'prerequisites_status'           => Reader_Activation::get_prerequisites_status(),
+				'memberships'                    => self::get_memberships_settings(),
+				'can_esp_sync'                   => Reader_Activation\Contact_Sync::has_one_syncable_integration( true ),
+				'verification_required_by_gates' => Reader_Activation::get_verification_required_gates(),
 			]
 		);
 	}

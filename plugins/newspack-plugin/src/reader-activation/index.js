@@ -237,6 +237,29 @@ export function openVerificationModal( config = {} ) {
 }
 
 /**
+ * Gate a registration submission on the pre-registration confirmation step.
+ *
+ * Public cross-plugin entry point. The actual implementation is registered by the
+ * reader-activation-auth bundle via `_maybeConfirmRegistration`. When the helper
+ * isn't available (older newspack-plugin), falls through to immediate `onProceed`
+ * — equivalent to "no confirmation".
+ *
+ * @param {Object}   config
+ * @param {string}   config.email      Email to confirm.
+ * @param {Function} config.onProceed  Called once the registration should be submitted.
+ * @param {Function} [config.onCancel] Called when the reader cancels the confirmation.
+ */
+export function maybeConfirmRegistration( config = {} ) {
+	if ( readerActivation?._maybeConfirmRegistration ) {
+		readerActivation._maybeConfirmRegistration( config );
+		return;
+	}
+	if ( typeof config.onProceed === 'function' ) {
+		config.onProceed();
+	}
+}
+
+/**
  * Get the reader's OTP hash for the current authentication request.
  *
  * @return {string} OTP hash.
@@ -660,6 +683,7 @@ const readerActivation = {
 	getReader,
 	openNewslettersSignupModal,
 	openVerificationModal,
+	maybeConfirmRegistration,
 	hasAuthLink,
 	getOTPHash,
 	setOTPTimer,

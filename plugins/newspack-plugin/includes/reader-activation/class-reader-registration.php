@@ -36,6 +36,22 @@ final class Reader_Registration {
 	public static function register_routes() {
 		\register_rest_route(
 			NEWSPACK_API_NAMESPACE,
+			'/reader-activation/check-email',
+			[
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => [ __CLASS__, 'api_check_email_exists' ],
+				'permission_callback' => '__return_true',
+				'args'                => [
+					'email' => [
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_email',
+						'default'           => '',
+					],
+				],
+			]
+		);
+		\register_rest_route(
+			NEWSPACK_API_NAMESPACE,
 			'/reader-activation/register',
 			[
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -442,6 +458,47 @@ final class Reader_Registration {
 		$response_data = array_merge( $response_data, Reader_Activation::get_verification_payload( $result ) );
 
 		return new \WP_REST_Response( $response_data, 201 );
+	}
+
+	/**
+	 * REST handler for checking whether an email maps to an existing reader.
+	 *
+	 * Used by registration entry points when the post-registration verification flow is
+	 * disabled — those flows need to ask the reader to confirm "You're about to create an
+	 * account for X" *before* the account is actually created, which requires knowing
+	 * up front whether the email is new or already registered.
+	 *
+	 * Privacy note: this endpoint reveals whether a given email belongs to a registered
+	 * reader. The existing /reader-activation/register and process_auth_form endpoints
+	 * already leak the same information through their response shapes, so this isn't a
+	 * net-new disclosure. Rate-limit + email-format validation are still applied.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public static function api_check_email_exists( \WP_REST_Request $request ) {
+		// Reuse the same per-IP rate limit as registration so a single client can't sweep
+		// the user base for valid emails by hammering this endpoint.
+		$rate_check = self::check_registration_rate_limit();
+		if ( \is_wp_error( $rate_check ) ) {
+			return $rate_check;
+		}
+
+		$email = $request->get_param( 'email' );
+		if ( empty( $email ) || ! \is_email( $email ) ) {
+			return new \WP_Error(
+				'invalid_email',
+				__( 'A valid email address is required.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
+			);
+		}
+
+		return new \WP_REST_Response(
+			[
+				'exists' => (bool) \get_user_by( 'email', $email ),
+			],
+			200
+		);
 	}
 }
 Reader_Registration::init();

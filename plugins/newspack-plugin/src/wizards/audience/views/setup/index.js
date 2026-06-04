@@ -29,6 +29,7 @@ function AudienceWizard( { confirmAction, pluginRequirements, wizardApiFetch }, 
 	const [ prerequisites, setPrerequisites ] = useState( null );
 	const [ error, setError ] = useState( false );
 	const [ espSyncErrors, setEspSyncErrors ] = useState( [] );
+	const [ verificationRequiredByGates, setVerificationRequiredByGates ] = useState( [] );
 
 	const fetchConfig = () => {
 		setError( false );
@@ -36,10 +37,11 @@ function AudienceWizard( { confirmAction, pluginRequirements, wizardApiFetch }, 
 		return wizardApiFetch( {
 			path: '/newspack/v1/wizard/newspack-audience/audience-management',
 		} )
-			.then( ( { config: fetchedConfig, prerequisites_status, can_esp_sync } ) => {
+			.then( ( { config: fetchedConfig, prerequisites_status, can_esp_sync, verification_required_by_gates } ) => {
 				setPrerequisites( prerequisites_status );
 				setConfig( fetchedConfig );
 				setEspSyncErrors( can_esp_sync.errors );
+				setVerificationRequiredByGates( verification_required_by_gates || [] );
 			} )
 			.catch( setError )
 			.finally( () => setInFlight( false ) );
@@ -56,10 +58,11 @@ function AudienceWizard( { confirmAction, pluginRequirements, wizardApiFetch }, 
 			quiet: true,
 			data,
 		} )
-			.then( ( { config: fetchedConfig, prerequisites_status, can_esp_sync } ) => {
+			.then( ( { config: fetchedConfig, prerequisites_status, can_esp_sync, verification_required_by_gates } ) => {
 				setPrerequisites( prerequisites_status );
 				setConfig( fetchedConfig );
 				setEspSyncErrors( can_esp_sync.errors );
+				setVerificationRequiredByGates( verification_required_by_gates || [] );
 			} )
 			.catch( setError )
 			.finally( () => setInFlight( false ) );
@@ -77,10 +80,11 @@ function AudienceWizard( { confirmAction, pluginRequirements, wizardApiFetch }, 
 					quiet: true,
 					data,
 				} )
-					.then( ( { config: fetchedConfig, prerequisites_status, can_esp_sync } ) => {
+					.then( ( { config: fetchedConfig, prerequisites_status, can_esp_sync, verification_required_by_gates } ) => {
 						setPrerequisites( prerequisites_status );
 						setConfig( fetchedConfig );
 						setEspSyncErrors( can_esp_sync.errors );
+						setVerificationRequiredByGates( verification_required_by_gates || [] );
 						if ( callback ) {
 							callback();
 						}
@@ -148,6 +152,7 @@ function AudienceWizard( { confirmAction, pluginRequirements, wizardApiFetch }, 
 		espSyncErrors,
 		prerequisites,
 		config,
+		verificationRequiredByGates,
 	};
 
 	return (

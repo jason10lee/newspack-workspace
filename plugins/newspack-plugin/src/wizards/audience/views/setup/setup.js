@@ -32,7 +32,19 @@ import SortableNewsletterListControl from '../../../../../packages/components/sr
 import Salesforce from '../../components/salesforce';
 
 export default withWizardScreen(
-	( { config, fetchConfig, updateConfig, getSharedProps, saveConfig, skipPrerequisite, prerequisites, espSyncErrors, error, inFlight } ) => {
+	( {
+		config,
+		fetchConfig,
+		updateConfig,
+		getSharedProps,
+		saveConfig,
+		skipPrerequisite,
+		prerequisites,
+		espSyncErrors,
+		error,
+		inFlight,
+		verificationRequiredByGates = [],
+	} ) => {
 		const [ allReady, setAllReady ] = useState( false );
 		const [ missingPlugins, setMissingPlugins ] = useState( [] );
 		const [ esp, setEsp ] = useState( '' );
@@ -126,6 +138,39 @@ export default withWizardScreen(
 				{ config.enabled && (
 					<Card noBorder>
 						<Divider alignment="full-width" variant="tertiary" />
+						{ ( () => {
+							const isForcedOn = verificationRequiredByGates.length > 0;
+							return (
+								<ActionCard
+									title={ __( 'Verify new reader accounts', 'newspack-plugin' ) }
+									description={ __(
+										'Ask readers to verify their accounts with an OTP code when registering a new account with an email address.',
+										'newspack-plugin'
+									) }
+									isMedium
+									toggleChecked={ isForcedOn || Boolean( config.verify_new_reader_accounts ) }
+									toggleOnChange={ value => updateConfig( 'verify_new_reader_accounts', value ) }
+									disabled={ isForcedOn }
+								>
+									{ isForcedOn && (
+										<Notice
+											isWarning
+											noticeText={
+												<>
+													{ __( 'Verification is required by at least one published content gate: ', 'newspack-plugin' ) }
+													{ verificationRequiredByGates.map( ( gate, index ) => (
+														<span key={ gate.id }>
+															<ExternalLink href={ gate.edit_url }>{ gate.title }</ExternalLink>
+															{ index < verificationRequiredByGates.length - 1 ? ', ' : '' }
+														</span>
+													) ) }
+												</>
+											}
+										/>
+									) }
+								</ActionCard>
+							);
+						} )() }
 						<ActionCard
 							title={ __( 'Present newsletter signup after checkout and registration', 'newspack-plugin' ) }
 							description={ __(
@@ -289,6 +334,7 @@ export default withWizardScreen(
 										newsletter_lists: config.newsletter_lists,
 										newsletter_list_initial_size: config.newsletter_list_initial_size,
 										oauth_redirect_to_ras: config.oauth_redirect_to_ras,
+										verify_new_reader_accounts: config.verify_new_reader_accounts,
 										sync_esp: config.sync_esp,
 										sync_esp_delete: config.sync_esp_delete,
 										metadata_fields: config.metadata_fields,

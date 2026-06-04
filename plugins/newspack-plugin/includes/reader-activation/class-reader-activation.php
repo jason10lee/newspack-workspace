@@ -94,6 +94,7 @@ final class Reader_Activation {
 		\add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_scripts' ] );
 		\add_action( 'wp_footer', [ __CLASS__, 'render_auth_modal' ] );
 		\add_action( 'wp_footer', [ __CLASS__, 'render_verification_modal' ] );
+		\add_action( 'wp_footer', [ __CLASS__, 'render_confirmation_modal' ] );
 		\add_action( 'wp_footer', [ __CLASS__, 'render_newsletters_signup_modal' ] );
 		\add_action( 'wp_ajax_newspack_reader_activation_newsletters_signup', [ __CLASS__, 'newsletters_signup' ] );
 		\add_action( 'woocommerce_customer_reset_password', [ __CLASS__, 'login_after_password_reset' ] );
@@ -151,6 +152,7 @@ final class Reader_Activation {
 			'is_ras_enabled'               => self::is_enabled(),
 			'require_account_verification' => self::show_post_registration_verification(),
 			'verification_url'             => \admin_url( 'admin-ajax.php' ),
+			'check_email_url'              => \rest_url( NEWSPACK_API_NAMESPACE . '/reader-activation/check-email' ),
 		];
 
 		$script_data = array_merge( $script_data, Reader_Registration::get_script_data() );
@@ -396,6 +398,7 @@ final class Reader_Activation {
 			'woocommerce_terms_confirmation_text'          => self::get_terms_confirmation_text(),
 			'woocommerce_terms_confirmation_url'           => self::get_terms_confirmation_url(),
 			'oauth_redirect_to_ras'                        => false,
+			'verify_new_reader_accounts'                   => true,
 		];
 
 		/**
@@ -1755,6 +1758,57 @@ final class Reader_Activation {
 	}
 
 	/**
+	 * Render the pre-registration confirmation modal.
+	 *
+	 * Used when post-registration verification is disabled — the reader sees this
+	 * modal *before* an account is created, so a typo doesn't silently provision
+	 * an unwanted account. Mirrors render_verification_modal()'s structure: global
+	 * markup in wp_footer with a `%EMAIL%` placeholder the JS helper fills in.
+	 *
+	 * @return void
+	 */
+	public static function render_confirmation_modal() {
+		if ( ! self::should_render_auth_modal() || self::show_post_registration_verification() ) {
+			return;
+		}
+
+		ob_start();
+		?>
+		<div class="newspack-ui__box newspack-ui__box--text-center">
+			<p>
+				<?php
+				printf(
+					// translators: %s is the email the reader is about to register.
+					esc_html__( 'You\'re about to create an account for %s.', 'newspack-plugin' ),
+					'<strong class="email-address">%EMAIL%</strong>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+				);
+				?>
+			</p>
+		</div>
+		<button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide" data-confirm-register>
+			<?php esc_html_e( 'Continue', 'newspack-plugin' ); ?>
+		</button>
+		<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-ui__modal__close" data-cancel-register>
+			<?php esc_html_e( 'Cancel', 'newspack-plugin' ); ?>
+		</button>
+		<?php
+		$content = ob_get_clean();
+		?>
+		<div class="newspack-ui newspack__reader-registration-confirmation">
+			<?php
+			\Newspack\Newspack_UI::generate_modal(
+				[
+					'id'      => 'newspack-reader-registration-confirmation',
+					'title'   => __( 'Register', 'newspack-plugin' ),
+					'content' => $content,
+				]
+			);
+			?>
+		</div>
+		<?php
+	}
+
+	/**
 	 * Fetch HTML for the post-checkout newsletter signup modal.
 	 *
 	 * @param WP_REST_Request $request The REST request.
@@ -2386,13 +2440,26 @@ final class Reader_Activation {
 	}
 
 	/**
-	 * Whether to show the post-registration flow for account verification.
+	 * Whether to show the post-registration verification flow for new reader accounts.
+	 *
+	 * The value is sourced from the `verify_new_reader_accounts` setting (toggled in
+	 * Audience → Configuration; defaults to true), then *forced* to true if any
+	 * published content gate is configured with Registered Access + Require
+	 * Verification — those gates depend on the verification flow to function, so we
+	 * never want the toggle to silently disable them. The
+	 * `newspack_show_post_registration_verification` filter receives the result and
+	 * is the documented escape hatch for sites that need to override either way.
 	 *
 	 * @return bool Whether to show the verification flow after registering a new reader account.
 	 */
 	public static function show_post_registration_verification() {
-		$current_user = \wp_get_current_user();
-		$should_show  = ! is_user_logged_in() || ( self::is_user_reader( $current_user ) && ! self::is_reader_verified( $current_user ) );
+		$should_show = (bool) self::get_setting( 'verify_new_reader_accounts' );
+
+		// Force ON when at least one published gate requires verification — those
+		// gates would be silently broken if a publisher toggled this off in settings.
+		if ( ! $should_show && ! empty( self::get_verification_required_gates() ) ) {
+			$should_show = true;
+		}
 
 		/**
 		 * Whether to show the verification flow after registering a new reader account.
@@ -2401,6 +2468,44 @@ final class Reader_Activation {
 		 * @param bool $show_pending_verification If true, show the post-registration verification flow.
 		 */
 		return apply_filters( 'newspack_show_post_registration_verification', $should_show );
+	}
+
+	/**
+	 * Get the list of published content gates that require email verification.
+	 *
+	 * These gates have Registered Access with Require Verification enabled — the
+	 * verification setting in Audience → Configuration is forced ON whenever any
+	 * of these exist so the gates continue to function.
+	 *
+	 * @return array<int,array{id:int,title:string,edit_url:string}> One entry per gate; empty when none require verification.
+	 */
+	public static function get_verification_required_gates() {
+		$gates = [];
+
+		if ( ! class_exists( 'Newspack\Content_Gate' ) ) {
+			return $gates;
+		}
+
+		$published_gates = \Newspack\Content_Gate::get_gates( \Newspack\Content_Gate::GATE_CPT, 'publish' );
+		if ( empty( $published_gates ) ) {
+			return $gates;
+		}
+
+		foreach ( $published_gates as $gate ) {
+			// Both Registered Access enabled AND Require Verification must be set for the gate
+			// to depend on this flow.
+			if ( empty( $gate['registration']['active'] ) || empty( $gate['registration']['require_verification'] ) ) {
+				continue;
+			}
+			$title     = isset( $gate['title'] ) && '' !== $gate['title'] ? $gate['title'] : __( '(no title)', 'newspack-plugin' );
+			$gates[] = [
+				'id'       => (int) $gate['id'],
+				'title'    => $title,
+				'edit_url' => get_edit_post_link( $gate['id'], 'raw' ),
+			];
+		}
+
+		return $gates;
 	}
 
 	/**
