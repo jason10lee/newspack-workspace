@@ -34,10 +34,10 @@ class My_Account {
 	}
 
 	/**
-	 * Initialize hooks. No-op for now; populated in later tasks.
+	 * Initialize hooks.
 	 */
 	public static function init() {
-		// Hooks are added in later tasks.
+		\add_action( 'init', [ __CLASS__, 'register_shortcode' ] );
 	}
 
 	/**
@@ -135,6 +135,52 @@ class My_Account {
 			return \user_trailingslashit( $url );
 		}
 		return \add_query_arg( $endpoint, $value, $permalink );
+	}
+
+	/**
+	 * Register the [newspack_my_account] shortcode.
+	 */
+	public static function register_shortcode() {
+		\add_shortcode( 'newspack_my_account', [ __CLASS__, 'render_page' ] );
+	}
+
+	/**
+	 * Render the My Account page body.
+	 *
+	 * Outputs the navigation and the content for the current endpoint. Used by
+	 * the [newspack_my_account] shortcode and block when WooCommerce is absent.
+	 *
+	 * @return string Rendered HTML.
+	 */
+	public static function render_page() {
+		if ( ! \is_user_logged_in() ) {
+			return '';
+		}
+
+		ob_start();
+		echo '<div class="newspack-my-account newspack-ui">';
+		self::render_navigation();
+		echo '<div class="newspack-my-account__content woocommerce-MyAccount-content">';
+		self::render_content();
+		echo '</div>';
+		echo '</div>';
+		return ob_get_clean();
+	}
+
+	/**
+	 * Render the navigation. Implemented in a later task (tab registry);
+	 * placeholder for now so render_page() is testable.
+	 */
+	protected static function render_navigation() {
+		// Replaced in a later task.
+	}
+
+	/**
+	 * Render the content for the current endpoint. Implemented in a later task
+	 * (dispatcher); placeholder for now.
+	 */
+	protected static function render_content() {
+		// Replaced in a later task.
 	}
 }
 

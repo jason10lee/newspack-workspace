@@ -1,0 +1,13 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "newspack/my-account",
+	"title": "My Account",
+	"category": "newspack",
+	"description": "Renders the Newspack My Account experience.",
+	"textdomain": "newspack-plugin",
+	"supports": {
+		"html": false,
+		"align": false
+	}
+}

@@ -98,4 +98,18 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 		wp_delete_post( $page_id, true );
 		delete_option( My_Account::PAGE_ID_OPTION );
 	}
+
+	/**
+	 * The [newspack_my_account] shortcode is registered and renders a container.
+	 */
+	public function test_shortcode_registered() {
+		My_Account::register_shortcode();
+		$this->assertTrue( shortcode_exists( 'newspack_my_account' ) );
+
+		$user_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		wp_set_current_user( $user_id );
+
+		$html = do_shortcode( '[newspack_my_account]' );
+		$this->assertStringContainsString( 'newspack-my-account', $html );
+	}
 }
