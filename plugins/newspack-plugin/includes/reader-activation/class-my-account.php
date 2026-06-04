@@ -38,6 +38,9 @@ class My_Account {
 	 */
 	public static function init() {
 		\add_action( 'init', [ __CLASS__, 'register_shortcode' ] );
+		if ( ! self::woocommerce_owns_shell() ) {
+			\add_filter( 'page_template', [ __CLASS__, 'page_template' ], 11 );
+		}
 	}
 
 	/**
@@ -142,6 +145,19 @@ class My_Account {
 	 */
 	public static function register_shortcode() {
 		\add_shortcode( 'newspack_my_account', [ __CLASS__, 'render_page' ] );
+	}
+
+	/**
+	 * Use the blank My Account page template on the native account page.
+	 *
+	 * @param string $template Template path.
+	 * @return string
+	 */
+	public static function page_template( $template ) {
+		if ( ! self::is_account_page() || ! \is_user_logged_in() ) {
+			return $template;
+		}
+		return NEWSPACK_ABSPATH . 'includes/plugins/woocommerce/my-account/templates/v1/my-account.php';
 	}
 
 	/**
