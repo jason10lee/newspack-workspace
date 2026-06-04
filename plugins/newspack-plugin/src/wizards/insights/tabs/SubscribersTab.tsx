@@ -2,12 +2,16 @@
  * SubscribersTab (NPPD-1616).
  *
  * Orchestrates the Tab 6 view: fetches data for the active range +
- * comparison range, then composes the classification banner + five
- * sections (scorecard, revenue, tenure, performance, cancellations).
+ * comparison range, then composes the four sections (scorecard,
+ * revenue, tenure, performance).
  *
  * Loading / error states are local to this tab; the wizard chrome
  * (date picker, comparison toggle, tab navigation) stays interactive
  * while the tab body is in any state.
+ *
+ * The REST endpoint still returns `cancellation_reasons` in the
+ * payload but it is no longer rendered — publisher data on this is
+ * sparse and the section wasn't pulling its weight.
  */
 
 /**
@@ -24,7 +28,6 @@ import ScorecardSection from './subscribers/ScorecardSection';
 import RevenueSection from './subscribers/RevenueSection';
 import TenureSection from './subscribers/TenureSection';
 import PerformanceSection from './subscribers/PerformanceSection';
-import CancellationReasonsSection from './subscribers/CancellationReasonsSection';
 import './subscribers/subscribers.scss';
 
 export interface SubscribersTabProps {
@@ -62,7 +65,6 @@ const SubscribersTab = ( { range, previousRange }: SubscribersTabProps ) => {
 			<RevenueSection current={ data.current } previous={ data.previous } />
 			<TenureSection rows={ data.snapshot.tenure_distribution } />
 			<PerformanceSection rows={ data.current.performance_by_product } />
-			<CancellationReasonsSection rows={ data.current.cancellation_reasons } activeSubscribers={ data.snapshot.active_subscribers } />
 		</div>
 	);
 };
