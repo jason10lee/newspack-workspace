@@ -115,6 +115,33 @@ class Insights_Wizard extends Wizard {
 	 *
 	 * @return array
 	 */
+	/**
+	 * Donors tab visibility. True when the publisher has at least one
+	 * donation product configured (per the union of canonical Newspack
+	 * donation family + manually flagged products).
+	 *
+	 * Wraps the shared {@see \Newspack\Insights\Donation_Product_Classifier}.
+	 * The classifier is loaded by the Donors / Subscribers sections'
+	 * `init()` callbacks, both of which run before this boot config
+	 * is requested by enqueue_scripts_and_styles. Falls back to true
+	 * if the classifier class isn't available (defensive — the section
+	 * file may have failed to load in development) so the tab still
+	 * appears and the missing-dep can be diagnosed.
+	 *
+	 * @return bool
+	 */
+	private static function has_donation_products(): bool {
+		if ( ! class_exists( '\Newspack\Insights\Donation_Product_Classifier' ) ) {
+			return true;
+		}
+		return ! empty( \Newspack\Insights\Donation_Product_Classifier::get_donation_product_ids() );
+	}
+
+	/**
+	 * Build the boot config consumed by the React entry.
+	 *
+	 * @return array
+	 */
 	protected function get_boot_config() {
 		// current_datetime() returns DateTimeImmutable; modify() returns a new
 		// instance and does not mutate $today. -29 days yields an inclusive
@@ -123,11 +150,15 @@ class Insights_Wizard extends Wizard {
 		$thirty_ago = $today->modify( '-29 days' );
 
 		return [
-			// Tab visibility. Real computation (feature detection: GAM
-			// dataset presence, scroll event presence, non-donation
-			// subscription product count, donation activity count) needs
-			// the BigQuery wrapper (NPPD-1598) plus Woo queries. Stubbed
-			// to all-on for now per the prompt's scope note.
+			// Tab visibility. The audience/engagement/conversion/gates/
+			// prompts/advertising tabs are stubbed to true until their
+			// data layers land (each needs BQ for proper feature
+			// detection, NPPD-1598). Subscribers stays all-on for now;
+			// Tab 6 visibility detection (non-donation subscription
+			// product presence) is a separate follow-up. Donors hides
+			// when there are no donation products on the publisher,
+			// using the shared Donation_Product_Classifier (cached 1h)
+			// as the single source of truth.
 			'tabs'              => [
 				'audience'    => true,
 				'engagement'  => true,
@@ -135,7 +166,7 @@ class Insights_Wizard extends Wizard {
 				'gates'       => true,
 				'prompts'     => true,
 				'subscribers' => true,
-				'donors'      => true,
+				'donors'      => self::has_donation_products(),
 				'advertising' => true,
 			],
 			'defaultDateRange'  => [
