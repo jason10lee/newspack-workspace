@@ -85,6 +85,13 @@ class My_Account {
 			[ 'newspack-ui' ],
 			NEWSPACK_PLUGIN_VERSION
 		);
+		// The classic theme pins the content column to its article width, which
+		// prevents the account content from expanding so its `margin: auto` can
+		// center it. Free the content column on the native account page.
+		\wp_add_inline_style(
+			'newspack-my-account-v1',
+			'.newspack-my-account--logged-in .main-content{width:100%;max-width:none}'
+		);
 		\wp_enqueue_script(
 			'newspack-ui',
 			\Newspack\Newspack::plugin_url() . '/dist/newspack-ui.js',
