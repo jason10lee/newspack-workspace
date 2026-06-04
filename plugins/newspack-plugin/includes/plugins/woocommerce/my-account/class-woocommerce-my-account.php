@@ -522,7 +522,7 @@ class WooCommerce_My_Account {
 				self::DELETE_ACCOUNT_FORM => $form_nonce,
 				'token'                   => $token,
 			],
-			\wc_get_account_endpoint_url( 'edit-account' )
+			My_Account::get_endpoint_url( My_Account::ENDPOINT_EDIT_ACCOUNT )
 		);
 		\set_transient( 'np_reader_account_delete_' . $user_id, $token, DAY_IN_SECONDS );
 

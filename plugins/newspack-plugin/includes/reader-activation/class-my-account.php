@@ -434,6 +434,12 @@ class My_Account {
 	 * link). Email-change verification reuses the shared handler.
 	 */
 	protected static function render_account_settings() {
+		// When arriving from the account-deletion email link, show the confirmation form.
+		if ( isset( $_GET[ WooCommerce_My_Account::DELETE_ACCOUNT_FORM ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- nonce is verified in render_delete_confirmation().
+			self::render_delete_confirmation();
+			return;
+		}
+
 		$user = \wp_get_current_user();
 		if ( ! $user || ! $user->ID ) {
 			return;
@@ -467,6 +473,46 @@ class My_Account {
 			<p class="woocommerce-buttons-card">
 				<a class="newspack-ui__button newspack-ui__button--destructive" href="<?php echo \esc_url( self::get_endpoint_url( self::ENDPOINT_DELETE_ACCOUNT ) ); ?>"><?php \esc_html_e( 'Delete account', 'newspack-plugin' ); ?></a>
 			</p>
+		</section>
+		<?php
+	}
+
+	/**
+	 * Render the account-deletion confirmation form (Woo absent).
+	 *
+	 * Reached when the reader clicks the link in the account-deletion email,
+	 * which lands on the edit-account endpoint carrying the deletion nonce and
+	 * token. Mirrors the safe happy-path of the Woo delete-account template but
+	 * uses no WooCommerce functions. Submitting the form is processed by
+	 * WooCommerce_My_Account::handle_delete_account() on template_redirect.
+	 */
+	protected static function render_delete_confirmation() {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- nonce is verified below before any output of the form.
+		$nonce = isset( $_GET[ WooCommerce_My_Account::DELETE_ACCOUNT_FORM ] ) ? \sanitize_text_field( \wp_unslash( $_GET[ WooCommerce_My_Account::DELETE_ACCOUNT_FORM ] ) ) : '';
+		if ( ! \wp_verify_nonce( $nonce, WooCommerce_My_Account::DELETE_ACCOUNT_FORM ) ) {
+			echo '<p>' . \esc_html__( 'Invalid request.', 'newspack-plugin' ) . '</p>';
+			return;
+		}
+
+		$token           = isset( $_GET['token'] ) ? \sanitize_text_field( \wp_unslash( $_GET['token'] ) ) : '';
+		$transient_token = \get_transient( 'np_reader_account_delete_' . \get_current_user_id() );
+		if ( ! $token || ! $transient_token || $token !== $transient_token ) {
+			echo '<p>' . \esc_html__( 'Invalid request.', 'newspack-plugin' ) . '</p>';
+			return;
+		}
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+		?>
+		<section id="delete-account-confirm">
+			<h4 class="newspack-ui__font--m is-destructive"><?php \esc_html_e( 'Delete account', 'newspack-plugin' ); ?></h4>
+			<p><?php \esc_html_e( 'Confirm to delete your account permanently.', 'newspack-plugin' ); ?></p>
+			<p><?php \esc_html_e( 'Deleting your account will also cancel any newsletter subscriptions and recurring payments.', 'newspack-plugin' ); ?></p>
+			<p><strong><?php \esc_html_e( 'Caution, this action is irreversible!', 'newspack-plugin' ); ?></strong></p>
+			<form method="post">
+				<input type="hidden" name="<?php echo \esc_attr( WooCommerce_My_Account::DELETE_ACCOUNT_FORM ); ?>" value="<?php echo \esc_attr( $nonce ); ?>" />
+				<input type="hidden" name="token" value="<?php echo \esc_attr( $token ); ?>" />
+				<input type="hidden" name="confirm_delete" value="1" />
+				<button type="submit" class="newspack-ui__button newspack-ui__button--destructive"><?php \esc_html_e( 'Delete account', 'newspack-plugin' ); ?></button>
+			</form>
 		</section>
 		<?php
 	}

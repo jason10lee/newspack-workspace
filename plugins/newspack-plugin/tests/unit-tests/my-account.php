@@ -6,6 +6,7 @@
  */
 
 use Newspack\My_Account;
+use Newspack\WooCommerce_My_Account;
 
 /**
  * Test the My_Account class.
@@ -192,5 +193,30 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 		$this->assertSame( 'new@example.com', $user->user_email );
 
 		unset( $_POST['newspack_my_account_save_nonce'], $_POST['account_display_name'], $_POST['account_email'] );
+	}
+
+	/**
+	 * Requesting account deletion natively stores a deletion token without fatal.
+	 *
+	 * Exercises send_delete_account_email(), whose URL line previously called the
+	 * Woo-only \wc_get_account_endpoint_url() and fataled when Woo was absent.
+	 */
+	public function test_native_delete_request_sets_token() {
+		if ( My_Account::woocommerce_owns_shell() ) {
+			$this->markTestSkipped( 'WooCommerce is active; native path not exercised.' );
+		}
+		$user = self::factory()->user->create_and_get( [ 'role' => 'subscriber' ] );
+		// Mark as a reader so the flow treats them as one if needed.
+		update_user_meta( $user->ID, 'np_reader', true );
+
+		$result = WooCommerce_My_Account::send_delete_account_email( $user );
+
+		// Token transient is set; no fatal calling the (formerly Woo-only) URL.
+		// This transient is the key proof that the URL line did not fatal.
+		$this->assertNotEmpty( get_transient( 'np_reader_account_delete_' . $user->ID ) );
+		// Emails::send_email may legitimately fail in the test env; only assert no fatal/error from the URL build.
+		$this->assertNotInstanceOf( 'WP_Error', $result );
+
+		delete_transient( 'np_reader_account_delete_' . $user->ID );
 	}
 }
