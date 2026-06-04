@@ -758,7 +758,9 @@ class Integrations {
 	 * @return array<string,string>
 	 */
 	public static function filter_native_my_account_endpoints( $endpoints ) {
-		self::register_my_account_endpoints();
+		if ( empty( self::$my_account_endpoints ) ) {
+			self::register_my_account_endpoints();
+		}
 		foreach ( self::$my_account_endpoints as $slug => $integration_id ) {
 			if ( isset( $endpoints[ $slug ] ) ) {
 				continue;
