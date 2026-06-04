@@ -52,6 +52,10 @@ class Newspack_Newsletters_Subscription {
 		add_filter( 'woocommerce_get_query_vars', [ __CLASS__, 'add_query_var' ] );
 		add_filter( 'woocommerce_account_menu_items', [ __CLASS__, 'add_menu_item' ], 20 );
 		add_action( 'woocommerce_account_newsletters_endpoint', [ __CLASS__, 'endpoint_content' ] );
+
+		/** Subscription management through Newspack's native My Account (no WooCommerce). */
+		add_filter( 'newspack_my_account_endpoints', [ __CLASS__, 'add_native_my_account_endpoint' ] );
+		add_action( 'newspack_my_account_content', [ __CLASS__, 'render_native_my_account_content' ] );
 		add_action( 'template_redirect', [ __CLASS__, 'process_subscription_update' ] );
 		add_action( 'init', [ __CLASS__, 'flush_rewrite_rules' ] );
 
@@ -791,7 +795,12 @@ class Newspack_Newsletters_Subscription {
 
 		$url = home_url();
 		if ( function_exists( 'wc_get_account_endpoint_url' ) ) {
-			$url = wc_get_account_endpoint_url( 'newsletters' );
+			$url = wc_get_account_endpoint_url( self::WC_ENDPOINT );
+		} elseif ( class_exists( 'Newspack\My_Account' ) ) {
+			$native_url = \Newspack\My_Account::get_endpoint_url( self::WC_ENDPOINT );
+			if ( $native_url ) {
+				$url = $native_url;
+			}
 		}
 		$url = add_query_arg(
 			[
@@ -859,9 +868,7 @@ class Newspack_Newsletters_Subscription {
 			\restore_previous_locale();
 		}
 
-		if ( function_exists( 'wc_add_notice' ) ) {
-			wc_add_notice( __( 'Check your email address for a verification link.', 'newspack-newsletters' ), 'success' );
-		}
+		self::add_account_notice( __( 'Check your email address for a verification link.', 'newspack-newsletters' ), 'success' );
 		wp_safe_redirect( add_query_arg( [ 'verification_sent' => 1 ], remove_query_arg( self::EMAIL_VERIFIED_REQUEST, wp_get_referer() ) ) );
 		exit;
 	}
@@ -889,9 +896,7 @@ class Newspack_Newsletters_Subscription {
 
 		delete_transient( $transient_key );
 
-		if ( function_exists( 'wc_add_notice' ) ) {
-			wc_add_notice( __( 'Your email has been verified.', 'newspack-newsletters' ), 'success' );
-		}
+		self::add_account_notice( __( 'Your email has been verified.', 'newspack-newsletters' ), 'success' );
 		wp_safe_redirect( remove_query_arg( [ self::EMAIL_VERIFIED_CONFIRM, 'token' ] ) );
 		exit;
 	}
@@ -945,6 +950,56 @@ class Newspack_Newsletters_Subscription {
 		$position       = -1;
 		$menu_item_name = __( 'Newsletters', 'newspack-newsletters' );
 		return array_slice( $menu_items, 0, $position, true ) + [ self::WC_ENDPOINT => $menu_item_name ] + array_slice( $menu_items, $position, null, true );
+	}
+
+	/**
+	 * Add the Newsletters endpoint to the native My Account nav (used when
+	 * WooCommerce is not active). Mirrors add_menu_item()'s gating.
+	 *
+	 * @param array $endpoints Map of slug => label.
+	 * @return array
+	 */
+	public static function add_native_my_account_endpoint( $endpoints ) {
+		if ( self::has_subscription_management() ) {
+			$endpoints[ self::WC_ENDPOINT ] = __( 'Newsletters', 'newspack-newsletters' );
+		}
+		return $endpoints;
+	}
+
+	/**
+	 * Render the Newsletters tab content on the native My Account page.
+	 *
+	 * @param string $endpoint Current My Account endpoint slug.
+	 */
+	public static function render_native_my_account_content( $endpoint ) {
+		if ( self::WC_ENDPOINT === $endpoint ) {
+			self::endpoint_content();
+		}
+	}
+
+	/**
+	 * Add a My Account notice, using WooCommerce notices when available and
+	 * falling back to Newspack UI snackbars on the native (no-WooCommerce) page.
+	 *
+	 * @param string $message Notice message.
+	 * @param string $type    Notice type: 'success' | 'error' | 'notice'.
+	 */
+	private static function add_account_notice( $message, $type = 'success' ) {
+		if ( function_exists( 'wc_add_notice' ) ) {
+			wc_add_notice( $message, $type );
+			return;
+		}
+		if ( class_exists( 'Newspack\Newspack_UI' ) ) {
+			\Newspack\Newspack_UI::add_notice(
+				$message,
+				[
+					'type'           => $type,
+					'corner'         => 'top-right',
+					'autohide'       => true,
+					'active_on_load' => true,
+				]
+			);
+		}
 	}
 
 	/**
@@ -1046,7 +1101,7 @@ class Newspack_Newsletters_Subscription {
 			return;
 		}
 		if ( ! is_user_logged_in() || ! self::is_email_verified() ) {
-			wc_add_notice( __( 'You must be logged in and verified to update your subscriptions.', 'newspack-newsletters' ), 'error' );
+			self::add_account_notice( __( 'You must be logged in and verified to update your subscriptions.', 'newspack-newsletters' ), 'error' );
 		} else {
 			$email         = get_userdata( get_current_user_id() )->user_email;
 			$lists         = isset( $_POST['lists'] ) ? array_map( 'sanitize_text_field', $_POST['lists'] ) : [];
@@ -1073,11 +1128,11 @@ class Newspack_Newsletters_Subscription {
 						$result
 					)
 					: $result->get_error_message();
-				wc_add_notice( $message, 'error' );
+				self::add_account_notice( $message, 'error' );
 			} elseif ( false === $result ) {
-				wc_add_notice( __( 'You must select newsletters to update.', 'newspack-newsletters' ), 'error' );
+				self::add_account_notice( __( 'You must select newsletters to update.', 'newspack-newsletters' ), 'error' );
 			} else {
-				wc_add_notice( __( 'Your subscriptions were updated.', 'newspack-newsletters' ), 'success' );
+				self::add_account_notice( __( 'Your subscriptions were updated.', 'newspack-newsletters' ), 'success' );
 				if ( ! empty( $lists_to_add ) ) {
 					wp_safe_redirect(
 						add_query_arg(
