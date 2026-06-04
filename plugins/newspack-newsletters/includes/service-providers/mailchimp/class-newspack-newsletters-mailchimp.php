@@ -1211,6 +1211,49 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			$payload = apply_filters( 'newspack_newsletters_mc_payload_sync', $payload, $post, $mc_campaign_id );
 
 			if ( $mc_campaign_id ) {
+				// Mailchimp snapshots ad-hoc "advanced segments"
+				// (segment_opts.conditions, as opposed to a saved segment
+				// referenced by ID) at PATCH time and does not refresh the
+				// campaign's `recipient_count` when a populated segment_opts is
+				// swapped for another populated segment_opts in a subsequent
+				// PATCH — the campaign keeps the prior snapshot's recipient
+				// count even though its stored conditions are correctly updated.
+				// Empirically the only PATCH shape that triggers a fresh
+				// snapshot is the transition from "no segment" to "populated
+				// segment". So before PATCHing a populated segment_opts onto an
+				// existing campaign, first PATCH segment_opts to an empty
+				// object to force Mailchimp through that transition.
+				//
+				// The reset PATCH is best-effort: if Mailchimp rejects it
+				// (e.g. the campaign is already sent or otherwise locked), let
+				// the main PATCH below produce the canonical error.
+				//
+				// References:
+				// - https://mailchimp.com/help/troubleshooting-advanced-segments/
+				// - https://mailchimp.com/help/schedule-or-pause-a-regular-email-campaign/
+				if (
+					isset( $payload['recipients']['segment_opts'], $payload['recipients']['list_id'] ) &&
+					! empty( (array) $payload['recipients']['segment_opts'] )
+				) {
+					try {
+						$this->validate(
+							$mc->patch(
+								"campaigns/$mc_campaign_id",
+								[
+									'recipients' => [
+										'list_id'      => $payload['recipients']['list_id'],
+										'segment_opts' => (object) [],
+									],
+								]
+							)
+						);
+					} catch ( Exception $reset_error ) {
+						Newspack_Newsletters_Logger::log(
+							'Mailchimp segment_opts reset failed for campaign ' . $mc_campaign_id . ': ' . $reset_error->getMessage() . ' — proceeding with main PATCH.'
+						);
+					}
+				}
+
 				$campaign_result = $this->validate(
 					$mc->patch( "campaigns/$mc_campaign_id", $payload )
 				);
