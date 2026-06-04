@@ -1019,7 +1019,7 @@ class Newspack_Newsletters_Subscription {
 					<?php esc_html_e( 'Please verify your email address before managing your newsletters subscriptions.', 'newspack-newsletters' ); ?>
 				</p>
 				<p>
-					<a href="<?php echo esc_url( wp_nonce_url( remove_query_arg( self::EMAIL_VERIFIED_REQUEST ), self::EMAIL_VERIFIED_REQUEST, self::EMAIL_VERIFIED_REQUEST ) ); ?>" class="button button-primary">
+					<a href="<?php echo esc_url( wp_nonce_url( remove_query_arg( self::EMAIL_VERIFIED_REQUEST ), self::EMAIL_VERIFIED_REQUEST, self::EMAIL_VERIFIED_REQUEST ) ); ?>" class="newspack-ui__button newspack-ui__button--primary">
 						<?php esc_html_e( 'Verify Email', 'newspack-newsletters' ); ?>
 					</a>
 				</p>
