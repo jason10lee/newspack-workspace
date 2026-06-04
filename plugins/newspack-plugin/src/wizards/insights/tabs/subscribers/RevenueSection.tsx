@@ -35,7 +35,6 @@ const RevenueSection = ( { current, previous }: RevenueSectionProps ) => (
 				description={ __( 'Subscription orders in selected timeframe (before refunds)', 'newspack-plugin' ) }
 			/>
 			<MetricCard
-				primary
 				label={ __( 'Net revenue', 'newspack-plugin' ) }
 				value={ current.revenue_net }
 				format="currency"

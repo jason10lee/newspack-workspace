@@ -31,14 +31,12 @@ const ScorecardSection = ( { snapshot, current, previous }: ScorecardSectionProp
 		</h2>
 		<div className="newspack-insights__metric-grid">
 			<MetricCard
-				primary
 				label={ __( 'Active subscribers', 'newspack-plugin' ) }
 				value={ snapshot.active_subscribers }
 				format="number"
 				description={ __( 'Distinct customers with at least one active subscription', 'newspack-plugin' ) }
 			/>
 			<MetricCard
-				primary
 				label={ __( 'Monthly recurring revenue', 'newspack-plugin' ) }
 				value={ snapshot.mrr }
 				format="currency"

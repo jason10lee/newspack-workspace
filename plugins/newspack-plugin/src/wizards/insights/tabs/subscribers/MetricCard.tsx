@@ -1,13 +1,14 @@
 /**
  * MetricCard (NPPD-1616).
  *
- * Scorecard atom: label + big value + optional previous-window delta.
- * Composed by ScorecardSection and RevenueSection.
+ * Scorecard atom: label (top) → value + optional delta (vertically
+ * centered hero region) → description (pinned to the bottom). Every
+ * card carries the brand-color top accent so all cards in a row read
+ * as a single coherent unit, and the hero numbers line up at the same
+ * vertical position regardless of label or description height.
  *
- * `primary` controls visual weight (44px value per spec value-lg; the
- * default 32px secondary uses value-md). `lowerIsBetter` flips the
- * green/red delta tone for metrics where a decrease is desirable
- * (refund rate, churned subscriber count).
+ * `lowerIsBetter` flips the green/red delta tone for metrics where a
+ * decrease is desirable (refund rate, churned subscriber count).
  */
 
 /**
@@ -28,7 +29,6 @@ export interface MetricCardProps {
 	format: MetricFormat;
 	previousValue?: number;
 	description?: string;
-	primary?: boolean;
 	lowerIsBetter?: boolean;
 }
 
@@ -43,7 +43,7 @@ const formatValue = ( v: number, fmt: MetricFormat ): string => {
 };
 
 const MetricCard = ( props: MetricCardProps ) => {
-	const { label, value, format, previousValue, description, primary = false, lowerIsBetter = false } = props;
+	const { label, value, format, previousValue, description, lowerIsBetter = false } = props;
 	const hasComparison = typeof previousValue === 'number';
 	const delta = hasComparison ? formatDelta( value, previousValue as number ) : null;
 	const tone = hasComparison ? deltaTone( value, previousValue as number, lowerIsBetter ) : 'neutral';
@@ -56,20 +56,20 @@ const MetricCard = ( props: MetricCardProps ) => {
 			  )
 			: null;
 
-	const cardClass = `newspack-insights__metric-card${ primary ? ' newspack-insights__metric-card--primary' : '' }`;
-
 	return (
-		<div className={ cardClass }>
+		<div className="newspack-insights__metric-card">
 			<div className="newspack-insights__metric-card-label">{ label }</div>
-			<div className="newspack-insights__metric-card-value">{ formatValue( value, format ) }</div>
-			{ hasComparison && delta && (
-				<div
-					className={ `newspack-insights__metric-card-delta newspack-insights__metric-card-delta--${ tone }` }
-					aria-label={ deltaA11y ?? undefined }
-				>
-					{ delta }
-				</div>
-			) }
+			<div className="newspack-insights__metric-card-body">
+				<div className="newspack-insights__metric-card-value">{ formatValue( value, format ) }</div>
+				{ hasComparison && delta && (
+					<div
+						className={ `newspack-insights__metric-card-delta newspack-insights__metric-card-delta--${ tone }` }
+						aria-label={ deltaA11y ?? undefined }
+					>
+						{ delta }
+					</div>
+				) }
+			</div>
 			{ description && <div className="newspack-insights__metric-card-description">{ description }</div> }
 		</div>
 	);
