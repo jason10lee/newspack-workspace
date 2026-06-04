@@ -277,11 +277,55 @@ class My_Account {
 	}
 
 	/**
-	 * Render the content for the current endpoint. Implemented in a later task
-	 * (dispatcher); placeholder for now.
+	 * Render the content for the current endpoint.
+	 *
+	 * Core endpoints render their own templates; the dashboard renders the
+	 * default landing. Integration endpoints are rendered by the
+	 * newspack_my_account_content action.
 	 */
-	protected static function render_content() {
-		// Replaced in a later task.
+	public static function render_content() {
+		$endpoint = self::get_current_endpoint();
+
+		switch ( $endpoint ) {
+			case self::ENDPOINT_EDIT_ACCOUNT:
+				self::render_account_settings();
+				break;
+			case self::ENDPOINT_DELETE_ACCOUNT:
+				self::render_delete_account();
+				break;
+			case '':
+				self::render_dashboard();
+				break;
+		}
+
+		/**
+		 * Fires when rendering My Account content for an endpoint. Integrations
+		 * hook this to render their tab body when their slug is current.
+		 *
+		 * @param string $endpoint Current endpoint slug ('' for dashboard).
+		 */
+		\do_action( 'newspack_my_account_content', $endpoint );
+	}
+
+	/**
+	 * Render the dashboard landing. Stub; refined in a later task.
+	 */
+	protected static function render_dashboard() {
+		echo '<p>' . \esc_html__( 'Welcome to your account.', 'newspack-plugin' ) . '</p>';
+	}
+
+	/**
+	 * Render the account settings tab. Implemented in a later task.
+	 */
+	protected static function render_account_settings() {
+		// Implemented in a later task.
+	}
+
+	/**
+	 * Render the delete-account tab. Implemented in a later task.
+	 */
+	protected static function render_delete_account() {
+		// Implemented in a later task.
 	}
 }
 

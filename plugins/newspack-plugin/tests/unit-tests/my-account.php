@@ -133,4 +133,27 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'edit-account', $endpoints );
 		$this->assertArrayHasKey( 'newspack-delete-account', $endpoints );
 	}
+
+	/**
+	 * The dispatcher fires the newspack_my_account_content action for the
+	 * current endpoint and the core content callback for the dashboard.
+	 */
+	public function test_render_content_dispatch() {
+		$fired = [];
+		add_action(
+			'newspack_my_account_content',
+			function ( $endpoint ) use ( &$fired ) {
+				$fired[] = $endpoint;
+			}
+		);
+
+		$user_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		wp_set_current_user( $user_id );
+
+		ob_start();
+		My_Account::render_content();
+		ob_get_clean();
+
+		$this->assertSame( [ '' ], $fired );
+	}
 }
