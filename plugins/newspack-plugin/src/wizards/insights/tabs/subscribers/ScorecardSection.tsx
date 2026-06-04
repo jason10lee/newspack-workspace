@@ -61,7 +61,7 @@ const ScorecardSection = ( { snapshot, current, previous }: ScorecardSectionProp
 				format="number"
 				previousValue={ previous?.churned_subscribers }
 				lowerIsBetter
-				description={ __( 'Lost all active subscriptions in selected timeframe', 'newspack-plugin' ) }
+				description={ __( 'Subscribers who churned in this timeframe', 'newspack-plugin' ) }
 			/>
 			<MetricCard
 				label={ __( 'Upcoming renewals (30d)', 'newspack-plugin' ) }
