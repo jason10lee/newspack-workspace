@@ -136,12 +136,15 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Native get_tabs() returns ordered slug => label entries including core tabs.
+	 * Native get_tabs() returns ordered slug => label entries: account details,
+	 * then logout last, excluding the dashboard and delete-account endpoints.
 	 */
 	public function test_get_tabs() {
 		$tabs = My_Account::get_tabs();
 		$this->assertArrayHasKey( 'edit-account', $tabs );
 		$this->assertArrayHasKey( 'customer-logout', $tabs );
+		$this->assertArrayNotHasKey( '', $tabs );
+		$this->assertArrayNotHasKey( My_Account::ENDPOINT_DELETE_ACCOUNT, $tabs );
 		// Logout is always last.
 		$this->assertSame( 'customer-logout', array_key_last( $tabs ) );
 	}

@@ -53,6 +53,7 @@ class My_Account {
 			\add_filter( 'page_template', [ __CLASS__, 'page_template' ], 11 );
 			\add_action( 'init', [ __CLASS__, 'register_endpoints' ], 6 );
 			\add_filter( 'query_vars', [ __CLASS__, 'add_query_vars' ] );
+			\add_action( 'template_redirect', [ __CLASS__, 'redirect_dashboard_to_account_details' ], 5 );
 			\add_action( 'template_redirect', [ __CLASS__, 'handle_form_submissions' ] );
 			\add_action( 'admin_init', [ __CLASS__, 'maybe_provision_page' ] );
 			\add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_assets' ], 11 );
@@ -175,6 +176,22 @@ class My_Account {
 		if ( 'newspack_my_account_request_delete' === $action ) {
 			self::handle_delete_request();
 		}
+	}
+
+	/**
+	 * Redirect the base account page to the Account details endpoint.
+	 *
+	 * The dashboard has no standalone view; Account details is the default.
+	 */
+	public static function redirect_dashboard_to_account_details() {
+		if ( ! \is_user_logged_in() || ! self::is_account_page() ) {
+			return;
+		}
+		if ( '' !== self::get_current_endpoint() ) {
+			return;
+		}
+		\wp_safe_redirect( self::get_endpoint_url( self::ENDPOINT_EDIT_ACCOUNT ) );
+		exit;
 	}
 
 	/**
@@ -318,14 +335,18 @@ class My_Account {
 	/**
 	 * Get the ordered set of navigation tabs (slug => label).
 	 *
-	 * Dashboard first, then endpoints (core + integration), then logout last.
+	 * Account details first, then integration endpoints, then logout last. The
+	 * dashboard and the delete-account endpoint are intentionally excluded:
+	 * the base account URL redirects to Account details, and account deletion
+	 * lives within the Account details screen.
 	 *
 	 * @return array<string,string>
 	 */
 	public static function get_tabs() {
+		$endpoints = self::get_endpoints();
+		unset( $endpoints[ self::ENDPOINT_DELETE_ACCOUNT ] );
 		$tabs = array_merge(
-			[ '' => \__( 'Account', 'newspack-plugin' ) ],
-			self::get_endpoints(),
+			$endpoints,
 			[ 'customer-logout' => \__( 'Sign out', 'newspack-plugin' ) ]
 		);
 		/**
@@ -432,28 +453,57 @@ class My_Account {
 
 	/**
 	 * Render the native navigation menu.
+	 *
+	 * Mirrors the structure of templates/v1/navigation.php so the sidebar CSS
+	 * (dist/my-account-v1.css) applies, using native tab data instead of
+	 * WooCommerce menu functions.
 	 */
 	protected static function render_navigation() {
 		$current = self::get_current_endpoint();
-		echo '<nav class="woocommerce-MyAccount-navigation newspack-ui" aria-label="' . \esc_attr__( 'Account pages', 'newspack-plugin' ) . '">';
-		echo '<ul>';
-		foreach ( self::get_tabs() as $slug => $label ) {
-			if ( 'customer-logout' === $slug ) {
-				$url = \wp_logout_url( \home_url( '/' ) );
-			} else {
-				$url = self::get_endpoint_url( $slug );
-			}
-			$is_current = ( $slug === $current );
-			printf(
-				'<li class="%1$s"><a href="%2$s"%3$s>%4$s</a></li>',
-				\esc_attr( $is_current ? 'is-active' : '' ),
-				\esc_url( $url ),
-				$is_current ? ' aria-current="page"' : '',
-				\esc_html( $label )
-			);
+		$tabs    = self::get_tabs();
+		$logout  = null;
+		if ( isset( $tabs['customer-logout'] ) ) {
+			$logout = $tabs['customer-logout'];
+			unset( $tabs['customer-logout'] );
 		}
-		echo '</ul>';
-		echo '</nav>';
+		$site_logo = \get_site_icon_url( 96 );
+		?>
+		<nav class="woocommerce-MyAccount-navigation newspack-ui" aria-label="<?php \esc_attr_e( 'Account pages', 'newspack-plugin' ); ?>">
+			<div class="newspack-my-account__navigation-header">
+				<?php if ( ! empty( $site_logo ) ) : ?>
+					<a class="newspack-my-account__site-logo" href="<?php echo \esc_url( \home_url( '/' ) ); ?>" title="<?php \esc_attr_e( 'Back to Homepage', 'newspack-plugin' ); ?>">
+						<img src="<?php echo \esc_url( $site_logo ); ?>" alt="" />
+					</a>
+				<?php endif; ?>
+				<a href="<?php echo \esc_url( \home_url( '/' ) ); ?>" class="newspack-my-account__home-link newspack-ui__button newspack-ui__button--small newspack-ui__button--ghost-light">
+					<?php Newspack_UI_Icons::print_svg( 'chevronLeft' ); ?>
+					<?php \esc_html_e( 'Back to Homepage', 'newspack-plugin' ); ?>
+				</a>
+				<ul>
+					<?php foreach ( $tabs as $newspack_tab_slug => $newspack_tab_label ) : ?>
+						<?php $is_current = ( $newspack_tab_slug === $current ) || ( '' === $current && self::ENDPOINT_EDIT_ACCOUNT === $newspack_tab_slug ); ?>
+						<li class="<?php echo \esc_attr( $is_current ? 'is-active' : '' ); ?>">
+							<a href="<?php echo \esc_url( self::get_endpoint_url( $newspack_tab_slug ) ); ?>"<?php echo $is_current ? ' aria-current="page"' : ''; ?> class="newspack-ui__button newspack-ui__button--small <?php echo $is_current ? 'newspack-ui__button--accent' : 'newspack-ui__button--ghost'; ?>">
+								<?php echo \esc_html( $newspack_tab_label ); ?>
+							</a>
+						</li>
+					<?php endforeach; ?>
+				</ul>
+			</div>
+			<?php if ( $logout ) : ?>
+			<div class="newspack-my-account__navigation-footer">
+				<ul>
+					<li>
+						<a href="<?php echo \esc_url( \wp_logout_url( \home_url( '/' ) ) ); ?>" class="newspack-ui__button newspack-ui__button--small newspack-ui__button--ghost">
+							<?php echo \esc_html( $logout ); ?>
+							<?php Newspack_UI_Icons::print_svg( 'logout' ); ?>
+						</a>
+					</li>
+				</ul>
+			</div>
+			<?php endif; ?>
+		</nav>
+		<?php
 	}
 
 	/**
