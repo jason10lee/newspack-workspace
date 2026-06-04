@@ -124,6 +124,7 @@ final class Reader_Activation {
 			\add_filter( 'lostpassword_errors', [ __CLASS__, 'rate_limit_lost_password' ], 10, 2 );
 			\add_filter( 'newspack_esp_sync_contact', [ __CLASS__, 'set_mailchimp_sync_contact_status' ], 10, 2 );
 			\add_filter( 'login_url', [ __CLASS__, 'redirect_oauth_to_ras_login' ], 10, 3 );
+			\add_filter( 'show_admin_bar', [ __CLASS__, 'hide_admin_bar_for_readers' ] ); // phpcs:ignore WordPressVIPMinimum.UserExperience.AdminBarRemoval.RemovalDetected
 
 			/**
 			 * If RAS is enabled, we assume that any user created by Woo is a reader, without a password and unverified.
@@ -1212,6 +1213,35 @@ final class Reader_Activation {
 		 * @param \WP_User $user      User object.
 		 */
 		return (bool) \apply_filters( 'newspack_is_user_reader', $is_reader, $user );
+	}
+
+	/**
+	 * Hide the WordPress admin bar on the front end for reader-role users.
+	 *
+	 * Administrators and editors keep the admin bar so they can still manage the
+	 * site. The behavior is filterable via `newspack_hide_admin_bar_for_readers`.
+	 *
+	 * @param bool $show Whether to show the admin bar.
+	 * @return bool
+	 */
+	public static function hide_admin_bar_for_readers( $show ) {
+		if ( \is_admin() ) {
+			return $show;
+		}
+		$user = \wp_get_current_user();
+		if ( ! $user || ! $user->ID || ! self::is_user_reader( $user ) ) {
+			return $show;
+		}
+		/**
+		 * Filters whether to hide the admin bar for reader-role users on the front end.
+		 *
+		 * @param bool     $hide Whether to hide the admin bar for this reader. Default true.
+		 * @param \WP_User $user The current reader user.
+		 */
+		if ( \apply_filters( 'newspack_hide_admin_bar_for_readers', true, $user ) ) {
+			return false;
+		}
+		return $show;
 	}
 
 	/**

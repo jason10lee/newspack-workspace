@@ -250,4 +250,19 @@ class Newspack_Test_Reader_Activation extends WP_UnitTestCase {
 
 		wp_delete_user( $user_id ); // Clean up.
 	}
+
+	/**
+	 * The admin bar is hidden on the front end for readers but kept for admins.
+	 */
+	public function test_hide_admin_bar_for_readers() {
+		$reader_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		wp_set_current_user( $reader_id );
+		$this->assertFalse( Reader_Activation::hide_admin_bar_for_readers( true ) );
+
+		$admin_id = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		wp_set_current_user( $admin_id );
+		$this->assertTrue( Reader_Activation::hide_admin_bar_for_readers( true ) );
+
+		wp_set_current_user( 0 );
+	}
 }
