@@ -896,12 +896,9 @@ class WooCommerce_My_Account {
 	 * @return string The filtered destination URL.
 	 */
 	public static function redirect_to_home_after_logout( $redirect_to ) {
-		if ( ! function_exists( 'wc_get_page_permalink' ) ) {
-			return;
-		}
-
-		if ( \wc_get_page_permalink( 'myaccount' ) === $redirect_to ) {
-			$redirect_to = \get_home_url();
+		$account_url = My_Account::get_endpoint_url();
+		if ( $account_url && $account_url === $redirect_to ) {
+			return \get_home_url();
 		}
 
 		return $redirect_to;

@@ -357,4 +357,24 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 
 		delete_option( My_Account::PAGE_ID_OPTION );
 	}
+
+	/**
+	 * Logout redirect never nulls the redirect target and sends the account page home.
+	 */
+	public function test_redirect_to_home_after_logout() {
+		$page_id = self::factory()->post->create( [ 'post_type' => 'page' ] );
+		update_option( My_Account::PAGE_ID_OPTION, $page_id );
+
+		// A non-account redirect target passes through unchanged (never null).
+		$home = home_url( '/' );
+		$this->assertSame( $home, WooCommerce_My_Account::redirect_to_home_after_logout( $home ) );
+
+		// Logging out from the account page redirects home.
+		$account_url = My_Account::get_endpoint_url();
+		if ( $account_url ) {
+			$this->assertSame( get_home_url(), WooCommerce_My_Account::redirect_to_home_after_logout( $account_url ) );
+		}
+
+		delete_option( My_Account::PAGE_ID_OPTION );
+	}
 }
