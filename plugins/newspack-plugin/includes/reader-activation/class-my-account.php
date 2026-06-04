@@ -50,6 +50,22 @@ class My_Account {
 	}
 
 	/**
+	 * Whether the current reader must verify their account before accessing
+	 * account content (mirrors WooCommerce_My_Account::restrict_account_content).
+	 *
+	 * @return bool
+	 */
+	protected static function reader_must_verify() {
+		if ( defined( 'NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION' ) && NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION ) {
+			return false;
+		}
+		if ( ! \class_exists( 'Newspack\WooCommerce_My_Account' ) ) {
+			return false;
+		}
+		return \is_user_logged_in() && ! WooCommerce_My_Account::is_user_verified();
+	}
+
+	/**
 	 * Initialize hooks.
 	 */
 	public static function init() {
@@ -205,6 +221,62 @@ class My_Account {
 	}
 
 	/**
+	 * Handle the native password change (Woo absent).
+	 *
+	 * @return bool True on success.
+	 */
+	public static function handle_password_change() {
+		if ( ! \is_user_logged_in() ) {
+			return false;
+		}
+		$nonce = isset( $_POST['newspack_my_account_password_nonce'] ) ? \sanitize_text_field( \wp_unslash( $_POST['newspack_my_account_password_nonce'] ) ) : '';
+		if ( ! \wp_verify_nonce( $nonce, 'newspack_my_account_password' ) ) {
+			return false;
+		}
+		$user  = \wp_get_current_user();
+		$pass1 = isset( $_POST['password_1'] ) ? (string) \wp_unslash( $_POST['password_1'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- passwords are not sanitized.
+		$pass2 = isset( $_POST['password_2'] ) ? (string) \wp_unslash( $_POST['password_2'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- passwords are not sanitized.
+
+		if ( '' === $pass1 || $pass1 !== $pass2 ) {
+			self::set_notice( \__( 'Passwords do not match. Please try again.', 'newspack-plugin' ), 'error' );
+			return false;
+		}
+		// Require the current password unless the reader has none yet.
+		if ( ! Reader_Activation::is_reader_without_password( $user ) ) {
+			$current = isset( $_POST['current_password'] ) ? (string) \wp_unslash( $_POST['current_password'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- passwords are not sanitized.
+			if ( '' === $current || ! \wp_check_password( $current, $user->data->user_pass, $user->ID ) ) {
+				self::set_notice( \__( 'Your current password is incorrect.', 'newspack-plugin' ), 'error' );
+				return false;
+			}
+		}
+		\wp_update_user(
+			[
+				'ID'        => $user->ID,
+				'user_pass' => $pass1,
+			]
+		);
+		self::set_notice( \__( 'Password updated.', 'newspack-plugin' ), 'success' );
+		return true;
+	}
+
+	/**
+	 * Store a one-time My Account notice for the current user (shown after redirect).
+	 *
+	 * @param string $message Notice message.
+	 * @param string $type    'success' | 'error'.
+	 */
+	private static function set_notice( $message, $type = 'success' ) {
+		\set_transient(
+			self::NOTICE_TRANSIENT_PREFIX . \get_current_user_id(),
+			[
+				'message' => $message,
+				'type'    => $type,
+			],
+			\MINUTE_IN_SECONDS
+		);
+	}
+
+	/**
 	 * Route native form POSTs to their handlers on the `template_redirect` hook.
 	 *
 	 * The form `action` value is only used for routing; each target handler runs
@@ -219,11 +291,15 @@ class My_Account {
 		// phpcs:enable WordPress.Security.NonceVerification.Missing
 		if ( 'newspack_my_account_save_account' === $action ) {
 			$saved = self::handle_save_account();
-			\set_transient(
-				self::NOTICE_TRANSIENT_PREFIX . \get_current_user_id(),
-				$saved ? 'success' : 'error',
-				\MINUTE_IN_SECONDS
+			self::set_notice(
+				$saved ? \__( 'Account details changed successfully.', 'newspack-plugin' ) : \__( 'Something went wrong. Please try again.', 'newspack-plugin' ),
+				$saved ? 'success' : 'error'
 			);
+			\wp_safe_redirect( self::get_endpoint_url( self::ENDPOINT_EDIT_ACCOUNT ) );
+			exit;
+		}
+		if ( 'newspack_my_account_save_password' === $action ) {
+			self::handle_password_change();
 			\wp_safe_redirect( self::get_endpoint_url( self::ENDPOINT_EDIT_ACCOUNT ) );
 			exit;
 		}
@@ -239,30 +315,48 @@ class My_Account {
 		if ( ! \is_user_logged_in() || ! self::is_account_page() ) {
 			return;
 		}
-		$key    = self::NOTICE_TRANSIENT_PREFIX . \get_current_user_id();
-		$result = \get_transient( $key );
-		if ( false === $result ) {
-			return;
-		}
-		\delete_transient( $key );
 
-		if ( 'success' === $result ) {
-			$message = \__( 'Account details changed successfully.', 'newspack-plugin' );
-			$type    = 'success';
-		} else {
-			$message = \__( 'Something went wrong. Please try again.', 'newspack-plugin' );
-			$type    = 'error';
-		}
-		if ( \class_exists( 'Newspack\Newspack_UI' ) ) {
+		// Native equivalent of WooCommerce_My_Account::handle_messages(): show the
+		// `?message=...&is_error=...` feedback used by the verify-account buttons.
+		$message = filter_input( INPUT_GET, 'message', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
+		if ( $message && \class_exists( 'Newspack\Newspack_UI' ) ) {
+			$is_error = (bool) filter_input( INPUT_GET, 'is_error', FILTER_VALIDATE_BOOLEAN );
 			Newspack_UI::add_notice(
 				$message,
 				[
-					'type'           => $type,
+					'type'           => $is_error ? 'error' : 'success',
 					'corner'         => 'top-right',
 					'autohide'       => true,
 					'active_on_load' => true,
 				]
 			);
+		}
+
+		$key    = self::NOTICE_TRANSIENT_PREFIX . \get_current_user_id();
+		$stored = \get_transient( $key );
+		if ( false !== $stored ) {
+			\delete_transient( $key );
+			if ( \class_exists( 'Newspack\Newspack_UI' ) ) {
+				if ( is_array( $stored ) ) {
+					$msg  = isset( $stored['message'] ) ? $stored['message'] : '';
+					$type = isset( $stored['type'] ) ? $stored['type'] : 'success';
+				} else {
+					// Back-compat with the old string form.
+					$type = ( 'success' === $stored ) ? 'success' : 'error';
+					$msg  = ( 'success' === $stored ) ? \__( 'Account details changed successfully.', 'newspack-plugin' ) : \__( 'Something went wrong. Please try again.', 'newspack-plugin' );
+				}
+				if ( $msg ) {
+					Newspack_UI::add_notice(
+						$msg,
+						[
+							'type'           => $type,
+							'corner'         => 'top-right',
+							'autohide'       => true,
+							'active_on_load' => true,
+						]
+					);
+				}
+			}
 		}
 	}
 
@@ -446,6 +540,20 @@ class My_Account {
 	 * @return array<string,string>
 	 */
 	public static function get_tabs() {
+		if ( self::reader_must_verify() ) {
+			/**
+			 * Filters the ordered My Account navigation tabs.
+			 *
+			 * @param array<string,string> $tabs slug => label.
+			 */
+			return \apply_filters(
+				'newspack_my_account_tabs',
+				[
+					self::ENDPOINT_EDIT_ACCOUNT => \__( 'Account details', 'newspack-plugin' ),
+					'customer-logout'           => \__( 'Sign out', 'newspack-plugin' ),
+				]
+			);
+		}
 		$endpoints = self::get_endpoints();
 		unset( $endpoints[ self::ENDPOINT_DELETE_ACCOUNT ] );
 		$tabs = array_merge(
@@ -619,6 +727,11 @@ class My_Account {
 	 * newspack_my_account_content action.
 	 */
 	public static function render_content() {
+		if ( self::reader_must_verify() ) {
+			include NEWSPACK_ABSPATH . 'includes/plugins/woocommerce/my-account/templates/verify.php';
+			return;
+		}
+
 		$endpoint = self::get_current_endpoint();
 
 		switch ( $endpoint ) {
@@ -684,6 +797,34 @@ class My_Account {
 					<?php \wp_nonce_field( 'newspack_my_account_save', 'newspack_my_account_save_nonce' ); ?>
 					<input type="hidden" name="action" value="newspack_my_account_save_account" />
 					<button type="submit" class="newspack-ui__button newspack-ui__button--primary"><?php \esc_html_e( 'Update profile', 'newspack-plugin' ); ?></button>
+				</p>
+			</form>
+		</section>
+		<?php
+		$newspack_user             = \wp_get_current_user();
+		$newspack_without_password = $newspack_user && true === Reader_Activation::is_reader_without_password( $newspack_user );
+		?>
+		<section id="account-password">
+			<h4 class="newspack-ui__font--m"><?php \esc_html_e( 'Password', 'newspack-plugin' ); ?></h4>
+			<form class="newspack-my-account__password-form" method="post" action="">
+				<?php if ( ! $newspack_without_password ) : ?>
+				<p class="woocommerce-form-row form-row form-row-wide">
+					<label for="current_password"><?php \esc_html_e( 'Current password', 'newspack-plugin' ); ?>&nbsp;<span class="required">*</span></label>
+					<input type="password" class="woocommerce-Input input-text" name="current_password" id="current_password" autocomplete="current-password" required />
+				</p>
+				<?php endif; ?>
+				<p class="woocommerce-form-row form-row form-row-wide">
+					<label for="password_1"><?php \esc_html_e( 'New password', 'newspack-plugin' ); ?>&nbsp;<span class="required">*</span></label>
+					<input type="password" class="woocommerce-Input input-text" name="password_1" id="password_1" autocomplete="new-password" required />
+				</p>
+				<p class="woocommerce-form-row form-row form-row-wide">
+					<label for="password_2"><?php \esc_html_e( 'Re-enter new password', 'newspack-plugin' ); ?>&nbsp;<span class="required">*</span></label>
+					<input type="password" class="woocommerce-Input input-text" name="password_2" id="password_2" autocomplete="new-password" required />
+				</p>
+				<p class="woocommerce-buttons-card">
+					<?php \wp_nonce_field( 'newspack_my_account_password', 'newspack_my_account_password_nonce' ); ?>
+					<input type="hidden" name="action" value="newspack_my_account_save_password" />
+					<button type="submit" class="newspack-ui__button newspack-ui__button--primary"><?php echo \esc_html( $newspack_without_password ? \__( 'Set password', 'newspack-plugin' ) : \__( 'Update password', 'newspack-plugin' ) ); ?></button>
 				</p>
 			</form>
 		</section>

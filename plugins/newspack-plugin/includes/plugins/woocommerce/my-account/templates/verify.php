@@ -23,13 +23,13 @@ $magic_link_args                                     = [];
 $magic_link_args[ $newspack_send_magic_link_arg ]    = wp_create_nonce( $newspack_send_magic_link_arg );
 $magic_link_url                                      = \add_query_arg(
 	$magic_link_args,
-	\wc_get_account_endpoint_url( 'edit-account' )
+	My_Account::get_endpoint_url( My_Account::ENDPOINT_EDIT_ACCOUNT )
 );
 $reset_password_args                                 = [];
 $reset_password_args[ $newspack_reset_password_arg ] = wp_create_nonce( $newspack_reset_password_arg );
 $reset_password_url                                  = \add_query_arg(
 	$reset_password_args,
-	\wc_get_account_endpoint_url( 'edit-account' )
+	My_Account::get_endpoint_url( My_Account::ENDPOINT_EDIT_ACCOUNT )
 );
 ?>
 

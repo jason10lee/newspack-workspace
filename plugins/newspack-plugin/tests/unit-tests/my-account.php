@@ -406,4 +406,35 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 		unset( $_POST['newspack_my_account_save_nonce'], $_POST['account_display_name'] );
 		delete_option( My_Account::PAGE_ID_OPTION );
 	}
+
+	/**
+	 * The native password handler updates the password with a matching confirmation.
+	 */
+	public function test_handle_password_change() {
+		if ( My_Account::woocommerce_owns_shell() ) {
+			$this->markTestSkipped( 'WooCommerce is active; native path not exercised.' );
+		}
+		$user_id = self::factory()->user->create(
+			[
+				'role'      => 'subscriber',
+				'user_pass' => 'oldpass-123',
+			]
+		);
+		wp_set_current_user( $user_id );
+		// Reader has a password, so current_password is required.
+		$_POST['newspack_my_account_password_nonce'] = wp_create_nonce( 'newspack_my_account_password' );
+		$_POST['current_password']                   = 'oldpass-123';
+		$_POST['password_1']                         = 'NewSecret-456';
+		$_POST['password_2']                         = 'NewSecret-456';
+
+		$this->assertTrue( My_Account::handle_password_change() );
+		$this->assertTrue( wp_check_password( 'NewSecret-456', get_userdata( $user_id )->user_pass, $user_id ) );
+
+		// Mismatch fails.
+		$_POST['password_2'] = 'different';
+		$this->assertFalse( My_Account::handle_password_change() );
+
+		unset( $_POST['newspack_my_account_password_nonce'], $_POST['current_password'], $_POST['password_1'], $_POST['password_2'] );
+		delete_transient( My_Account::NOTICE_TRANSIENT_PREFIX . $user_id );
+	}
 }
