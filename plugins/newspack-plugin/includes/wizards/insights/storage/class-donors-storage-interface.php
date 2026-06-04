@@ -80,6 +80,18 @@ interface Donors_Storage_Interface {
 	public function get_donation_mrr(): float;
 
 	/**
+	 * Count + total value of active recurring donation subscriptions
+	 * whose `_schedule_next_payment` falls within the next 30 days
+	 * from NOW. Same shape and treatment as Tab 6's upcoming renewals;
+	 * scoped to the donation product set instead of excluding it.
+	 *
+	 *   [ 'count' => int, 'total_value' => float ]
+	 *
+	 * @return array{count: int, total_value: float}
+	 */
+	public function get_upcoming_donation_renewals_30d(): array;
+
+	/**
 	 * Distinct customers whose FIRST donation order completed within
 	 * the window. Excludes returning donors making their second or
 	 * later gift.

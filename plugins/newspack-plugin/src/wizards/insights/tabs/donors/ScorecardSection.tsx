@@ -2,8 +2,10 @@
  * ScorecardSection (NPPD-1617).
  *
  * "Donors at a glance" — current-state metrics that ignore the date
- * picker. Two cards, each pairing a primary value with a secondary
- * snippet (Active Donors → recurring count; Donation MRR → ARR).
+ * picker. Three cards: Active Donors (with active recurring count as
+ * secondary), Donation MRR (with annualized as secondary), and
+ * Upcoming renewals — count of active recurring donation subscriptions
+ * due to renew in the next 30 days. Same shape as Tab 6's glance.
  */
 
 /**
@@ -55,6 +57,12 @@ const ScorecardSection = ( { snapshot }: ScorecardSectionProps ) => (
 					formatCurrency( snapshot.donation_arr )
 				) }
 				description={ __( 'Active recurring donations normalized to a monthly rate', 'newspack-plugin' ) }
+			/>
+			<MetricCard
+				label={ __( 'Upcoming renewals (30d)', 'newspack-plugin' ) }
+				value={ snapshot.upcoming_donation_renewals_30d.count }
+				format="number"
+				description={ __( 'Active recurring donations due to renew in the next 30 days', 'newspack-plugin' ) }
 			/>
 		</div>
 	</section>

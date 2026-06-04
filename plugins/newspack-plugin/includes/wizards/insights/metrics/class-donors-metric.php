@@ -37,7 +37,7 @@ class Donors_Metric {
 	 *
 	 * @var string
 	 */
-	const CACHE_PREFIX = 'newspack_insights_tab7_v7:';
+	const CACHE_PREFIX = 'newspack_insights_tab7_v8:';
 
 	/**
 	 * Cache TTL for windowed and snapshot metrics (30 min).
@@ -157,6 +157,22 @@ class Donors_Metric {
 	 */
 	public function get_donation_arr(): float {
 		return $this->get_donation_mrr() * 12;
+	}
+
+	/**
+	 * Upcoming donation renewals in the next 30 days.
+	 *
+	 * @return array{count: int, total_value: float}
+	 */
+	public function get_upcoming_donation_renewals_30d(): array {
+		return (array) $this->cached(
+			'upcoming_donation_renewals_30d',
+			[],
+			self::TTL_DEFAULT,
+			function () {
+				return $this->storage->get_upcoming_donation_renewals_30d();
+			}
+		);
 	}
 
 	/**

@@ -181,6 +181,47 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 	/**
 	 * {@inheritDoc}
 	 *
+	 * @return array{count: int, total_value: float}
+	 */
+	public function get_upcoming_donation_renewals_30d(): array {
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+
+		// DISTINCT id-subselect for the donation filter so a multi-line-item
+		// subscription is counted once and its total_amount isn't summed twice.
+		// Mirrors Tab 6's upcoming-renewals query exactly, with the donation
+		// filter flipped from NOT IN to IN.
+		$row = $wpdb->get_row(
+			"SELECT
+				COUNT(*) AS upcoming_count,
+				COALESCE(SUM(o.total_amount), 0) AS upcoming_value
+			FROM {$prefix}wc_orders o
+			JOIN {$prefix}wc_orders_meta om
+				ON om.order_id = o.id AND om.meta_key = '_schedule_next_payment'
+			WHERE o.type = 'shop_subscription'
+			  AND o.status = 'wc-active'
+			  AND o.id IN (
+				SELECT DISTINCT oi.order_id
+				FROM {$prefix}woocommerce_order_items oi
+				JOIN {$prefix}woocommerce_order_itemmeta oim
+					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+				WHERE oi.order_item_type = 'line_item'
+				  AND oim.meta_value IN ($donations)
+			  )
+			  AND om.meta_value BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 30 DAY)",
+			ARRAY_A
+		);
+
+		return [
+			'count'       => (int) ( $row['upcoming_count'] ?? 0 ),
+			'total_value' => (float) ( $row['upcoming_value'] ?? 0 ),
+		];
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return int

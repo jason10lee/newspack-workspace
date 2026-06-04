@@ -176,6 +176,48 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 	/**
 	 * {@inheritDoc}
 	 *
+	 * @return array{count: int, total_value: float}
+	 */
+	public function get_upcoming_donation_renewals_30d(): array {
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+
+		// Mirrors Tab 6's legacy upcoming-renewals query, donation filter
+		// flipped from NOT IN to IN. See HPOS variant for the DISTINCT
+		// subselect rationale.
+		$row = $wpdb->get_row(
+			"SELECT
+				COUNT(*) AS upcoming_count,
+				COALESCE(SUM(CAST(tot.meta_value AS DECIMAL(15,2))), 0) AS upcoming_value
+			FROM {$prefix}posts p
+			JOIN {$prefix}postmeta next
+				ON next.post_id = p.ID AND next.meta_key = '_schedule_next_payment'
+			JOIN {$prefix}postmeta tot
+				ON tot.post_id = p.ID AND tot.meta_key = '_order_total'
+			WHERE p.post_type = 'shop_subscription'
+			  AND p.post_status = 'wc-active'
+			  AND p.ID IN (
+				SELECT DISTINCT oi.order_id
+				FROM {$prefix}woocommerce_order_items oi
+				JOIN {$prefix}woocommerce_order_itemmeta oim
+					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+				WHERE oi.order_item_type = 'line_item'
+				  AND oim.meta_value IN ($donations)
+			  )
+			  AND next.meta_value BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 30 DAY)",
+			ARRAY_A
+		);
+
+		return [
+			'count'       => (int) ( $row['upcoming_count'] ?? 0 ),
+			'total_value' => (float) ( $row['upcoming_value'] ?? 0 ),
+		];
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return int

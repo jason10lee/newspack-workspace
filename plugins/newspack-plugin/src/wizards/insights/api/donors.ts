@@ -20,11 +20,17 @@ export interface DonorsClassification {
 	has_donation_family: boolean;
 }
 
+export interface UpcomingDonationRenewals {
+	count: number;
+	total_value: number;
+}
+
 export interface DonorsSnapshot {
 	active_donors: number;
 	active_recurring_donors: number;
 	donation_mrr: number;
 	donation_arr: number;
+	upcoming_donation_renewals_30d: UpcomingDonationRenewals;
 }
 
 /**

@@ -42,7 +42,7 @@ const ScorecardSection = ( { snapshot }: ScorecardSectionProps ) => (
 				description={ __( 'Distinct readers with at least one active subscription', 'newspack-plugin' ) }
 			/>
 			<MetricCard
-				label={ __( 'Monthly recurring revenue', 'newspack-plugin' ) }
+				label={ __( 'Subscriptions MRR', 'newspack-plugin' ) }
 				value={ snapshot.mrr }
 				format="currency"
 				secondary={ sprintf(
