@@ -2,7 +2,7 @@
 
 - **Linear:** [NPPD-1567](https://linear.app/a8c/issue/NPPD-1567/my-account-page-without-woocommerce)
 - **Milestone:** My Account
-- **Branch:** `nppd-1567-my-account-page-without-woocommerce`
+- **Branch:** `feat/native-my-account`
 - **Date:** 2026-06-04
 - **Status:** Design approved; ready for implementation plan
 
