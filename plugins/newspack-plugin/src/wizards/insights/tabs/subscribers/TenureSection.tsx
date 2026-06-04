@@ -67,41 +67,71 @@ const TenureSection = ( { rows }: TenureSectionProps ) => {
 		);
 	}
 
+	// Narrative below the callouts. Translates the percentile numbers
+	// into plain language so the section reads as more than three bare
+	// numbers. The second sentence is suppressed when the 75th
+	// percentile collapses to the median (a degenerate case with very
+	// few subscribers — saying "a quarter have been here longer than X"
+	// when X equals the median is redundant).
+	const showSecondSentence = stats.p75 > stats.median;
+	const medianSentence = sprintf(
+		/* translators: %d: median tenure in days */
+		_n(
+			'Half of your subscribers have been here longer than %d day.',
+			'Half of your subscribers have been here longer than %d days.',
+			stats.median,
+			'newspack-plugin'
+		),
+		stats.median
+	);
+	const p75Sentence = sprintf(
+		/* translators: %d: 75th-percentile tenure in days */
+		_n( 'A quarter have been here longer than %d day.', 'A quarter have been here longer than %d days.', stats.p75, 'newspack-plugin' ),
+		stats.p75
+	);
+
 	return (
 		<section className="newspack-insights__section newspack-insights__section--tenure" aria-labelledby="newspack-insights-tenure-heading">
 			<h2 id="newspack-insights-tenure-heading" className="newspack-insights__section-heading">
 				{ __( 'Subscriber tenure', 'newspack-plugin' ) }
 			</h2>
-			<dl className="newspack-insights__stats-summary">
-				<div>
-					<dt>{ __( 'Median tenure', 'newspack-plugin' ) }</dt>
-					<dd>
-						{ sprintf(
-							/* translators: %d: number of days */
-							_n( '%d day', '%d days', stats.median, 'newspack-plugin' ),
-							stats.median
-						) }
-					</dd>
-				</div>
-				<div>
-					<dt>{ __( '25th percentile', 'newspack-plugin' ) }</dt>
-					<dd>
-						{
-							/* translators: %d: number of days */
-							sprintf( _n( '%d day', '%d days', stats.p25, 'newspack-plugin' ), stats.p25 )
-						}
-					</dd>
-				</div>
-				<div>
-					<dt>{ __( '75th percentile', 'newspack-plugin' ) }</dt>
-					<dd>
-						{
-							/* translators: %d: number of days */
-							sprintf( _n( '%d day', '%d days', stats.p75, 'newspack-plugin' ), stats.p75 )
-						}
-					</dd>
-				</div>
-			</dl>
+			<div className="newspack-insights__tenure-card">
+				<dl className="newspack-insights__stats-summary">
+					<div>
+						<dt>{ __( 'Median tenure', 'newspack-plugin' ) }</dt>
+						<dd>
+							{ sprintf(
+								/* translators: %d: number of days */
+								_n( '%d day', '%d days', stats.median, 'newspack-plugin' ),
+								stats.median
+							) }
+						</dd>
+					</div>
+					<div>
+						<dt>{ __( '25th percentile', 'newspack-plugin' ) }</dt>
+						<dd>
+							{
+								/* translators: %d: number of days */
+								sprintf( _n( '%d day', '%d days', stats.p25, 'newspack-plugin' ), stats.p25 )
+							}
+						</dd>
+					</div>
+					<div>
+						<dt>{ __( '75th percentile', 'newspack-plugin' ) }</dt>
+						<dd>
+							{
+								/* translators: %d: number of days */
+								sprintf( _n( '%d day', '%d days', stats.p75, 'newspack-plugin' ), stats.p75 )
+							}
+						</dd>
+					</div>
+				</dl>
+				<p className="newspack-insights__tenure-narrative">
+					{ medianSentence }
+					{ showSecondSentence && ' ' }
+					{ showSecondSentence && p75Sentence }
+				</p>
+			</div>
 		</section>
 	);
 };
