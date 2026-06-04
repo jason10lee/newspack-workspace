@@ -87,6 +87,7 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 			$this->markTestSkipped( 'WooCommerce is active; native path not exercised.' );
 		}
 		delete_option( My_Account::PAGE_ID_OPTION );
+		delete_option( 'woocommerce_myaccount_page_id' );
 
 		$page_id = My_Account::get_or_create_page();
 		$this->assertGreaterThan( 0, $page_id );
@@ -98,6 +99,48 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 
 		wp_delete_post( $page_id, true );
 		delete_option( My_Account::PAGE_ID_OPTION );
+	}
+
+	/**
+	 * The get_or_create_page() method reuses an existing WooCommerce account
+	 * page instead of creating a duplicate.
+	 */
+	public function test_get_or_create_page_reuses_wc_page() {
+		if ( My_Account::woocommerce_owns_shell() ) {
+			$this->markTestSkipped( 'WooCommerce is active; native path not exercised.' );
+		}
+		delete_option( My_Account::PAGE_ID_OPTION );
+		$wc_page_id = self::factory()->post->create(
+			[
+				'post_type' => 'page',
+				'post_name' => 'my-account',
+			]
+		);
+		update_option( 'woocommerce_myaccount_page_id', $wc_page_id );
+
+		$this->assertSame( $wc_page_id, My_Account::get_or_create_page() );
+		$this->assertSame( $wc_page_id, (int) get_option( My_Account::PAGE_ID_OPTION, 0 ) );
+
+		delete_option( 'woocommerce_myaccount_page_id' );
+		delete_option( My_Account::PAGE_ID_OPTION );
+		wp_delete_post( $wc_page_id, true );
+	}
+
+	/**
+	 * The get_page_id() method falls back to the WooCommerce account page when
+	 * the native option is unset.
+	 */
+	public function test_get_page_id_falls_back_to_wc_page() {
+		if ( My_Account::woocommerce_owns_shell() ) {
+			$this->markTestSkipped( 'WooCommerce is active; native path not exercised.' );
+		}
+		delete_option( My_Account::PAGE_ID_OPTION );
+		$wc_page_id = self::factory()->post->create( [ 'post_type' => 'page' ] );
+		update_option( 'woocommerce_myaccount_page_id', $wc_page_id );
+
+		$this->assertSame( $wc_page_id, My_Account::get_page_id() );
+
+		delete_option( 'woocommerce_myaccount_page_id' );
 	}
 
 	/**

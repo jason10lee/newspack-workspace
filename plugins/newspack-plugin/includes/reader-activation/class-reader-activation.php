@@ -1406,9 +1406,10 @@ final class Reader_Activation {
 	 * Setup nav menu hooks.
 	 */
 	public static function setup_nav_menu() {
-		// Not checking if the whole WC suite is active (self::is_woocommerce_active()),
-		// because only the main WooCommerce plugin is actually required for this to work.
-		if ( ! self::get_setting( 'enabled_account_link' ) || ! function_exists( 'WC' ) ) {
+		// The account link works with or without WooCommerce: the URL is resolved
+		// via My_Account::get_endpoint_url(), which falls back to the native
+		// account page when WooCommerce is inactive.
+		if ( ! self::get_setting( 'enabled_account_link' ) ) {
 			return;
 		}
 
@@ -1505,10 +1506,7 @@ final class Reader_Activation {
 	 * @return string Account link HTML or empty string.
 	 */
 	private static function get_account_link() {
-		$account_url = '';
-		if ( function_exists( 'wc_get_account_endpoint_url' ) ) {
-			$account_url = \wc_get_account_endpoint_url( 'dashboard' );
-		}
+		$account_url = My_Account::get_endpoint_url();
 
 		/** Do not render link for authenticated readers if account page doesn't exist. */
 		if ( empty( $account_url ) && \is_user_logged_in() ) {

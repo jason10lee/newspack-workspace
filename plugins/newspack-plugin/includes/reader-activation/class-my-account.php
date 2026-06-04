@@ -240,7 +240,12 @@ class My_Account {
 		if ( self::woocommerce_owns_shell() ) {
 			return (int) \get_option( 'woocommerce_myaccount_page_id', 0 );
 		}
-		return (int) \get_option( self::PAGE_ID_OPTION, 0 );
+		$page_id = (int) \get_option( self::PAGE_ID_OPTION, 0 );
+		if ( ! $page_id ) {
+			// Fall back to an existing WooCommerce account page if present.
+			$page_id = (int) \get_option( 'woocommerce_myaccount_page_id', 0 );
+		}
+		return $page_id;
 	}
 
 	/**
@@ -254,6 +259,16 @@ class My_Account {
 		$page_id = (int) \get_option( self::PAGE_ID_OPTION, 0 );
 		if ( $page_id && 'page' === \get_post_type( $page_id ) ) {
 			return $page_id;
+		}
+
+		// Reuse an existing WooCommerce My Account page if present. This avoids
+		// creating a duplicate "my-account-2" page when a WooCommerce account
+		// page already occupies the "my-account" slug, and round-trips cleanly
+		// if WooCommerce is reactivated (both resolve to the same page).
+		$existing_id = (int) \get_option( 'woocommerce_myaccount_page_id', 0 );
+		if ( $existing_id && 'page' === \get_post_type( $existing_id ) ) {
+			\update_option( self::PAGE_ID_OPTION, $existing_id );
+			return $existing_id;
 		}
 
 		$page_id = \wp_insert_post(
