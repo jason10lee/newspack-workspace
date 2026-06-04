@@ -6,7 +6,7 @@
  *   - Active Subscribers
  *   - Subscriptions MRR (with annualized as secondary)
  *   - Upcoming renewals (active subs due to renew in next 30d)
- *   - Upcoming cancellations (subs set to end in next 30d)
+ *   - Upcoming endings (subs set to end in next 30d)
  *
  * Window-scoped metrics (new/churned, gross/net revenue, refund rate,
  * retry rate) live in {@see WindowedSection} below this one.
@@ -61,7 +61,7 @@ const ScorecardSection = ( { snapshot }: ScorecardSectionProps ) => (
 				description={ __( 'Active subscriptions due to renew in the next 30 days', 'newspack-plugin' ) }
 			/>
 			<MetricCard
-				label={ __( 'Upcoming cancellations (30d)', 'newspack-plugin' ) }
+				label={ __( 'Upcoming endings (30d)', 'newspack-plugin' ) }
 				value={ snapshot.upcoming_cancellations_30d.count }
 				format="number"
 				lowerIsBetter

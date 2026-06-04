@@ -6,7 +6,7 @@
  *   - Active Donors (with active recurring count as secondary)
  *   - Donation MRR (with annualized as secondary)
  *   - Upcoming renewals (donation subs due to renew in next 30d)
- *   - Upcoming cancellations (donation subs set to end in next 30d)
+ *   - Upcoming endings (donation subs set to end in next 30d)
  */
 
 /**
@@ -66,7 +66,7 @@ const ScorecardSection = ( { snapshot }: ScorecardSectionProps ) => (
 				description={ __( 'Active recurring donations due to renew in the next 30 days', 'newspack-plugin' ) }
 			/>
 			<MetricCard
-				label={ __( 'Upcoming cancellations (30d)', 'newspack-plugin' ) }
+				label={ __( 'Upcoming endings (30d)', 'newspack-plugin' ) }
 				value={ snapshot.upcoming_donation_cancellations_30d.count }
 				format="number"
 				lowerIsBetter
