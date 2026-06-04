@@ -201,52 +201,55 @@ final class Reader_Registration {
 	}
 
 	/**
-	 * Check (and optionally increment) the per-IP rate limit for frontend registration.
+	 * Check and increment a per-IP rate-limit bucket for frontend registration traffic.
 	 *
-	 * The same per-IP budget is shared by the /register endpoint and the /check-email
-	 * preflight so the combined budget stays at 10/hour per IP regardless of how many
-	 * times a single submission pings the API. /register increments the counter (one
-	 * attempt = one token); /check-email passes $increment = false so the preflight
-	 * doesn't burn a token before the registration itself runs.
+	 * Each bucket has its own per-IP counter at 10/hour. The /register endpoint and
+	 * the /check-email preflight use separate buckets so that:
+	 *   - A legitimate user submission (one preflight + one register) still buys 10
+	 *     full registrations per hour — neither endpoint can double-charge the other.
+	 *   - An attacker probing /check-email for email enumeration is rate-limited at
+	 *     10 requests/hour regardless of registration traffic, and vice versa.
 	 *
-	 * @param bool $increment Whether to consume a token. False = peek-only (used by
-	 *                        the check-email preflight so it doesn't double-charge
-	 *                        a single registration attempt).
+	 * @param string $bucket Bucket key. 'registration' for /register (default, preserves
+	 *                       the existing cache key), 'check_email' for the preflight.
 	 *
 	 * @return bool|\WP_Error True if under limit, WP_Error if exceeded.
 	 */
-	private static function check_registration_rate_limit( bool $increment = true ): bool|\WP_Error {
+	private static function check_registration_rate_limit( string $bucket = 'registration' ): bool|\WP_Error {
 		// @todo REMOTE_ADDR may be a proxy/load-balancer IP in some environments.
 		// On WordPress VIP/Atomic this is the real client IP. For other hosts,
 		// consider parsing forwarded headers or providing a filter to override IP resolution.
 		// See WooCommerce_Connection::get_client_ip() for a forwarded-header approach.
-		$ip        = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '127.0.0.1'; // phpcs:ignore WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders,WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
-		$cache_key = 'newspack_reg_ip_' . md5( $ip );
+		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '127.0.0.1'; // phpcs:ignore WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders,WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
+
+		// Bucket → cache-key prefix. Keep 'newspack_reg_ip_' for registration so any
+		// in-flight counters from prior releases continue to apply.
+		$prefix    = 'check_email' === $bucket ? 'newspack_check_email_ip_' : 'newspack_reg_ip_';
+		$cache_key = $prefix . md5( $ip );
 
 		/**
 		 * Filters the maximum number of frontend registration attempts per IP per hour.
 		 *
-		 * @param int    $limit Maximum attempts. Default 10.
-		 * @param string $ip    The client IP address.
+		 * Applies independently to each bucket: 10/hr for /register, 10/hr for /check-email.
+		 *
+		 * @param int    $limit  Maximum attempts. Default 10.
+		 * @param string $ip     The client IP address.
+		 * @param string $bucket Bucket name ('registration' or 'check_email').
 		 */
-		$limit = \apply_filters( 'newspack_frontend_registration_rate_limit', 10, $ip );
+		$limit = \apply_filters( 'newspack_frontend_registration_rate_limit', 10, $ip, $bucket );
 
 		if ( \wp_using_ext_object_cache() ) {
 			$cache_group = 'newspack_rate_limit';
 			\wp_cache_add( $cache_key, 0, $cache_group, HOUR_IN_SECONDS );
-			$attempts = $increment
-				? \wp_cache_incr( $cache_key, 1, $cache_group )
-				: (int) \wp_cache_get( $cache_key, $cache_group );
+			$attempts = \wp_cache_incr( $cache_key, 1, $cache_group );
 		} else {
 			$attempts = (int) \get_transient( $cache_key );
-			if ( $increment ) {
-				\set_transient( $cache_key, $attempts + 1, HOUR_IN_SECONDS );
-				$attempts++;
-			}
+			\set_transient( $cache_key, $attempts + 1, HOUR_IN_SECONDS );
+			$attempts++;
 		}
 
 		if ( $attempts > $limit ) {
-			Logger::log( 'Frontend registration rate limit exceeded for IP ' . $ip );
+			Logger::log( sprintf( 'Frontend registration rate limit exceeded for IP %1$s (bucket: %2$s)', $ip, $bucket ) );
 			return new \WP_Error(
 				'rate_limit_exceeded',
 				__( 'Too many registration attempts. Please try again later.', 'newspack-plugin' ),
@@ -489,16 +492,17 @@ final class Reader_Registration {
 	 *   - Responses are filtered to readers only — staff/admin/editor accounts that share
 	 *     the email surface as "exists: false" so this endpoint can't be used to enumerate
 	 *     non-reader logins.
-	 *   - Shares the registration rate-limit budget (peek-only here so the preflight
-	 *     doesn't burn a token before /register runs).
+	 *   - Rate-limited at 10 requests/hour per IP in its own bucket (separate from
+	 *     /register, so neither endpoint can starve the other and an enumeration
+	 *     attempt is independently bounded).
 	 *
 	 * @param \WP_REST_Request $request Request object.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public static function api_check_email_exists( \WP_REST_Request $request ) {
-		// Share the per-IP rate-limit budget with /register but don't consume a token —
-		// a single user submission shouldn't cost two attempts.
-		$rate_check = self::check_registration_rate_limit( false );
+		// Enforce a per-IP 10/hr budget in a bucket separate from /register so that
+		// hammering this endpoint can't enumerate emails without tripping the limit.
+		$rate_check = self::check_registration_rate_limit( 'check_email' );
 		if ( \is_wp_error( $rate_check ) ) {
 			return $rate_check;
 		}

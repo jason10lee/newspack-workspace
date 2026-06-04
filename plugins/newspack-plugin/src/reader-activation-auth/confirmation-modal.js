@@ -138,8 +138,23 @@ export function maybeConfirmRegistration( { email, onProceed, onCancel = () => {
 		headers: { Accept: 'application/json' },
 		body: checkBody,
 	} )
-		.then( res => res.json() )
+		.then( res => {
+			// Treat non-2xx as a preflight failure and fall open (proceed). Critically,
+			// fetch() does NOT reject on HTTP errors — without this guard, a 400
+			// (invalid email) or 429 (rate limit) would resolve as { exists: false }
+			// and open the confirmation modal instead of letting /register's own
+			// validation/rate-limit handle the case.
+			if ( ! res.ok ) {
+				proceed();
+				return null;
+			}
+			return res.json();
+		} )
 		.then( json => {
+			// `null` signals the non-OK branch above already called proceed().
+			if ( null === json ) {
+				return;
+			}
 			if ( json?.exists ) {
 				proceed();
 				return;
