@@ -62,7 +62,7 @@ const SubscribersTab = ( { range, previousRange }: SubscribersTabProps ) => {
 			<RevenueSection current={ data.current } previous={ data.previous } />
 			<TenureSection rows={ data.snapshot.tenure_distribution } />
 			<PerformanceSection rows={ data.current.performance_by_product } />
-			<CancellationReasonsSection rows={ data.current.cancellation_reasons } />
+			<CancellationReasonsSection rows={ data.current.cancellation_reasons } activeSubscribers={ data.snapshot.active_subscribers } />
 		</div>
 	);
 };

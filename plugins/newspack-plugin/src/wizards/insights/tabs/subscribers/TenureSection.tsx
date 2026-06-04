@@ -1,7 +1,7 @@
 /**
  * TenureSection (NPPD-1616).
  *
- * Tenure of the active non-donation subscriber base. Server returns one
+ * Tenure of the active subscriber base. Server returns one
  * row per active subscription `{ product_name, tenure_days }`; this
  * component computes median + quartiles + day-bucket counts client-side
  * so the raw distribution remains available for future drill-downs.

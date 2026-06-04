@@ -35,7 +35,7 @@ const ScorecardSection = ( { snapshot, current, previous }: ScorecardSectionProp
 				label={ __( 'Active subscribers', 'newspack-plugin' ) }
 				value={ snapshot.active_subscribers }
 				format="number"
-				description={ __( 'Distinct customers with at least one active non-donation subscription', 'newspack-plugin' ) }
+				description={ __( 'Distinct customers with at least one active subscription', 'newspack-plugin' ) }
 			/>
 			<MetricCard
 				primary
@@ -55,7 +55,7 @@ const ScorecardSection = ( { snapshot, current, previous }: ScorecardSectionProp
 				value={ current.new_subscribers }
 				format="number"
 				previousValue={ previous?.new_subscribers }
-				description={ __( 'First-time non-donation subscribers in selected timeframe', 'newspack-plugin' ) }
+				description={ __( 'First-time subscribers in selected timeframe', 'newspack-plugin' ) }
 			/>
 			<MetricCard
 				label={ __( 'Churned subscribers', 'newspack-plugin' ) }

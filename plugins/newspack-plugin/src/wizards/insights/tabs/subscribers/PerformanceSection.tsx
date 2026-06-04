@@ -1,7 +1,7 @@
 /**
  * PerformanceSection (NPPD-1616).
  *
- * Per-product breakdown for non-donation subscription products. Top 50
+ * Per-product breakdown for subscription products. Top 50
  * by active subscriber count (already limited server-side). Rendered as
  * a sortable-by-server table; client-side sorting is intentionally out
  * of scope for v1 to keep the implementation contained.
