@@ -175,6 +175,27 @@ class My_Account {
 	}
 
 	/**
+	 * Get the ordered set of navigation tabs (slug => label).
+	 *
+	 * Dashboard first, then endpoints (core + integration), then logout last.
+	 *
+	 * @return array<string,string>
+	 */
+	public static function get_tabs() {
+		$tabs = array_merge(
+			[ '' => \__( 'Account', 'newspack-plugin' ) ],
+			self::get_endpoints(),
+			[ 'customer-logout' => \__( 'Sign out', 'newspack-plugin' ) ]
+		);
+		/**
+		 * Filters the ordered My Account navigation tabs.
+		 *
+		 * @param array<string,string> $tabs slug => label.
+		 */
+		return \apply_filters( 'newspack_my_account_tabs', $tabs );
+	}
+
+	/**
 	 * Register rewrite endpoints for the native shell.
 	 */
 	public static function register_endpoints() {
@@ -269,11 +290,29 @@ class My_Account {
 	}
 
 	/**
-	 * Render the navigation. Implemented in a later task (tab registry);
-	 * placeholder for now so render_page() is testable.
+	 * Render the native navigation menu.
 	 */
 	protected static function render_navigation() {
-		// Replaced in a later task.
+		$current = self::get_current_endpoint();
+		echo '<nav class="woocommerce-MyAccount-navigation newspack-ui" aria-label="' . \esc_attr__( 'Account pages', 'newspack-plugin' ) . '">';
+		echo '<ul>';
+		foreach ( self::get_tabs() as $slug => $label ) {
+			if ( 'customer-logout' === $slug ) {
+				$url = \wp_logout_url( \home_url( '/' ) );
+			} else {
+				$url = self::get_endpoint_url( $slug );
+			}
+			$is_current = ( $slug === $current );
+			printf(
+				'<li class="%1$s"><a href="%2$s"%3$s>%4$s</a></li>',
+				\esc_attr( $is_current ? 'is-active' : '' ),
+				\esc_url( $url ),
+				$is_current ? ' aria-current="page"' : '',
+				\esc_html( $label )
+			);
+		}
+		echo '</ul>';
+		echo '</nav>';
 	}
 
 	/**

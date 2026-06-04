@@ -135,6 +135,17 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 	}
 
 	/**
+	 * get_tabs() returns ordered slug => label entries including core tabs.
+	 */
+	public function test_get_tabs() {
+		$tabs = My_Account::get_tabs();
+		$this->assertArrayHasKey( 'edit-account', $tabs );
+		$this->assertArrayHasKey( 'customer-logout', $tabs );
+		// Logout is always last.
+		$this->assertSame( 'customer-logout', array_key_last( $tabs ) );
+	}
+
+	/**
 	 * The dispatcher fires the newspack_my_account_content action for the
 	 * current endpoint and the core content callback for the dashboard.
 	 */
