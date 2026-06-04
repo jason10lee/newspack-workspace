@@ -26,6 +26,7 @@ import RevenueSection from './subscribers/RevenueSection';
 import TenureSection from './subscribers/TenureSection';
 import PerformanceSection from './subscribers/PerformanceSection';
 import CancellationReasonsSection from './subscribers/CancellationReasonsSection';
+import './subscribers/subscribers.scss';
 
 export interface SubscribersTabProps {
 	range: DateRange;
