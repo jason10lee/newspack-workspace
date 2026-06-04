@@ -354,17 +354,62 @@ class My_Account {
 	}
 
 	/**
-	 * Render the account settings tab. Implemented in a later task.
+	 * Render the native account settings form (display name, email, password
+	 * link). Email-change verification reuses the shared handler.
 	 */
 	protected static function render_account_settings() {
-		// Implemented in a later task.
+		$user = \wp_get_current_user();
+		if ( ! $user || ! $user->ID ) {
+			return;
+		}
+		?>
+		<section id="account-profile">
+			<h4 class="newspack-ui__font--m newspack-ui__spacing-top--0"><?php \esc_html_e( 'Profile', 'newspack-plugin' ); ?></h4>
+			<form class="woocommerce-EditAccountForm edit-profile newspack-my-account__settings-form" action="" method="post">
+				<p class="woocommerce-form-row form-row form-row-wide">
+					<label for="account_display_name"><?php \esc_html_e( 'Display name', 'newspack-plugin' ); ?></label>
+					<input type="text" class="woocommerce-Input input-text" name="account_display_name" id="account_display_name" value="<?php echo \esc_attr( $user->display_name ); ?>" />
+				</p>
+				<p class="woocommerce-form-row form-row form-row-wide">
+					<label for="account_email"><?php \esc_html_e( 'Email address', 'newspack-plugin' ); ?>&nbsp;<span class="required">*</span></label>
+					<input type="email" class="woocommerce-Input input-text" name="account_email" id="account_email" value="<?php echo \esc_attr( $user->user_email ); ?>" required />
+				</p>
+				<?php
+				/** Lets integrations add fields, mirroring the Woo template hook. */
+				\do_action( 'newspack_woocommerce_edit_account_form_fields' );
+				?>
+				<p class="woocommerce-buttons-card">
+					<?php \wp_nonce_field( 'newspack_my_account_save', 'newspack_my_account_save_nonce' ); ?>
+					<input type="hidden" name="action" value="newspack_my_account_save_account" />
+					<button type="submit" class="newspack-ui__button newspack-ui__button--primary"><?php \esc_html_e( 'Update profile', 'newspack-plugin' ); ?></button>
+				</p>
+			</form>
+		</section>
+		<section id="delete-account">
+			<h4 class="newspack-ui__font--m is-destructive"><?php \esc_html_e( 'Delete account', 'newspack-plugin' ); ?></h4>
+			<p><?php \esc_html_e( 'Please note, account deletion is final, and there will be no way to restore your account.', 'newspack-plugin' ); ?></p>
+			<p class="woocommerce-buttons-card">
+				<a class="newspack-ui__button newspack-ui__button--destructive" href="<?php echo \esc_url( self::get_endpoint_url( self::ENDPOINT_DELETE_ACCOUNT ) ); ?>"><?php \esc_html_e( 'Delete account', 'newspack-plugin' ); ?></a>
+			</p>
+		</section>
+		<?php
 	}
 
 	/**
-	 * Render the delete-account tab. Implemented in a later task.
+	 * Render the native delete-account confirmation tab.
 	 */
 	protected static function render_delete_account() {
-		// Implemented in a later task.
+		?>
+		<section id="delete-account-confirm">
+			<h4 class="newspack-ui__font--m is-destructive"><?php \esc_html_e( 'Delete account', 'newspack-plugin' ); ?></h4>
+			<p><?php \esc_html_e( 'This action is permanent. To confirm, submit the request below and follow the link we email you.', 'newspack-plugin' ); ?></p>
+			<form method="post" action="">
+				<?php \wp_nonce_field( 'newspack_my_account_delete', 'newspack_my_account_delete_nonce' ); ?>
+				<input type="hidden" name="action" value="newspack_my_account_request_delete" />
+				<button type="submit" class="newspack-ui__button newspack-ui__button--destructive"><?php \esc_html_e( 'Request account deletion', 'newspack-plugin' ); ?></button>
+			</form>
+		</section>
+		<?php
 	}
 }
 
