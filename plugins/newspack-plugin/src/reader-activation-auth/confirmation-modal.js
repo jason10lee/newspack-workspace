@@ -29,20 +29,22 @@ let currentController = null;
 /**
  * Open the pre-registration confirmation modal.
  *
+ * Returns false (without firing onCancel) when the modal markup isn't rendered;
+ * callers decide whether to fail open (`onProceed`) or fail closed for that case.
+ * Internal helper for maybeConfirmRegistration() — not exported.
+ *
  * @param {Object}   config
  * @param {string}   config.email       Email address to display in the modal copy.
  * @param {Function} [config.onConfirm] Called when the reader clicks Continue, after the modal closes.
  * @param {Function} [config.onCancel]  Called when the reader closes the modal without confirming (X / Escape / Cancel / backdrop).
  *
- * @return {boolean} Whether the modal was found and opened. When false, `onCancel` is invoked synchronously.
+ * @return {boolean} Whether the modal was found and opened.
  */
-export function openConfirmationModal( config = {} ) {
+function openConfirmationModal( config = {} ) {
 	const modal = document.getElementById( MODAL_ID );
 	const confirmButton = modal?.querySelector( '[data-confirm-register]' );
 	if ( ! modal || ! confirmButton ) {
-		if ( typeof config.onCancel === 'function' ) {
-			config.onCancel();
-		}
+		// Markup missing — caller decides fail-open vs fail-closed by inspecting the return value.
 		return false;
 	}
 
@@ -117,7 +119,7 @@ export function openConfirmationModal( config = {} ) {
  * @param {Function} [args.onCancel] Called when the reader cancels the confirmation.
  */
 export function maybeConfirmRegistration( { email, onProceed, onCancel = () => {} } ) {
-	if ( newspack_ras_config?.require_account_verification ) {
+	if ( newspack_ras_config?.verify_new_reader_accounts ) {
 		onProceed();
 		return;
 	}
@@ -142,11 +144,18 @@ export function maybeConfirmRegistration( { email, onProceed, onCancel = () => {
 				proceed();
 				return;
 			}
-			openConfirmationModal( {
+			const opened = openConfirmationModal( {
 				email,
 				onConfirm: proceed,
 				onCancel,
 			} );
+			// When the confirmation modal markup isn't rendered (older plugin, race with
+			// wp_footer, third-party stripping the modal element), fall open so the
+			// registration still completes — the modal is a confirmation step, not the
+			// authoritative guard.
+			if ( ! opened ) {
+				proceed();
+			}
 		} )
 		.catch( proceed );
 }

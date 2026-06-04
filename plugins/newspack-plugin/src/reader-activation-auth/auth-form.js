@@ -331,7 +331,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 					// modal before completing the auth flow. The newsletters signup modal is shown after the
 					// verification step (or its dismissal) and before the original onSuccess/onClose callbacks.
 					const needsVerification =
-						data?.registered && newspack_ras_config?.require_account_verification && data?.verified !== true && data?.verification_nonce;
+						data?.registered && newspack_ras_config?.verify_new_reader_accounts && data?.verified !== true && data?.verification_nonce;
 
 					let callback;
 					if ( ! container.config?.skipNewslettersSignup && data?.registered && container.authCallback ) {

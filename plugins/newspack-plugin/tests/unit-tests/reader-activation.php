@@ -250,4 +250,30 @@ class Newspack_Test_Reader_Activation extends WP_UnitTestCase {
 
 		wp_delete_user( $user_id ); // Clean up.
 	}
+
+	/**
+	 * The `verify_new_reader_accounts` setting must round-trip cleanly as a boolean
+	 * via update_setting/get_setting. update_setting coerces to int internally
+	 * (intval), so the read must come back as a strict boolean — false/true, not
+	 * 0/1/'' — for `show_post_registration_verification()` and the
+	 * `newspack_ras_config` JS payload to behave correctly.
+	 */
+	public function test_verify_new_reader_accounts_setting_round_trip() {
+		$original = Reader_Activation::get_setting( 'verify_new_reader_accounts' );
+
+		Reader_Activation::update_setting( 'verify_new_reader_accounts', true );
+		$this->assertTrue(
+			Reader_Activation::get_setting( 'verify_new_reader_accounts' ),
+			'Setting `verify_new_reader_accounts` to true should round-trip as boolean true.'
+		);
+
+		Reader_Activation::update_setting( 'verify_new_reader_accounts', false );
+		$this->assertFalse(
+			Reader_Activation::get_setting( 'verify_new_reader_accounts' ),
+			'Setting `verify_new_reader_accounts` to false should round-trip as boolean false.'
+		);
+
+		// Restore.
+		Reader_Activation::update_setting( 'verify_new_reader_accounts', $original );
+	}
 }

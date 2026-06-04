@@ -182,7 +182,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 
 				// Check if this is a new registration that needs email verification
 				// Note: verified can be false, null, or undefined - we need verification if it's not true
-				const needsVerification = ! data?.existing_user && newspack_ras_config.require_account_verification && data?.verified !== true;
+				const needsVerification = ! data?.existing_user && newspack_ras_config.verify_new_reader_accounts && data?.verified !== true;
 
 				// Hide success element first to ensure clean state
 				const successElement = container.querySelector( '.newspack-registration__registration-success' );

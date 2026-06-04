@@ -210,56 +210,6 @@ export function openNewslettersSignupModal( config = {} ) {
 }
 
 /**
- * Open the post-registration verification modal.
- *
- * Public cross-plugin entry point. The actual implementation is registered by
- * the reader-activation-auth bundle via `_openVerificationModal`. Returns true
- * when the modal was opened; calls `config.onDismiss` and returns false when the
- * modal isn't available (older newspack-plugin or modal markup not rendered).
- *
- * @param {Object}   config
- * @param {string}   config.email             Email to display in the modal copy.
- * @param {string}   config.verificationNonce Nonce authorizing the OTP request.
- * @param {Function} [config.onSendCode]      Called after the OTP is successfully sent.
- * @param {Function} [config.onDismiss]       Called when the modal closes without sending a code.
- *
- * @return {boolean} Whether the modal was opened.
- */
-export function openVerificationModal( config = {} ) {
-	if ( readerActivation?._openVerificationModal ) {
-		return readerActivation._openVerificationModal( config );
-	}
-	console.warn( 'Verification modal not available' ); // eslint-disable-line no-console
-	if ( config?.onDismiss && typeof config.onDismiss === 'function' ) {
-		config.onDismiss();
-	}
-	return false;
-}
-
-/**
- * Gate a registration submission on the pre-registration confirmation step.
- *
- * Public cross-plugin entry point. The actual implementation is registered by the
- * reader-activation-auth bundle via `_maybeConfirmRegistration`. When the helper
- * isn't available (older newspack-plugin), falls through to immediate `onProceed`
- * — equivalent to "no confirmation".
- *
- * @param {Object}   config
- * @param {string}   config.email      Email to confirm.
- * @param {Function} config.onProceed  Called once the registration should be submitted.
- * @param {Function} [config.onCancel] Called when the reader cancels the confirmation.
- */
-export function maybeConfirmRegistration( config = {} ) {
-	if ( readerActivation?._maybeConfirmRegistration ) {
-		readerActivation._maybeConfirmRegistration( config );
-		return;
-	}
-	if ( typeof config.onProceed === 'function' ) {
-		config.onProceed();
-	}
-}
-
-/**
  * Get the reader's OTP hash for the current authentication request.
  *
  * @return {string} OTP hash.
@@ -682,8 +632,11 @@ const readerActivation = {
 	refreshAuthentication,
 	getReader,
 	openNewslettersSignupModal,
-	openVerificationModal,
-	maybeConfirmRegistration,
+	// openVerificationModal and maybeConfirmRegistration are attached at runtime by
+	// the reader-activation-auth bundle (see reader-activation-auth/index.js). They
+	// aren't included in this literal because they depend on auth-modal markup that
+	// only ships when the auth modal is rendered. Cross-plugin consumers gate access
+	// with `typeof ras?.openVerificationModal === 'function'`.
 	hasAuthLink,
 	getOTPHash,
 	setOTPTimer,

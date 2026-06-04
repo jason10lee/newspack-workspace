@@ -477,6 +477,21 @@ class Audience_Wizard extends Wizard {
 	/**
 	 * Get reader activation settings.
 	 *
+	 * Response shape:
+	 *   - config (array)                        Reader Activation settings keyed by option name.
+	 *                                           See Reader_Activation::get_settings_config()
+	 *                                           for the canonical field list.
+	 *   - prerequisites_status (array)          Per-prerequisite completion + plugin status.
+	 *   - memberships (array)                   Memberships integration settings.
+	 *   - can_esp_sync (array)                  Whether ESP sync is currently possible
+	 *                                           and the validation errors if not.
+	 *   - verification_required_by_gates (array<int,array{id:int,title:string,edit_url:string}>)
+	 *                                           Published content gates that force
+	 *                                           post-registration verification ON.
+	 *                                           Returned on GET only — the UPDATE endpoint
+	 *                                           skips this field because saving an unrelated
+	 *                                           setting can't change the gate list.
+	 *
 	 * @return WP_REST_Response
 	 */
 	public function api_get_reader_activation_settings() {
@@ -494,6 +509,12 @@ class Audience_Wizard extends Wizard {
 	/**
 	 * Update reader activation settings.
 	 *
+	 * Mirrors {@see api_get_reader_activation_settings()} except that
+	 * `verification_required_by_gates` is intentionally omitted — saving an
+	 * unrelated RAS setting can't change which gates are published with
+	 * Require Verification, so the client can keep the value it received on
+	 * the initial GET.
+	 *
 	 * @param WP_REST_Request $request Request object.
 	 *
 	 * @return WP_REST_Response
@@ -506,11 +527,10 @@ class Audience_Wizard extends Wizard {
 
 		return rest_ensure_response(
 			[
-				'config'                         => Reader_Activation::get_settings(),
-				'prerequisites_status'           => Reader_Activation::get_prerequisites_status(),
-				'memberships'                    => self::get_memberships_settings(),
-				'can_esp_sync'                   => Reader_Activation\Contact_Sync::has_one_syncable_integration( true ),
-				'verification_required_by_gates' => Reader_Activation::get_verification_required_gates(),
+				'config'               => Reader_Activation::get_settings(),
+				'prerequisites_status' => Reader_Activation::get_prerequisites_status(),
+				'memberships'          => self::get_memberships_settings(),
+				'can_esp_sync'         => Reader_Activation\Contact_Sync::has_one_syncable_integration( true ),
 			]
 		);
 	}

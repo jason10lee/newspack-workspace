@@ -49,6 +49,12 @@ export default withWizardScreen(
 		const [ missingPlugins, setMissingPlugins ] = useState( [] );
 		const [ esp, setEsp ] = useState( '' );
 
+		// Verification gets force-enabled (toggle disabled, value pinned ON) when any
+		// published content gate uses Registered Access + Require Verification. The
+		// list is supplied by the GET /audience-management response so we don't have
+		// to re-fetch on every render.
+		const isVerificationForcedOn = verificationRequiredByGates.length > 0;
+
 		useEffect( () => {
 			window.scrollTo( 0, 0 );
 			// Clear the handoff when the component mounts.
@@ -138,39 +144,34 @@ export default withWizardScreen(
 				{ config.enabled && (
 					<Card noBorder>
 						<Divider alignment="full-width" variant="tertiary" />
-						{ ( () => {
-							const isForcedOn = verificationRequiredByGates.length > 0;
-							return (
-								<ActionCard
-									title={ __( 'Verify new reader accounts', 'newspack-plugin' ) }
-									description={ __(
-										'Ask readers to verify their accounts with an OTP code when registering a new account with an email address.',
-										'newspack-plugin'
-									) }
-									isMedium
-									toggleChecked={ isForcedOn || Boolean( config.verify_new_reader_accounts ) }
-									toggleOnChange={ value => updateConfig( 'verify_new_reader_accounts', value ) }
-									disabled={ isForcedOn }
-								>
-									{ isForcedOn && (
-										<Notice
-											isWarning
-											noticeText={
-												<>
-													{ __( 'Verification is required by at least one published content gate: ', 'newspack-plugin' ) }
-													{ verificationRequiredByGates.map( ( gate, index ) => (
-														<span key={ gate.id }>
-															<ExternalLink href={ gate.edit_url }>{ gate.title }</ExternalLink>
-															{ index < verificationRequiredByGates.length - 1 ? ', ' : '' }
-														</span>
-													) ) }
-												</>
-											}
-										/>
-									) }
-								</ActionCard>
-							);
-						} )() }
+						<ActionCard
+							title={ __( 'Verify new reader accounts', 'newspack-plugin' ) }
+							description={ __(
+								'Ask readers to verify their accounts with an OTP code when registering a new account with an email address.',
+								'newspack-plugin'
+							) }
+							isMedium
+							toggleChecked={ isVerificationForcedOn || Boolean( config.verify_new_reader_accounts ) }
+							toggleOnChange={ value => updateConfig( 'verify_new_reader_accounts', value ) }
+							disabled={ isVerificationForcedOn || inFlight }
+						>
+							{ isVerificationForcedOn && (
+								<Notice
+									isWarning
+									noticeText={
+										<>
+											{ __( 'Verification is required by at least one published content gate: ', 'newspack-plugin' ) }
+											{ verificationRequiredByGates.map( ( gate, index ) => (
+												<span key={ gate.id }>
+													<ExternalLink href={ gate.edit_url }>{ gate.title }</ExternalLink>
+													{ index < verificationRequiredByGates.length - 1 ? ', ' : '' }
+												</span>
+											) ) }
+										</>
+									}
+								/>
+							) }
+						</ActionCard>
 						<ActionCard
 							title={ __( 'Present newsletter signup after checkout and registration', 'newspack-plugin' ) }
 							description={ __(

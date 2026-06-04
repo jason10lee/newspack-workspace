@@ -161,24 +161,27 @@ domReady( function () {
 			// immediately; the verification modal still runs after registration. Degrades to
 			// immediate subscribe when running against a newspack-plugin that doesn't expose the
 			// helper.
-			window.newspackRAS = window.newspackRAS || [];
-			window.newspackRAS.push( ras => {
-				if ( typeof ras?.maybeConfirmRegistration !== 'function' ) {
-					submitSubscribe();
-					return;
-				}
-				ras.maybeConfirmRegistration( {
-					email: body.get( 'npe' ),
-					onProceed: submitSubscribe,
-					onCancel: () => {
-						emailInput.removeAttribute( 'disabled' );
-						submit.removeAttribute( 'disabled' );
-						if ( submit.contains( spinner ) ) {
-							submit.removeChild( spinner );
-						}
-						form.classList.remove( 'in-progress' );
-					},
-				} );
+			//
+			// Look the helper up synchronously instead of going through window.newspackRAS.push():
+			// the push queue is drained on domReady, so if RAS never initialises (older plugin,
+			// runtime error in the RAS bundle) the callback never fires and the form gets stuck
+			// "in progress" forever. A direct global check fails open to immediate submit.
+			const ras = window.newspackReaderActivation;
+			if ( typeof ras?.maybeConfirmRegistration !== 'function' ) {
+				submitSubscribe();
+				return;
+			}
+			ras.maybeConfirmRegistration( {
+				email: body.get( 'npe' ),
+				onProceed: submitSubscribe,
+				onCancel: () => {
+					emailInput.removeAttribute( 'disabled' );
+					submit.removeAttribute( 'disabled' );
+					if ( submit.contains( spinner ) ) {
+						submit.removeChild( spinner );
+					}
+					form.classList.remove( 'in-progress' );
+				},
 			} );
 		} );
 	} );

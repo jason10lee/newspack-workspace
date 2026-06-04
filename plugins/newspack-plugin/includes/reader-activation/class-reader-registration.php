@@ -201,11 +201,21 @@ final class Reader_Registration {
 	}
 
 	/**
-	 * Check and increment the per-IP rate limit for frontend registration.
+	 * Check (and optionally increment) the per-IP rate limit for frontend registration.
+	 *
+	 * The same per-IP budget is shared by the /register endpoint and the /check-email
+	 * preflight so the combined budget stays at 10/hour per IP regardless of how many
+	 * times a single submission pings the API. /register increments the counter (one
+	 * attempt = one token); /check-email passes $increment = false so the preflight
+	 * doesn't burn a token before the registration itself runs.
+	 *
+	 * @param bool $increment Whether to consume a token. False = peek-only (used by
+	 *                        the check-email preflight so it doesn't double-charge
+	 *                        a single registration attempt).
 	 *
 	 * @return bool|\WP_Error True if under limit, WP_Error if exceeded.
 	 */
-	private static function check_registration_rate_limit(): bool|\WP_Error {
+	private static function check_registration_rate_limit( bool $increment = true ): bool|\WP_Error {
 		// @todo REMOTE_ADDR may be a proxy/load-balancer IP in some environments.
 		// On WordPress VIP/Atomic this is the real client IP. For other hosts,
 		// consider parsing forwarded headers or providing a filter to override IP resolution.
@@ -224,11 +234,15 @@ final class Reader_Registration {
 		if ( \wp_using_ext_object_cache() ) {
 			$cache_group = 'newspack_rate_limit';
 			\wp_cache_add( $cache_key, 0, $cache_group, HOUR_IN_SECONDS );
-			$attempts = \wp_cache_incr( $cache_key, 1, $cache_group );
+			$attempts = $increment
+				? \wp_cache_incr( $cache_key, 1, $cache_group )
+				: (int) \wp_cache_get( $cache_key, $cache_group );
 		} else {
 			$attempts = (int) \get_transient( $cache_key );
-			\set_transient( $cache_key, $attempts + 1, HOUR_IN_SECONDS );
-			$attempts++;
+			if ( $increment ) {
+				\set_transient( $cache_key, $attempts + 1, HOUR_IN_SECONDS );
+				$attempts++;
+			}
 		}
 
 		if ( $attempts > $limit ) {
@@ -468,18 +482,23 @@ final class Reader_Registration {
 	 * account for X" *before* the account is actually created, which requires knowing
 	 * up front whether the email is new or already registered.
 	 *
-	 * Privacy note: this endpoint reveals whether a given email belongs to a registered
-	 * reader. The existing /reader-activation/register and process_auth_form endpoints
-	 * already leak the same information through their response shapes, so this isn't a
-	 * net-new disclosure. Rate-limit + email-format validation are still applied.
+	 * Privacy notes:
+	 *   - The /register and process_auth_form endpoints already disclose the same
+	 *     "this email is a reader" signal via their response shapes, so this isn't a
+	 *     net-new oracle.
+	 *   - Responses are filtered to readers only — staff/admin/editor accounts that share
+	 *     the email surface as "exists: false" so this endpoint can't be used to enumerate
+	 *     non-reader logins.
+	 *   - Shares the registration rate-limit budget (peek-only here so the preflight
+	 *     doesn't burn a token before /register runs).
 	 *
 	 * @param \WP_REST_Request $request Request object.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public static function api_check_email_exists( \WP_REST_Request $request ) {
-		// Reuse the same per-IP rate limit as registration so a single client can't sweep
-		// the user base for valid emails by hammering this endpoint.
-		$rate_check = self::check_registration_rate_limit();
+		// Share the per-IP rate-limit budget with /register but don't consume a token —
+		// a single user submission shouldn't cost two attempts.
+		$rate_check = self::check_registration_rate_limit( false );
 		if ( \is_wp_error( $rate_check ) ) {
 			return $rate_check;
 		}
@@ -493,9 +512,15 @@ final class Reader_Registration {
 			);
 		}
 
+		// Only disclose existence for reader accounts. Staff/admin/editor logins that
+		// happen to share the email return false so this endpoint can't be turned into
+		// a non-reader account enumerator.
+		$user   = \get_user_by( 'email', $email );
+		$exists = $user && Reader_Activation::is_user_reader( $user );
+
 		return new \WP_REST_Response(
 			[
-				'exists' => (bool) \get_user_by( 'email', $email ),
+				'exists' => $exists,
 			],
 			200
 		);

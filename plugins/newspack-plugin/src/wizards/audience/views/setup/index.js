@@ -62,7 +62,12 @@ function AudienceWizard( { confirmAction, pluginRequirements, wizardApiFetch }, 
 				setPrerequisites( prerequisites_status );
 				setConfig( fetchedConfig );
 				setEspSyncErrors( can_esp_sync.errors );
-				setVerificationRequiredByGates( verification_required_by_gates || [] );
+				// The update endpoint omits verification_required_by_gates (saving an
+				// unrelated setting can't change the gate list), so preserve whatever the
+				// initial GET fetched. Skip + activate endpoints behave the same way.
+				if ( Array.isArray( verification_required_by_gates ) ) {
+					setVerificationRequiredByGates( verification_required_by_gates );
+				}
 			} )
 			.catch( setError )
 			.finally( () => setInFlight( false ) );
@@ -84,7 +89,9 @@ function AudienceWizard( { confirmAction, pluginRequirements, wizardApiFetch }, 
 						setPrerequisites( prerequisites_status );
 						setConfig( fetchedConfig );
 						setEspSyncErrors( can_esp_sync.errors );
-						setVerificationRequiredByGates( verification_required_by_gates || [] );
+						if ( Array.isArray( verification_required_by_gates ) ) {
+							setVerificationRequiredByGates( verification_required_by_gates );
+						}
 						if ( callback ) {
 							callback();
 						}
