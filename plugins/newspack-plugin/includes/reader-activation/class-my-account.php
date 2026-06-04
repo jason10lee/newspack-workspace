@@ -36,6 +36,11 @@ class My_Account {
 	const ENDPOINTS_OPTION = 'newspack_my_account_endpoint_slugs';
 
 	/**
+	 * Transient prefix for one-time My Account notices (keyed by user ID).
+	 */
+	const NOTICE_TRANSIENT_PREFIX = 'newspack_my_account_notice_';
+
+	/**
 	 * Whether WooCommerce owns the My Account shell.
 	 *
 	 * @return bool
@@ -55,6 +60,7 @@ class My_Account {
 			\add_filter( 'query_vars', [ __CLASS__, 'add_query_vars' ] );
 			\add_action( 'template_redirect', [ __CLASS__, 'redirect_dashboard_to_account_details' ], 5 );
 			\add_action( 'template_redirect', [ __CLASS__, 'handle_form_submissions' ] );
+			\add_action( 'wp', [ __CLASS__, 'maybe_display_notice' ] );
 			\add_action( 'admin_init', [ __CLASS__, 'maybe_provision_page' ] );
 			\add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_assets' ], 11 );
 			\add_filter( 'body_class', [ __CLASS__, 'add_body_class' ] );
@@ -78,6 +84,28 @@ class My_Account {
 			\Newspack\Newspack::plugin_url() . '/dist/my-account-v1.css',
 			[ 'newspack-ui' ],
 			NEWSPACK_PLUGIN_VERSION
+		);
+		\wp_enqueue_script(
+			'newspack-ui',
+			\Newspack\Newspack::plugin_url() . '/dist/newspack-ui.js',
+			[ 'wp-util' ],
+			NEWSPACK_PLUGIN_VERSION,
+			true
+		);
+		\wp_add_inline_script(
+			'newspack-ui',
+			"( function() {
+				document.addEventListener( 'DOMContentLoaded', function() {
+					var deleteButton = document.querySelector( '#delete-account .newspack-ui__button' );
+					var modal = document.getElementById( 'newspack-my-account__delete-account' );
+					if ( deleteButton && modal ) {
+						deleteButton.addEventListener( 'click', function( e ) {
+							e.preventDefault();
+							modal.setAttribute( 'data-state', 'open' );
+						} );
+					}
+				} );
+			} )();"
 		);
 	}
 
@@ -183,12 +211,51 @@ class My_Account {
 		$action = \sanitize_text_field( \wp_unslash( $_POST['action'] ) );
 		// phpcs:enable WordPress.Security.NonceVerification.Missing
 		if ( 'newspack_my_account_save_account' === $action ) {
-			self::handle_save_account();
+			$saved = self::handle_save_account();
+			\set_transient(
+				self::NOTICE_TRANSIENT_PREFIX . \get_current_user_id(),
+				$saved ? 'success' : 'error',
+				\MINUTE_IN_SECONDS
+			);
 			\wp_safe_redirect( self::get_endpoint_url( self::ENDPOINT_EDIT_ACCOUNT ) );
 			exit;
 		}
 		if ( 'newspack_my_account_request_delete' === $action ) {
 			self::handle_delete_request();
+		}
+	}
+
+	/**
+	 * Display a one-time success/error notice after a profile save.
+	 */
+	public static function maybe_display_notice() {
+		if ( ! \is_user_logged_in() || ! self::is_account_page() ) {
+			return;
+		}
+		$key    = self::NOTICE_TRANSIENT_PREFIX . \get_current_user_id();
+		$result = \get_transient( $key );
+		if ( false === $result ) {
+			return;
+		}
+		\delete_transient( $key );
+
+		if ( 'success' === $result ) {
+			$message = \__( 'Account details changed successfully.', 'newspack-plugin' );
+			$type    = 'success';
+		} else {
+			$message = \__( 'Something went wrong. Please try again.', 'newspack-plugin' );
+			$type    = 'error';
+		}
+		if ( \class_exists( 'Newspack\Newspack_UI' ) ) {
+			Newspack_UI::add_notice(
+				$message,
+				[
+					'type'           => $type,
+					'corner'         => 'top-right',
+					'autohide'       => true,
+					'active_on_load' => true,
+				]
+			);
 		}
 	}
 
@@ -621,6 +688,9 @@ class My_Account {
 			</p>
 		</section>
 		<?php
+		if ( \class_exists( 'Newspack\My_Account_UI_V1' ) && \method_exists( 'Newspack\My_Account_UI_V1', 'delete_account_modal' ) ) {
+			My_Account_UI_V1::delete_account_modal();
+		}
 	}
 
 	/**

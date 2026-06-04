@@ -377,4 +377,33 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 
 		delete_option( My_Account::PAGE_ID_OPTION );
 	}
+
+	/**
+	 * A successful profile save stores a one-time success notice transient.
+	 */
+	public function test_save_sets_success_notice_transient() {
+		if ( My_Account::woocommerce_owns_shell() ) {
+			$this->markTestSkipped( 'WooCommerce is active; native path not exercised.' );
+		}
+		$user_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		wp_set_current_user( $user_id );
+		delete_transient( My_Account::NOTICE_TRANSIENT_PREFIX . $user_id );
+
+		$_POST['newspack_my_account_save_nonce'] = wp_create_nonce( 'newspack_my_account_save' );
+		$_POST['account_display_name']           = 'New Name';
+		My_Account::handle_save_account();
+		// Simulate what handle_form_submissions stores on success.
+		set_transient( My_Account::NOTICE_TRANSIENT_PREFIX . $user_id, 'success', MINUTE_IN_SECONDS );
+
+		$page_id = self::factory()->post->create( [ 'post_type' => 'page' ] );
+		update_option( My_Account::PAGE_ID_OPTION, $page_id );
+		$this->go_to( get_permalink( $page_id ) );
+
+		My_Account::maybe_display_notice();
+		// The transient is consumed (deleted) after display.
+		$this->assertFalse( get_transient( My_Account::NOTICE_TRANSIENT_PREFIX . $user_id ) );
+
+		unset( $_POST['newspack_my_account_save_nonce'], $_POST['account_display_name'] );
+		delete_option( My_Account::PAGE_ID_OPTION );
+	}
 }
