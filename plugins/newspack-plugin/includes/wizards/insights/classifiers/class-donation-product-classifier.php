@@ -118,10 +118,15 @@ class Donation_Product_Classifier {
 		// Path 3: canonical donation family (parent + once/month/year children).
 		// This is the universal path on all Newspack publishers today and the
 		// only path that fires before v6.41.0 adoption of the flag.
+		//
+		// Read the parent ID via the public option constant rather than the
+		// private Donations::get_parent_donation_product() — the parent is a
+		// grouped product that's never directly purchased, but we include it
+		// anyway so any edge configuration that does record it is covered.
 		if ( class_exists( Donations::class ) ) {
-			$parent = Donations::get_parent_donation_product();
-			if ( $parent ) {
-				$ids[] = (int) $parent->get_id();
+			$parent_id = (int) get_option( Donations::DONATION_PRODUCT_ID_OPTION, 0 );
+			if ( $parent_id > 0 ) {
+				$ids[] = $parent_id;
 			}
 			$children = Donations::get_donation_product_child_products_ids();
 			foreach ( $children as $child_id ) {
