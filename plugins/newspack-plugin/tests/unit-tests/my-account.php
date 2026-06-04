@@ -219,4 +219,30 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 
 		delete_transient( 'np_reader_account_delete_' . $user->ID );
 	}
+
+	/**
+	 * The maybe_provision_page() method creates the native page when RA is enabled and Woo absent.
+	 */
+	public function test_maybe_provision_page() {
+		if ( My_Account::woocommerce_owns_shell() ) {
+			$this->markTestSkipped( 'WooCommerce is active; native path not exercised.' );
+		}
+		delete_option( My_Account::PAGE_ID_OPTION );
+
+		// Force Reader Activation enabled for this test.
+		add_filter( 'newspack_reader_activation_enabled', '__return_true' );
+
+		My_Account::maybe_provision_page();
+		$page_id = (int) get_option( My_Account::PAGE_ID_OPTION, 0 );
+		$this->assertGreaterThan( 0, $page_id );
+		$this->assertSame( 'page', get_post_type( $page_id ) );
+
+		// Idempotent: a second call does not create a new page.
+		My_Account::maybe_provision_page();
+		$this->assertSame( $page_id, (int) get_option( My_Account::PAGE_ID_OPTION, 0 ) );
+
+		remove_filter( 'newspack_reader_activation_enabled', '__return_true' );
+		wp_delete_post( $page_id, true );
+		delete_option( My_Account::PAGE_ID_OPTION );
+	}
 }

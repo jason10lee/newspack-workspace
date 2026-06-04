@@ -54,7 +54,25 @@ class My_Account {
 			\add_action( 'init', [ __CLASS__, 'register_endpoints' ], 6 );
 			\add_filter( 'query_vars', [ __CLASS__, 'add_query_vars' ] );
 			\add_action( 'template_redirect', [ __CLASS__, 'handle_form_submissions' ] );
+			\add_action( 'admin_init', [ __CLASS__, 'maybe_provision_page' ] );
 		}
+	}
+
+	/**
+	 * Ensure the native account page exists when running without WooCommerce.
+	 *
+	 * Self-healing: runs on admin_init, creates the page at most once (guarded
+	 * by the stored option), and only when Reader Activation is enabled.
+	 */
+	public static function maybe_provision_page() {
+		if ( ! Reader_Activation::is_enabled() ) {
+			return;
+		}
+		$page_id = (int) \get_option( self::PAGE_ID_OPTION, 0 );
+		if ( $page_id && 'page' === \get_post_type( $page_id ) ) {
+			return;
+		}
+		self::get_or_create_page();
 	}
 
 	/**
