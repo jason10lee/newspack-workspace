@@ -1229,8 +1229,8 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 				// the main PATCH below produce the canonical error.
 				//
 				// References:
-				// - https://mailchimp.com/help/troubleshooting-advanced-segments/
-				// - https://mailchimp.com/help/schedule-or-pause-a-regular-email-campaign/
+				// - https://mailchimp.com/help/troubleshooting-advanced-segments.
+				// - https://mailchimp.com/help/schedule-or-pause-a-regular-email-campaign.
 				if (
 					isset( $payload['recipients']['segment_opts'], $payload['recipients']['list_id'] ) &&
 					! empty( (array) $payload['recipients']['segment_opts'] )
