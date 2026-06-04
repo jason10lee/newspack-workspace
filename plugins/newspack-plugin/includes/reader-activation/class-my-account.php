@@ -31,6 +31,11 @@ class My_Account {
 	const ENDPOINT_DELETE_ACCOUNT = 'newspack-delete-account';
 
 	/**
+	 * Option storing the last-registered endpoint slug set (for flush detection).
+	 */
+	const ENDPOINTS_OPTION = 'newspack_my_account_endpoint_slugs';
+
+	/**
 	 * Whether WooCommerce owns the My Account shell.
 	 *
 	 * @return bool
@@ -173,8 +178,22 @@ class My_Account {
 	 * Register rewrite endpoints for the native shell.
 	 */
 	public static function register_endpoints() {
-		foreach ( array_keys( self::get_endpoints() ) as $slug ) {
+		$slugs = array_keys( self::get_endpoints() );
+		foreach ( $slugs as $slug ) {
 			\add_rewrite_endpoint( $slug, EP_PAGES );
+		}
+
+		$current = $slugs;
+		sort( $current );
+		$previous = \get_option( self::ENDPOINTS_OPTION, [] );
+		if ( ! is_array( $previous ) ) {
+			$previous = [];
+		}
+		sort( $previous );
+		if ( $current !== $previous ) {
+			// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.flush_rewrite_rules_flush_rewrite_rules -- only fires when the slug set changes.
+			\flush_rewrite_rules( false );
+			\update_option( self::ENDPOINTS_OPTION, $current );
 		}
 	}
 
