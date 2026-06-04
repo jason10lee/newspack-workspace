@@ -37,6 +37,7 @@ namespace Newspack\Insights;
 defined( 'ABSPATH' ) || exit;
 
 use DateTimeInterface;
+use Newspack\Logger;
 
 // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery
 // phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -227,18 +228,23 @@ class Legacy_Storage implements Storage_Interface {
 		$prefix    = $wpdb->prefix;
 		$donations = $this->id_list( $this->donation_product_ids );
 
-		// Same CASE-on-period logic as HPOS, but the total amount is
-		// retrieved via _order_total postmeta (stored as DECIMAL string).
-		// DISTINCT id-subselect dedupes subscriptions with more than one
-		// non-donation line item so MRR isn't multiplied.
+		// Same CASE-on-period logic as HPOS_Storage::get_mrr(), but the
+		// total amount comes from _order_total postmeta (DECIMAL string).
+		// See the HPOS implementation for the documented spec — covers
+		// day/week/month/year at any positive interval; ELSE is truly
+		// conservative (total / 12) and a diagnostic surfaces any
+		// fallthroughs via Newspack\Logger.
 		$sql = "SELECT SUM(
 				CASE
-					WHEN bp.meta_value = 'month' AND bi.meta_value = '1' THEN CAST(tot.meta_value AS DECIMAL(15,2))
-					WHEN bp.meta_value = 'year'  AND bi.meta_value = '1' THEN CAST(tot.meta_value AS DECIMAL(15,2)) / 12
-					WHEN bp.meta_value = 'month' AND bi.meta_value = '3' THEN CAST(tot.meta_value AS DECIMAL(15,2)) / 3
-					WHEN bp.meta_value = 'month' AND bi.meta_value = '6' THEN CAST(tot.meta_value AS DECIMAL(15,2)) / 6
-					WHEN bp.meta_value = 'week'  AND bi.meta_value = '1' THEN CAST(tot.meta_value AS DECIMAL(15,2)) * 4.345
-					ELSE CAST(tot.meta_value AS DECIMAL(15,2))
+					WHEN bp.meta_value = 'day'   AND CAST(bi.meta_value AS UNSIGNED) > 0
+						THEN CAST(tot.meta_value AS DECIMAL(15,2)) * 30 / CAST(bi.meta_value AS UNSIGNED)
+					WHEN bp.meta_value = 'week'  AND CAST(bi.meta_value AS UNSIGNED) > 0
+						THEN CAST(tot.meta_value AS DECIMAL(15,2)) * (52/12) / CAST(bi.meta_value AS UNSIGNED)
+					WHEN bp.meta_value = 'month' AND CAST(bi.meta_value AS UNSIGNED) > 0
+						THEN CAST(tot.meta_value AS DECIMAL(15,2)) / CAST(bi.meta_value AS UNSIGNED)
+					WHEN bp.meta_value = 'year'  AND CAST(bi.meta_value AS UNSIGNED) > 0
+						THEN CAST(tot.meta_value AS DECIMAL(15,2)) / (12 * CAST(bi.meta_value AS UNSIGNED))
+					ELSE CAST(tot.meta_value AS DECIMAL(15,2)) / 12
 				END
 			)
 			FROM {$prefix}posts p
@@ -259,7 +265,40 @@ class Legacy_Storage implements Storage_Interface {
 				  AND oim.meta_value NOT IN ($donations)
 			  )";
 
-		return (float) $wpdb->get_var( $sql );
+		$mrr = (float) $wpdb->get_var( $sql );
+
+		$unrecognized = (int) $wpdb->get_var(
+			"SELECT COUNT(DISTINCT p.ID)
+			FROM {$prefix}posts p
+			JOIN {$prefix}postmeta bp ON bp.post_id = p.ID AND bp.meta_key = '_billing_period'
+			JOIN {$prefix}postmeta bi ON bi.post_id = p.ID AND bi.meta_key = '_billing_interval'
+			WHERE p.post_type = 'shop_subscription'
+			  AND p.post_status = 'wc-active'
+			  AND (
+				bp.meta_value NOT IN ('day', 'week', 'month', 'year')
+				OR CAST(bi.meta_value AS UNSIGNED) = 0
+			  )
+			  AND p.ID IN (
+				SELECT DISTINCT oi.order_id
+				FROM {$prefix}woocommerce_order_items oi
+				JOIN {$prefix}woocommerce_order_itemmeta oim
+					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+				WHERE oi.order_item_type = 'line_item'
+				  AND oim.meta_value NOT IN ($donations)
+			  )"
+		);
+
+		if ( $unrecognized > 0 && class_exists( Logger::class ) ) {
+			Logger::log(
+				sprintf(
+					'%d active non-donation subscription(s) have unrecognized _billing_period/_billing_interval combinations. Their MRR contribution fell through to the conservative annual-amortized fallback (total / 12). Review product configuration.',
+					$unrecognized
+				),
+				'NEWSPACK-INSIGHTS'
+			);
+		}
+
+		return $mrr;
 	}
 
 	/**

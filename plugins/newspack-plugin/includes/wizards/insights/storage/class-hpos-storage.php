@@ -33,6 +33,7 @@ namespace Newspack\Insights;
 defined( 'ABSPATH' ) || exit;
 
 use DateTimeInterface;
+use Newspack\Logger;
 
 // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery
 // phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -203,17 +204,34 @@ class HPOS_Storage implements Storage_Interface {
 		$donations = $this->id_list( $this->donation_product_ids );
 
 		// Normalize each active subscription's total to a monthly rate.
-		// Conservative ELSE clause for unrecognized periods/intervals.
+		// The CASE statement covers all documented Woo billing periods
+		// at any positive interval N. Daily subscriptions multiply by
+		// thirty and divide by N, treating a month as thirty days.
+		// Weekly subscriptions multiply by fifty-two over twelve and
+		// divide by N. Monthly subscriptions divide by N. Yearly
+		// subscriptions divide by twelve times N.
+		// The ELSE branch is now TRULY conservative — it falls through to
+		// `total / 12`, which undercounts MRR for anything except yearly
+		// (a publisher with weird intervals will see slightly lower MRR
+		// than reality rather than the previous behavior of multiplying
+		// everything to look monthly). A separate diagnostic query below
+		// counts how many subscriptions hit this fallback and logs a
+		// notice via Newspack\Logger so the publisher can correct the
+		// product configuration.
+		//
 		// DISTINCT id-subselect dedupes orders that have more than one
 		// non-donation line item so MRR isn't multiplied.
 		$sql = "SELECT SUM(
 				CASE
-					WHEN bp.meta_value = 'month' AND bi.meta_value = '1' THEN o.total_amount
-					WHEN bp.meta_value = 'year'  AND bi.meta_value = '1' THEN o.total_amount / 12
-					WHEN bp.meta_value = 'month' AND bi.meta_value = '3' THEN o.total_amount / 3
-					WHEN bp.meta_value = 'month' AND bi.meta_value = '6' THEN o.total_amount / 6
-					WHEN bp.meta_value = 'week'  AND bi.meta_value = '1' THEN o.total_amount * 4.345
-					ELSE o.total_amount
+					WHEN bp.meta_value = 'day'   AND CAST(bi.meta_value AS UNSIGNED) > 0
+						THEN o.total_amount * 30 / CAST(bi.meta_value AS UNSIGNED)
+					WHEN bp.meta_value = 'week'  AND CAST(bi.meta_value AS UNSIGNED) > 0
+						THEN o.total_amount * (52/12) / CAST(bi.meta_value AS UNSIGNED)
+					WHEN bp.meta_value = 'month' AND CAST(bi.meta_value AS UNSIGNED) > 0
+						THEN o.total_amount / CAST(bi.meta_value AS UNSIGNED)
+					WHEN bp.meta_value = 'year'  AND CAST(bi.meta_value AS UNSIGNED) > 0
+						THEN o.total_amount / (12 * CAST(bi.meta_value AS UNSIGNED))
+					ELSE o.total_amount / 12
 				END
 			)
 			FROM {$prefix}wc_orders o
@@ -232,7 +250,44 @@ class HPOS_Storage implements Storage_Interface {
 				  AND oim.meta_value NOT IN ($donations)
 			  )";
 
-		return (float) $wpdb->get_var( $sql );
+		$mrr = (float) $wpdb->get_var( $sql );
+
+		// Diagnostic: count active non-donation subscriptions whose
+		// _billing_period or _billing_interval is unrecognized. If any
+		// exist, their MRR contribution was the conservative fallback —
+		// surface so the publisher can fix the product config.
+		$unrecognized = (int) $wpdb->get_var(
+			"SELECT COUNT(DISTINCT o.id)
+			FROM {$prefix}wc_orders o
+			JOIN {$prefix}wc_orders_meta bp ON bp.order_id = o.id AND bp.meta_key = '_billing_period'
+			JOIN {$prefix}wc_orders_meta bi ON bi.order_id = o.id AND bi.meta_key = '_billing_interval'
+			WHERE o.type = 'shop_subscription'
+			  AND o.status = 'wc-active'
+			  AND (
+				bp.meta_value NOT IN ('day', 'week', 'month', 'year')
+				OR CAST(bi.meta_value AS UNSIGNED) = 0
+			  )
+			  AND o.id IN (
+				SELECT DISTINCT oi.order_id
+				FROM {$prefix}woocommerce_order_items oi
+				JOIN {$prefix}woocommerce_order_itemmeta oim
+					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+				WHERE oi.order_item_type = 'line_item'
+				  AND oim.meta_value NOT IN ($donations)
+			  )"
+		);
+
+		if ( $unrecognized > 0 && class_exists( Logger::class ) ) {
+			Logger::log(
+				sprintf(
+					'%d active non-donation subscription(s) have unrecognized _billing_period/_billing_interval combinations. Their MRR contribution fell through to the conservative annual-amortized fallback (total / 12). Review product configuration.',
+					$unrecognized
+				),
+				'NEWSPACK-INSIGHTS'
+			);
+		}
+
+		return $mrr;
 	}
 
 	/**
