@@ -148,7 +148,7 @@ final class Reader_Activation {
 			'otp_auth_action'              => Magic_Link::OTP_AUTH_ACTION,
 			'otp_rate_interval'            => Magic_Link::RATE_INTERVAL,
 			'auth_action_result'           => Magic_Link::AUTH_ACTION_RESULT,
-			'account_url'                  => function_exists( 'wc_get_account_endpoint_url' ) ? \wc_get_account_endpoint_url( 'dashboard' ) : '',
+			'account_url'                  => My_Account::get_endpoint_url(),
 			'is_ras_enabled'               => self::is_enabled(),
 			'require_account_verification' => self::show_post_registration_verification(),
 			'verification_url'             => \admin_url( 'admin-ajax.php' ),
