@@ -1269,17 +1269,19 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 					// locked), let the main PATCH below produce the
 					// canonical error.
 					try {
-						$this->validate(
-							$mc->patch(
-								"campaigns/$mc_campaign_id",
-								[
-									'recipients' => [
-										'list_id'      => $payload['recipients']['list_id'],
-										'segment_opts' => (object) [],
-									],
-								]
-							)
-						);
+						if ( null !== $rollback_recipients ) {
+							$this->validate(
+								$mc->patch(
+									"campaigns/$mc_campaign_id",
+									[
+										'recipients' => [
+											'list_id'      => $payload['recipients']['list_id'],
+											'segment_opts' => (object) [],
+										],
+									]
+								)
+							);
+						}
 					} catch ( Exception $reset_error ) {
 						Newspack_Newsletters_Logger::log(
 							'Mailchimp segment_opts reset failed for campaign ' . $mc_campaign_id . ': ' . $reset_error->getMessage() . ' — proceeding with main PATCH.'
