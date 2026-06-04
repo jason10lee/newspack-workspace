@@ -53,7 +53,83 @@ class My_Account {
 			\add_filter( 'page_template', [ __CLASS__, 'page_template' ], 11 );
 			\add_action( 'init', [ __CLASS__, 'register_endpoints' ], 6 );
 			\add_filter( 'query_vars', [ __CLASS__, 'add_query_vars' ] );
+			\add_action( 'template_redirect', [ __CLASS__, 'handle_form_submissions' ] );
 		}
+	}
+
+	/**
+	 * Handle the native account-settings save (Woo absent).
+	 *
+	 * Updates display name and email. Returns the updated user ID, or 0 on
+	 * failure / invalid nonce.
+	 *
+	 * @return int
+	 */
+	public static function handle_save_account() {
+		if ( ! \is_user_logged_in() ) {
+			return 0;
+		}
+		$nonce = isset( $_POST['newspack_my_account_save_nonce'] ) ? \sanitize_text_field( \wp_unslash( $_POST['newspack_my_account_save_nonce'] ) ) : '';
+		if ( ! \wp_verify_nonce( $nonce, 'newspack_my_account_save' ) ) {
+			return 0;
+		}
+
+		$user_id = \get_current_user_id();
+		$args    = [ 'ID' => $user_id ];
+		if ( isset( $_POST['account_display_name'] ) ) {
+			$args['display_name'] = \sanitize_text_field( \wp_unslash( $_POST['account_display_name'] ) );
+		}
+		if ( isset( $_POST['account_email'] ) ) {
+			$email = \sanitize_email( \wp_unslash( $_POST['account_email'] ) );
+			if ( \is_email( $email ) ) {
+				$args['user_email'] = $email;
+			}
+		}
+		$result = \wp_update_user( $args );
+		return \is_wp_error( $result ) ? 0 : $user_id;
+	}
+
+	/**
+	 * Route native form POSTs to their handlers on the `template_redirect` hook.
+	 *
+	 * The form `action` value is only used for routing; each target handler runs
+	 * its own nonce verification before mutating any data.
+	 */
+	public static function handle_form_submissions() {
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- routing only; the dispatched handlers verify their own nonces.
+		if ( empty( $_POST['action'] ) || ! self::is_account_page() ) {
+			return;
+		}
+		$action = \sanitize_text_field( \wp_unslash( $_POST['action'] ) );
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
+		if ( 'newspack_my_account_save_account' === $action ) {
+			self::handle_save_account();
+			\wp_safe_redirect( self::get_endpoint_url( self::ENDPOINT_EDIT_ACCOUNT ) );
+			exit;
+		}
+		if ( 'newspack_my_account_request_delete' === $action ) {
+			self::handle_delete_request();
+		}
+	}
+
+	/**
+	 * Handle the native delete-account request (Woo absent): send the existing
+	 * deletion email if available, else delete after confirmation.
+	 */
+	public static function handle_delete_request() {
+		if ( ! \is_user_logged_in() ) {
+			return;
+		}
+		$nonce = isset( $_POST['newspack_my_account_delete_nonce'] ) ? \sanitize_text_field( \wp_unslash( $_POST['newspack_my_account_delete_nonce'] ) ) : '';
+		if ( ! \wp_verify_nonce( $nonce, 'newspack_my_account_delete' ) ) {
+			return;
+		}
+		$user = \wp_get_current_user();
+		if ( class_exists( 'Newspack\WooCommerce_My_Account' ) && method_exists( 'Newspack\WooCommerce_My_Account', 'send_delete_account_email' ) ) {
+			WooCommerce_My_Account::send_delete_account_email( $user );
+		}
+		\wp_safe_redirect( self::get_endpoint_url( self::ENDPOINT_EDIT_ACCOUNT ) );
+		exit;
 	}
 
 	/**

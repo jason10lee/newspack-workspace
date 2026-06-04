@@ -167,4 +167,30 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 
 		$this->assertSame( [ '' ], $fired );
 	}
+
+	/**
+	 * The native save handler updates display name and email.
+	 */
+	public function test_native_save_account() {
+		$user_id = self::factory()->user->create(
+			[
+				'role'         => 'subscriber',
+				'display_name' => 'Old Name',
+				'user_email'   => 'old@example.com',
+			]
+		);
+		wp_set_current_user( $user_id );
+
+		$_POST['newspack_my_account_save_nonce'] = wp_create_nonce( 'newspack_my_account_save' );
+		$_POST['account_display_name']           = 'New Name';
+		$_POST['account_email']                  = 'new@example.com';
+
+		My_Account::handle_save_account();
+
+		$user = get_user_by( 'id', $user_id );
+		$this->assertSame( 'New Name', $user->display_name );
+		$this->assertSame( 'new@example.com', $user->user_email );
+
+		unset( $_POST['newspack_my_account_save_nonce'], $_POST['account_display_name'], $_POST['account_email'] );
+	}
 }
