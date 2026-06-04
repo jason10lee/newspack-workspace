@@ -58,6 +58,7 @@ class My_Account {
 			\add_action( 'admin_init', [ __CLASS__, 'maybe_provision_page' ] );
 			\add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_assets' ], 11 );
 			\add_filter( 'body_class', [ __CLASS__, 'add_body_class' ] );
+			\add_filter( 'show_admin_bar', [ __CLASS__, 'hide_admin_bar' ] ); // phpcs:ignore WordPressVIPMinimum.UserExperience.AdminBarRemoval.RemovalDetected
 		}
 	}
 
@@ -104,6 +105,19 @@ class My_Account {
 			$classes[] = 'newspack-my-account--logged-in';
 		}
 		return $classes;
+	}
+
+	/**
+	 * Hide the WordPress admin bar on the native My Account page.
+	 *
+	 * @param bool $show Whether to show the admin bar.
+	 * @return bool
+	 */
+	public static function hide_admin_bar( $show ) {
+		if ( self::is_account_page() ) {
+			return false;
+		}
+		return $show;
 	}
 
 	/**
@@ -493,7 +507,7 @@ class My_Account {
 			<?php if ( $logout ) : ?>
 			<div class="newspack-my-account__navigation-footer">
 				<ul>
-					<li>
+					<li class="woocommerce-MyAccount-navigation-link woocommerce-MyAccount-navigation-link--customer-logout">
 						<a href="<?php echo \esc_url( \wp_logout_url( \home_url( '/' ) ) ); ?>" class="newspack-ui__button newspack-ui__button--small newspack-ui__button--ghost">
 							<?php echo \esc_html( $logout ); ?>
 							<?php Newspack_UI_Icons::print_svg( 'logout' ); ?>

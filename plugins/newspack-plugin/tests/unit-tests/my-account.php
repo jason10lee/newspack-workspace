@@ -294,4 +294,24 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 
 		delete_option( My_Account::PAGE_ID_OPTION );
 	}
+
+	/**
+	 * The admin bar is hidden on the native account page and untouched elsewhere.
+	 */
+	public function test_hide_admin_bar() {
+		if ( My_Account::woocommerce_owns_shell() ) {
+			$this->markTestSkipped( 'WooCommerce is active; native path not exercised.' );
+		}
+		$page_id  = self::factory()->post->create( [ 'post_type' => 'page' ] );
+		$other_id = self::factory()->post->create( [ 'post_type' => 'page' ] );
+		update_option( My_Account::PAGE_ID_OPTION, $page_id );
+
+		$this->go_to( get_permalink( $page_id ) );
+		$this->assertFalse( My_Account::hide_admin_bar( true ) );
+
+		$this->go_to( get_permalink( $other_id ) );
+		$this->assertTrue( My_Account::hide_admin_bar( true ) );
+
+		delete_option( My_Account::PAGE_ID_OPTION );
+	}
 }
