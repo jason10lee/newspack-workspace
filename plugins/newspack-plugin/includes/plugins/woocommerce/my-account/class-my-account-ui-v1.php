@@ -737,27 +737,27 @@ class My_Account_UI_V1 {
 	 * @return bool
 	 */
 	private static function current_user_has_saved_billing_data() {
-		static $cached = null;
-		if ( null !== $cached ) {
-			return $cached;
-		}
+		static $cache = [];
 		$user_id = \get_current_user_id();
+		if ( isset( $cache[ $user_id ] ) ) {
+			return $cache[ $user_id ];
+		}
 		if ( ! $user_id ) {
-			$cached = false;
-			return $cached;
+			$cache[ $user_id ] = false;
+			return $cache[ $user_id ];
 		}
 		if ( function_exists( 'wc_get_customer_saved_methods_list' ) && ! empty( \wc_get_customer_saved_methods_list( $user_id ) ) ) {
-			$cached = true;
-			return $cached;
+			$cache[ $user_id ] = true;
+			return $cache[ $user_id ];
 		}
 		foreach ( [ 'billing_address_1', 'shipping_address_1' ] as $meta_key ) {
 			if ( \get_user_meta( $user_id, $meta_key, true ) ) {
-				$cached = true;
-				return $cached;
+				$cache[ $user_id ] = true;
+				return $cache[ $user_id ];
 			}
 		}
-		$cached = false;
-		return $cached;
+		$cache[ $user_id ] = false;
+		return $cache[ $user_id ];
 	}
 
 	/**
@@ -766,16 +766,16 @@ class My_Account_UI_V1 {
 	 * @return bool
 	 */
 	private static function current_user_has_orders() {
-		static $cached = null;
-		if ( null !== $cached ) {
-			return $cached;
-		}
+		static $cache = [];
 		$user_id = \get_current_user_id();
-		if ( ! $user_id || ! function_exists( 'wc_get_orders' ) ) {
-			$cached = false;
-			return $cached;
+		if ( isset( $cache[ $user_id ] ) ) {
+			return $cache[ $user_id ];
 		}
-		$cached = (bool) \wc_get_orders(
+		if ( ! $user_id || ! function_exists( 'wc_get_orders' ) ) {
+			$cache[ $user_id ] = false;
+			return $cache[ $user_id ];
+		}
+		$cache[ $user_id ] = (bool) \wc_get_orders(
 			[
 				'customer_id' => $user_id,
 				'limit'       => 1,
@@ -783,7 +783,7 @@ class My_Account_UI_V1 {
 				'status'      => 'any',
 			]
 		);
-		return $cached;
+		return $cache[ $user_id ];
 	}
 
 	/**

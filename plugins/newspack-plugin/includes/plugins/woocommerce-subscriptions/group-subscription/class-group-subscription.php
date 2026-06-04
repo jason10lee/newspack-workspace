@@ -60,14 +60,31 @@ class Group_Subscription {
 	private static $names_cache = [];
 
 	/**
-	 * Reset the per-request names cache.
+	 * Per-request cache of the subscriptions a user is a member of, keyed by `user_id|ids_only`.
+	 *
+	 * @var array<string,array>
+	 */
+	private static $member_subscriptions_cache = [];
+
+	/**
+	 * Per-request cache of the subscriptions a user manages, keyed by `user_id|ids_only`.
+	 *
+	 * @var array<string,array>
+	 */
+	private static $managed_subscriptions_cache = [];
+
+	/**
+	 * Reset the per-request caches.
 	 *
 	 * Tests, CLI workers, and invalidation hooks call this to bust the static
-	 * memoization in `get_group_names_for_user()` / `get_group_ids_for_user()`.
+	 * memoization in `get_group_names_for_user()` / `get_group_ids_for_user()`,
+	 * `get_group_subscriptions_for_user()`, and `get_managed_subscriptions_for_user()`.
 	 * No-op if nothing is cached.
 	 */
 	public static function reset_cache() {
-		self::$names_cache = [];
+		self::$names_cache                 = [];
+		self::$member_subscriptions_cache  = [];
+		self::$managed_subscriptions_cache = [];
 	}
 
 	/**
@@ -179,6 +196,10 @@ class Group_Subscription {
 		if ( ! $user_id || ! function_exists( 'wcs_get_users_subscriptions' ) ) {
 			return [];
 		}
+		$cache_key = $user_id . '|' . ( $ids_only ? '1' : '0' );
+		if ( isset( self::$managed_subscriptions_cache[ $cache_key ] ) ) {
+			return self::$managed_subscriptions_cache[ $cache_key ];
+		}
 		$owned   = \wcs_get_users_subscriptions( $user_id );
 		$managed = [];
 		foreach ( $owned as $sub ) {
@@ -204,7 +225,10 @@ class Group_Subscription {
 		 * @param \WC_Subscription[]|int[] $managed Managed group subscriptions or IDs.
 		 * @param int                      $user_id The user ID.
 		 */
-		return apply_filters( 'newspack_group_subscriptions_managed_for_user', $managed, $user_id );
+		$managed = apply_filters( 'newspack_group_subscriptions_managed_for_user', $managed, $user_id );
+
+		self::$managed_subscriptions_cache[ $cache_key ] = $managed;
+		return $managed;
 	}
 
 	/**
@@ -375,11 +399,16 @@ class Group_Subscription {
 	 * @return \WC_Subscription[]|int[] The group subscriptions or subscription IDs the user is a member of.
 	 */
 	public static function get_group_subscriptions_for_user( $user_id, $ids_only = false ) {
+		$user_id = (int) $user_id;
 		if ( ! function_exists( 'wcs_get_subscription' ) ) {
 			return [];
 		}
 		if ( ! Reader_Activation::is_user_reader( \get_user_by( 'id', $user_id ) ) ) {
 			return [];
+		}
+		$cache_key = $user_id . '|' . ( $ids_only ? '1' : '0' );
+		if ( isset( self::$member_subscriptions_cache[ $cache_key ] ) ) {
+			return self::$member_subscriptions_cache[ $cache_key ];
 		}
 		$subscription_ids = array_map( 'absint', \get_user_meta( $user_id, self::GROUP_SUBSCRIPTION_USER_META_KEY, false ) );
 		$subscriptions    = [];
@@ -404,7 +433,10 @@ class Group_Subscription {
 		 * @param \WC_Subscription[]|int[] $subscriptions The group subscriptions or subscription IDs the user is a member of.
 		 * @param int $user_id The user ID.
 		 */
-		return apply_filters( 'newspack_group_subscriptions_for_user', $subscriptions, $user_id );
+		$subscriptions = apply_filters( 'newspack_group_subscriptions_for_user', $subscriptions, $user_id );
+
+		self::$member_subscriptions_cache[ $cache_key ] = $subscriptions;
+		return $subscriptions;
 	}
 
 	/**
