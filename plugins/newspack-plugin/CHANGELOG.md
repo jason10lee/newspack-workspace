@@ -1,3 +1,10 @@
+## newspack [6.42.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.42.2...newspack@6.42.3) (2026-06-04)
+
+
+### Bug Fixes
+
+* **jetpack:** disable Newsletter (subscriptions) module ([#208](https://github.com/Automattic/newspack-workspace/issues/208)) ([7d56e9d](https://github.com/Automattic/newspack-workspace/commit/7d56e9d92988bf95640fb6924b7a9eb1c66c71d0))
+
 ## newspack [6.42.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.42.1...newspack@6.42.2) (2026-06-03)
 
 
