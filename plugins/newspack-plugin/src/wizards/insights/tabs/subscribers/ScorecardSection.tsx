@@ -1,10 +1,14 @@
 /**
  * ScorecardSection (NPPD-1616).
  *
- * Top-line subscriber numbers. Three "snapshot" cards (active subs,
- * MRR, ARR) that don't depend on the window, plus two windowed cards
- * (new / churned) that show a delta against the previous window when
- * comparison mode is on.
+ * "Subscribers at a glance" — current-state metrics that do NOT depend
+ * on the date range picker. Active subscribers and MRR/ARR reflect
+ * what's true right now; upcoming renewals (30d) is a forward-looking
+ * snapshot of currently-active subscriptions but is also independent
+ * of the picker.
+ *
+ * Window-scoped metrics (new/churned, gross/net revenue, refund rate,
+ * retry rate) live in {@see WindowedSection} below this one.
  */
 
 /**
@@ -15,16 +19,14 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
-import type { SubscribersSnapshot, SubscribersWindow } from '../../api/subscribers';
+import type { SubscribersSnapshot } from '../../api/subscribers';
 import MetricCard from './MetricCard';
 
 export interface ScorecardSectionProps {
 	snapshot: SubscribersSnapshot;
-	current: SubscribersWindow;
-	previous: SubscribersWindow | null;
 }
 
-const ScorecardSection = ( { snapshot, current, previous }: ScorecardSectionProps ) => (
+const ScorecardSection = ( { snapshot }: ScorecardSectionProps ) => (
 	<section className="newspack-insights__section newspack-insights__section--scorecard" aria-labelledby="newspack-insights-scorecard-heading">
 		<h2 id="newspack-insights-scorecard-heading" className="newspack-insights__section-heading">
 			{ __( 'Subscribers at a glance', 'newspack-plugin' ) }
@@ -49,25 +51,10 @@ const ScorecardSection = ( { snapshot, current, previous }: ScorecardSectionProp
 				description={ __( 'MRR × 12', 'newspack-plugin' ) }
 			/>
 			<MetricCard
-				label={ __( 'New subscribers', 'newspack-plugin' ) }
-				value={ current.new_subscribers }
-				format="number"
-				previousValue={ previous?.new_subscribers }
-				description={ __( 'First-time subscribers in selected timeframe', 'newspack-plugin' ) }
-			/>
-			<MetricCard
-				label={ __( 'Churned subscribers', 'newspack-plugin' ) }
-				value={ current.churned_subscribers }
-				format="number"
-				previousValue={ previous?.churned_subscribers }
-				lowerIsBetter
-				description={ __( 'Subscribers who churned in this timeframe', 'newspack-plugin' ) }
-			/>
-			<MetricCard
 				label={ __( 'Upcoming renewals (30d)', 'newspack-plugin' ) }
 				value={ snapshot.upcoming_renewals_30d.count }
 				format="number"
-				description={ __( 'Count of active subs renewing in the next 30 days', 'newspack-plugin' ) }
+				description={ __( 'Active subscriptions due to renew in the next 30 days', 'newspack-plugin' ) }
 			/>
 		</div>
 	</section>
