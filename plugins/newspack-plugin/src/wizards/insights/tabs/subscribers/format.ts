@@ -51,14 +51,18 @@ export const formatDelta = ( current: number, previous: number ): string | null 
 	return signedPercentFormatter.format( ( current - previous ) / previous );
 };
 
-export const deltaDirection = ( current: number, previous: number ): 'up' | 'down' | 'flat' => {
-	if ( current > previous ) {
-		return 'up';
+/**
+ * Compute the user-meaningful tone of a delta. "Positive" means the
+ * change is good news for the publisher; "negative" means bad news.
+ * lowerIsBetter inverts the mapping for metrics where a decrease is the
+ * desired direction (refund rate, churn count, etc.).
+ */
+export const deltaTone = ( current: number, previous: number, lowerIsBetter = false ): 'positive' | 'negative' | 'neutral' => {
+	if ( current === previous ) {
+		return 'neutral';
 	}
-	if ( current < previous ) {
-		return 'down';
-	}
-	return 'flat';
+	const improved = lowerIsBetter ? current < previous : current > previous;
+	return improved ? 'positive' : 'negative';
 };
 
 export const noDataLabel = (): string => __( 'No data', 'newspack-plugin' );

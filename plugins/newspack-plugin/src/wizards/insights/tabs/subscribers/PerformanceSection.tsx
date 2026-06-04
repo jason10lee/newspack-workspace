@@ -50,7 +50,10 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 				{ __( 'Performance by product', 'newspack-plugin' ) }
 			</h2>
 			<p className="newspack-insights__section-caption">
-				{ __( 'Active subscriptions per product (subscriptions, not unique customers). A customer with two active subscriptions counts in both products’ rows.', 'newspack-plugin' ) }
+				{ __(
+					'Active subscriptions per product (subscriptions, not unique customers). A customer with two active subscriptions counts in both products’ rows.',
+					'newspack-plugin'
+				) }
 			</p>
 			<div className="newspack-insights__table-wrap">
 				<table className="newspack-insights__table">

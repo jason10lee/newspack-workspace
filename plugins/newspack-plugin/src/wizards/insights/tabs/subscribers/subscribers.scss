@@ -1,10 +1,11 @@
 /**
  * Newspack Insights — Tab 6 (Subscribers) styles (NPPD-1616)
  *
- * Tab-local styling for the classification banner, scorecard / revenue
- * metric grid, tenure box-plot summary + buckets, performance table,
- * and cancellation reasons bar list. Imported by SubscribersTab so it
- * code-splits with the tab bundle.
+ * Implements the card chrome + type scale from
+ * `~/Sites/insights-docs/component-design-spec.md`. Sections are
+ * spacing-only (no background, no border); cards are the white
+ * surfaces with `gray-200` borders. Primary scorecards use the spec's
+ * `value-lg` 44px size; secondary use `value-md` 32px.
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
@@ -13,7 +14,7 @@
 	&__subscribers-tab {
 		display: flex;
 		flex-direction: column;
-		gap: 24px;
+		gap: 32px;
 	}
 
 	&__tab-loading,
@@ -35,121 +36,165 @@
 		}
 	}
 
-	// Generic per-section container.
+	// Sections are pure spacing — no background, no border. The cards
+	// inside them carry the chrome (per spec).
 
 	&__section {
 		display: flex;
 		flex-direction: column;
 		gap: 16px;
-		padding: 20px;
-		background-color: #fff;
-		border: 1px solid wp-colors.$gray-200;
-		border-radius: 4px;
 	}
 
 	&__section-heading {
-		font-size: 16px;
+		font-size: 18px;
 		font-weight: 600;
 		line-height: 1.3;
 		margin: 0;
 		color: wp-colors.$gray-900;
 	}
 
+	&__section-caption {
+		margin: 0;
+		font-size: 13px;
+		font-weight: 400;
+		color: wp-colors.$gray-700;
+	}
+
 	&__section-empty {
 		margin: 0;
+		padding: 20px;
+		background-color: #fff;
+		border: 1px solid wp-colors.$gray-200;
+		border-radius: 4px;
 		font-size: 14px;
-		color: wp-colors.$gray-600;
+		font-weight: 400;
+		color: wp-colors.$gray-700;
 	}
 
 	// Scorecard + Revenue: responsive metric grid.
 
 	&__metric-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+		grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
 		gap: 16px;
 	}
+
+	// Card chrome per spec: white background, gray-200 border, 4px
+	// radius. Padding 24px 28px (top/bottom × left/right). Min-height
+	// 160px so cards line up uniformly across the grid.
 
 	&__metric-card {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
-		padding: 16px;
-		background-color: wp-colors.$gray-100;
+		padding: 24px 28px;
+		background-color: #fff;
+		border: 1px solid wp-colors.$gray-200;
 		border-radius: 4px;
+		min-height: 160px;
 
 		&-label {
-			font-size: 13px;
-			font-weight: 500;
+			font-size: 12px;
+			font-weight: 600;
+			letter-spacing: 0.05em;
+			text-transform: uppercase;
 			color: wp-colors.$gray-700;
 		}
 
 		&-value {
-			font-size: 24px;
+			margin-top: 16px;
+			font-size: 32px;
 			font-weight: 600;
-			line-height: 1.2;
+			line-height: 1.05;
+			letter-spacing: -0.01em;
 			color: wp-colors.$gray-900;
+			font-variant-numeric: tabular-nums;
 		}
 
 		&-delta {
+			margin-top: 8px;
 			font-size: 13px;
-			font-weight: 500;
+			font-weight: 600;
+			font-variant-numeric: tabular-nums;
 
-			&--up {
+			// Spec calls for newspack-colors $success-600 / $error-600.
+			// Chrome stylesheet only imports @wordpress/base-styles, so
+			// using its alert tokens here keeps the import surface tight;
+			// swap to newspack-colors when (if) those tokens get wired in.
+			&--positive {
 				color: wp-colors.$alert-green;
 			}
 
-			&--down {
+			&--negative {
 				color: wp-colors.$alert-red;
 			}
 
-			&--flat {
+			&--neutral {
 				color: wp-colors.$gray-600;
 			}
 		}
 
 		&-description {
-			font-size: 12px;
-			color: wp-colors.$gray-600;
+			margin-top: 8px;
+			font-size: 14px;
+			font-weight: 400;
+			line-height: 1.4;
+			color: wp-colors.$gray-700;
+		}
+
+		// Primary scorecards: value-lg per spec.
+		&--primary &-value {
+			font-size: 44px;
 		}
 	}
 
-	// Tenure box-plot stats summary.
+	// Tenure box-plot stats summary lives inside a card.
 
 	&__stats-summary {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 24px;
 		margin: 0;
+		padding: 20px 24px;
+		background-color: #fff;
+		border: 1px solid wp-colors.$gray-200;
+		border-radius: 4px;
 
 		div {
 			display: flex;
 			flex-direction: column;
-			gap: 2px;
+			gap: 4px;
 		}
 
 		dt {
 			font-size: 12px;
-			font-weight: 500;
-			color: wp-colors.$gray-600;
+			font-weight: 600;
+			letter-spacing: 0.05em;
+			text-transform: uppercase;
+			color: wp-colors.$gray-700;
 			margin: 0;
 		}
 
 		dd {
-			font-size: 18px;
+			font-size: 22px;
 			font-weight: 600;
 			color: wp-colors.$gray-900;
+			font-variant-numeric: tabular-nums;
 			margin: 0;
 		}
 	}
 
-	// Bar list — used by tenure buckets and cancellation reasons.
+	// Bar list — used by tenure buckets and cancellation reasons. The
+	// list itself is the card.
 
 	&__bar-list {
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
 		margin: 0;
-		padding: 0;
+		padding: 20px 24px;
+		background-color: #fff;
+		border: 1px solid wp-colors.$gray-200;
+		border-radius: 4px;
 		list-style: none;
 
 		&-item {
@@ -180,28 +225,40 @@
 		}
 	}
 
-	// Performance table.
+	// Performance table — card wraps the table, table fills (padding 0
+	// on wrapper). Header bg per spec gray-100.
 
 	&__table-wrap {
 		overflow-x: auto;
+		background-color: #fff;
+		border: 1px solid wp-colors.$gray-200;
+		border-radius: 4px;
 	}
 
 	&__table {
 		width: 100%;
 		border-collapse: collapse;
-		font-size: 13px;
+		font-size: 14px;
 
 		th,
 		td {
-			padding: 8px 12px;
+			padding: 12px 20px;
 			text-align: left;
 			border-bottom: 1px solid wp-colors.$gray-200;
 		}
 
 		th {
+			font-size: 12px;
 			font-weight: 600;
+			letter-spacing: 0.04em;
+			text-transform: uppercase;
 			color: wp-colors.$gray-700;
 			background-color: wp-colors.$gray-100;
+			border-bottom: 1px solid wp-colors.$gray-300;
+		}
+
+		tbody tr:last-child td {
+			border-bottom: 0;
 		}
 
 		&-num {

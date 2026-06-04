@@ -124,6 +124,9 @@ const InsightsWizard = ( { config }: InsightsWizardProps ) => {
 						<>
 							<DateRangePicker range={ range } onPresetChange={ setPreset } onCustomChange={ setCustom } />
 							<ComparisonToggle enabled={ comparisonEnabled } onChange={ setComparisonEnabled } />
+							{ /* TODO(NPPD-1605): wire computed_at from the SWR cache layer. */ }
+							{ /* Currently always null because the REST endpoints don't surface */ }
+							{ /* their cache timestamps yet; LastUpdated renders nothing in that case. */ }
 							<LastUpdated timestamp={ config.lastUpdated ?? null } />
 						</>
 					) }

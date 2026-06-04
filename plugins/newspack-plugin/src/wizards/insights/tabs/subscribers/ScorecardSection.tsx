@@ -31,15 +31,14 @@ const ScorecardSection = ( { snapshot, current, previous }: ScorecardSectionProp
 		</h2>
 		<div className="newspack-insights__metric-grid">
 			<MetricCard
+				primary
 				label={ __( 'Active subscribers', 'newspack-plugin' ) }
 				value={ snapshot.active_subscribers }
 				format="number"
-				description={ __(
-					'Distinct customers with at least one active non-donation subscription',
-					'newspack-plugin'
-				) }
+				description={ __( 'Distinct customers with at least one active non-donation subscription', 'newspack-plugin' ) }
 			/>
 			<MetricCard
+				primary
 				label={ __( 'Monthly recurring revenue', 'newspack-plugin' ) }
 				value={ snapshot.mrr }
 				format="currency"
@@ -63,6 +62,7 @@ const ScorecardSection = ( { snapshot, current, previous }: ScorecardSectionProp
 				value={ current.churned_subscribers }
 				format="number"
 				previousValue={ previous?.churned_subscribers }
+				lowerIsBetter
 				description={ __( 'Lost all active subscriptions in selected timeframe', 'newspack-plugin' ) }
 			/>
 			<MetricCard

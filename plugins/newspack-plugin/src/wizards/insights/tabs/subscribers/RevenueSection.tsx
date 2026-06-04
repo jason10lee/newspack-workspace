@@ -35,6 +35,7 @@ const RevenueSection = ( { current, previous }: RevenueSectionProps ) => (
 				description={ __( 'Subscription orders in selected timeframe (before refunds)', 'newspack-plugin' ) }
 			/>
 			<MetricCard
+				primary
 				label={ __( 'Net revenue', 'newspack-plugin' ) }
 				value={ current.revenue_net }
 				format="currency"
@@ -46,6 +47,7 @@ const RevenueSection = ( { current, previous }: RevenueSectionProps ) => (
 				value={ current.refund_rate }
 				format="percent"
 				previousValue={ previous?.refund_rate }
+				lowerIsBetter
 				description={ __( 'Refunds ÷ subscription orders', 'newspack-plugin' ) }
 			/>
 			<MetricCard
