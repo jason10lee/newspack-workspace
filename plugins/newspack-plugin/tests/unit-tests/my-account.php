@@ -245,4 +245,50 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 		wp_delete_post( $page_id, true );
 		delete_option( My_Account::PAGE_ID_OPTION );
 	}
+
+	/**
+	 * Native account page enqueues the My Account stylesheet and body classes.
+	 */
+	public function test_native_account_page_styles() {
+		if ( My_Account::woocommerce_owns_shell() ) {
+			$this->markTestSkipped( 'WooCommerce is active; native path not exercised.' );
+		}
+		$page_id = self::factory()->post->create( [ 'post_type' => 'page' ] );
+		update_option( My_Account::PAGE_ID_OPTION, $page_id );
+		$user_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		wp_set_current_user( $user_id );
+		$this->go_to( get_permalink( $page_id ) );
+
+		My_Account::enqueue_assets();
+		$this->assertTrue( wp_style_is( 'newspack-my-account-v1', 'enqueued' ) );
+
+		$classes = My_Account::add_body_class( [] );
+		$this->assertContains( 'newspack-ui', $classes );
+		$this->assertContains( 'newspack-my-account', $classes );
+		$this->assertContains( 'newspack-my-account--v1', $classes );
+		$this->assertContains( 'newspack-my-account--logged-in', $classes );
+
+		wp_dequeue_style( 'newspack-my-account-v1' );
+		delete_option( My_Account::PAGE_ID_OPTION );
+	}
+
+	/**
+	 * Styles are not enqueued away from the account page.
+	 */
+	public function test_native_styles_not_enqueued_off_page() {
+		if ( My_Account::woocommerce_owns_shell() ) {
+			$this->markTestSkipped( 'WooCommerce is active; native path not exercised.' );
+		}
+		$page_id  = self::factory()->post->create( [ 'post_type' => 'page' ] );
+		$other_id = self::factory()->post->create( [ 'post_type' => 'page' ] );
+		update_option( My_Account::PAGE_ID_OPTION, $page_id );
+		$user_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		wp_set_current_user( $user_id );
+		$this->go_to( get_permalink( $other_id ) );
+
+		My_Account::enqueue_assets();
+		$this->assertFalse( wp_style_is( 'newspack-my-account-v1', 'enqueued' ) );
+
+		delete_option( My_Account::PAGE_ID_OPTION );
+	}
 }

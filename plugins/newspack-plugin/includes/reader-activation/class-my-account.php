@@ -55,7 +55,54 @@ class My_Account {
 			\add_filter( 'query_vars', [ __CLASS__, 'add_query_vars' ] );
 			\add_action( 'template_redirect', [ __CLASS__, 'handle_form_submissions' ] );
 			\add_action( 'admin_init', [ __CLASS__, 'maybe_provision_page' ] );
+			\add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_assets' ], 11 );
+			\add_filter( 'body_class', [ __CLASS__, 'add_body_class' ] );
 		}
+	}
+
+	/**
+	 * Enqueue My Account styles on the native account page.
+	 *
+	 * Reuses the compiled My Account stylesheet (dist/my-account-v1.css). The
+	 * WooCommerce path enqueues this via My_Account_UI_V1; when WooCommerce is
+	 * absent the native shell must do it.
+	 */
+	public static function enqueue_assets() {
+		if ( ! self::is_account_page() || ! \is_user_logged_in() ) {
+			return;
+		}
+		\wp_enqueue_style(
+			'newspack-my-account-v1',
+			\Newspack\Newspack::plugin_url() . '/dist/my-account-v1.css',
+			[ 'newspack-ui' ],
+			NEWSPACK_PLUGIN_VERSION
+		);
+	}
+
+	/**
+	 * Add My Account body classes on the native account page.
+	 *
+	 * Mirrors My_Account_UI_V1::add_body_class() so the layout CSS (scoped to
+	 * these classes) applies on the native path.
+	 *
+	 * @param array $classes Body classes.
+	 * @return array
+	 */
+	public static function add_body_class( $classes ) {
+		if ( ! self::is_account_page() ) {
+			return $classes;
+		}
+		if ( \is_user_logged_in() ) {
+			$classes[] = 'newspack-ui';
+		}
+		$classes[] = 'newspack-my-account';
+		$classes[] = 'newspack-my-account--v1';
+		if ( ! \is_user_logged_in() ) {
+			$classes[] = 'newspack-my-account--logged-out';
+		} else {
+			$classes[] = 'newspack-my-account--logged-in';
+		}
+		return $classes;
 	}
 
 	/**
