@@ -74,7 +74,10 @@ class My_Account {
 			\add_filter( 'page_template', [ __CLASS__, 'page_template' ], 11 );
 			\add_action( 'init', [ __CLASS__, 'register_endpoints' ], 6 );
 			\add_filter( 'query_vars', [ __CLASS__, 'add_query_vars' ] );
-			\add_action( 'template_redirect', [ __CLASS__, 'redirect_dashboard_to_account_details' ], 5 );
+			// Priority 20 so it runs after auth/token handlers (e.g. Magic_Link's
+			// process_token_request at 10), which redirect+exit on their own — the
+			// dashboard redirect must not strip their query params.
+			\add_action( 'template_redirect', [ __CLASS__, 'redirect_dashboard_to_account_details' ], 20 );
 			\add_action( 'template_redirect', [ __CLASS__, 'handle_form_submissions' ] );
 			\add_action( 'wp', [ __CLASS__, 'maybe_display_notice' ] );
 			\add_action( 'admin_init', [ __CLASS__, 'maybe_provision_page' ] );

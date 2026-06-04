@@ -2863,7 +2863,7 @@ final class Reader_Activation {
 			return new \WP_Error( 'newspack_verification_email_interval', __( 'Please wait before requesting another verification email.', 'newspack-plugin' ) );
 		}
 
-		$redirect_to = function_exists( '\wc_get_account_endpoint_url' ) ? \wc_get_account_endpoint_url( 'dashboard' ) : '';
+		$redirect_to = class_exists( 'Newspack\My_Account' ) ? My_Account::get_endpoint_url() : '';
 		\update_user_meta( $user->ID, self::LAST_EMAIL_DATE, time() );
 
 		$link = Magic_Link::generate_url( $user, $redirect_to );
