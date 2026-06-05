@@ -82,7 +82,9 @@ class My_Account {
 			\add_action( 'wp', [ __CLASS__, 'maybe_display_notice' ] );
 			\add_action( 'admin_init', [ __CLASS__, 'maybe_provision_page' ] );
 			\add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_assets' ], 11 );
-			\add_filter( 'body_class', [ __CLASS__, 'add_body_class' ] );
+			// Priority 11 so it runs after the theme's body_class filter (10) and
+			// can replace `has-sidebar` with `no-sidebar` on the logged-out page.
+			\add_filter( 'body_class', [ __CLASS__, 'add_body_class' ], 11 );
 			\add_filter( 'show_admin_bar', [ __CLASS__, 'hide_admin_bar' ] ); // phpcs:ignore WordPressVIPMinimum.UserExperience.AdminBarRemoval.RemovalDetected
 		}
 	}
@@ -111,7 +113,6 @@ class My_Account {
 		if ( ! \is_user_logged_in() ) {
 			\wp_add_inline_style(
 				'newspack-my-account-v1',
-				'.newspack-my-account--logged-out .main-content{width:100%;max-width:none}' .
 				'.newspack-my-account--logged-out .newspack-reader-auth__inline-wrapper{margin-left:auto;margin-right:auto;max-width:var(--newspack-ui-modal-width-s)}'
 			);
 			return;
@@ -168,6 +169,13 @@ class My_Account {
 		$classes[] = 'newspack-my-account--v1';
 		if ( ! \is_user_logged_in() ) {
 			$classes[] = 'newspack-my-account--logged-out';
+			// The logged-out template renders no sidebar; swap the theme's
+			// `has-sidebar` class for `no-sidebar` so the content lays out
+			// full-width and the auth form centers on the page.
+			$classes = array_values( array_diff( $classes, [ 'has-sidebar' ] ) );
+			if ( ! in_array( 'no-sidebar', $classes, true ) ) {
+				$classes[] = 'no-sidebar';
+			}
 		} else {
 			$classes[] = 'newspack-my-account--logged-in';
 		}
@@ -659,8 +667,13 @@ class My_Account {
 	 * @return string
 	 */
 	public static function page_template( $template ) {
-		if ( ! self::is_account_page() || ! \is_user_logged_in() ) {
+		if ( ! self::is_account_page() ) {
 			return $template;
+		}
+		if ( ! \is_user_logged_in() ) {
+			// Logged-out readers get a stripped template: site header, the auth
+			// form as content, and the site footer — no title, no sidebar.
+			return NEWSPACK_ABSPATH . 'includes/plugins/woocommerce/my-account/templates/v1/login.php';
 		}
 		return NEWSPACK_ABSPATH . 'includes/plugins/woocommerce/my-account/templates/v1/my-account.php';
 	}
