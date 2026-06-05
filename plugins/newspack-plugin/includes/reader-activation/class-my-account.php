@@ -95,7 +95,7 @@ class My_Account {
 	 * absent the native shell must do it.
 	 */
 	public static function enqueue_assets() {
-		if ( ! self::is_account_page() || ! \is_user_logged_in() ) {
+		if ( ! self::is_account_page() ) {
 			return;
 		}
 		\wp_enqueue_style(
@@ -104,6 +104,19 @@ class My_Account {
 			[ 'newspack-ui' ],
 			NEWSPACK_PLUGIN_VERSION
 		);
+
+		// Logged-out readers see the inline auth form. Center it like the
+		// WooCommerce account page does (its centering CSS is scoped to the
+		// `.woocommerce-account` body class, which is absent without WooCommerce).
+		if ( ! \is_user_logged_in() ) {
+			\wp_add_inline_style(
+				'newspack-my-account-v1',
+				'.newspack-my-account--logged-out .main-content{width:100%;max-width:none}' .
+				'.newspack-my-account--logged-out .newspack-reader-auth__inline-wrapper{margin-left:auto;margin-right:auto;max-width:var(--newspack-ui-modal-width-s)}'
+			);
+			return;
+		}
+
 		// The classic theme pins the content column to its article width, which
 		// prevents the account content from expanding so its `margin: auto` can
 		// center it. Free the content column on the native account page.
@@ -627,6 +640,16 @@ class My_Account {
 	 */
 	public static function register_shortcode() {
 		\add_shortcode( 'newspack_my_account', [ __CLASS__, 'render_page' ] );
+
+		// The native account page reuses the existing WooCommerce account page,
+		// whose content is the `[woocommerce_my_account]` shortcode. When
+		// WooCommerce is inactive that shortcode is unregistered and would render
+		// as raw text, so alias it to the native renderer. This makes the page
+		// render natively regardless of the active page template (e.g. when a
+		// logged-out/cached copy bypasses the page_template override).
+		if ( ! self::woocommerce_owns_shell() ) {
+			\add_shortcode( 'woocommerce_my_account', [ __CLASS__, 'render_page' ] );
+		}
 	}
 
 	/**
@@ -652,7 +675,18 @@ class My_Account {
 	 */
 	public static function render_page() {
 		if ( ! \is_user_logged_in() ) {
-			return '';
+			// Mirror the WooCommerce account page: a logged-out visitor gets the
+			// inline Reader Activation auth form (see login-form.php), not an
+			// empty page.
+			ob_start();
+			echo '<div class="newspack-ui newspack-reader-auth__inline-wrapper">';
+			Reader_Activation::render_auth_form( false );
+			$footer = Reader_Activation::get_auth_footer();
+			if ( $footer ) {
+				echo '<p class="newspack-ui__font--xs">' . \wp_kses_post( $footer ) . '</p>';
+			}
+			echo '</div>';
+			return ob_get_clean();
 		}
 
 		ob_start();
