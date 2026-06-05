@@ -1598,6 +1598,10 @@ final class Reader_Activation {
 			} elseif ( function_exists( 'wc_get_page_permalink' ) && function_exists( 'is_account_page' ) && \is_account_page() ) {
 				// If we are already on the my account page, set the my account URL so the page reloads on submit.
 				$auth_callback_url = \wc_get_page_permalink( 'myaccount' );
+			} elseif ( class_exists( 'Newspack\My_Account' ) && My_Account::is_account_page() ) {
+				// Native (WooCommerce-less) account page: reload it on submit so the
+				// signed-in reader lands on their account.
+				$auth_callback_url = My_Account::get_endpoint_url();
 			}
 		}
 		?>
@@ -2454,8 +2458,26 @@ final class Reader_Activation {
 		}
 
 		\wp_clear_auth_cookie();
-		\wp_set_current_user( $user->ID );
+		\wp_set_current_user( $user->ID, $user->user_login );
+
+		/*
+		 * Keep $_COOKIE in sync with the auth cookie issued below for the
+		 * remainder of this request. wp_set_auth_cookie() only emits Set-Cookie
+		 * headers; it does not update $_COOKIE. Without this, same-request session
+		 * management that reads the current session token from $_COOKIE — e.g.
+		 * wp_destroy_other_sessions() invoked when set_reader_verified() runs on
+		 * the magic-link verification request — would operate on the previous
+		 * session token, preserve it, and destroy the newly issued session that
+		 * the browser actually receives, logging the reader out.
+		 */
+		$sync_cookie_superglobal = function ( $logged_in_cookie ) {
+			// phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+			$_COOKIE[ LOGGED_IN_COOKIE ] = $logged_in_cookie;
+		};
+		\add_action( 'set_logged_in_cookie', $sync_cookie_superglobal );
 		\wp_set_auth_cookie( $user->ID, true );
+		\remove_action( 'set_logged_in_cookie', $sync_cookie_superglobal );
+
 		\do_action( 'wp_login', $user->user_login, $user );
 		Logger::log( 'Logged in user ' . $user->ID );
 
