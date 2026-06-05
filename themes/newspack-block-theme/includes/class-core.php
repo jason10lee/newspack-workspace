@@ -65,12 +65,8 @@ final class Core {
 		// Strings for translation.
 		$newspack_l10n = array(
 			'close_menu'       => esc_html__( 'Close Menu', 'newspack-block-theme' ),
-			'close_search'     => esc_html__( 'Close Search', 'newspack-block-theme' ),
 			'comment_too_fast' => esc_html__( 'You are posting comments too quickly. Please wait a moment before trying again.', 'newspack-block-theme' ),
 		);
-		if ( wp_script_is( 'jetpack-instant-search', 'enqueued' ) ) {
-			$newspack_l10n['jetpack_instant_search'] = 'true';
-		}
 
 		// Enqueue front-end JavaScript.
 		wp_enqueue_script( 'newspack-main', get_theme_file_uri( '/dist/main.js' ), array(), wp_get_theme()->get( 'Version' ), true );
