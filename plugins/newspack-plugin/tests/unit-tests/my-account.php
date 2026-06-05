@@ -339,7 +339,8 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The admin bar is hidden on the native account page and untouched elsewhere.
+	 * The admin bar is hidden for readers on the native account page, but kept
+	 * for admins/editors and untouched elsewhere.
 	 */
 	public function test_hide_admin_bar() {
 		if ( My_Account::woocommerce_owns_shell() ) {
@@ -349,12 +350,25 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 		$other_id = self::factory()->post->create( [ 'post_type' => 'page' ] );
 		update_option( My_Account::PAGE_ID_OPTION, $page_id );
 
+		$reader_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		update_user_meta( $reader_id, 'np_reader', true );
+		$admin_id = self::factory()->user->create( [ 'role' => 'administrator' ] );
+
+		// Reader on the account page: admin bar is hidden.
+		wp_set_current_user( $reader_id );
 		$this->go_to( get_permalink( $page_id ) );
 		$this->assertFalse( My_Account::hide_admin_bar( true ) );
 
+		// Reader elsewhere: untouched.
 		$this->go_to( get_permalink( $other_id ) );
 		$this->assertTrue( My_Account::hide_admin_bar( true ) );
 
+		// Admins/editors keep the admin bar even on the account page.
+		wp_set_current_user( $admin_id );
+		$this->go_to( get_permalink( $page_id ) );
+		$this->assertTrue( My_Account::hide_admin_bar( true ) );
+
+		wp_set_current_user( 0 );
 		delete_option( My_Account::PAGE_ID_OPTION );
 	}
 
