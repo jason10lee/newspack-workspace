@@ -26,9 +26,9 @@ import { __, sprintf } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
-import { formatCurrency, formatNumber, formatPercent, formatDelta, deltaTone } from './format';
+import { formatCurrency, formatDecimal, formatNumber, formatPercent, formatDelta, deltaTone } from './format';
 
-export type MetricFormat = 'number' | 'currency' | 'percent';
+export type MetricFormat = 'number' | 'currency' | 'percent' | 'decimal';
 
 export interface MetricCardProps {
 	label: string;
@@ -61,6 +61,9 @@ const formatValue = ( v: number, fmt: MetricFormat ): string => {
 	}
 	if ( fmt === 'percent' ) {
 		return formatPercent( v );
+	}
+	if ( fmt === 'decimal' ) {
+		return formatDecimal( v );
 	}
 	return formatNumber( v );
 };
