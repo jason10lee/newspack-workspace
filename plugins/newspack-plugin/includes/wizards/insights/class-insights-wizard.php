@@ -71,6 +71,34 @@ class Insights_Wizard extends Wizard {
 	}
 
 	/**
+	 * Whether the Gates preview tab (Tab 4 / NPPD-1604) is enabled
+	 * for this environment.
+	 *
+	 * Independent from {@see self::is_enabled()} so the preview can
+	 * be flipped on only where it's wanted (development, staging,
+	 * canary), separately from the broader Insights wizard rollout.
+	 * Once Phase 2 (NPPD-1630) lands and the tab is no longer a
+	 * placeholder, this gate can be retired in favor of the standard
+	 * Insights flag plus a runtime feature-detection check.
+	 *
+	 * @return bool True when the Gates preview should appear in the
+	 *              Insights tab nav and have its REST route active.
+	 */
+	public static function is_gates_preview_enabled(): bool {
+		/**
+		 * Enables the Gates tab preview (Phase 1, placeholder data).
+		 *
+		 * @constant NEWSPACK_INSIGHTS_GATES_PREVIEW
+		 * @type     bool
+		 * @default  Gates preview tab hidden
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_INSIGHTS_GATES_PREVIEW', true );
+		 */
+		return defined( 'NEWSPACK_INSIGHTS_GATES_PREVIEW' ) && NEWSPACK_INSIGHTS_GATES_PREVIEW;
+	}
+
+	/**
 	 * Constructor.
 	 *
 	 * Bails before parent registration when the feature flag is disabled,
@@ -236,7 +264,7 @@ class Insights_Wizard extends Wizard {
 		$thirty_ago = $today->modify( '-29 days' );
 
 		return [
-			// Tab visibility. The audience/engagement/conversion/gates/
+			// Tab visibility. The audience/engagement/conversion/
 			// prompts/advertising tabs are stubbed to true until their
 			// data layers land (each needs BQ for proper feature
 			// detection, NPPD-1598). Subscribers stays all-on for now;
@@ -244,12 +272,14 @@ class Insights_Wizard extends Wizard {
 			// product presence) is a separate follow-up. Donors hides
 			// when there are no donation products on the publisher,
 			// using the shared Donation_Product_Classifier (cached 1h)
-			// as the single source of truth.
+			// as the single source of truth. Gates is gated to the
+			// preview constant NEWSPACK_INSIGHTS_GATES_PREVIEW while
+			// Phase 1 (placeholder data) is being validated.
 			'tabs'              => [
 				'audience'    => true,
 				'engagement'  => true,
 				'conversion'  => true,
-				'gates'       => true,
+				'gates'       => self::is_gates_preview_enabled(),
 				'prompts'     => true,
 				'subscribers' => true,
 				'donors'      => self::has_donation_activity(),
