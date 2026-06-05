@@ -70,23 +70,40 @@ class My_Account {
 	 */
 	public static function init() {
 		\add_action( 'init', [ __CLASS__, 'register_shortcode' ] );
-		if ( ! self::woocommerce_owns_shell() ) {
-			\add_filter( 'page_template', [ __CLASS__, 'page_template' ], 11 );
-			\add_action( 'init', [ __CLASS__, 'register_endpoints' ], 6 );
-			\add_filter( 'query_vars', [ __CLASS__, 'add_query_vars' ] );
-			// Priority 20 so it runs after auth/token handlers (e.g. Magic_Link's
-			// process_token_request at 10), which redirect+exit on their own — the
-			// dashboard redirect must not strip their query params.
-			\add_action( 'template_redirect', [ __CLASS__, 'redirect_dashboard_to_account_details' ], 20 );
-			\add_action( 'template_redirect', [ __CLASS__, 'handle_form_submissions' ] );
-			\add_action( 'wp', [ __CLASS__, 'maybe_display_notice' ] );
-			\add_action( 'admin_init', [ __CLASS__, 'maybe_provision_page' ] );
-			\add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_assets' ], 11 );
-			// Priority 11 so it runs after the theme's body_class filter (10) and
-			// can replace `has-sidebar` with `no-sidebar` on the logged-out page.
-			\add_filter( 'body_class', [ __CLASS__, 'add_body_class' ], 11 );
-			\add_filter( 'show_admin_bar', [ __CLASS__, 'hide_admin_bar' ] ); // phpcs:ignore WordPressVIPMinimum.UserExperience.AdminBarRemoval.RemovalDetected
+		// Defer the native-shell decision to `plugins_loaded` so the WooCommerce
+		// class-existence check is reliable regardless of plugin load order
+		// (newspack-plugin sorts before woocommerce, so WooCommerce may not be
+		// loaded yet at this file's load time).
+		\add_action( 'plugins_loaded', [ __CLASS__, 'maybe_register_native_hooks' ] );
+	}
+
+	/**
+	 * Register the native shell hooks when WooCommerce is absent.
+	 *
+	 * Gated on Reader Activation being enabled so sites without it aren't given
+	 * site-wide rewrite endpoints, query vars, or a rewrite flush for a feature
+	 * that is effectively off (no native account page is provisioned when
+	 * Reader Activation is disabled).
+	 */
+	public static function maybe_register_native_hooks() {
+		if ( self::woocommerce_owns_shell() || ! Reader_Activation::is_enabled() ) {
+			return;
 		}
+		\add_filter( 'page_template', [ __CLASS__, 'page_template' ], 11 );
+		\add_action( 'init', [ __CLASS__, 'register_endpoints' ], 6 );
+		\add_filter( 'query_vars', [ __CLASS__, 'add_query_vars' ] );
+		// Priority 20 so it runs after auth/token handlers (e.g. Magic_Link's
+		// process_token_request at 10), which redirect+exit on their own — the
+		// dashboard redirect must not strip their query params.
+		\add_action( 'template_redirect', [ __CLASS__, 'redirect_dashboard_to_account_details' ], 20 );
+		\add_action( 'template_redirect', [ __CLASS__, 'handle_form_submissions' ] );
+		\add_action( 'wp', [ __CLASS__, 'maybe_display_notice' ] );
+		\add_action( 'admin_init', [ __CLASS__, 'maybe_provision_page' ] );
+		\add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_assets' ], 11 );
+		// Priority 11 so it runs after the theme's body_class filter (10) and
+		// can replace `has-sidebar` with `no-sidebar` on the logged-out page.
+		\add_filter( 'body_class', [ __CLASS__, 'add_body_class' ], 11 );
+		\add_filter( 'show_admin_bar', [ __CLASS__, 'hide_admin_bar' ] ); // phpcs:ignore WordPressVIPMinimum.UserExperience.AdminBarRemoval.RemovalDetected
 	}
 
 	/**
@@ -183,16 +200,23 @@ class My_Account {
 	}
 
 	/**
-	 * Hide the WordPress admin bar on the native My Account page.
+	 * Hide the WordPress admin bar on the native My Account page for readers.
+	 *
+	 * Mirrors Reader_Activation::hide_admin_bar_for_readers(): administrators and
+	 * editors keep the admin bar so they can still manage the site.
 	 *
 	 * @param bool $show Whether to show the admin bar.
 	 * @return bool
 	 */
 	public static function hide_admin_bar( $show ) {
-		if ( self::is_account_page() ) {
-			return false;
+		if ( ! self::is_account_page() ) {
+			return $show;
 		}
-		return $show;
+		$user = \wp_get_current_user();
+		if ( ! $user || ! $user->ID || ! Reader_Activation::is_user_reader( $user ) ) {
+			return $show;
+		}
+		return false;
 	}
 
 	/**
@@ -734,7 +758,7 @@ class My_Account {
 		<nav class="woocommerce-MyAccount-navigation newspack-ui" aria-label="<?php \esc_attr_e( 'Account pages', 'newspack-plugin' ); ?>">
 			<div class="newspack-my-account__navigation-header">
 				<?php if ( ! empty( $site_logo ) ) : ?>
-					<a class="newspack-my-account__site-logo" href="<?php echo \esc_url( \home_url( '/' ) ); ?>" title="<?php \esc_attr_e( 'Back to Homepage', 'newspack-plugin' ); ?>">
+					<a class="newspack-my-account__site-logo" href="<?php echo \esc_url( \home_url( '/' ) ); ?>" title="<?php \esc_attr_e( 'Back to Homepage', 'newspack-plugin' ); ?>" aria-label="<?php \esc_attr_e( 'Back to Homepage', 'newspack-plugin' ); ?>">
 						<img src="<?php echo \esc_url( $site_logo ); ?>" alt="" />
 					</a>
 				<?php endif; ?>
