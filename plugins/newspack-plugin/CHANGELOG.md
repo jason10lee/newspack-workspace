@@ -1,3 +1,25 @@
+# newspack [6.43.0-alpha.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.42.4...newspack@6.43.0-alpha.1) (2026-06-05)
+
+
+### Bug Fixes
+
+* add contrasting colour to the my account mobile menu button ([#164](https://github.com/Automattic/newspack-workspace/issues/164)) ([c06219c](https://github.com/Automattic/newspack-workspace/commit/c06219c4dcf2ae0f83fc195dc1b74fdab84e284a))
+* **audience:** decode HTML entities in campaign prompt titles ([#4711](https://github.com/Automattic/newspack-workspace/issues/4711)) ([f1d189b](https://github.com/Automattic/newspack-workspace/commit/f1d189b8e73cb3a3db2c5cf8771bed221a8c7694))
+* correct submit button text on change-payment-method page ([#4654](https://github.com/Automattic/newspack-workspace/issues/4654)) ([7aba1ff](https://github.com/Automattic/newspack-workspace/commit/7aba1ff3705e9f971c92ad3840da8c1dfd953fd4))
+* prevent content-gate editor.scss styles from getting chunked into the common.css file ([#4716](https://github.com/Automattic/newspack-workspace/issues/4716)) ([f6e5a56](https://github.com/Automattic/newspack-workspace/commit/f6e5a56bbf3470ada39e8c89e2c872ad17673f03))
+* **reader-activation:** clear localStorage namespace on logout ([#145](https://github.com/Automattic/newspack-workspace/issues/145)) ([c201ad5](https://github.com/Automattic/newspack-workspace/commit/c201ad5ea7b93ff7d0916aec8050c69970d561c3))
+* **reader-activation:** exclude peeking newsletter from a11y tree ([#4744](https://github.com/Automattic/newspack-workspace/issues/4744)) ([b726bbf](https://github.com/Automattic/newspack-workspace/commit/b726bbf9096f50c1ac68c21d94cb84265b11179b))
+
+
+### Features
+
+* **block-theme:** add search overlay block ([#4729](https://github.com/Automattic/newspack-workspace/issues/4729)) ([0ebac0d](https://github.com/Automattic/newspack-workspace/commit/0ebac0d43c4aabb62e2fdbb676cdae51c433b6ab))
+* **integrations:** add inactive plugin state ([#4721](https://github.com/Automattic/newspack-workspace/issues/4721)) ([d67ffe0](https://github.com/Automattic/newspack-workspace/commit/d67ffe0451ca2513e81ce5ab86266462dbbc53fd))
+* **integrations:** add oauth and hidden field types ([#4639](https://github.com/Automattic/newspack-workspace/issues/4639)) ([8bd0e7c](https://github.com/Automattic/newspack-workspace/commit/8bd0e7cbdcd46bb77417ad5518ad726765ccf838))
+* **integrations:** allow filtering integration settings list ([#224](https://github.com/Automattic/newspack-workspace/issues/224)) ([af0a884](https://github.com/Automattic/newspack-workspace/commit/af0a884474487ac343f7e07812463e3d5c210cf3))
+* **reader-auth:** unify auth + post-reg verification flows ([#135](https://github.com/Automattic/newspack-workspace/issues/135)) ([f67bb65](https://github.com/Automattic/newspack-workspace/commit/f67bb654374b291658a90dd9151dcc9e3cce43fc)), closes [#signin_modal](https://github.com/Automattic/newspack-workspace/issues/signin_modal) [#register_modal](https://github.com/Automattic/newspack-workspace/issues/register_modal)
+* **wc-subscriptions:** recover switch proration when no amount paid ([#4745](https://github.com/Automattic/newspack-workspace/issues/4745)) ([f9db7a7](https://github.com/Automattic/newspack-workspace/commit/f9db7a717105702ef5fa3461c2564b68700410b3))
+
 ## newspack [6.42.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.42.3...newspack@6.42.4) (2026-06-04)
 
 
