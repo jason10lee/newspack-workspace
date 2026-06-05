@@ -3,7 +3,7 @@
  *
  * Four scorecards in a single row covering paywall-gate conversion
  * (Direct attribution, Influenced 14-day lookback) plus revenue
- * captured from gate-tagged conversions.
+ * from same-session paywall conversions.
  */
 
 /**
@@ -30,7 +30,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 		</h2>
 		<p className="newspack-insights__section-caption">
 			{ __(
-				'How effectively paywall gates convert visitors into paying subscribers. Direct counts subscriptions tagged to a gate. Influenced counts readers who saw a paywall and then subscribed within 14 days. Revenue is computed from actual Woo orders, not gate-event amounts.',
+				'How effectively paywall gates convert visitors into paying subscribers. Direct counts subscriptions that happened in the same session as a paywall impression. Influenced counts subscriptions that happened in a later session within 14 days of a paywall impression. Revenue is computed from actual Woo orders, not gate-event amounts.',
 				'newspack-plugin'
 			) }
 		</p>
@@ -38,7 +38,10 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 			<MetricCard
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Paywall Conversion (Direct)', 'newspack-plugin' ),
-					description: __( 'Subscriptions tagged to a gate ÷ paywall impressions', 'newspack-plugin' ),
+					description: __(
+						'Sessions with a subscription after a paywall impression ÷ sessions with a paywall impression',
+						'newspack-plugin'
+					),
 					current: current.paywall_conversion_direct,
 					previous: previous?.paywall_conversion_direct,
 				} ) }
@@ -46,7 +49,10 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 			<MetricCard
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Paywall Conversion (Influenced, 14d)', 'newspack-plugin' ),
-					description: __( 'Readers who subscribed within 14 days of seeing a paywall ÷ readers who saw a paywall', 'newspack-plugin' ),
+					description: __(
+						'Readers who subscribed in a later session within 14 days of seeing a paywall ÷ readers who saw a paywall',
+						'newspack-plugin'
+					),
 					current: current.paywall_conversion_influenced_14d,
 					previous: previous?.paywall_conversion_influenced_14d,
 				} ) }
@@ -54,7 +60,10 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 			<MetricCard
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Total Paywall Revenue (Direct)', 'newspack-plugin' ),
-					description: __( 'Sum of Woo order totals from gate-tagged conversions', 'newspack-plugin' ),
+					description: __(
+						'Sum of Woo order totals from subscriptions completed in the same session as a paywall impression',
+						'newspack-plugin'
+					),
 					current: current.total_paywall_revenue_direct,
 					previous: previous?.total_paywall_revenue_direct,
 				} ) }
