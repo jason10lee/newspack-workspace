@@ -108,7 +108,7 @@ if ( function_exists( 'wc_memberships_for_teams' ) ) {
 				</li>
 			<?php endforeach; ?>
 			<li class="<?php echo esc_attr( wc_get_account_menu_item_classes( 'customer-logout' ) ); ?>">
-				<a href="<?php echo esc_url( wp_logout_url( home_url( '/' ) ) ); ?>" class="newspack-ui__button newspack-ui__button--small newspack-ui__button--ghost">
+				<a href="<?php echo esc_url( wp_logout_url( wc_get_account_endpoint_url( 'customer-logout' ) ) ); ?>" class="newspack-ui__button newspack-ui__button--small newspack-ui__button--ghost">
 					<?php _e( 'Sign out', 'newspack-plugin' ); ?>
 					<?php Newspack_UI_Icons::print_svg( 'logout' ); ?>
 				</a>
