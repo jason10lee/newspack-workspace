@@ -32,20 +32,20 @@ const DirectVsInfluencedCallout = () => {
 				<p>
 					<strong>{ __( 'Direct', 'newspack-plugin' ) }</strong>{ ' ' }
 					{ __(
-						'conversions are tagged to a specific gate at the moment of conversion (a gate_post_id is captured on the registration or checkout event).',
+						'conversions happen in the same session as a gate impression. The gate is credited regardless of whether checkout happens on the same page (embedded checkout block) or after clicking through to a subscription page.',
 						'newspack-plugin'
 					) }
 				</p>
 				<p>
 					<strong>{ __( 'Influenced', 'newspack-plugin' ) }</strong>{ ' ' }
 					{ __(
-						'conversions count readers who saw a gate and then converted within a lookback window (7 days for free conversions, 14 days for paid). The conversion may happen later, possibly on a different page than the gate.',
+						'conversions happen after a gate impression but in a later session, within a lookback window (7 days for free conversions, 14 days for paid).',
 						'newspack-plugin'
 					) }
 				</p>
 				<p>
 					{ __(
-						'Influenced is broader than Direct. Use Direct for "this specific gate drove this specific conversion" attribution; use Influenced for "gates contributed to this conversion somewhere in the reader’s journey."',
+						'Same-session is Direct. Later-session-within-lookback is Influenced. The two are mutually exclusive and together capture every gate-touched conversion within the lookback period.',
 						'newspack-plugin'
 					) }
 				</p>
