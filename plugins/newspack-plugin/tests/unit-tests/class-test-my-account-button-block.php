@@ -99,7 +99,7 @@ class Newspack_Test_My_Account_Button_Block extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that My Account button links to the account page and doesn't trigger the modal when the reader is signed in..
+	 * Test that My Account button links to the account page and doesn't trigger the modal when the reader is signed in.
 	 */
 	public function test_render_block_signed_in() {
 		self::$reader_activation_enabled = true;
