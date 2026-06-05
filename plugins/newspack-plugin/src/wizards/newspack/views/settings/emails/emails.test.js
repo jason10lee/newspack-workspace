@@ -224,8 +224,10 @@ describe( 'Emails', () => {
 				method: 'POST',
 				data: { status: 'draft' },
 			} ),
+			// updateStatus is optimistic — it patches the row in place and
+			// only wires onError (to roll back), never onSuccess.
 			expect.objectContaining( {
-				onSuccess: expect.any( Function ),
+				onError: expect.any( Function ),
 			} )
 		);
 	} );
@@ -263,8 +265,10 @@ describe( 'Emails', () => {
 				method: 'POST',
 				data: { status: 'publish' },
 			} ),
+			// updateStatus is optimistic — it patches the row in place and
+			// only wires onError (to roll back), never onSuccess.
 			expect.objectContaining( {
-				onSuccess: expect.any( Function ),
+				onError: expect.any( Function ),
 			} )
 		);
 	} );
@@ -313,7 +317,7 @@ describe( 'Emails', () => {
 		);
 	} );
 
-	it( 'reset is eligible when registry_slug is present', async () => {
+	it( 'reset is eligible only for newspack-source emails', async () => {
 		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
@@ -322,9 +326,24 @@ describe( 'Emails', () => {
 		} );
 
 		const reset = mockCapturedActions.find( a => a.id === 'reset' );
-		// Email with registry_slug — eligible.
+		// Newspack-source email — eligible.
 		expect( reset.isEligible( mockEmails[ 0 ] ) ).toBe( true );
-		// Email without registry_slug — not eligible.
-		expect( reset.isEligible( { ...mockEmails[ 0 ], registry_slug: '' } ) ).toBe( false );
+		// Non-Newspack (e.g. WooCommerce) source — not eligible. Mirrors the
+		// server-side boundary: only Newspack-managed emails are resettable.
+		expect( reset.isEligible( { ...mockEmails[ 0 ], source: 'woocommerce' } ) ).toBe( false );
+	} );
+
+	it( 'renders the Emails heading as visually hidden (screen-reader only)', async () => {
+		const Emails = require( './emails' ).default;
+		render( <Emails /> );
+
+		await waitFor( () => {
+			expect( screen.getByTestId( 'dataviews' ) ).toBeInTheDocument();
+		} );
+
+		// The tab surface renders no visible title; the section heading is
+		// present for assistive tech but visually hidden via screen-reader-text.
+		const heading = screen.getByRole( 'heading', { level: 1, name: 'Emails' } );
+		expect( heading ).toHaveClass( 'screen-reader-text' );
 	} );
 } );
