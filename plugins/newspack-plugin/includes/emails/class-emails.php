@@ -537,6 +537,18 @@ class Emails {
 				[ 'status' => 404 ]
 			);
 		}
+		// Require the Newspack email CPT explicitly. serialize_email() keys
+		// off post meta (EMAIL_CONFIG_NAME_META / EMAIL_HTML_META) that a
+		// non-email post could also carry, so gate on post_type — otherwise
+		// a matching-meta post of another type could reach the test-send
+		// dispatch path.
+		if ( self::POST_TYPE !== get_post_type( $post_id ) ) {
+			return new \WP_Error(
+				'newspack_emails_wrong_post_type',
+				esc_html__( 'The provided post is not a Newspack email.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
+			);
+		}
 		$email_config = self::serialize_email( null, $post_id );
 		if ( ! $email_config ) {
 			return new \WP_Error(
@@ -556,6 +568,17 @@ class Emails {
 			return new \WP_Error(
 				'newspack_emails_config_name_missing',
 				esc_html__( 'Email is not associated with a known config type. Cannot dispatch.', 'newspack-plugin' ),
+				[ 'status' => 422 ]
+			);
+		}
+		// Beyond non-empty, require the config name to be a REGISTERED type.
+		// An unknown/stale name (e.g. a renamed provider type left on an old
+		// draft) would otherwise reach dispatch and re-resolve to nothing
+		// downstream, producing a blank-bodied email. Fail fast instead.
+		if ( ! isset( self::get_email_configs()[ $config_name ] ) ) {
+			return new \WP_Error(
+				'newspack_emails_config_name_unknown',
+				esc_html__( 'Email is associated with an unregistered config type. Cannot dispatch.', 'newspack-plugin' ),
 				[ 'status' => 422 ]
 			);
 		}

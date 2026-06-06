@@ -403,6 +403,154 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A non-email post that happens to carry the email meta keys must not
+	 * reach the dispatch path. serialize_email() keys off post meta, so the
+	 * post_type guard is what keeps a matching-meta post of another type out.
+	 */
+	public function test_test_send_blocked_for_wrong_post_type() {
+		$post_id = wp_insert_post(
+			[
+				'post_type'   => 'post',
+				'post_status' => 'draft',
+				'post_title'  => 'NPPD-1547 wrong-post-type test',
+				'meta_input'  => [
+					Emails::EMAIL_CONFIG_NAME_META         => 'test-email-config',
+					\Newspack_Newsletters::EMAIL_HTML_META => '<!doctype html><html><body>stub</body></html>',
+				],
+			]
+		);
+
+		$admin = self::login_as_admin();
+		try {
+			$result = Emails::send_test_email( $post_id, 'tester@example.com' );
+
+			self::assertInstanceOf( WP_Error::class, $result );
+			self::assertSame( 'newspack_emails_wrong_post_type', $result->get_error_code() );
+			self::assertSame( 400, $result->get_error_data()['status'] );
+		} finally {
+			wp_delete_post( $post_id, true );
+			self::logout_admin( $admin );
+		}
+	}
+
+	/**
+	 * A non-empty but UNREGISTERED config name (e.g. a renamed provider type
+	 * left on an old draft) is rejected before dispatch — otherwise it would
+	 * re-resolve to nothing downstream and send a blank-bodied email.
+	 */
+	public function test_test_send_blocked_when_config_name_unknown() {
+		$post_id = wp_insert_post(
+			[
+				'post_type'   => Emails::POST_TYPE,
+				'post_status' => 'draft',
+				'post_title'  => 'NPPD-1547 unknown-config-name test',
+				'meta_input'  => [
+					Emails::EMAIL_CONFIG_NAME_META         => 'this-config-does-not-exist',
+					\Newspack_Newsletters::EMAIL_HTML_META => '<!doctype html><html><body>stub</body></html>',
+				],
+			]
+		);
+
+		$admin = self::login_as_admin();
+		try {
+			$result = Emails::send_test_email( $post_id, 'tester@example.com' );
+
+			self::assertInstanceOf( WP_Error::class, $result );
+			self::assertSame( 'newspack_emails_config_name_unknown', $result->get_error_code() );
+			self::assertSame( 422, $result->get_error_data()['status'] );
+		} finally {
+			wp_delete_post( $post_id, true );
+			self::logout_admin( $admin );
+		}
+	}
+
+	/**
+	 * The `wp_mail_content_type` filter is request-scoped: dispatch_email
+	 * must remove it after a SUCCESSFUL send, or subsequent plain-text mail
+	 * in the same request silently becomes html.
+	 */
+	public function test_dispatch_removes_content_type_filter_on_success() {
+		$test_email = self::get_test_email( 'test-email-config' );
+		$admin      = self::login_as_admin();
+		try {
+			$result = Emails::send_test_email( $test_email['post_id'], 'tester@example.com' );
+
+			self::assertTrue( $result, 'Sanity: the test send should succeed.' );
+			self::assertFalse(
+				has_filter( 'wp_mail_content_type' ),
+				'wp_mail_content_type must be removed after a successful dispatch.'
+			);
+		} finally {
+			self::logout_admin( $admin );
+		}
+	}
+
+	/**
+	 * ...and removed after a FAILED send too — the try/finally in
+	 * dispatch_email is what guarantees the filter never leaks past the
+	 * wp_mail() call. wp_mail is forced to fail via `pre_wp_mail`.
+	 */
+	public function test_dispatch_removes_content_type_filter_on_failure() {
+		$test_email = self::get_test_email( 'test-email-config' );
+		$admin      = self::login_as_admin();
+		add_filter( 'pre_wp_mail', '__return_false' );
+		try {
+			$result = Emails::send_test_email( $test_email['post_id'], 'tester@example.com' );
+
+			self::assertInstanceOf( WP_Error::class, $result );
+			self::assertSame( 'newspack_emails_test_dispatch_failed', $result->get_error_code() );
+			self::assertFalse(
+				has_filter( 'wp_mail_content_type' ),
+				'wp_mail_content_type must be removed even when dispatch fails.'
+			);
+		} finally {
+			remove_filter( 'pre_wp_mail', '__return_false' );
+			self::logout_admin( $admin );
+		}
+	}
+
+	/**
+	 * The locale switch wraps the whole send operation. After a SUCCESSFUL
+	 * send the locale must be restored. The admin is given a distinct
+	 * (`fr_FR`) user locale so a real switch happens and a leak would be
+	 * observable.
+	 */
+	public function test_send_test_email_restores_locale_on_success() {
+		$test_email = self::get_test_email( 'test-email-config' );
+		$admin      = self::login_as_admin();
+		update_user_meta( $admin[0], 'locale', 'fr_FR' );
+		$before = get_locale();
+		try {
+			$result = Emails::send_test_email( $test_email['post_id'], 'tester@example.com' );
+
+			self::assertTrue( $result, 'Sanity: the test send should succeed.' );
+			self::assertSame( $before, get_locale(), 'Locale must be restored after a successful test-send.' );
+		} finally {
+			self::logout_admin( $admin );
+		}
+	}
+
+	/**
+	 * ...and restored on an EARLY prerequisite failure too (here an invalid
+	 * recipient, which returns before dispatch). The switch is the
+	 * outermost operation, so every return path must unwind it.
+	 */
+	public function test_send_test_email_restores_locale_on_early_error() {
+		$test_email = self::get_test_email( 'test-email-config' );
+		$admin      = self::login_as_admin();
+		update_user_meta( $admin[0], 'locale', 'fr_FR' );
+		$before = get_locale();
+		try {
+			$result = Emails::send_test_email( $test_email['post_id'], 'not-an-email' );
+
+			self::assertInstanceOf( WP_Error::class, $result );
+			self::assertSame( $before, get_locale(), 'Locale must be restored even when an early prerequisite check fails.' );
+		} finally {
+			self::logout_admin( $admin );
+		}
+	}
+
+	/**
 	 * Trashed posts cannot be test-sent. The publish-status gate
 	 * skip in NPPD-1547 is for the "draft / inactive but being
 	 * edited" case; a trashed post is intentionally removed and
