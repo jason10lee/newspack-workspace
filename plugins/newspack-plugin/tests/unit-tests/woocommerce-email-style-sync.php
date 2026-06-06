@@ -91,20 +91,43 @@ class Newspack_Test_WooCommerce_Email_Style_Sync extends WP_UnitTestCase {
 		parent::tear_down();
 	}
 
-	public function test_sync_styles_writes_base_color_only() {
+	public function test_sync_styles_writes_base_color_and_backfills_empty_header_image() {
 		set_theme_mod( 'primary_color_hex', '#abcdef' );
 
-		// Seed a custom logo too — sync_styles() should NOT propagate
-		// it. Only base color is touched on the ongoing-change paths.
-		set_theme_mod( 'custom_logo', $this->create_fake_logo_attachment_id() );
+		// Logo exists and the header_image option is empty (not customized).
+		// NPPD-1537: sync_styles() now backfills the header image in this
+		// case, so a logo uploaded AFTER first-run still reaches classic WC
+		// emails (previously the header image was first-run-only and a later
+		// logo upload never propagated).
+		$attachment_id = $this->create_fake_logo_attachment_id();
+		set_theme_mod( 'custom_logo', $attachment_id );
 
 		WooCommerce_Email_Style_Sync::sync_styles();
 
 		$this->assertSame( '#abcdef', get_option( 'woocommerce_email_base_color' ) );
 		$this->assertSame(
-			false,
-			get_option( 'woocommerce_email_header_image', false ),
-			'sync_styles() must not write the header_image option — that is first-run-only.'
+			wp_get_attachment_url( $attachment_id ),
+			get_option( 'woocommerce_email_header_image' ),
+			'sync_styles() must backfill an empty header_image once a logo exists.'
+		);
+	}
+
+	/**
+	 * Backfill is empty-only: sync_styles() fills an empty header image but
+	 * must never overwrite a non-empty one (a publisher upload or our prior
+	 * sync).
+	 */
+	public function test_sync_styles_does_not_overwrite_existing_header_image() {
+		update_option( 'woocommerce_email_header_image', 'https://example.test/publisher-logo.png' );
+		set_theme_mod( 'primary_color_hex', '#abcdef' );
+		set_theme_mod( 'custom_logo', $this->create_fake_logo_attachment_id() );
+
+		WooCommerce_Email_Style_Sync::sync_styles();
+
+		$this->assertSame(
+			'https://example.test/publisher-logo.png',
+			get_option( 'woocommerce_email_header_image' ),
+			'A non-empty header_image is a customization — sync_styles() must leave it alone.'
 		);
 	}
 
@@ -342,12 +365,14 @@ class Newspack_Test_WooCommerce_Email_Style_Sync extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Provenance: when first-run SKIPS due to publisher customization,
-	 * the current stored value gets recorded as the provenance baseline
-	 * — so subsequent `sync_styles()` calls correctly identify any
-	 * further publisher edits as edits (not as "this is what we wrote").
+	 * NPPD-1537 regression: when first-run SKIPS due to a publisher
+	 * customization, it must NOT seed the provenance marker with the
+	 * publisher's value. Seeding it would make the next sync_styles() see
+	 * `stored === marker` and clobber the customization on an unrelated
+	 * Customizer save. With no marker, sync_styles()'s no-marker branch
+	 * re-runs the customization check and preserves the publisher color.
 	 */
-	public function test_first_run_records_provenance_marker_when_skipping_due_to_customization() {
+	public function test_first_run_skip_does_not_seed_marker_and_sync_styles_preserves_custom_color() {
 		update_option( 'woocommerce_email_base_color', '#deadbe' );
 		set_theme_mod( 'primary_color_hex', '#003da5' );
 
@@ -355,8 +380,55 @@ class Newspack_Test_WooCommerce_Email_Style_Sync extends WP_UnitTestCase {
 
 		$this->assertSame(
 			'#deadbe',
-			get_option( WooCommerce_Email_Style_Sync::LAST_SYNCED_BASE_COLOR_OPTION ),
-			'Provenance marker must seed to the publisher value on first-run skip, so sync_styles() can detect future edits as edits.'
+			get_option( 'woocommerce_email_base_color' ),
+			'Publisher customization must be preserved on first-run.'
+		);
+		$this->assertFalse(
+			get_option( WooCommerce_Email_Style_Sync::LAST_SYNCED_BASE_COLOR_OPTION, false ),
+			'First-run skip must NOT seed the provenance marker with the publisher value.'
+		);
+
+		// A later Customizer save must still preserve the customization —
+		// the no-marker branch defers to has_base_color_customization().
+		set_theme_mod( 'primary_color_hex', '#abcdef' );
+		WooCommerce_Email_Style_Sync::sync_styles();
+
+		$this->assertSame(
+			'#deadbe',
+			get_option( 'woocommerce_email_base_color' ),
+			'sync_styles() must preserve the publisher customization (no marker → customization check skips).'
+		);
+	}
+
+	/**
+	 * NPPD-1537: the provenance marker must NOT be recorded when the
+	 * `woocommerce_email_base_color` write is vetoed by a
+	 * `pre_update_option_*` filter — otherwise provenance would claim we
+	 * wrote a value the option never stored.
+	 */
+	public function test_sync_base_color_does_not_record_marker_when_write_is_rejected() {
+		// `#8526ff` is a known WC default → not a customization → first-run
+		// attempts the write. The veto then blocks it.
+		update_option( 'woocommerce_email_base_color', '#8526ff' );
+		set_theme_mod( 'primary_color_hex', '#003da5' );
+
+		$veto = static function ( $value, $old_value ) {
+			return $old_value;
+		};
+		add_filter( 'pre_update_option_woocommerce_email_base_color', $veto, 10, 2 );
+
+		WooCommerce_Email_Style_Sync::maybe_sync_on_first_run();
+
+		remove_filter( 'pre_update_option_woocommerce_email_base_color', $veto, 10 );
+
+		$this->assertSame(
+			'#8526ff',
+			get_option( 'woocommerce_email_base_color' ),
+			'Sanity: the write was vetoed, so the option keeps its prior value.'
+		);
+		$this->assertFalse(
+			get_option( WooCommerce_Email_Style_Sync::LAST_SYNCED_BASE_COLOR_OPTION, false ),
+			'Provenance marker must not be recorded when the base_color write was rejected.'
 		);
 	}
 

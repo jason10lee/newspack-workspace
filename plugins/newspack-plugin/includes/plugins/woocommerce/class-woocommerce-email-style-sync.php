@@ -38,20 +38,24 @@
  *     the safety net: older WC installs where `EmailColors` doesn't
  *     exist still get the sync rather than silently bypass.
  *
- *   - `woocommerce_email_header_image`: row-presence semantics, because
- *     WC has no default header image — any value in the row is either
- *     ours from a previous sync or a publisher-uploaded logo. Either
- *     way, leave it alone.
+ *   - `woocommerce_email_header_image`: non-empty-row semantics. WC has no
+ *     default header image, but it DOES persist an empty string into the
+ *     row when its Emails settings are saved, so an empty row is NOT a
+ *     customization. Any NON-EMPTY value is ours from a previous sync or a
+ *     publisher-uploaded logo — leave it alone. An empty/absent row may be
+ *     filled (first-run, or the ongoing sync once a logo exists).
  *
  *   After first-run, ongoing theme changes propagate via the
  *   Customizer / theme-switch hooks — but with write-provenance
  *   protection: we record what we last wrote in
- *   `LAST_SYNCED_BASE_COLOR_OPTION`, and the ongoing-sync path skips
- *   the write when the current stored value no longer matches that
- *   marker (i.e., the publisher edited it via WC > Settings > Emails
- *   between our writes). First-run also seeds the marker on the
- *   skip-due-to-customization path so the ongoing path doesn't
- *   incorrectly write the publisher's customization as a baseline.
+ *   `LAST_SYNCED_BASE_COLOR_OPTION` (only when a write actually lands),
+ *   and the ongoing-sync path skips the write when the current stored
+ *   value no longer matches that marker (i.e., the publisher edited it
+ *   via WC > Settings > Emails between our writes). When first-run skips
+ *   because of an existing customization it does NOT seed the marker —
+ *   the ongoing path's no-marker branch re-runs the same customization
+ *   check and skips, so a publisher color is preserved without us ever
+ *   recording it as our own baseline.
  *
  * Opt-out:
  *   Publishers can disable the sync entirely via the
@@ -182,16 +186,14 @@ class WooCommerce_Email_Style_Sync {
 				self::LOGGER_HEADER,
 				'info'
 			);
-			// Record the current stored value as our provenance baseline.
-			// Without this, sync_styles() on the next Customizer save would
-			// see no marker, fall through to its "establish baseline" path,
-			// and overwrite the publisher's customization. Recording it
-			// here means sync_styles() correctly sees stored === marker
-			// and keeps its hands off.
-			$current = get_option( 'woocommerce_email_base_color', '' );
-			if ( is_string( $current ) && '' !== $current ) {
-				update_option( self::LAST_SYNCED_BASE_COLOR_OPTION, $current );
-			}
+			// Deliberately DON'T seed LAST_SYNCED_BASE_COLOR_OPTION with the
+			// publisher's value here. Seeding it would make the next
+			// sync_styles() see `stored === marker` and treat the publisher's
+			// customization as a baseline WE wrote — then clobber it on the
+			// next Customizer save / theme switch. With no marker, sync_styles()
+			// instead falls through to its no-marker branch, re-runs
+			// has_base_color_customization(), and correctly skips — preserving
+			// the publisher's color.
 		} else {
 			self::sync_base_color();
 		}
@@ -223,8 +225,10 @@ class WooCommerce_Email_Style_Sync {
 	 * opening any wp-admin page), the sync proceeds and sets the
 	 * marker as a side effect.
 	 *
-	 * The header image is NOT re-synced here; see the class docblock
-	 * for the rationale.
+	 * The header image is only BACKFILLED here when the option is still
+	 * empty and a logo now exists (covering a logo uploaded after first-run
+	 * burned its single header pass). A non-empty header image is never
+	 * touched on this path, so a publisher value is preserved.
 	 */
 	public static function sync_styles(): void {
 		if ( ! self::is_sync_enabled() ) {
@@ -269,6 +273,17 @@ class WooCommerce_Email_Style_Sync {
 		}
 
 		self::sync_base_color();
+
+		// Backfill the header image if it's still empty and a logo now
+		// exists. First-run's single header-image pass is burned even when
+		// no logo was set yet (the shared FIRST_RUN_DONE flag is written
+		// before any sync), so a logo uploaded LATER would otherwise never
+		// reach classic WC emails. This only ever FILLS an empty row — a
+		// publisher-set header image (any non-empty value) is left alone,
+		// exactly as first-run does — so it can't clobber a publisher value.
+		if ( ! self::has_header_image_customization() ) {
+			self::sync_header_image();
+		}
 	}
 
 	/**
@@ -288,25 +303,30 @@ class WooCommerce_Email_Style_Sync {
 			return;
 		}
 		update_option( 'woocommerce_email_base_color', $primary );
-		// Record what we just wrote so `sync_styles()` can distinguish
-		// "publisher hasn't touched it" (proceed) from "publisher edited
-		// it via WC > Settings > Emails" (skip).
-		update_option( self::LAST_SYNCED_BASE_COLOR_OPTION, $primary );
+		// Record the provenance marker ONLY if the write actually landed.
+		// A `pre_update_option_woocommerce_email_base_color` filter (or any
+		// option-level veto) can reject the write — recording $primary as
+		// "what we wrote" when it never persisted would let a later
+		// sync_styles() proceed against a value the option doesn't hold,
+		// reporting provenance for a color we never stored.
+		if ( (string) get_option( 'woocommerce_email_base_color', '' ) === $primary ) {
+			update_option( self::LAST_SYNCED_BASE_COLOR_OPTION, $primary );
+		}
 	}
 
 	/**
 	 * Write the current site logo URL to the WC classic email header
 	 * image option.
 	 *
-	 * Called only on first-run, not on the ongoing customize/switch
-	 * paths. The site logo doesn't typically change with a theme
-	 * switch, so re-syncing on every Customizer save would mean any
-	 * publisher who later sets a different header image in
-	 * WC > Settings > Emails gets it silently clobbered on the next
-	 * unrelated Customizer change. This matches WC core's block-based
-	 * emails, which don't have a `header_image` option at all —
-	 * logo placement is built into the block template, so no
-	 * propagation analogue exists there.
+	 * Called on first-run AND from the ongoing sync_styles() path — but the
+	 * caller only invokes it when the header image option is empty (no
+	 * publisher customization), so this never overwrites a publisher-set
+	 * header image. The empty-only guard is why re-running it on Customizer
+	 * saves / theme switches is safe: a publisher who later sets a different
+	 * header image in WC > Settings > Emails (a non-empty value) is left
+	 * alone. WC core's block-based emails don't have a `header_image` option
+	 * at all — logo placement is built into the block template — so this
+	 * backfill is the classic-renderer analogue.
 	 *
 	 * Skips the write if the site has no custom logo set.
 	 */
@@ -407,16 +427,23 @@ class WooCommerce_Email_Style_Sync {
 	/**
 	 * Has the publisher customized `woocommerce_email_header_image`?
 	 *
-	 * Row-presence semantics. WC doesn't write a default header image,
-	 * so any value in the row is either ours from a previous sync (the
-	 * `newspack_wc_email_style_sync_first_run_done` flag from a prior
-	 * sync iteration on the same site) or a publisher-uploaded logo via
-	 * WC > Settings > Emails. Either way: don't overwrite.
+	 * Non-empty-row semantics. WC doesn't write a default header image, but
+	 * it DOES persist an EMPTY STRING into the row when its Emails settings
+	 * are saved without a header image — so a plain row-presence check would
+	 * misread that empty row as a customization and silently skip the logo
+	 * sync. A NON-EMPTY value is either ours from a previous sync or a
+	 * publisher-uploaded logo via WC > Settings > Emails — leave it alone.
+	 * An absent or empty row is not a customization (the sync may fill it).
+	 *
+	 * There is no provenance marker for the header image (unlike base_color):
+	 * the ongoing sync only ever FILLS an empty row, never overwrites a
+	 * non-empty one, so it cannot clobber a publisher value.
 	 *
 	 * @return bool
 	 */
 	private static function has_header_image_customization(): bool {
-		return false !== get_option( 'woocommerce_email_header_image', false );
+		$stored = get_option( 'woocommerce_email_header_image', false );
+		return false !== $stored && '' !== $stored;
 	}
 
 	/**
