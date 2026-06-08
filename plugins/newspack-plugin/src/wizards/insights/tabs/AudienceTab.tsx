@@ -60,7 +60,10 @@ const AudienceTab = ( { range, previousRange }: AudienceTabProps ) => {
 	}
 
 	const current = data.current;
-	const previous = data.previous ?? null;
+	// Only surface comparison deltas when the toggle is on (previousRange set).
+	// Fixture mode returns a `previous` window unconditionally, so gate on the
+	// toggle here rather than on the response — matches Gates/Subscribers/Donors.
+	const previous = previousRange ? data.previous ?? null : null;
 
 	return (
 		<div className="newspack-insights__audience-tab">

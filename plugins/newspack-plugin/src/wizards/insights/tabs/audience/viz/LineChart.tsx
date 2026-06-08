@@ -2,8 +2,10 @@
  * LineChart (NPPD-1649) — tab-local time-series line.
  *
  * Dependency-free SVG polyline scaled to the data range, with a subtle area
- * fill. Used for "active readers over time" (Audience) and "engagement by day
- * of week" (Engagement, which imports this component per the v1 plan).
+ * fill and per-point hover dots carrying a native `<title>` tooltip (matching
+ * the reference tabs' hand-rolled, no-Recharts approach). `formatLabel` lets
+ * callers humanize x labels (e.g. YYYYMMDD → "May 10"). Used by Audience's
+ * "active readers over time" and Engagement's "by day of week".
  */
 
 /**
@@ -23,13 +25,15 @@ export interface LinePoint {
 
 export interface LineChartProps {
 	points: LinePoint[];
+	/** Humanize an x-axis label for tooltips and the meta row. Defaults to identity. */
+	formatLabel?: ( label: string ) => string;
 }
 
 const W = 600;
 const H = 160;
 const PAD = 8;
 
-const LineChart = ( { points }: LineChartProps ) => {
+const LineChart = ( { points, formatLabel = ( l: string ) => l }: LineChartProps ) => {
 	if ( points.length === 0 ) {
 		return <p className="newspack-insights__chart-empty">{ __( 'No data in this timeframe.', 'newspack-plugin' ) }</p>;
 	}
@@ -49,22 +53,29 @@ const LineChart = ( { points }: LineChartProps ) => {
 	const line = coords.map( ( [ x, y ] ) => `${ x.toFixed( 1 ) },${ y.toFixed( 1 ) }` ).join( ' ' );
 	const area = `${ PAD },${ H - PAD } ${ line } ${ ( PAD + ( points.length - 1 ) * stepX ).toFixed( 1 ) },${ H - PAD }`;
 
-	const lastLabel = points[ points.length - 1 ].label;
-	const a11y = __( 'Time-series chart', 'newspack-plugin' );
-
 	return (
 		<div className="newspack-insights__line">
-			<svg viewBox={ `0 0 ${ W } ${ H }` } className="newspack-insights__line-svg" role="img" aria-label={ a11y } preserveAspectRatio="none">
+			<svg
+				viewBox={ `0 0 ${ W } ${ H }` }
+				className="newspack-insights__line-svg"
+				role="img"
+				aria-label={ __( 'Time-series chart', 'newspack-plugin' ) }
+				preserveAspectRatio="none"
+			>
 				<polygon className="newspack-insights__line-area is-series-0" points={ area } />
 				<polyline className="newspack-insights__line-stroke is-series-0" points={ line } fill="none" />
+				{ coords.map( ( [ x, y ], i ) => (
+					<circle key={ points[ i ].label } className="newspack-insights__line-point is-series-0" cx={ x } cy={ y } r="3">
+						<title>{ `${ formatLabel( points[ i ].label ) }: ${ formatNumber( points[ i ].value ) }` }</title>
+					</circle>
+				) ) }
 			</svg>
 			<div className="newspack-insights__line-meta">
-				<span>{ points[ 0 ].label }</span>
+				<span>{ formatLabel( points[ 0 ].label ) }</span>
 				<span>
-					{ /* translators: shown as "peak: 4,300" under a line chart. */ }
 					{ __( 'peak', 'newspack-plugin' ) }: { formatNumber( max ) }
 				</span>
-				<span>{ lastLabel }</span>
+				<span>{ formatLabel( points[ points.length - 1 ].label ) }</span>
 			</div>
 		</div>
 	);

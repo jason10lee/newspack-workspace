@@ -52,7 +52,9 @@ const PieChart = ( { segments }: PieChartProps ) => {
 							r={ RADIUS }
 							strokeDasharray={ `${ dash } ${ CIRCUMFERENCE - dash }` }
 							strokeDashoffset={ CIRCUMFERENCE / 4 - offset }
-						/>
+						>
+							<title>{ `${ segment.label }: ${ formatNumber( segment.value ) } (${ formatPercent( fraction ) })` }</title>
+						</circle>
 					);
 					offset += dash;
 					return circle;

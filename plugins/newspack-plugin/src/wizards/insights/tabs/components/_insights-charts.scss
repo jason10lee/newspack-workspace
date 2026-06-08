@@ -1,8 +1,11 @@
 /**
  * Shared styles for the GA4-backed Insights tabs (Audience, Engagement — NPPD-1649):
- * graceful-failure card states, chart/table grids, tab-local viz (pie/bar/line),
- * and the connect banner. Scorecard / metric-grid base styles live in
- * components/sections.scss and are not redefined here.
+ * graceful-failure note, chart/table grids + per-section column modifiers,
+ * tab-local viz (pie/bar/line) with hover affordances, and the connect banner.
+ *
+ * Tables reuse the canonical `.newspack-insights__table` / `-wrap` chrome from
+ * components/sections.scss; nothing table-related is redefined here. Scorecard
+ * / metric-grid base styles also live in sections.scss.
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
@@ -23,20 +26,19 @@
 		display: grid;
 		grid-template-columns: repeat( auto-fit, minmax( 280px, 1fr ) );
 		gap: 24px;
-		margin: 16px 0;
 	}
 
 	&__table-grid {
 		display: grid;
 		grid-template-columns: repeat( auto-fit, minmax( 320px, 1fr ) );
 		gap: 24px;
-		margin: 16px 0;
 	}
 
 	&__chart-card {
 		border: 1px solid wp-colors.$gray-200;
 		border-radius: 4px;
 		padding: 16px;
+		min-width: 0; // let charts shrink inside grid cells instead of overflowing
 
 		&-title {
 			font-size: 14px;
@@ -52,53 +54,38 @@
 		}
 	}
 
-	// Graceful-failure card states (overlay / error).
+	// Standalone table heading (Geographic / Content performance, where each
+	// table has its own title above the canonical table-wrap).
+	&__table-grid &__chart-card-title {
+		margin-bottom: 8px;
+	}
+
+	// Graceful-failure value placeholder + the shared note treatment. The note
+	// is informational, not code: muted sans-serif with a small info glyph. The
+	// custom-dimension param keeps an inline <code>, but with no block styling.
 	&__metric-card-value--muted {
 		color: wp-colors.$gray-400;
 	}
 
-	&__metric-card-note {
-		font-size: 12px;
-		color: wp-colors.$gray-600;
-		margin-top: 4px;
+	&__metric-note {
+		display: flex;
+		align-items: flex-start;
+		gap: 6px;
+		margin: 8px 0 0;
+		font-size: 13px;
 		line-height: 1.4;
+		color: wp-colors.$gray-600;
 
 		code {
-			font-size: 11px;
-			background: wp-colors.$gray-100;
-			padding: 1px 4px;
-			border-radius: 2px;
-		}
-	}
-
-	// Tables.
-	&__table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 13px;
-
-		th,
-		td {
-			text-align: left;
-			padding: 8px 12px;
-			border-bottom: 1px solid wp-colors.$gray-100;
-		}
-
-		th {
+			font-family: monospace;
+			font-size: 12px;
 			color: wp-colors.$gray-700;
-			font-weight: 600;
-		}
-
-		.is-right {
-			text-align: right;
-			font-variant-numeric: tabular-nums;
 		}
 	}
 
-	&__table-note {
-		font-size: 13px;
+	&__metric-note-icon {
+		flex-shrink: 0;
 		color: wp-colors.$gray-600;
-		padding: 12px 0;
 	}
 
 	&__chart-empty {
@@ -120,6 +107,7 @@
 		width: 120px;
 		height: 120px;
 		transform: rotate( -90deg );
+		flex-shrink: 0;
 	}
 
 	&__pie-track {
@@ -132,6 +120,11 @@
 		fill: none;
 		stroke: var( --series-color );
 		stroke-width: 4;
+		transition: stroke-width 0.1s ease;
+
+		&:hover {
+			stroke-width: 6;
+		}
 	}
 
 	&__pie-legend {
@@ -146,21 +139,21 @@
 			align-items: center;
 			gap: 8px;
 			font-size: 12px;
-			margin-bottom: 4px;
+			margin-bottom: 6px;
 		}
 	}
 
 	&__legend-swatch {
 		display: inline-block;
-		width: 10px;
-		height: 10px;
+		width: 12px;
+		height: 12px;
 		border-radius: 2px;
 		background: var( --series-color );
 		flex-shrink: 0;
 	}
 
+	// Label and value sit next to each other (not justified to opposite edges).
 	&__legend-label {
-		flex: 1;
 		color: wp-colors.$gray-800;
 	}
 
@@ -173,12 +166,14 @@
 	&__bars {
 		display: flex;
 		align-items: flex-end;
-		gap: 4px;
+		gap: 3px;
 		height: 160px;
+		overflow: hidden; // 24 hour-of-day bars must not spill past the card
 	}
 
 	&__bar-col {
-		flex: 1;
+		flex: 1 1 0;
+		min-width: 0; // allow columns to shrink so they fit the container
 		display: flex;
 		flex-direction: column;
 		align-items: center;
@@ -197,10 +192,15 @@
 		background: var( --series-color );
 		border-radius: 2px 2px 0 0;
 		min-height: 1px;
+		transition: opacity 0.1s ease;
+
+		&:hover {
+			opacity: 0.8;
+		}
 	}
 
 	&__bar-label {
-		font-size: 10px;
+		font-size: 9px;
 		color: wp-colors.$gray-600;
 		margin-top: 4px;
 		white-space: nowrap;
@@ -224,6 +224,16 @@
 		stroke: var( --series-color );
 		stroke-width: 2;
 		vector-effect: non-scaling-stroke;
+	}
+
+	&__line-point {
+		fill: var( --series-color );
+		stroke: #fff;
+		stroke-width: 1;
+
+		&:hover {
+			stroke-width: 2;
+		}
 	}
 
 	&__line-meta {
@@ -251,5 +261,31 @@
 		&-cta {
 			font-weight: 600;
 		}
+	}
+}
+
+// Per-section grid column modifiers. Compound selectors (0,2,0) so they win
+// over the single-class base rules regardless of stylesheet load order.
+.newspack-insights__metric-grid.newspack-insights__metric-grid--cols-5 {
+	grid-template-columns: repeat( 5, minmax( 0, 1fr ) );
+
+	@media ( max-width: 1280px ) {
+		grid-template-columns: repeat( auto-fill, minmax( 180px, 1fr ) );
+	}
+}
+
+.newspack-insights__chart-grid.newspack-insights__chart-grid--cols-2 {
+	grid-template-columns: repeat( 2, minmax( 0, 1fr ) );
+
+	@media ( max-width: 782px ) {
+		grid-template-columns: 1fr;
+	}
+}
+
+.newspack-insights__table-grid.newspack-insights__table-grid--cols-2 {
+	grid-template-columns: repeat( 2, minmax( 0, 1fr ) );
+
+	@media ( max-width: 782px ) {
+		grid-template-columns: 1fr;
 	}
 }

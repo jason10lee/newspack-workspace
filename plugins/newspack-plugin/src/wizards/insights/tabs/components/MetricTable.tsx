@@ -1,10 +1,11 @@
 /**
  * MetricTable (NPPD-1649).
  *
- * Renders a rows-shaped metric payload (`type: 'table'`) as a table, handling
- * every graceful-failure state the orchestrator can return: custom-dimension
- * overlay, generic error, degraded (article filter unavailable), and the
- * empty / no-data case. Hidden-in-v1 payloads are skipped by the caller.
+ * Renders a rows-shaped metric payload (`type: 'table'`) using the canonical
+ * Insights table chrome (`.newspack-insights__table-wrap` + `.newspack-insights__table`
+ * from sections.scss), and routes every graceful-failure state through the
+ * shared MetricNote / section-empty treatments. Hidden-in-v1 payloads are
+ * skipped by the caller.
  */
 
 /**
@@ -16,7 +17,8 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import { formatCurrency, formatDecimal, formatDuration, formatNumber, formatPercent } from './format';
-import { SETUP_DOCS_URL, type MetricPayload, type MetricRow } from './metrics';
+import MetricNote from './MetricNote';
+import type { MetricPayload, MetricRow } from './metrics';
 
 export interface MetricTableColumn {
 	key: string;
@@ -54,63 +56,59 @@ const formatCell = ( value: string | number | null, format?: MetricTableColumn[ 
 	return String( value );
 };
 
-const Note = ( { children }: { children: React.ReactNode } ) => <p className="newspack-insights__table-note">{ children }</p>;
-
 const MetricTable = ( { payload, columns, emptyMessage, rowLimit = 10 }: MetricTableProps ) => {
-	if ( ! payload ) {
-		return <Note>{ emptyMessage }</Note>;
+	if ( payload?.overlay ) {
+		return <MetricNote overlay={ payload.overlay } />;
+	}
+	if ( payload?.error ) {
+		return <MetricNote error />;
+	}
+	if ( payload?.not_configured ) {
+		return <MetricNote notConfigured />;
 	}
 
-	if ( payload.overlay ) {
-		const param = payload.overlay.dimensions[ 0 ] ?? '';
-		return (
-			<Note>
-				<code>
-					{ /* translators: %s is a GA4 custom dimension parameter name. */ }
-					{ __( 'Custom dimension', 'newspack-plugin' ) } { param } { __( 'not detected', 'newspack-plugin' ) }
-				</code>{ ' ' }
-				<a href={ SETUP_DOCS_URL } target="_blank" rel="noreferrer">
-					{ __( 'See setup docs', 'newspack-plugin' ) }
-				</a>
-			</Note>
-		);
-	}
-
-	if ( payload.error ) {
-		return <Note>{ __( 'Data temporarily unavailable.', 'newspack-plugin' ) }</Note>;
-	}
-
-	const rows: MetricRow[] = Array.isArray( payload.rows ) ? payload.rows.slice( 0, rowLimit ) : [];
+	const rows: MetricRow[] = payload && Array.isArray( payload.rows ) ? payload.rows.slice( 0, rowLimit ) : [];
 
 	if ( rows.length === 0 ) {
-		return <Note>{ emptyMessage }</Note>;
+		return <p className="newspack-insights__section-empty">{ emptyMessage }</p>;
 	}
+
+	const numClass = ( col: MetricTableColumn ) => ( col.align === 'right' ? 'newspack-insights__table-num' : undefined );
 
 	return (
 		<>
-			{ payload.degraded && <Note>{ __( 'Singular content filter unavailable; showing all URLs.', 'newspack-plugin' ) }</Note> }
-			<table className="newspack-insights__table">
-				<thead>
-					<tr>
-						{ columns.map( col => (
-							<th key={ col.key } className={ col.align === 'right' ? 'is-right' : undefined }>
-								{ col.label }
-							</th>
-						) ) }
-					</tr>
-				</thead>
-				<tbody>
-					{ rows.map( ( row, i ) => (
-						<tr key={ i }>
+			{ payload?.degraded && (
+				<p className="newspack-insights__metric-note">
+					<span className="newspack-insights__metric-note-icon" aria-hidden="true">
+						&#9432;
+					</span>
+					<span>{ __( 'Singular content filter unavailable; showing all URLs.', 'newspack-plugin' ) }</span>
+				</p>
+			) }
+			<div className="newspack-insights__table-wrap">
+				<table className="newspack-insights__table">
+					<thead>
+						<tr>
 							{ columns.map( col => (
-								<td key={ col.key } className={ col.align === 'right' ? 'is-right' : undefined }>
-									{ formatCell( row[ col.key ] ?? null, col.format ) }
-								</td>
+								<th key={ col.key } className={ numClass( col ) }>
+									{ col.label }
+								</th>
 							) ) }
 						</tr>
-					) ) }
-				</tbody>
-			</table>
+					</thead>
+					<tbody>
+						{ rows.map( ( row, i ) => (
+							<tr key={ i }>
+								{ columns.map( col => (
+									<td key={ col.key } className={ numClass( col ) }>
+										{ formatCell( row[ col.key ] ?? null, col.format ) }
+									</td>
+								) ) }
+							</tr>
+						) ) }
+					</tbody>
+				</table>
+			</div>
 		</>
 	);
 };

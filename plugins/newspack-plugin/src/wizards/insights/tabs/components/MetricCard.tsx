@@ -2,10 +2,7 @@
  * MetricCard (NPPD-1616, extended for NPPD-1604 and NPPD-1649).
  *
  * Scorecard atom: label (top) → value + optional delta (vertically
- * centered hero region) → description (pinned to the bottom). Every
- * card carries the brand-color top accent so all cards in a row read
- * as a single coherent unit, and the hero numbers line up at the same
- * vertical position regardless of label or description height.
+ * centered hero region) → description (pinned to the bottom).
  *
  * `lowerIsBetter` flips the green/red delta tone for metrics where a
  * decrease is desirable (refund rate, churned subscriber count).
@@ -13,11 +10,9 @@
  * `pending` (NPPD-1604) renders the value normally but suppresses the
  * comparison delta even when `previousValue` is supplied.
  *
- * `overlay` / `error` (NPPD-1649) render graceful failure states in
- * place of the value: `overlay` for a missing GA4 custom dimension
- * ("Custom dimension `<param>` not detected"), `error` for a generic
- * data failure. Both are additive — every existing call site leaves
- * them undefined, so its rendering is unchanged.
+ * `overlay` / `error` / `notConfigured` (NPPD-1649) render a single shared
+ * graceful-failure treatment (see MetricNote) in place of the value. All are
+ * additive — every existing call site leaves them undefined, unchanged.
  */
 
 /**
@@ -29,6 +24,7 @@ import { __, sprintf } from '@wordpress/i18n';
  * Internal dependencies
  */
 import { formatCurrency, formatDecimal, formatDuration, formatNumber, formatPercent, formatDelta, deltaTone } from './format';
+import MetricNote from './MetricNote';
 
 export type MetricFormat = 'number' | 'currency' | 'percent' | 'decimal' | 'duration';
 
@@ -47,12 +43,12 @@ export interface MetricCardProps {
 	lowerIsBetter?: boolean;
 	secondary?: string;
 	pending?: boolean;
-	/** Missing-custom-dimension state. When set, the value is replaced by overlay copy. */
+	/** Missing-custom-dimension state. */
 	overlay?: MetricCardOverlay;
-	/** Generic failure message. When set, the card renders an error state. */
+	/** Generic failure message (presence triggers the note; text shown in title). */
 	error?: string;
-	/** URL for the "see setup docs" link in the custom-dimension overlay. */
-	setupDocsUrl?: string;
+	/** Metric needs configuration (e.g. coverage area not set). */
+	notConfigured?: boolean;
 }
 
 const formatValue = ( v: number, fmt: MetricFormat ): string => {
@@ -84,49 +80,17 @@ const MetricCard = ( props: MetricCardProps ) => {
 		pending = false,
 		overlay,
 		error,
-		setupDocsUrl,
+		notConfigured,
 	} = props;
 
-	// Error state: no value, no delta.
-	if ( error ) {
+	// Shared graceful-failure state (missing dimension / not configured / error).
+	if ( overlay || error || notConfigured ) {
 		return (
-			<div className="newspack-insights__metric-card newspack-insights__metric-card--error">
+			<div className="newspack-insights__metric-card newspack-insights__metric-card--note">
 				<div className="newspack-insights__metric-card-label">{ label }</div>
 				<div className="newspack-insights__metric-card-body">
 					<div className="newspack-insights__metric-card-value newspack-insights__metric-card-value--muted">{ PLACEHOLDER }</div>
-					<div className="newspack-insights__metric-card-note" title={ error }>
-						{ __( 'Data temporarily unavailable.', 'newspack-plugin' ) }
-					</div>
-				</div>
-				{ description && <div className="newspack-insights__metric-card-description">{ description }</div> }
-			</div>
-		);
-	}
-
-	// Custom-dimension-missing overlay state.
-	if ( overlay ) {
-		const param = overlay.dimensions[ 0 ] ?? '';
-		const overlayText = sprintf(
-			/* translators: %s: GA4 custom dimension parameter name */
-			__( 'Custom dimension %s not detected', 'newspack-plugin' ),
-			param
-		);
-		return (
-			<div className="newspack-insights__metric-card newspack-insights__metric-card--overlay">
-				<div className="newspack-insights__metric-card-label">{ label }</div>
-				<div className="newspack-insights__metric-card-body">
-					<div className="newspack-insights__metric-card-value newspack-insights__metric-card-value--muted">{ PLACEHOLDER }</div>
-					<div className="newspack-insights__metric-card-note">
-						<code>{ overlayText }</code>
-						{ setupDocsUrl && (
-							<>
-								{ ' ' }
-								<a href={ setupDocsUrl } target="_blank" rel="noreferrer">
-									{ __( 'See setup docs', 'newspack-plugin' ) }
-								</a>
-							</>
-						) }
-					</div>
+					<MetricNote overlay={ overlay } error={ !! error } notConfigured={ notConfigured } />
 				</div>
 				{ description && <div className="newspack-insights__metric-card-description">{ description }</div> }
 			</div>

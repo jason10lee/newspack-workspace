@@ -26,7 +26,7 @@ const GeographicSection = ( { current }: SectionProps ) => (
 			{ __( 'Geographic', 'newspack-plugin' ) }
 		</h2>
 		<p className="newspack-insights__section-caption">{ __( 'Where your readers are.', 'newspack-plugin' ) }</p>
-		<div className="newspack-insights__table-grid">
+		<div className="newspack-insights__table-grid newspack-insights__table-grid--cols-2">
 			<div>
 				<h3 className="newspack-insights__chart-card-title">{ __( 'Top Countries', 'newspack-plugin' ) }</h3>
 				<MetricTable

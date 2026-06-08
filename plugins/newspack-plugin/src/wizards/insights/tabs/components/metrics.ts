@@ -71,10 +71,13 @@ export const payloadToCard = ( args: PayloadToCardArgs ): MetricCardProps | null
 		return null;
 	}
 	if ( current.overlay ) {
-		return { label, description, overlay: current.overlay, setupDocsUrl: SETUP_DOCS_URL };
+		return { label, description, overlay: current.overlay };
 	}
 	if ( current.error ) {
 		return { label, description, error: current.error };
+	}
+	if ( current.not_configured ) {
+		return { label, description, notConfigured: true };
 	}
 
 	const previousValue = previous && previous.computable && typeof previous.value === 'number' ? previous.value : null;

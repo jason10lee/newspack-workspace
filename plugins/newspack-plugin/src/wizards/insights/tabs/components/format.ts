@@ -38,7 +38,22 @@ const signedPercentFormatter = new Intl.NumberFormat( undefined, {
 	maximumFractionDigits: 1,
 } );
 
+const shortDateFormatter = new Intl.DateTimeFormat( undefined, {
+	month: 'short',
+	day: 'numeric',
+} );
+
 export const formatNumber = ( n: number ): string => numberFormatter.format( n );
+
+/** Format a GA4 `YYYYMMDD` date string as a short date: "20260510" -> "May 10". Falls back to the raw string. */
+export const formatShortDate = ( ymd: string ): string => {
+	const match = /^(\d{4})(\d{2})(\d{2})$/.exec( ymd );
+	if ( ! match ) {
+		return ymd;
+	}
+	const date = new Date( Number( match[ 1 ] ), Number( match[ 2 ] ) - 1, Number( match[ 3 ] ) );
+	return shortDateFormatter.format( date );
+};
 
 /** Format a number with exactly one decimal place: 0 -> "0.0", 1.23 -> "1.2". */
 export const formatDecimal = ( n: number ): string => decimalFormatter.format( n );

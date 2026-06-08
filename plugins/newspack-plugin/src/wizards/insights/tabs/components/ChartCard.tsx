@@ -2,21 +2,17 @@
  * ChartCard (NPPD-1649).
  *
  * Frame around a visualization (pie / line / bar) that centralizes the
- * graceful-failure states: hidden_in_v1 (renders nothing), custom-dimension
- * overlay, generic error, and the no-data empty case. The section passes the
- * built chart as children; ChartCard only renders it when the payload is
- * computable with rows.
+ * graceful-failure states: hidden_in_v1 (renders nothing), and the shared
+ * MetricNote treatment for overlay / error / not-configured. The section
+ * passes the built chart as children; ChartCard renders it only when the
+ * payload is computable.
  */
-
-/**
- * WordPress dependencies
- */
-import { __ } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
  */
-import { SETUP_DOCS_URL, type MetricPayload } from './metrics';
+import MetricNote from './MetricNote';
+import type { MetricPayload } from './metrics';
 
 export interface ChartCardProps {
 	title: string;
@@ -32,19 +28,11 @@ const ChartCard = ( { title, caption, payload, children }: ChartCardProps ) => {
 
 	let body: React.ReactNode = children;
 	if ( payload.overlay ) {
-		const param = payload.overlay.dimensions[ 0 ] ?? '';
-		body = (
-			<p className="newspack-insights__table-note">
-				<code>
-					{ __( 'Custom dimension', 'newspack-plugin' ) } { param } { __( 'not detected', 'newspack-plugin' ) }
-				</code>{ ' ' }
-				<a href={ SETUP_DOCS_URL } target="_blank" rel="noreferrer">
-					{ __( 'See setup docs', 'newspack-plugin' ) }
-				</a>
-			</p>
-		);
+		body = <MetricNote overlay={ payload.overlay } />;
 	} else if ( payload.error ) {
-		body = <p className="newspack-insights__table-note">{ __( 'Data temporarily unavailable.', 'newspack-plugin' ) }</p>;
+		body = <MetricNote error />;
+	} else if ( payload.not_configured ) {
+		body = <MetricNote notConfigured />;
 	}
 
 	return (

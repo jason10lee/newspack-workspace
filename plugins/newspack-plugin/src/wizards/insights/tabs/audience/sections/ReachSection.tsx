@@ -28,7 +28,7 @@ const ReachSection = ( { current, previous }: SectionProps ) => (
 		<p className="newspack-insights__section-caption">
 			{ __( 'How many readers and sessions you reached in this timeframe.', 'newspack-plugin' ) }
 		</p>
-		<div className="newspack-insights__metric-grid">
+		<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-5">
 			<Scorecard
 				label={ __( 'Active Readers', 'newspack-plugin' ) }
 				description={ __( 'Distinct readers in this timeframe', 'newspack-plugin' ) }

@@ -30,7 +30,8 @@ describe( 'MetricCard graceful states', () => {
 				overlay={ { type: 'custom_dimension_missing', dimensions: [ 'is_newsletter_subscriber' ] } }
 			/>
 		);
-		expect( screen.getByText( /is_newsletter_subscriber not detected/ ) ).toBeInTheDocument();
+		expect( screen.getByText( 'is_newsletter_subscriber' ) ).toBeInTheDocument();
+		expect( screen.getByText( /Custom dimension/ ) ).toBeInTheDocument();
 		expect( screen.getByText( '—' ) ).toBeInTheDocument();
 	} );
 
