@@ -47,10 +47,10 @@ const QualitySection = ( { current, previous }: SectionProps ) => (
 				lowerIsBetter
 			/>
 			<Scorecard
-				label={ __( 'Scroll Depth Rate', 'newspack-plugin' ) }
-				description={ __( '% of article reads that reached 90%', 'newspack-plugin' ) }
-				current={ current.scroll_depth_rate }
-				previous={ previous?.scroll_depth_rate }
+				label={ __( 'Article Completion Rate', 'newspack-plugin' ) }
+				description={ __( '% of article reads that reached the end', 'newspack-plugin' ) }
+				current={ current.article_completion_rate }
+				previous={ previous?.article_completion_rate }
 			/>
 		</div>
 	</section>

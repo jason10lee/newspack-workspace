@@ -28,14 +28,6 @@ const GeographicSection = ( { current }: SectionProps ) => (
 		<p className="newspack-insights__section-caption">{ __( 'Where your readers are.', 'newspack-plugin' ) }</p>
 		<div className="newspack-insights__table-grid newspack-insights__table-grid--cols-2">
 			<div>
-				<h3 className="newspack-insights__chart-card-title">{ __( 'Top Countries', 'newspack-plugin' ) }</h3>
-				<MetricTable
-					payload={ current.top_countries }
-					emptyMessage={ __( 'No data in this timeframe.', 'newspack-plugin' ) }
-					columns={ [ { key: 'country', label: __( 'Country', 'newspack-plugin' ) }, READERS_COL ] }
-				/>
-			</div>
-			<div>
 				<h3 className="newspack-insights__chart-card-title">{ __( 'Top Regions / States', 'newspack-plugin' ) }</h3>
 				<MetricTable
 					payload={ current.top_regions }
@@ -58,14 +50,6 @@ const GeographicSection = ( { current }: SectionProps ) => (
 						{ key: 'city', label: __( 'City', 'newspack-plugin' ) },
 						READERS_COL,
 					] }
-				/>
-			</div>
-			<div>
-				<h3 className="newspack-insights__chart-card-title">{ __( 'Top DMAs', 'newspack-plugin' ) }</h3>
-				<MetricTable
-					payload={ current.top_dmas }
-					emptyMessage={ __( 'No DMA data (US-only) in this timeframe.', 'newspack-plugin' ) }
-					columns={ [ { key: 'dma', label: __( 'DMA', 'newspack-plugin' ) }, READERS_COL ] }
 				/>
 			</div>
 		</div>

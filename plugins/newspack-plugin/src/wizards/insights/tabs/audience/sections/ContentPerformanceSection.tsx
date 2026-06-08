@@ -26,20 +26,9 @@ const ContentPerformanceSection = ( { current }: SectionProps ) => (
 		<p className="newspack-insights__section-caption">{ __( 'Your most-read pages and authors in this timeframe.', 'newspack-plugin' ) }</p>
 		<div className="newspack-insights__table-grid">
 			<div>
-				<h3 className="newspack-insights__chart-card-title">{ __( 'Top Pages by Pageviews', 'newspack-plugin' ) }</h3>
+				<h3 className="newspack-insights__chart-card-title">{ __( 'Top Pages', 'newspack-plugin' ) }</h3>
 				<MetricTable
-					payload={ current.top_pages_by_pageviews }
-					emptyMessage={ __( 'No page data in this timeframe.', 'newspack-plugin' ) }
-					columns={ [
-						{ key: 'page_title', label: __( 'Page', 'newspack-plugin' ) },
-						{ key: 'pageviews', label: __( 'Pageviews', 'newspack-plugin' ), format: 'number', align: 'right' },
-					] }
-				/>
-			</div>
-			<div>
-				<h3 className="newspack-insights__chart-card-title">{ __( 'Top Pages by Reader Count', 'newspack-plugin' ) }</h3>
-				<MetricTable
-					payload={ current.top_pages_by_reader_count }
+					payload={ current.top_pages }
 					emptyMessage={ __( 'No page data in this timeframe.', 'newspack-plugin' ) }
 					columns={ [
 						{ key: 'page_title', label: __( 'Page', 'newspack-plugin' ) },

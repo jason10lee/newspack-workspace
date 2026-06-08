@@ -159,11 +159,10 @@ final class Engagement_Metric {
 			'avg_pages_per_session'                 => self::avg_pages_per_session_via_ga4( $pid, $start_date, $end_date ),
 			'avg_engaged_session_duration'          => self::avg_engaged_session_duration_via_ga4( $pid, $start_date, $end_date ),
 			'bounce_rate'                           => self::bounce_rate_via_ga4( $pid, $start_date, $end_date ),
-			'scroll_depth_rate'                     => self::scroll_depth_rate_via_ga4( $pid, $start_date, $end_date ),
+			'article_completion_rate'               => self::article_completion_rate_via_ga4( $pid, $start_date, $end_date ),
 			// Content engagement.
-			'most_engaged_articles'                 => self::most_engaged_articles_via_ga4( $pid, $start_date, $end_date ),
+			'most_read_articles'                    => self::most_read_articles_via_ga4( $pid, $start_date, $end_date ),
 			'articles_by_completion_rate'           => self::articles_by_completion_rate_via_ga4( $pid, $start_date, $end_date ),
-			'articles_by_avg_time_on_page'          => self::articles_by_avg_time_on_page_via_ga4( $pid, $start_date, $end_date ),
 			'top_authors_by_avg_engagement_time'    => self::top_authors_by_avg_engagement_time_via_ga4( $pid, $start_date, $end_date ),
 			// Reader segments.
 			'engagement_by_device_type'             => self::engagement_by_device_type_via_ga4( $pid, $start_date, $end_date ),
@@ -191,10 +190,9 @@ final class Engagement_Metric {
 			'avg_pages_per_session',
 			'avg_engaged_session_duration',
 			'bounce_rate',
-			'scroll_depth_rate',
-			'most_engaged_articles',
+			'article_completion_rate',
+			'most_read_articles',
 			'articles_by_completion_rate',
-			'articles_by_avg_time_on_page',
 			'top_authors_by_avg_engagement_time',
 			'engagement_by_device_type',
 			'engagement_by_newsletter_status',
@@ -336,31 +334,6 @@ final class Engagement_Metric {
 		];
 	}
 
-	/**
-	 * Articles by Avg Time on Page — customEvent:post_id (degrade if missing).
-	 *
-	 * @param string $pid Property ID.
-	 * @param string $s   Start date.
-	 * @param string $e   End date.
-	 * @return array
-	 */
-	private static function articles_by_avg_time_on_page_via_ga4( string $pid, string $s, string $e ): array {
-		$body                    = self::body( $s, $e, [ 'customEvent:post_id', 'pagePath', 'pageTitle' ], [ 'totalUsers', 'averageEngagementTimePerSession' ] );
-		$body['dimensionFilter'] = self::custom_event_present_filter( 'post_id' );
-		$body                   += self::order_by_metric_desc( 'averageEngagementTimePerSession' );
-		$body['limit']           = 50;
-		$result                  = self::safe_run_report( $pid, $body );
-
-		if ( self::is_custom_dimension_missing( $result ) ) {
-			$degraded          = self::body( $s, $e, [ 'pagePath', 'pageTitle' ], [ 'totalUsers', 'averageEngagementTimePerSession' ] );
-			$degraded         += self::order_by_metric_desc( 'averageEngagementTimePerSession' );
-			$degraded['limit'] = 50;
-			$out               = self::rows( self::safe_run_report( $pid, $degraded ), [ 'page_path', 'page_title' ], [ 'unique_readers', 'avg_time_seconds' ], 'table' );
-			return self::mark_degraded( $out, __( 'Singular content filter unavailable; showing all pages.', 'newspack-plugin' ) );
-		}
-		return self::rows( $result, [ 'post_id', 'page_path', 'page_title' ], [ 'unique_readers', 'avg_time_seconds' ], 'table' );
-	}
-
 	/*
 	===================================================================
 	 * GA4-conditional metrics
@@ -368,15 +341,16 @@ final class Engagement_Metric {
 	 */
 
 	/**
-	 * Scroll Depth Rate — article-scoped scroll events ÷ article reads.
-	 * Each `scroll` event is a 90% read under GA4 default enhanced measurement.
+	 * Article Completion Rate — article reads that reached the end ÷ article
+	 * reads. A `scroll` event is the completion signal under GA4 default
+	 * enhanced measurement (it fires once a reader reaches the end of the page).
 	 *
 	 * @param string $pid Property ID.
 	 * @param string $s   Start date.
 	 * @param string $e   End date.
 	 * @return array
 	 */
-	private static function scroll_depth_rate_via_ga4( string $pid, string $s, string $e ): array {
+	private static function article_completion_rate_via_ga4( string $pid, string $s, string $e ): array {
 		$num_body                    = self::body( $s, $e, [], [ 'eventCount' ] );
 		$num_body['dimensionFilter'] = [
 			'andGroup' => [
@@ -410,15 +384,17 @@ final class Engagement_Metric {
 	}
 
 	/**
-	 * Most-Engaged Articles — composite of reach, scroll completion, and time.
-	 * Two reports joined and scored in PHP.
+	 * Most-Read Articles — ranked by a composite of reach, scroll completion,
+	 * and engagement time (scroll still factors into the ranking even though it
+	 * isn't a displayed column). Two reports joined and scored in PHP; the row
+	 * payload exposes readers + avg engagement time.
 	 *
 	 * @param string $pid Property ID.
 	 * @param string $s   Start date.
 	 * @param string $e   End date.
 	 * @return array
 	 */
-	private static function most_engaged_articles_via_ga4( string $pid, string $s, string $e ): array {
+	private static function most_read_articles_via_ga4( string $pid, string $s, string $e ): array {
 		$reach_body                    = self::body( $s, $e, [ 'customEvent:post_id', 'pagePath', 'pageTitle' ], [ 'totalUsers', 'userEngagementDuration' ] );
 		$reach_body['dimensionFilter'] = self::custom_event_present_filter( 'post_id' );
 		$reach_body                   += self::order_by_metric_desc( 'totalUsers' );
@@ -439,13 +415,14 @@ final class Engagement_Metric {
 			$post_id    = $row['dimensionValues'][0]['value'] ?? '';
 			$avg_eng    = $readers > 0 ? self::num( $row, 1 ) / $readers : 0;
 			$scroll     = $scroll_by_post[ $post_id ] ?? 0;
+			// Scroll completion still feeds the composite ranking score, but is
+			// no longer surfaced as a displayed column.
 			$avg_scroll = $readers > 0 ? min( 1.0, $scroll / $readers ) : 0;
 			$articles[] = [
 				'post_id'                => $post_id,
 				'page_path'              => $row['dimensionValues'][1]['value'] ?? null,
 				'page_title'             => $row['dimensionValues'][2]['value'] ?? null,
 				'unique_readers'         => $readers,
-				'avg_scroll_depth'       => $avg_scroll,
 				'avg_engagement_seconds' => $avg_eng,
 				'engagement_score'       => $readers * max( $avg_scroll, 0.1 ) * ( 1 + log( $avg_eng + 1 ) ),
 			];

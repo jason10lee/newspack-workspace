@@ -190,14 +190,11 @@ final class Audience_Metric {
 			'logged_in_reader_rate'              => self::logged_in_reader_rate_via_ga4( $pid, $start_date, $end_date ),
 			'logged_in_vs_anonymous_composition' => self::logged_in_vs_anonymous_composition_via_ga4( $pid, $start_date, $end_date ),
 			// Geographic.
-			'top_countries'                      => self::top_countries_via_ga4( $pid, $start_date, $end_date ),
 			'top_regions'                        => self::top_regions_via_ga4( $pid, $start_date, $end_date ),
 			'top_cities'                         => self::top_cities_via_ga4( $pid, $start_date, $end_date ),
-			'top_dmas'                           => self::top_dmas_via_ga4( $pid, $start_date, $end_date ),
 			'local_reader_rate'                  => self::local_reader_rate_via_ga4( $pid, $start_date, $end_date ),
 			// Content performance.
-			'top_pages_by_pageviews'             => self::top_pages_by_pageviews_via_ga4( $pid, $start_date, $end_date ),
-			'top_pages_by_reader_count'          => self::top_pages_by_reader_count_via_ga4( $pid, $start_date, $end_date ),
+			'top_pages'                          => self::top_pages_via_ga4( $pid, $start_date, $end_date ),
 			'top_authors_by_reader_count'        => self::top_authors_by_reader_count_via_ga4( $pid, $start_date, $end_date ),
 			// BQ-only (hidden in v1).
 			'returning_reader_rate_strict'       => self::hidden_in_v1_payload(),
@@ -232,13 +229,10 @@ final class Audience_Metric {
 			'newsletter_subscriber_composition',
 			'logged_in_reader_rate',
 			'logged_in_vs_anonymous_composition',
-			'top_countries',
 			'top_regions',
 			'top_cities',
-			'top_dmas',
 			'local_reader_rate',
-			'top_pages_by_pageviews',
-			'top_pages_by_reader_count',
+			'top_pages',
 			'top_authors_by_reader_count',
 		];
 		$payload = [
@@ -462,22 +456,6 @@ final class Audience_Metric {
 	}
 
 	/**
-	 * Top Countries — country / totalUsers.
-	 *
-	 * @param string $pid Property ID.
-	 * @param string $s   Start date.
-	 * @param string $e   End date.
-	 * @return array
-	 */
-	private static function top_countries_via_ga4( string $pid, string $s, string $e ): array {
-		$body          = self::body( $s, $e, [ 'country' ], [ 'totalUsers' ] );
-		$body         += self::order_by_metric_desc( 'totalUsers' );
-		$body['limit'] = 25;
-		$result        = self::safe_run_report( $pid, $body );
-		return self::rows( $result, [ 'country' ], [ 'readers' ], 'table' );
-	}
-
-	/**
 	 * Top Regions/States — country, region / totalUsers.
 	 *
 	 * @param string $pid Property ID.
@@ -507,31 +485,6 @@ final class Audience_Metric {
 		$body['limit'] = 50;
 		$result        = self::safe_run_report( $pid, $body );
 		return self::rows( $result, [ 'country', 'region', 'city' ], [ 'readers' ], 'table' );
-	}
-
-	/**
-	 * Top DMAs (US-only) — metro / totalUsers, filtered to United States.
-	 *
-	 * @param string $pid Property ID.
-	 * @param string $s   Start date.
-	 * @param string $e   End date.
-	 * @return array
-	 */
-	private static function top_dmas_via_ga4( string $pid, string $s, string $e ): array {
-		$body                    = self::body( $s, $e, [ 'metro' ], [ 'totalUsers' ] );
-		$body['dimensionFilter'] = [
-			'filter' => [
-				'fieldName'    => 'country',
-				'stringFilter' => [
-					'matchType' => 'EXACT',
-					'value'     => 'United States',
-				],
-			],
-		];
-		$body         += self::order_by_metric_desc( 'totalUsers' );
-		$body['limit'] = 50;
-		$result        = self::safe_run_report( $pid, $body );
-		return self::rows( $result, [ 'dma' ], [ 'readers' ], 'table' );
 	}
 
 	/*
@@ -593,40 +546,15 @@ final class Audience_Metric {
 	}
 
 	/**
-	 * Top Pages by Pageviews — customEvent:post_id (degrade to all URLs if missing).
+	 * Top Pages — customEvent:post_id (degrade to all URLs if missing). Ranked by
+	 * unique readers; returns both reader and pageview counts.
 	 *
 	 * @param string $pid Property ID.
 	 * @param string $s   Start date.
 	 * @param string $e   End date.
 	 * @return array
 	 */
-	private static function top_pages_by_pageviews_via_ga4( string $pid, string $s, string $e ): array {
-		$body                    = self::body( $s, $e, [ 'customEvent:post_id', 'pagePath', 'pageTitle' ], [ 'screenPageViews' ] );
-		$body['dimensionFilter'] = self::custom_event_present_filter( 'post_id' );
-		$body                   += self::order_by_metric_desc( 'screenPageViews' );
-		$body['limit']           = 50;
-		$result                  = self::safe_run_report( $pid, $body );
-
-		if ( self::is_custom_dimension_missing( $result ) ) {
-			// Degrade rather than hide: drop the post_id dimension + filter.
-			$degraded          = self::body( $s, $e, [ 'pagePath', 'pageTitle' ], [ 'screenPageViews' ] );
-			$degraded         += self::order_by_metric_desc( 'screenPageViews' );
-			$degraded['limit'] = 50;
-			$out               = self::rows( self::safe_run_report( $pid, $degraded ), [ 'page_path', 'page_title' ], [ 'pageviews' ], 'table' );
-			return self::mark_degraded( $out, __( 'Singular content filter unavailable; showing all URLs.', 'newspack-plugin' ) );
-		}
-		return self::rows( $result, [ 'post_id', 'page_path', 'page_title' ], [ 'pageviews' ], 'table' );
-	}
-
-	/**
-	 * Top Pages by Reader Count — customEvent:post_id (degrade if missing).
-	 *
-	 * @param string $pid Property ID.
-	 * @param string $s   Start date.
-	 * @param string $e   End date.
-	 * @return array
-	 */
-	private static function top_pages_by_reader_count_via_ga4( string $pid, string $s, string $e ): array {
+	private static function top_pages_via_ga4( string $pid, string $s, string $e ): array {
 		$body                    = self::body( $s, $e, [ 'customEvent:post_id', 'pagePath', 'pageTitle' ], [ 'totalUsers', 'screenPageViews' ] );
 		$body['dimensionFilter'] = self::custom_event_present_filter( 'post_id' );
 		$body                   += self::order_by_metric_desc( 'totalUsers' );

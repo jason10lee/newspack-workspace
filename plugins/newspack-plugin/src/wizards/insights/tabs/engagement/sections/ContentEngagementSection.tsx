@@ -28,14 +28,13 @@ const ContentEngagementSection = ( { current }: SectionProps ) => (
 		<p className="newspack-insights__section-caption">{ __( 'Which articles and authors hold reader attention.', 'newspack-plugin' ) }</p>
 		<div className="newspack-insights__table-grid">
 			<div>
-				<h3 className="newspack-insights__chart-card-title">{ __( 'Most-Engaged Articles', 'newspack-plugin' ) }</h3>
+				<h3 className="newspack-insights__chart-card-title">{ __( 'Most-Read Articles', 'newspack-plugin' ) }</h3>
 				<MetricTable
-					payload={ current.most_engaged_articles }
+					payload={ current.most_read_articles }
 					emptyMessage={ __( 'No article engagement data in this timeframe.', 'newspack-plugin' ) }
 					columns={ [
 						PAGE_COL,
 						{ key: 'unique_readers', label: __( 'Readers', 'newspack-plugin' ), format: 'number', align: 'right' },
-						{ key: 'avg_scroll_depth', label: __( 'Avg scroll', 'newspack-plugin' ), format: 'percent', align: 'right' },
 						{ key: 'avg_engagement_seconds', label: __( 'Avg time', 'newspack-plugin' ), format: 'duration', align: 'right' },
 					] }
 				/>
@@ -49,18 +48,6 @@ const ContentEngagementSection = ( { current }: SectionProps ) => (
 						PAGE_COL,
 						{ key: 'readers', label: __( 'Readers', 'newspack-plugin' ), format: 'number', align: 'right' },
 						{ key: 'completion_rate', label: __( 'Completion', 'newspack-plugin' ), format: 'percent', align: 'right' },
-					] }
-				/>
-			</div>
-			<div>
-				<h3 className="newspack-insights__chart-card-title">{ __( 'Articles by Avg Time on Page', 'newspack-plugin' ) }</h3>
-				<MetricTable
-					payload={ current.articles_by_avg_time_on_page }
-					emptyMessage={ __( 'No time-on-page data in this timeframe.', 'newspack-plugin' ) }
-					columns={ [
-						PAGE_COL,
-						{ key: 'unique_readers', label: __( 'Readers', 'newspack-plugin' ), format: 'number', align: 'right' },
-						{ key: 'avg_time_seconds', label: __( 'Avg time', 'newspack-plugin' ), format: 'duration', align: 'right' },
 					] }
 				/>
 			</div>

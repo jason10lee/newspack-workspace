@@ -283,30 +283,6 @@ $build = function ( float $f ) use ( $scalar, $rate, $breakdown, $table, $series
 		),
 
 		// Geographic.
-		'top_countries'                      => $table(
-			[
-				[
-					'country' => 'United States',
-					'readers' => (int) round( 112900 * $f ),
-				],
-				[
-					'country' => 'Canada',
-					'readers' => (int) round( 6200 * $f ),
-				],
-				[
-					'country' => 'United Kingdom',
-					'readers' => (int) round( 3800 * $f ),
-				],
-				[
-					'country' => 'Mexico',
-					'readers' => (int) round( 1900 * $f ),
-				],
-				[
-					'country' => 'Germany',
-					'readers' => (int) round( 1100 * $f ),
-				],
-			]
-		),
 		'top_regions'                        => $table(
 			[
 				[
@@ -370,26 +346,6 @@ $build = function ( float $f ) use ( $scalar, $rate, $breakdown, $table, $series
 				],
 			]
 		),
-		'top_dmas'                           => $table(
-			[
-				[
-					'dma'     => 'Chicago IL',
-					'readers' => (int) round( 44600 * $f ),
-				],
-				[
-					'dma'     => 'New York NY',
-					'readers' => (int) round( 10100 * $f ),
-				],
-				[
-					'dma'     => 'Los Angeles CA',
-					'readers' => (int) round( 7900 * $f ),
-				],
-				[
-					'dma'     => 'Indianapolis IN',
-					'readers' => (int) round( 4200 * $f ),
-				],
-			]
-		),
 		// Error state: coverage area not configured.
 		'local_reader_rate'                  => [
 			'value'      => null,
@@ -399,35 +355,7 @@ $build = function ( float $f ) use ( $scalar, $rate, $breakdown, $table, $series
 		],
 
 		// Content performance.
-		'top_pages_by_pageviews'             => $table(
-			[
-				[
-					'post_id'    => '40122',
-					'page_path'  => '/2026/05/city-budget-vote',
-					'page_title' => 'City council passes contested budget',
-					'pageviews'  => (int) round( 28400 * $f ),
-				],
-				[
-					'post_id'    => '39880',
-					'page_path'  => '/2026/05/school-closures',
-					'page_title' => 'District announces three school closures',
-					'pageviews'  => (int) round( 19100 * $f ),
-				],
-				[
-					'post_id'    => '40310',
-					'page_path'  => '/2026/06/heat-wave-guide',
-					'page_title' => 'Your guide to surviving the heat wave',
-					'pageviews'  => (int) round( 12700 * $f ),
-				],
-				[
-					'post_id'    => '39501',
-					'page_path'  => '/2026/05/transit-expansion',
-					'page_title' => 'Transit expansion clears final hurdle',
-					'pageviews'  => (int) round( 9800 * $f ),
-				],
-			]
-		),
-		'top_pages_by_reader_count'          => $table(
+		'top_pages'                          => $table(
 			[
 				[
 					'post_id'        => '40122',
@@ -449,6 +377,13 @@ $build = function ( float $f ) use ( $scalar, $rate, $breakdown, $table, $series
 					'page_title'     => 'Your guide to surviving the heat wave',
 					'unique_readers' => (int) round( 11200 * $f ),
 					'pageviews'      => (int) round( 12700 * $f ),
+				],
+				[
+					'post_id'        => '39501',
+					'page_path'      => '/2026/05/transit-expansion',
+					'page_title'     => 'Transit expansion clears final hurdle',
+					'unique_readers' => (int) round( 8100 * $f ),
+					'pageviews'      => (int) round( 9800 * $f ),
 				],
 			]
 		),

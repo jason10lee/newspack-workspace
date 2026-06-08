@@ -66,17 +66,16 @@ $build = function ( float $f ) use ( $scalar, $rate, $table, $hidden, $start, $e
 		'avg_pages_per_session'                 => $scalar( round( 2.34 * $f, 2 ), 'decimal' ),
 		'avg_engaged_session_duration'          => $scalar( round( 142 * $f ), 'duration' ),
 		'bounce_rate'                           => $rate( (int) round( 95600 * ( 2 - $f ) ), 281200 ),
-		'scroll_depth_rate'                     => $rate( (int) round( 71400 * $f ), 168000 ),
+		'article_completion_rate'               => $rate( (int) round( 71400 * $f ), 168000 ),
 
 		// Content engagement.
-		'most_engaged_articles'                 => $table(
+		'most_read_articles'                    => $table(
 			[
 				[
 					'post_id'                => '40122',
 					'page_path'              => '/2026/05/city-budget-vote',
 					'page_title'             => 'City council passes contested budget',
 					'unique_readers'         => (int) round( 21900 * $f ),
-					'avg_scroll_depth'       => round( 0.74 * $f, 2 ),
 					'avg_engagement_seconds' => round( 188 * $f ),
 					'engagement_score'       => round( 41200 * $f ),
 				],
@@ -85,7 +84,6 @@ $build = function ( float $f ) use ( $scalar, $rate, $table, $hidden, $start, $e
 					'page_path'              => '/2026/05/school-closures',
 					'page_title'             => 'District announces three school closures',
 					'unique_readers'         => (int) round( 16400 * $f ),
-					'avg_scroll_depth'       => round( 0.68 * $f, 2 ),
 					'avg_engagement_seconds' => round( 162 * $f ),
 					'engagement_score'       => round( 28900 * $f ),
 				],
@@ -94,7 +92,6 @@ $build = function ( float $f ) use ( $scalar, $rate, $table, $hidden, $start, $e
 					'page_path'              => '/2026/06/heat-wave-guide',
 					'page_title'             => 'Your guide to surviving the heat wave',
 					'unique_readers'         => (int) round( 11200 * $f ),
-					'avg_scroll_depth'       => round( 0.81 * $f, 2 ),
 					'avg_engagement_seconds' => round( 205 * $f ),
 					'engagement_score'       => round( 24100 * $f ),
 				],
@@ -122,31 +119,6 @@ $build = function ( float $f ) use ( $scalar, $rate, $table, $hidden, $start, $e
 					'page_title'      => 'Transit expansion clears final hurdle',
 					'readers'         => (int) round( 8100 * $f ),
 					'completion_rate' => round( 0.47 * $f, 2 ),
-				],
-			]
-		),
-		'articles_by_avg_time_on_page'          => $table(
-			[
-				[
-					'post_id'          => '40310',
-					'page_path'        => '/2026/06/heat-wave-guide',
-					'page_title'       => 'Your guide to surviving the heat wave',
-					'unique_readers'   => (int) round( 11200 * $f ),
-					'avg_time_seconds' => round( 232 * $f ),
-				],
-				[
-					'post_id'          => '40122',
-					'page_path'        => '/2026/05/city-budget-vote',
-					'page_title'       => 'City council passes contested budget',
-					'unique_readers'   => (int) round( 21900 * $f ),
-					'avg_time_seconds' => round( 198 * $f ),
-				],
-				[
-					'post_id'          => '39880',
-					'page_path'        => '/2026/05/school-closures',
-					'page_title'       => 'District announces three school closures',
-					'unique_readers'   => (int) round( 16400 * $f ),
-					'avg_time_seconds' => round( 171 * $f ),
 				],
 			]
 		),
