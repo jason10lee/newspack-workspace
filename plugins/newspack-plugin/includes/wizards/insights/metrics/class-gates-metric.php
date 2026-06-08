@@ -22,6 +22,7 @@ namespace Newspack\Insights;
 defined( 'ABSPATH' ) || exit;
 
 use DateTimeInterface;
+use Newspack\Insights\BigQuery_Proxy_Client;
 
 /**
  * Tab 4 placeholder metric orchestrator.
@@ -43,6 +44,22 @@ final class Gates_Metric {
 	 * @var string
 	 */
 	const CACHE_PREFIX = 'newspack_insights_tab4_v1:';
+
+	/**
+	 * Proxy client used to dispatch catalog queries to the hub.
+	 *
+	 * @var BigQuery_Proxy_Client
+	 */
+	private BigQuery_Proxy_Client $proxy;
+
+	/**
+	 * Constructor. Optionally inject a proxy client (used in tests).
+	 *
+	 * @param BigQuery_Proxy_Client|null $proxy Injected client, or null to lazy-resolve.
+	 */
+	public function __construct( ?BigQuery_Proxy_Client $proxy = null ) {
+		$this->proxy = $proxy ?? new BigQuery_Proxy_Client();
+	}
 
 	/**
 	 * Build the standard placeholder shape for a single scorecard
