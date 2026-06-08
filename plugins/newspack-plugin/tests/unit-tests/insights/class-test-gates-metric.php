@@ -361,4 +361,119 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 		$this->assertSame( 50.00, $total['value'] );
 		$this->assertSame( 50.0, $avg['value'] );
 	}
+
+	/**
+	 * Funnel: maps BQ row to React-ready stages with pct_of_top.
+	 */
+	public function test_funnel_maps_bq_rows_to_stages() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->once() )
+			->method( 'query' )
+			->with( 'gates_funnel', $this->isInstanceOf( DateTimeImmutable::class ), $this->isInstanceOf( DateTimeImmutable::class ) )
+			->willReturn(
+				[
+					[
+						'step_1_impression' => 1000,
+						'step_2_engagement' => 200,
+						'step_3_conversion' => 50,
+					],
+				]
+			);
+
+		$metric = new Gates_Metric( $proxy );
+		$result = $metric->get_conversion_funnel( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertFalse( $result['pending'] );
+		$this->assertCount( 3, $result['stages'] );
+		$this->assertSame( 1000, $result['stages'][0]['count'] );
+		$this->assertSame( 200, $result['stages'][1]['count'] );
+		$this->assertSame( 50, $result['stages'][2]['count'] );
+		$this->assertEqualsWithDelta( 1.0, $result['stages'][0]['pct_of_top'], 0.001 );
+		$this->assertEqualsWithDelta( 0.2, $result['stages'][1]['pct_of_top'], 0.001 );
+		$this->assertEqualsWithDelta( 0.05, $result['stages'][2]['pct_of_top'], 0.001 );
+	}
+
+	/**
+	 * Funnel falls back on error.
+	 */
+	public function test_funnel_falls_back_on_error() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( new \WP_Error( 'bigquery_query_failed', 'BQ down' ) );
+
+		$metric = new Gates_Metric( $proxy );
+		$result = $metric->get_conversion_funnel( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertTrue( $result['pending'] );
+		$this->assertCount( 3, $result['stages'] );
+	}
+
+	/**
+	 * Distribution: maps BQ rows to React-ready buckets in the expected order.
+	 */
+	public function test_distribution_maps_bq_rows_to_buckets() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )
+			->willReturn(
+				[
+					[
+						'bucket'               => '1',
+						'converters_in_bucket' => 50,
+						'pct_of_converters'    => 0.5,
+					],
+					[
+						'bucket'               => '2',
+						'converters_in_bucket' => 30,
+						'pct_of_converters'    => 0.3,
+					],
+					[
+						'bucket'               => '3-5',
+						'converters_in_bucket' => 15,
+						'pct_of_converters'    => 0.15,
+					],
+					[
+						'bucket'               => '6+',
+						'converters_in_bucket' => 5,
+						'pct_of_converters'    => 0.05,
+					],
+				]
+			);
+
+		$metric = new Gates_Metric( $proxy );
+		$result = $metric->get_exposures_distribution( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertFalse( $result['pending'] );
+		$this->assertCount( 4, $result['buckets'] );
+		$this->assertSame( 50, $result['buckets'][0]['count'] );
+		$this->assertSame( 5, $result['buckets'][3]['count'] );
+	}
+
+	/**
+	 * Distribution: buckets with missing rows from BQ default to zero, preserving order.
+	 */
+	public function test_distribution_handles_partial_buckets() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )
+			->willReturn(
+				[
+					[
+						'bucket'               => '1',
+						'converters_in_bucket' => 80,
+						'pct_of_converters'    => 0.8,
+					],
+					[
+						'bucket'               => '6+',
+						'converters_in_bucket' => 20,
+						'pct_of_converters'    => 0.2,
+					],
+				]
+			);
+
+		$metric = new Gates_Metric( $proxy );
+		$result = $metric->get_exposures_distribution( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertSame( 80, $result['buckets'][0]['count'] ); // bucket '1'.
+		$this->assertSame( 0, $result['buckets'][1]['count'] );  // bucket '2' (missing).
+		$this->assertSame( 0, $result['buckets'][2]['count'] );  // bucket '3-5' (missing).
+		$this->assertSame( 20, $result['buckets'][3]['count'] ); // bucket '6+'.
+	}
 }

@@ -369,24 +369,51 @@ final class Gates_Metric {
 	 * }
 	 */
 	public function get_conversion_funnel( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
+		$rows = $this->proxy->query( 'gates_funnel', $start, $end );
+		if ( is_wp_error( $rows ) || empty( $rows ) || ! is_array( $rows[0] ) ) {
+			return [
+				'pending' => true,
+				'stages'  => [
+					[
+						'label'      => __( 'Impression', 'newspack-plugin' ),
+						'count'      => 0,
+						'pct_of_top' => 0.0,
+					],
+					[
+						'label'      => __( 'Engagement', 'newspack-plugin' ),
+						'count'      => 0,
+						'pct_of_top' => 0.0,
+					],
+					[
+						'label'      => __( 'Conversion', 'newspack-plugin' ),
+						'count'      => 0,
+						'pct_of_top' => 0.0,
+					],
+				],
+			];
+		}
+		$row   = $rows[0];
+		$step1 = (int) ( $row['step_1_impression'] ?? 0 );
+		$step2 = (int) ( $row['step_2_engagement'] ?? 0 );
+		$step3 = (int) ( $row['step_3_conversion'] ?? 0 );
+		$top   = $step1 > 0 ? $step1 : 1; // Avoid div-by-zero in pct_of_top.
 		return [
-			'pending' => true,
+			'pending' => false,
 			'stages'  => [
 				[
 					'label'      => __( 'Impression', 'newspack-plugin' ),
-					'count'      => 0,
-					'pct_of_top' => 0.0,
+					'count'      => $step1,
+					'pct_of_top' => 1.0,
 				],
 				[
 					'label'      => __( 'Engagement', 'newspack-plugin' ),
-					'count'      => 0,
-					'pct_of_top' => 0.0,
+					'count'      => $step2,
+					'pct_of_top' => $step2 / $top,
 				],
 				[
 					'label'      => __( 'Conversion', 'newspack-plugin' ),
-					'count'      => 0,
-					'pct_of_top' => 0.0,
+					'count'      => $step3,
+					'pct_of_top' => $step3 / $top,
 				],
 			],
 		];
@@ -403,7 +430,52 @@ final class Gates_Metric {
 	 * }
 	 */
 	public function get_exposures_distribution( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
+		$rows = $this->proxy->query( 'gates_exposures_before_conversion', $start, $end );
+		if ( is_wp_error( $rows ) || ! is_array( $rows ) ) {
+			return $this->empty_distribution();
+		}
+
+		$by_bucket = [];
+		foreach ( $rows as $row ) {
+			if ( isset( $row['bucket'] ) ) {
+				$by_bucket[ $row['bucket'] ] = [
+					'count' => (int) ( $row['converters_in_bucket'] ?? 0 ),
+					'pct'   => (float) ( $row['pct_of_converters'] ?? 0.0 ),
+				];
+			}
+		}
+
+		if ( empty( $by_bucket ) ) {
+			return $this->empty_distribution();
+		}
+
+		$ordered_keys   = [ '1', '2', '3-5', '6+' ];
+		$ordered_labels = [
+			'1'   => __( '1 exposure', 'newspack-plugin' ),
+			'2'   => __( '2 exposures', 'newspack-plugin' ),
+			'3-5' => __( '3–5 exposures', 'newspack-plugin' ),
+			'6+'  => __( '6+ exposures', 'newspack-plugin' ),
+		];
+		$buckets        = [];
+		foreach ( $ordered_keys as $key ) {
+			$buckets[] = [
+				'label' => $ordered_labels[ $key ],
+				'count' => $by_bucket[ $key ]['count'] ?? 0,
+				'pct'   => $by_bucket[ $key ]['pct'] ?? 0.0,
+			];
+		}
+		return [
+			'pending' => false,
+			'buckets' => $buckets,
+		];
+	}
+
+	/**
+	 * Empty distribution shape (Phase 1-style placeholder for the React table).
+	 *
+	 * @return array
+	 */
+	private function empty_distribution(): array {
 		return [
 			'pending' => true,
 			'buckets' => [
