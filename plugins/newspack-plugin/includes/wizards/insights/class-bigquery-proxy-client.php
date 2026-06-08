@@ -14,6 +14,7 @@
 namespace Newspack\Insights;
 
 use DateTimeInterface;
+use DateTimeZone;
 use WP_Error;
 
 defined( 'ABSPATH' ) || exit;
@@ -89,6 +90,9 @@ class BigQuery_Proxy_Client {
 	/**
 	 * Dispatch a catalog query against the hub. Returns rows on success, `WP_Error` on any failure path.
 	 *
+	 * Dates are formatted as `YYYYMMDD` in UTC (the GA4 daily-shard partition convention).
+	 * Non-UTC inputs are converted before formatting; the caller's `$start`/`$end` are not mutated.
+	 *
 	 * @param string            $query_name Allowlisted catalog name (e.g. `gates_total_impressions`).
 	 * @param DateTimeInterface $start      Window start (Ymd format applied by this method).
 	 * @param DateTimeInterface $end        Window end.
@@ -102,11 +106,13 @@ class BigQuery_Proxy_Client {
 			);
 		}
 
+		$utc = new \DateTimeZone( 'UTC' );
+
 		$body = wp_json_encode(
 			[
 				'query_name' => $query_name,
-				'start_date' => $start->format( 'Ymd' ),
-				'end_date'   => $end->format( 'Ymd' ),
+				'start_date' => \DateTimeImmutable::createFromInterface( $start )->setTimezone( $utc )->format( 'Ymd' ),
+				'end_date'   => \DateTimeImmutable::createFromInterface( $end )->setTimezone( $utc )->format( 'Ymd' ),
 			]
 		);
 
@@ -129,8 +135,7 @@ class BigQuery_Proxy_Client {
 		$code = (int) wp_remote_retrieve_response_code( $response );
 		$raw  = wp_remote_retrieve_body( $response );
 
-		$decoded = json_decode( $raw, true );
-		if ( null === $decoded && JSON_ERROR_NONE !== json_last_error() ) {
+		if ( ! json_validate( $raw ) ) {
 			return new WP_Error(
 				'bigquery_proxy_invalid_response',
 				sprintf(
@@ -140,6 +145,7 @@ class BigQuery_Proxy_Client {
 				)
 			);
 		}
+		$decoded = json_decode( $raw, true );
 
 		if ( 200 !== $code ) {
 			$error_code    = is_array( $decoded ) && isset( $decoded['code'] ) ? (string) $decoded['code'] : 'bigquery_proxy_http_error';

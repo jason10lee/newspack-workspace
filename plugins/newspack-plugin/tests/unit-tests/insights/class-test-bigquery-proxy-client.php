@@ -131,6 +131,31 @@ class Test_BigQuery_Proxy_Client extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Non-UTC DateTimeImmutable inputs are normalized to UTC before formatting.
+	 *
+	 * GA4 daily-shard tables are UTC-partitioned; querying a non-UTC date silently
+	 * returns the wrong day's data. The client must defensively convert.
+	 */
+	public function test_query_normalizes_non_utc_dates() {
+		$this->stub_response = [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode( [ [ 'gate_impressions' => 0 ] ] ),
+		];
+
+		// 2026-03-22 01:00 JST == 2026-03-21 16:00 UTC.
+		$tokyo_start = new \DateTimeImmutable( '2026-03-22 01:00:00', new \DateTimeZone( 'Asia/Tokyo' ) );
+		// 2026-04-22 01:00 JST == 2026-04-21 16:00 UTC.
+		$tokyo_end = new \DateTimeImmutable( '2026-04-22 01:00:00', new \DateTimeZone( 'Asia/Tokyo' ) );
+
+		$client = new BigQuery_Proxy_Client( 'https://hub.example.com/x?api_key=k', 'k' );
+		$client->query( 'gates_total_impressions', $tokyo_start, $tokyo_end );
+
+		$body = json_decode( $this->captured_args['body'], true );
+		$this->assertSame( '20260321', $body['start_date'] );
+		$this->assertSame( '20260421', $body['end_date'] );
+	}
+
+	/**
 	 * Query() returns rows on 200 response.
 	 */
 	public function test_query_returns_rows_on_success() {
