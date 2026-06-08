@@ -11,6 +11,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use Newspack\Insights\BigQuery_Proxy_Client;
 use Newspack\Insights\Gates_Metric;
+use Newspack\Insights\Woo_Order_Resolver;
 use WP_UnitTestCase;
 
 /**
@@ -158,6 +159,132 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 
 		$metric = new Gates_Metric( $proxy );
 		$result = $metric->get_total_gate_impressions( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertTrue( $result['pending'] );
+	}
+
+	/**
+	 * Paywall direct conversion rate: matched orders / BQ row count.
+	 */
+	public function test_paywall_conversion_direct_uses_woo_join() {
+		$bq_rows = [
+			[
+				'user_pseudo_id' => '1',
+				'session_id'     => 's1',
+				'attempt_ts'     => '1000000000000000',
+			],
+			[
+				'user_pseudo_id' => '2',
+				'session_id'     => 's2',
+				'attempt_ts'     => '1000001000000000',
+			],
+			[
+				'user_pseudo_id' => '3',
+				'session_id'     => 's3',
+				'attempt_ts'     => '1000002000000000',
+			],
+			[
+				'user_pseudo_id' => '4',
+				'session_id'     => 's4',
+				'attempt_ts'     => '1000003000000000',
+			],
+		];
+
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->once() )
+			->method( 'query' )
+			->with( 'gates_paywall_conversion_direct', $this->isInstanceOf( DateTimeImmutable::class ), $this->isInstanceOf( DateTimeImmutable::class ) )
+			->willReturn( $bq_rows );
+
+		$resolver = $this->createMock( Woo_Order_Resolver::class );
+		$resolver->method( 'count_completed_orders' )->willReturn( 1 ); // 1 of 4 attempts converted.
+
+		$metric = new Gates_Metric( $proxy, $resolver );
+		$result = $metric->get_paywall_conversion_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertSame( 0.25, $result['value'] );
+		$this->assertFalse( $result['pending'] );
+		$this->assertSame( 4, $result['denominator'] );
+	}
+
+	/**
+	 * Paywall direct conversion rate: zero denominator -> placeholder.
+	 */
+	public function test_paywall_conversion_direct_with_zero_denominator() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( [] );
+
+		$metric = new Gates_Metric( $proxy );
+		$result = $metric->get_paywall_conversion_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertTrue( $result['pending'] );
+	}
+
+	/**
+	 * Total paywall revenue (Direct): sum_completed_revenue passthrough.
+	 */
+	public function test_total_paywall_revenue_direct_sums_woo() {
+		$bq_rows = [
+			[
+				'user_pseudo_id' => '1',
+				'session_id'     => 's1',
+				'attempt_ts'     => '1000000000000000',
+			],
+		];
+
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( $bq_rows );
+
+		$resolver = $this->createMock( Woo_Order_Resolver::class );
+		$resolver->method( 'sum_completed_revenue' )->willReturn( 99.99 );
+
+		$metric = new Gates_Metric( $proxy, $resolver );
+		$result = $metric->get_total_paywall_revenue_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertSame( 99.99, $result['value'] );
+		$this->assertFalse( $result['pending'] );
+	}
+
+	/**
+	 * Avg revenue per conversion is derived from the two queries it depends on.
+	 */
+	public function test_avg_revenue_per_paywall_conversion_derives_from_two_queries() {
+		$bq_rows = [
+			[
+				'user_pseudo_id' => '1',
+				'session_id'     => 's1',
+				'attempt_ts'     => '1000000000000000',
+			],
+			[
+				'user_pseudo_id' => '2',
+				'session_id'     => 's2',
+				'attempt_ts'     => '1000001000000000',
+			],
+		];
+
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( $bq_rows );
+
+		$resolver = $this->createMock( Woo_Order_Resolver::class );
+		$resolver->method( 'count_completed_orders' )->willReturn( 2 );
+		$resolver->method( 'sum_completed_revenue' )->willReturn( 200.00 );
+
+		$metric = new Gates_Metric( $proxy, $resolver );
+		$result = $metric->get_avg_revenue_per_paywall_conversion( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertSame( 100.0, $result['value'] );
+		$this->assertFalse( $result['pending'] );
+	}
+
+	/**
+	 * Avg revenue per conversion: zero conversions -> placeholder, not divide-by-zero.
+	 */
+	public function test_avg_revenue_per_paywall_conversion_with_zero_conversions() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( [] );
+
+		$metric = new Gates_Metric( $proxy );
+		$result = $metric->get_avg_revenue_per_paywall_conversion( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
 		$this->assertTrue( $result['pending'] );
 	}

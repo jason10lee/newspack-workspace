@@ -23,6 +23,7 @@ defined( 'ABSPATH' ) || exit;
 
 use DateTimeInterface;
 use Newspack\Insights\BigQuery_Proxy_Client;
+use Newspack\Insights\Woo_Order_Resolver;
 
 /**
  * Tab 4 placeholder metric orchestrator.
@@ -53,12 +54,24 @@ final class Gates_Metric {
 	private BigQuery_Proxy_Client $proxy;
 
 	/**
-	 * Constructor. Optionally inject a proxy client (used in tests).
+	 * Resolver used to match BQ paywall attempts against Woo orders.
 	 *
-	 * @param BigQuery_Proxy_Client|null $proxy Injected client, or null to lazy-resolve.
+	 * @var Woo_Order_Resolver
 	 */
-	public function __construct( ?BigQuery_Proxy_Client $proxy = null ) {
-		$this->proxy = $proxy ?? new BigQuery_Proxy_Client();
+	private Woo_Order_Resolver $woo_resolver;
+
+	/**
+	 * Constructor. Optionally inject collaborators (used in tests).
+	 *
+	 * @param BigQuery_Proxy_Client|null $proxy        Injected proxy client, or null to lazy-resolve.
+	 * @param Woo_Order_Resolver|null    $woo_resolver Injected Woo resolver, or null to lazy-create.
+	 */
+	public function __construct(
+		?BigQuery_Proxy_Client $proxy = null,
+		?Woo_Order_Resolver $woo_resolver = null
+	) {
+		$this->proxy        = $proxy ?? new BigQuery_Proxy_Client();
+		$this->woo_resolver = $woo_resolver ?? new Woo_Order_Resolver();
 	}
 
 	/**
@@ -120,6 +133,59 @@ final class Gates_Metric {
 			'pending'          => false,
 			'denominator'      => null,
 			'placeholder_type' => $placeholder_type,
+		];
+	}
+
+	/**
+	 * Compute a paywall conversion rate from BQ rows + Woo completion join.
+	 *
+	 * @param string            $query_name Catalog name (`gates_paywall_conversion_*`).
+	 * @param DateTimeInterface $start      Window start.
+	 * @param DateTimeInterface $end        Window end.
+	 * @return array
+	 */
+	private function compute_paywall_rate_from_proxy(
+		string $query_name,
+		DateTimeInterface $start,
+		DateTimeInterface $end
+	): array {
+		$rows = $this->proxy->query( $query_name, $start, $end );
+		if ( is_wp_error( $rows ) || ! is_array( $rows ) || empty( $rows ) ) {
+			return $this->placeholder( 'rate' );
+		}
+		$denominator = count( $rows );
+		$numerator   = $this->woo_resolver->count_completed_orders( $rows );
+		return [
+			'value'            => $denominator > 0 ? $numerator / $denominator : 0.0,
+			'computable'       => true,
+			'pending'          => false,
+			'denominator'      => $denominator,
+			'placeholder_type' => 'rate',
+		];
+	}
+
+	/**
+	 * Fetch paywall direct rows and return matched-order count + summed revenue.
+	 *
+	 * Used by both `get_total_paywall_revenue_direct` and
+	 * `get_avg_revenue_per_paywall_conversion` (derived).
+	 *
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
+	 * @return array{rows:array, conversions:int, revenue:float}|null
+	 */
+	private function fetch_paywall_direct_woo_join(
+		DateTimeInterface $start,
+		DateTimeInterface $end
+	): ?array {
+		$rows = $this->proxy->query( 'gates_paywall_revenue_direct', $start, $end );
+		if ( is_wp_error( $rows ) || ! is_array( $rows ) || empty( $rows ) ) {
+			return null;
+		}
+		return [
+			'rows'        => $rows,
+			'conversions' => $this->woo_resolver->count_completed_orders( $rows ),
+			'revenue'     => $this->woo_resolver->sum_completed_revenue( $rows ),
 		];
 	}
 
@@ -203,8 +269,7 @@ final class Gates_Metric {
 	 * @return array
 	 */
 	public function get_paywall_conversion_direct( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder( 'rate' );
+		return $this->compute_paywall_rate_from_proxy( 'gates_paywall_conversion_direct', $start, $end );
 	}
 
 	/**
@@ -215,8 +280,7 @@ final class Gates_Metric {
 	 * @return array
 	 */
 	public function get_paywall_conversion_influenced_14d( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder( 'rate' );
+		return $this->compute_paywall_rate_from_proxy( 'gates_paywall_conversion_influenced_14d', $start, $end );
 	}
 
 	/**
@@ -227,8 +291,17 @@ final class Gates_Metric {
 	 * @return array
 	 */
 	public function get_total_paywall_revenue_direct( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder( 'currency' );
+		$joined = $this->fetch_paywall_direct_woo_join( $start, $end );
+		if ( null === $joined ) {
+			return $this->placeholder( 'currency' );
+		}
+		return [
+			'value'            => $joined['revenue'],
+			'computable'       => true,
+			'pending'          => false,
+			'denominator'      => $joined['conversions'],
+			'placeholder_type' => 'currency',
+		];
 	}
 
 	/**
@@ -239,8 +312,17 @@ final class Gates_Metric {
 	 * @return array
 	 */
 	public function get_avg_revenue_per_paywall_conversion( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder( 'currency' );
+		$joined = $this->fetch_paywall_direct_woo_join( $start, $end );
+		if ( null === $joined || $joined['conversions'] <= 0 ) {
+			return $this->placeholder( 'currency' );
+		}
+		return [
+			'value'            => $joined['revenue'] / $joined['conversions'],
+			'computable'       => true,
+			'pending'          => false,
+			'denominator'      => $joined['conversions'],
+			'placeholder_type' => 'currency',
+		];
 	}
 
 	// --- Section 4: How readers convert ---------------------------------
