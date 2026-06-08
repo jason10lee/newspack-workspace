@@ -168,8 +168,6 @@ final class Engagement_Metric {
 			'engagement_by_device_type'             => self::engagement_by_device_type_via_ga4( $pid, $start_date, $end_date ),
 			'engagement_by_newsletter_status'       => self::engagement_by_newsletter_status_via_ga4( $pid, $start_date, $end_date ),
 			'engagement_by_returning_vs_new'        => self::engagement_by_returning_vs_new_via_ga4( $pid, $start_date, $end_date ),
-			// Time patterns.
-			'engagement_by_day_of_week'             => self::engagement_by_day_of_week_via_ga4( $pid, $start_date, $end_date ),
 			// BQ-only (hidden in v1).
 			'top_categories_by_engagement'          => self::hidden_in_v1_payload(),
 			'mobile_vs_desktop_content_preferences' => self::hidden_in_v1_payload(),
@@ -197,7 +195,6 @@ final class Engagement_Metric {
 			'engagement_by_device_type',
 			'engagement_by_newsletter_status',
 			'engagement_by_returning_vs_new',
-			'engagement_by_day_of_week',
 		];
 		$payload = [
 			'window' => [
@@ -257,19 +254,6 @@ final class Engagement_Metric {
 	private static function bounce_rate_via_ga4( string $pid, string $s, string $e ): array {
 		$result = self::safe_run_report( $pid, self::body( $s, $e, [], [ 'bounceRate' ] ) );
 		return self::scalar( $result, 'rate' );
-	}
-
-	/**
-	 * Engagement by Day of Week — dayOfWeekName / averageSessionDuration + totalUsers.
-	 *
-	 * @param string $pid Property ID.
-	 * @param string $s   Start date.
-	 * @param string $e   End date.
-	 * @return array
-	 */
-	private static function engagement_by_day_of_week_via_ga4( string $pid, string $s, string $e ): array {
-		$result = self::safe_run_report( $pid, self::body( $s, $e, [ 'dayOfWeekName' ], [ 'averageSessionDuration', 'totalUsers' ] ) );
-		return self::rows( $result, [ 'day_of_week' ], [ 'avg_session_duration', 'active_readers' ], 'breakdown' );
 	}
 
 	/**

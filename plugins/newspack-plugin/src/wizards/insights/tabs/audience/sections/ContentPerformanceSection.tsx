@@ -49,6 +49,21 @@ const ContentPerformanceSection = ( { current }: SectionProps ) => (
 					] }
 				/>
 			</div>
+			{ /* Top Categories is hidden_in_v1 (needs BQ UNNEST); it skip-renders until the BQ catalog ships. */ }
+			{ ! current.top_categories?.hidden_in_v1 && (
+				<div>
+					<h3 className="newspack-insights__chart-card-title">{ __( 'Top Categories', 'newspack-plugin' ) }</h3>
+					<MetricTable
+						payload={ current.top_categories }
+						emptyMessage={ __( 'No category data in this timeframe.', 'newspack-plugin' ) }
+						columns={ [
+							{ key: 'category', label: __( 'Category', 'newspack-plugin' ) },
+							{ key: 'unique_readers', label: __( 'Readers', 'newspack-plugin' ), format: 'number', align: 'right' },
+							{ key: 'pageviews', label: __( 'Pageviews', 'newspack-plugin' ), format: 'number', align: 'right' },
+						] }
+					/>
+				</div>
+			) }
 		</div>
 	</section>
 );

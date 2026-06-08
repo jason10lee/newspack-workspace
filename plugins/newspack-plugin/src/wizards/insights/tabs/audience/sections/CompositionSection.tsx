@@ -30,7 +30,7 @@ const CompositionSection = ( { current }: SectionProps ) => (
 		<p className="newspack-insights__section-caption">
 			{ __( 'Who your readers are — subscribers, logged-in status, and devices.', 'newspack-plugin' ) }
 		</p>
-		<div className="newspack-insights__chart-grid newspack-insights__chart-grid--cols-3">
+		<div className="newspack-insights__chart-grid newspack-insights__chart-grid--cols-4">
 			<ChartCard title={ __( 'Newsletter Subscriber Composition', 'newspack-plugin' ) } payload={ current.newsletter_subscriber_composition }>
 				<PieChart segments={ toSeries( current.newsletter_subscriber_composition, 'label', 'value' ) } />
 			</ChartCard>
@@ -39,6 +39,13 @@ const CompositionSection = ( { current }: SectionProps ) => (
 			</ChartCard>
 			<ChartCard title={ __( 'Device Breakdown', 'newspack-plugin' ) } payload={ current.device_breakdown }>
 				<PieChart segments={ toSeries( current.device_breakdown, 'device', 'readers' ) } />
+			</ChartCard>
+			<ChartCard
+				title={ __( 'Supporter Type', 'newspack-plugin' ) }
+				caption={ __( 'Subscribers, donors, and registered readers among your logged-in audience.', 'newspack-plugin' ) }
+				payload={ current.supporter_type }
+			>
+				<PieChart segments={ toSeries( current.supporter_type, 'label', 'value' ) } />
 			</ChartCard>
 		</div>
 	</section>

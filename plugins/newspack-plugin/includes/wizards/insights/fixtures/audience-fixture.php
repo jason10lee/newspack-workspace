@@ -8,13 +8,14 @@
  * controller assembles. Values are computed date-relative so the fixture
  * never goes stale.
  *
- * Deliberately exercises every render path:
+ * Fully populated — no overlay/error states — so fixture mode shows the whole
+ * tab rendered cleanly. (The overlay/error render paths are covered by the
+ * component unit tests, not the fixture.)
  *   - realistic, varied values across scorecards, tables, charts, pies
- *   - custom_dimension_missing overlay: newsletter_subscriber_composition (pie)
  *   - two-series timeseries: new_vs_returning_over_time
- *   - hidden_in_v1: returning_reader_rate_strict
+ *   - Supporter Type pie: "both products" shape
+ *   - hidden_in_v1 (skip-renders): top_categories, returning_reader_rate_strict
  *   - comparison deltas in both directions (previous window differs)
- *   (the generic-error path is exercised by the Engagement fixture)
  *
  * @package Newspack
  */
@@ -30,16 +31,6 @@ $scalar = function ( $value, $type ) {
 		'value'      => $value,
 		'computable' => true,
 		'type'       => $type,
-	];
-};
-
-$rate = function ( $numerator, $denominator ) {
-	return [
-		'value'       => $denominator > 0 ? $numerator / $denominator : 0,
-		'computable'  => $denominator > 0,
-		'type'        => 'rate',
-		'numerator'   => $numerator,
-		'denominator' => $denominator,
 	];
 };
 
@@ -76,7 +67,7 @@ $series = function ( int $count, int $base, float $jitter ) use ( $end ) {
 	return $rows;
 };
 
-$build = function ( float $f ) use ( $scalar, $rate, $breakdown, $table, $series, $start, $end ) {
+$build = function ( float $f ) use ( $scalar, $breakdown, $table, $series, $start, $end ) {
 	return [
 		'window'                             => [
 			'start' => $start->format( 'Y-m-d' ),
@@ -95,18 +86,6 @@ $build = function ( float $f ) use ( $scalar, $rate, $breakdown, $table, $series
 			'computable' => true,
 			'type'       => 'timeseries',
 		],
-		'new_vs_returning_counts'            => $breakdown(
-			[
-				[
-					'reader_type' => 'new',
-					'readers'     => (int) round( 79400 * $f ),
-				],
-				[
-					'reader_type' => 'returning',
-					'readers'     => (int) round( 49030 * $f ),
-				],
-			]
-		),
 		// Two parallel series (new vs returning) on a shared date axis, with
 		// realistic divergence — returning readers run lower and steadier.
 		'new_vs_returning_over_time'         => [
@@ -255,16 +234,18 @@ $build = function ( float $f ) use ( $scalar, $rate, $breakdown, $table, $series
 				],
 			]
 		),
-		// Overlay state (custom dimension not registered) — demonstrated on the
-		// composition pie now that the standalone rate scorecards are gone.
-		'newsletter_subscriber_composition'  => [
-			'value'      => null,
-			'computable' => false,
-			'overlay'    => [
-				'type'       => 'custom_dimension_missing',
-				'dimensions' => [ 'is_newsletter_subscriber' ],
-			],
-		],
+		'newsletter_subscriber_composition'  => $breakdown(
+			[
+				[
+					'label' => 'Newsletter subscriber',
+					'value' => (int) round( 32100 * $f ),
+				],
+				[
+					'label' => 'Not subscribed',
+					'value' => (int) round( 96330 * $f ),
+				],
+			]
+		),
 		'logged_in_vs_anonymous_composition' => $breakdown(
 			[
 				[
@@ -274,6 +255,27 @@ $build = function ( float $f ) use ( $scalar, $rate, $breakdown, $table, $series
 				[
 					'label' => 'Anonymous',
 					'value' => (int) round( 89930 * $f ),
+				],
+			]
+		),
+		// Supporter Type — among logged-in readers; "both products" shape.
+		'supporter_type'                     => $breakdown(
+			[
+				[
+					'label' => 'Subscriber only',
+					'value' => (int) round( 14200 * $f ),
+				],
+				[
+					'label' => 'Donor only',
+					'value' => (int) round( 9100 * $f ),
+				],
+				[
+					'label' => 'Both',
+					'value' => (int) round( 3400 * $f ),
+				],
+				[
+					'label' => 'Logged-in only',
+					'value' => (int) round( 11800 * $f ),
 				],
 			]
 		),
@@ -472,7 +474,14 @@ $build = function ( float $f ) use ( $scalar, $rate, $breakdown, $table, $series
 			]
 		),
 
-		// BQ-only — hidden in v1 (UI skips rendering).
+		// BQ-only — hidden in v1 (UI skips rendering). Deliberately left hidden so
+		// fixture mode shows the skip behavior (categories needs BQ UNNEST).
+		'top_categories'                     => [
+			'value'        => null,
+			'computable'   => false,
+			'hidden_in_v1' => true,
+			'reason'       => 'available when BigQuery catalog ships',
+		],
 		'returning_reader_rate_strict'       => [
 			'value'        => null,
 			'computable'   => false,

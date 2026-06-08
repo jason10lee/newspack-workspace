@@ -20,7 +20,6 @@ import ConnectBanner from './components/ConnectBanner';
 import QualitySection from './engagement/sections/QualitySection';
 import ContentEngagementSection from './engagement/sections/ContentEngagementSection';
 import ReaderSegmentsSection from './engagement/sections/ReaderSegmentsSection';
-import TimePatternsSection from './engagement/sections/TimePatternsSection';
 import './engagement/engagement.scss';
 
 export interface EngagementTabProps {
@@ -66,7 +65,6 @@ const EngagementTab = ( { range, previousRange }: EngagementTabProps ) => {
 			<QualitySection current={ current } previous={ previous } />
 			<ContentEngagementSection current={ current } previous={ previous } />
 			<ReaderSegmentsSection current={ current } previous={ previous } />
-			<TimePatternsSection current={ current } previous={ previous } />
 		</div>
 	);
 };

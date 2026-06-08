@@ -7,11 +7,10 @@
  * is truthy. Returns the same { current, previous } shape the live
  * controller assembles, computed date-relative so it never goes stale.
  *
- * Exercises every render path:
- *   - realistic values across scorecards, tables, the day-of-week chart
- *   - custom_dimension_missing overlay: engagement_by_newsletter_status
- *   - generic error: top_authors_by_avg_engagement_time
- *   - hidden_in_v1: the four BQ-only metrics
+ * Fully populated — no overlay/error states — so fixture mode renders the whole
+ * tab cleanly. (Overlay/error render paths are covered by component unit tests.)
+ *   - realistic values across scorecards and tables
+ *   - hidden_in_v1 (skip-renders): the four BQ-only metrics
  *   - comparison deltas in both directions
  *
  * @package Newspack
@@ -122,12 +121,35 @@ $build = function ( float $f ) use ( $scalar, $rate, $table, $hidden, $start, $e
 				],
 			]
 		),
-		// Error state.
-		'top_authors_by_avg_engagement_time'    => [
-			'value'      => null,
-			'computable' => false,
-			'error'      => 'GA4 Data API request failed (HTTP 503). Try again shortly.',
-		],
+		'top_authors_by_avg_engagement_time'    => $table(
+			[
+				[
+					'author'                 => 'Priya Nair',
+					'unique_readers'         => (int) round( 12400 * $f ),
+					'avg_engagement_seconds' => round( 246 * $f ),
+				],
+				[
+					'author'                 => 'Maria Alvarez',
+					'unique_readers'         => (int) round( 18900 * $f ),
+					'avg_engagement_seconds' => round( 221 * $f ),
+				],
+				[
+					'author'                 => 'Daniel Cho',
+					'unique_readers'         => (int) round( 9700 * $f ),
+					'avg_engagement_seconds' => round( 203 * $f ),
+				],
+				[
+					'author'                 => 'James Okafor',
+					'unique_readers'         => (int) round( 15200 * $f ),
+					'avg_engagement_seconds' => round( 188 * $f ),
+				],
+				[
+					'author'                 => 'Aisha Bello',
+					'unique_readers'         => (int) round( 8300 * $f ),
+					'avg_engagement_seconds' => round( 171 * $f ),
+				],
+			]
+		),
 
 		// Reader segments.
 		'engagement_by_device_type'             => $table(
@@ -152,15 +174,22 @@ $build = function ( float $f ) use ( $scalar, $rate, $table, $hidden, $start, $e
 				],
 			]
 		),
-		// Overlay state: custom dimension not registered.
-		'engagement_by_newsletter_status'       => [
-			'value'      => null,
-			'computable' => false,
-			'overlay'    => [
-				'type'       => 'custom_dimension_missing',
-				'dimensions' => [ 'is_newsletter_subscriber' ],
-			],
-		],
+		'engagement_by_newsletter_status'       => $table(
+			[
+				[
+					'segment'                => 'Subscriber',
+					'sessions'               => (int) round( 61200 * $f ),
+					'avg_pages_per_session'  => round( 3.4 * $f, 2 ),
+					'avg_engagement_seconds' => round( 224 * $f ),
+				],
+				[
+					'segment'                => 'Non-subscriber',
+					'sessions'               => (int) round( 219800 * $f ),
+					'avg_pages_per_session'  => round( 2.0 * $f, 2 ),
+					'avg_engagement_seconds' => round( 121 * $f ),
+				],
+			]
+		),
 		'engagement_by_returning_vs_new'        => $table(
 			[
 				[
@@ -177,49 +206,6 @@ $build = function ( float $f ) use ( $scalar, $rate, $table, $hidden, $start, $e
 				],
 			]
 		),
-
-		// Time patterns — day of week (line chart).
-		'engagement_by_day_of_week'             => [
-			'rows'       => [
-				[
-					'day_of_week'          => 'Monday',
-					'avg_session_duration' => round( 138 * $f ),
-					'active_readers'       => (int) round( 21300 * $f ),
-				],
-				[
-					'day_of_week'          => 'Tuesday',
-					'avg_session_duration' => round( 145 * $f ),
-					'active_readers'       => (int) round( 22800 * $f ),
-				],
-				[
-					'day_of_week'          => 'Wednesday',
-					'avg_session_duration' => round( 151 * $f ),
-					'active_readers'       => (int) round( 23100 * $f ),
-				],
-				[
-					'day_of_week'          => 'Thursday',
-					'avg_session_duration' => round( 149 * $f ),
-					'active_readers'       => (int) round( 21950 * $f ),
-				],
-				[
-					'day_of_week'          => 'Friday',
-					'avg_session_duration' => round( 132 * $f ),
-					'active_readers'       => (int) round( 18700 * $f ),
-				],
-				[
-					'day_of_week'          => 'Saturday',
-					'avg_session_duration' => round( 119 * $f ),
-					'active_readers'       => (int) round( 11200 * $f ),
-				],
-				[
-					'day_of_week'          => 'Sunday',
-					'avg_session_duration' => round( 124 * $f ),
-					'active_readers'       => (int) round( 12500 * $f ),
-				],
-			],
-			'computable' => true,
-			'type'       => 'breakdown',
-		],
 
 		// BQ-only — hidden in v1.
 		'top_categories_by_engagement'          => $hidden,

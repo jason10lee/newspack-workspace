@@ -175,7 +175,6 @@ final class Audience_Metric {
 			'avg_sessions_per_reader'            => self::avg_sessions_per_reader_via_ga4( $pid, $start_date, $end_date ),
 			// Time trends.
 			'active_readers_over_time'           => self::active_readers_over_time_via_ga4( $pid, $start_date, $end_date ),
-			'new_vs_returning_counts'            => self::new_vs_returning_counts_via_ga4( $pid, $start_date, $end_date ),
 			'new_vs_returning_over_time'         => self::new_vs_returning_over_time_via_ga4( $pid, $start_date, $end_date ),
 			'readership_by_day_of_week'          => self::readership_by_day_of_week_via_ga4( $pid, $start_date, $end_date ),
 			'readership_by_hour_of_day'          => self::readership_by_hour_of_day_via_ga4( $pid, $start_date, $end_date ),
@@ -186,6 +185,7 @@ final class Audience_Metric {
 			'device_breakdown'                   => self::device_breakdown_via_ga4( $pid, $start_date, $end_date ),
 			'newsletter_subscriber_composition'  => self::newsletter_subscriber_composition_via_ga4( $pid, $start_date, $end_date ),
 			'logged_in_vs_anonymous_composition' => self::logged_in_vs_anonymous_composition_via_ga4( $pid, $start_date, $end_date ),
+			'supporter_type'                     => self::supporter_type_via_ga4( $pid, $start_date, $end_date ),
 			// Geographic.
 			'top_regions'                        => self::top_regions_via_ga4( $pid, $start_date, $end_date ),
 			'top_cities'                         => self::top_cities_via_ga4( $pid, $start_date, $end_date ),
@@ -193,6 +193,7 @@ final class Audience_Metric {
 			'top_pages'                          => self::top_pages_via_ga4( $pid, $start_date, $end_date ),
 			'top_authors_by_reader_count'        => self::top_authors_by_reader_count_via_ga4( $pid, $start_date, $end_date ),
 			// BQ-only (hidden in v1).
+			'top_categories'                     => self::bq_only_payload( 'available when BigQuery catalog ships' ),
 			'returning_reader_rate_strict'       => self::hidden_in_v1_payload(),
 		];
 	}
@@ -213,7 +214,6 @@ final class Audience_Metric {
 			'pageviews',
 			'avg_sessions_per_reader',
 			'active_readers_over_time',
-			'new_vs_returning_counts',
 			'new_vs_returning_over_time',
 			'readership_by_day_of_week',
 			'readership_by_hour_of_day',
@@ -222,6 +222,7 @@ final class Audience_Metric {
 			'device_breakdown',
 			'newsletter_subscriber_composition',
 			'logged_in_vs_anonymous_composition',
+			'supporter_type',
 			'top_regions',
 			'top_cities',
 			'top_pages',
@@ -236,6 +237,7 @@ final class Audience_Metric {
 		foreach ( $keys as $key ) {
 			$payload[ $key ] = self::not_implemented_payload();
 		}
+		$payload['top_categories']               = self::bq_only_payload( 'available when BigQuery catalog ships' );
 		$payload['returning_reader_rate_strict'] = self::hidden_in_v1_payload();
 		return $payload;
 	}
@@ -323,19 +325,6 @@ final class Audience_Metric {
 		$body['orderBys']    = [ [ 'dimension' => [ 'dimensionName' => 'date' ] ] ];
 		$result              = self::safe_run_report( $pid, $body );
 		return self::rows( $result, [ 'date' ], [ 'active_readers' ], 'timeseries' );
-	}
-
-	/**
-	 * New vs Returning Counts — newVsReturning / totalUsers (pie).
-	 *
-	 * @param string $pid Property ID.
-	 * @param string $s   Start date.
-	 * @param string $e   End date.
-	 * @return array
-	 */
-	private static function new_vs_returning_counts_via_ga4( string $pid, string $s, string $e ): array {
-		$result = self::safe_run_report( $pid, self::body( $s, $e, [ 'newVsReturning' ], [ 'totalUsers' ] ) );
-		return self::rows( $result, [ 'reader_type' ], [ 'readers' ], 'breakdown' );
 	}
 
 	/**
@@ -521,6 +510,134 @@ final class Audience_Metric {
 	private static function logged_in_vs_anonymous_composition_via_ga4( string $pid, string $s, string $e ): array {
 		$result = self::safe_run_report( $pid, self::body( $s, $e, [ 'customEvent:logged_in' ], [ 'totalUsers' ] ) );
 		return self::yes_composition( $result, __( 'Logged in', 'newspack-plugin' ), __( 'Anonymous', 'newspack-plugin' ) );
+	}
+
+	/**
+	 * Supporter Type — composition of the logged-in audience by support status,
+	 * grouped on customEvent:is_subscriber × customEvent:is_donor. The slices
+	 * adapt to which products the publisher actually sells: both, subscriptions
+	 * only, donations only, or — when neither is configured — the metric is
+	 * hidden entirely (there is nothing to segment by).
+	 *
+	 * @param string $pid Property ID.
+	 * @param string $s   Start date.
+	 * @param string $e   End date.
+	 * @return array
+	 */
+	private static function supporter_type_via_ga4( string $pid, string $s, string $e ): array {
+		$products = self::detect_supporter_products();
+		if ( ! $products['subscriptions'] && ! $products['donations'] ) {
+			return self::bq_only_payload( 'no subscription or donation products configured' );
+		}
+
+		// is_subscriber / is_donor are only set for logged-in readers, so
+		// requiring is_subscriber present scopes the report to the logged-in
+		// audience without adding a third custom-dimension dependency.
+		$body                    = self::body( $s, $e, [ 'customEvent:is_subscriber', 'customEvent:is_donor' ], [ 'totalUsers' ] );
+		$body['dimensionFilter'] = self::custom_event_present_filter( 'is_subscriber' );
+		$result                  = self::safe_run_report( $pid, $body );
+		if ( isset( $result['error'] ) || isset( $result['overlay'] ) ) {
+			return $result;
+		}
+
+		$sub_only   = 0;
+		$donor_only = 0;
+		$both       = 0;
+		$neither    = 0;
+		foreach ( $result['raw']['rows'] ?? [] as $row ) {
+			$is_sub   = 'yes' === ( $row['dimensionValues'][0]['value'] ?? '' );
+			$is_donor = 'yes' === ( $row['dimensionValues'][1]['value'] ?? '' );
+			$users    = (int) ( $row['metricValues'][0]['value'] ?? 0 );
+			if ( $is_sub && $is_donor ) {
+				$both += $users;
+			} elseif ( $is_sub ) {
+				$sub_only += $users;
+			} elseif ( $is_donor ) {
+				$donor_only += $users;
+			} else {
+				$neither += $users;
+			}
+		}
+
+		if ( $products['subscriptions'] && $products['donations'] ) {
+			$rows = [
+				[
+					'label' => __( 'Subscriber only', 'newspack-plugin' ),
+					'value' => $sub_only,
+				],
+				[
+					'label' => __( 'Donor only', 'newspack-plugin' ),
+					'value' => $donor_only,
+				],
+				[
+					'label' => __( 'Both', 'newspack-plugin' ),
+					'value' => $both,
+				],
+				[
+					'label' => __( 'Logged-in only', 'newspack-plugin' ),
+					'value' => $neither,
+				],
+			];
+		} elseif ( $products['subscriptions'] ) {
+			$rows = [
+				[
+					'label' => __( 'Subscriber', 'newspack-plugin' ),
+					'value' => $sub_only + $both,
+				],
+				[
+					'label' => __( 'Logged-in only', 'newspack-plugin' ),
+					'value' => $neither + $donor_only,
+				],
+			];
+		} else {
+			$rows = [
+				[
+					'label' => __( 'Donor', 'newspack-plugin' ),
+					'value' => $donor_only + $both,
+				],
+				[
+					'label' => __( 'Logged-in only', 'newspack-plugin' ),
+					'value' => $neither + $sub_only,
+				],
+			];
+		}
+
+		$total = array_sum( array_column( $rows, 'value' ) );
+		return [
+			'rows'       => $rows,
+			'computable' => $total > 0,
+			'type'       => 'breakdown',
+		];
+	}
+
+	/**
+	 * Detect which supporter products the publisher sells. Side-effect free:
+	 * donations are inferred from the saved donation-product option, and
+	 * subscriptions from the presence of a published WooCommerce Subscriptions
+	 * product. Used to shape (or hide) the Supporter Type pie.
+	 *
+	 * @return array{subscriptions:bool,donations:bool}
+	 */
+	private static function detect_supporter_products(): array {
+		$has_donations = (int) get_option( 'newspack_donation_product_id', 0 ) > 0;
+
+		$has_subscriptions = false;
+		if ( class_exists( 'WC_Subscriptions' ) && function_exists( 'wc_get_products' ) ) {
+			$subs = wc_get_products(
+				[
+					'type'   => [ 'subscription', 'variable-subscription' ],
+					'status' => 'publish',
+					'limit'  => 1,
+					'return' => 'ids',
+				]
+			);
+			$has_subscriptions = ! empty( $subs );
+		}
+
+		return [
+			'subscriptions' => $has_subscriptions,
+			'donations'     => $has_donations,
+		];
 	}
 
 	/**
@@ -823,6 +940,23 @@ final class Audience_Metric {
 			'value'        => null,
 			'computable'   => false,
 			'hidden_in_v1' => true,
+		];
+	}
+
+	/**
+	 * Hidden_in_v1 payload that records why the metric is unavailable in v1
+	 * (e.g. a BQ-only metric, or a publisher with no supporter products). The UI
+	 * skips rendering on `hidden_in_v1`; the reason is for docs/diagnostics.
+	 *
+	 * @param string $reason Short machine-ish reason.
+	 * @return array
+	 */
+	private static function bq_only_payload( string $reason ): array {
+		return [
+			'value'        => null,
+			'computable'   => false,
+			'hidden_in_v1' => true,
+			'reason'       => $reason,
 		];
 	}
 
