@@ -80,6 +80,44 @@ final class Gates_Metric {
 		];
 	}
 
+	/**
+	 * Run a scalar catalog query and extract a single value from the first row.
+	 *
+	 * Returns a payload in the same shape as `placeholder()`. On any failure path
+	 * (proxy not configured, BQ error, empty rows, missing key, non-numeric value),
+	 * falls back to `placeholder( $placeholder_type )` with `pending: true`.
+	 *
+	 * @param string            $query_name        Catalog `query_name`.
+	 * @param string            $row_key           Column to extract from the first row.
+	 * @param string            $placeholder_type  'count' | 'rate' | 'currency' | 'decimal'.
+	 * @param DateTimeInterface $start             Window start.
+	 * @param DateTimeInterface $end               Window end.
+	 * @return array
+	 */
+	private function compute_metric_from_proxy(
+		string $query_name,
+		string $row_key,
+		string $placeholder_type,
+		DateTimeInterface $start,
+		DateTimeInterface $end
+	): array {
+		$rows = $this->proxy->query( $query_name, $start, $end );
+		if ( is_wp_error( $rows ) || empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( $row_key, $rows[0] ) ) {
+			return $this->placeholder( $placeholder_type );
+		}
+		$value = $rows[0][ $row_key ];
+		if ( ! is_numeric( $value ) ) {
+			return $this->placeholder( $placeholder_type );
+		}
+		return [
+			'value'            => 'count' === $placeholder_type ? (int) $value : (float) $value,
+			'computable'       => true,
+			'pending'          => false,
+			'denominator'      => null,
+			'placeholder_type' => $placeholder_type,
+		];
+	}
+
 	// --- Section 1: Gate exposure ---------------------------------------
 
 	/**
@@ -90,8 +128,7 @@ final class Gates_Metric {
 	 * @return array
 	 */
 	public function get_total_gate_impressions( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder( 'count' );
+		return $this->compute_metric_from_proxy( 'gates_total_impressions', 'gate_impressions', 'count', $start, $end );
 	}
 
 	/**
@@ -102,8 +139,7 @@ final class Gates_Metric {
 	 * @return array
 	 */
 	public function get_unique_readers_reached( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder( 'count' );
+		return $this->compute_metric_from_proxy( 'gates_unique_viewers', 'unique_gate_viewers', 'count', $start, $end );
 	}
 
 	/**
@@ -114,8 +150,7 @@ final class Gates_Metric {
 	 * @return array
 	 */
 	public function get_avg_exposures_per_reader( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder( 'decimal' );
+		return $this->compute_metric_from_proxy( 'gates_avg_exposures_per_reader', 'avg_exposures_per_reader', 'decimal', $start, $end );
 	}
 
 	/**
@@ -126,8 +161,7 @@ final class Gates_Metric {
 	 * @return array
 	 */
 	public function get_sessions_with_gate( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder( 'rate' );
+		return $this->compute_metric_from_proxy( 'gates_sessions_with_gate', 'pct_sessions_with_gate', 'rate', $start, $end );
 	}
 
 	// --- Section 2: Free reader conversion ------------------------------
