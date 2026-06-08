@@ -681,6 +681,21 @@ final class Audience_Metric {
 			return $result;
 		}
 
+		// This rate is computed from the full geo row set in PHP, so a truncated
+		// response would silently skew the numerator/denominator. GA4 reports the
+		// total matching row count in `rowCount`; if it exceeds the rows actually
+		// returned, bail with an explicit error rather than reporting a wrong rate.
+		$returned_rows = count( $result['raw']['rows'] ?? [] );
+		$row_count     = isset( $result['raw']['rowCount'] ) ? (int) $result['raw']['rowCount'] : $returned_rows;
+		if ( $row_count > $returned_rows ) {
+			return [
+				'value'      => null,
+				'computable' => false,
+				'type'       => 'rate',
+				'error'      => 'Local Reader Rate could not be computed: the geo breakdown exceeded the row limit and was truncated.',
+			];
+		}
+
 		$total = 0;
 		$local = 0;
 		foreach ( $result['raw']['rows'] ?? [] as $row ) {

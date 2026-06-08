@@ -187,28 +187,28 @@ class Audience_REST_Controller extends WP_REST_Controller {
 				[
 					'description' => __( 'Inclusive window start date (YYYY-MM-DD, site timezone).', 'newspack-plugin' ),
 					'required'    => true,
-				] 
+				]
 			),
 			'end'           => array_merge(
 				$base,
 				[
 					'description' => __( 'Inclusive window end date (YYYY-MM-DD, site timezone).', 'newspack-plugin' ),
 					'required'    => true,
-				] 
+				]
 			),
 			'compare_start' => array_merge(
 				$base,
 				[
 					'description' => __( 'Optional comparison window start. Must pair with compare_end.', 'newspack-plugin' ),
 					'required'    => false,
-				] 
+				]
 			),
 			'compare_end'   => array_merge(
 				$base,
 				[
 					'description' => __( 'Optional comparison window end. Must pair with compare_start.', 'newspack-plugin' ),
 					'required'    => false,
-				] 
+				]
 			),
 		];
 	}

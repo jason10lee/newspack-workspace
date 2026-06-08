@@ -59,7 +59,7 @@ class Insights_Section_Engagement {
 	 *
 	 * @return void
 	 */
-	public static function register_hooks() {
+	public static function register_hooks(): void {
 		add_action(
 			'rest_api_init',
 			function () {
