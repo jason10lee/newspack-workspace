@@ -22,6 +22,7 @@ namespace Newspack\Insights;
 defined( 'ABSPATH' ) || exit;
 
 use DateTimeInterface;
+use DateTimeZone;
 use Newspack\Insights\BigQuery_Proxy_Client;
 use Newspack\Insights\Woo_Order_Resolver;
 
@@ -59,6 +60,18 @@ final class Gates_Metric {
 	 * @var Woo_Order_Resolver
 	 */
 	private Woo_Order_Resolver $woo_resolver;
+
+	/**
+	 * Per-request memoization for `fetch_paywall_direct_woo_join`.
+	 *
+	 * Keyed by `Ymd|Ymd` of the (start, end) UTC dates. The two revenue methods
+	 * (`get_total_paywall_revenue_direct` and `get_avg_revenue_per_paywall_conversion`)
+	 * both source from `gates_paywall_revenue_direct`; this cache avoids issuing
+	 * two identical HTTP round-trips to the hub for the same window.
+	 *
+	 * @var array<string, array{rows:array, conversions:int, revenue:float}|null>
+	 */
+	private array $paywall_direct_cache = [];
 
 	/**
 	 * Constructor. Optionally inject collaborators (used in tests).
@@ -178,15 +191,31 @@ final class Gates_Metric {
 		DateTimeInterface $start,
 		DateTimeInterface $end
 	): ?array {
+		// Normalize both bounds to UTC Ymd so callers passing different timezone
+		// objects don't bust the cache for the same logical window. Matches the
+		// proxy client's own UTC normalization.
+		$utc       = new \DateTimeZone( 'UTC' );
+		$cache_key = \DateTimeImmutable::createFromInterface( $start )->setTimezone( $utc )->format( 'Ymd' )
+			. '|'
+			. \DateTimeImmutable::createFromInterface( $end )->setTimezone( $utc )->format( 'Ymd' );
+
+		if ( array_key_exists( $cache_key, $this->paywall_direct_cache ) ) {
+			return $this->paywall_direct_cache[ $cache_key ];
+		}
+
 		$rows = $this->proxy->query( 'gates_paywall_revenue_direct', $start, $end );
 		if ( is_wp_error( $rows ) || ! is_array( $rows ) || empty( $rows ) ) {
+			$this->paywall_direct_cache[ $cache_key ] = null;
 			return null;
 		}
-		return [
+
+		$result = [
 			'rows'        => $rows,
 			'conversions' => $this->woo_resolver->count_completed_orders( $rows ),
 			'revenue'     => $this->woo_resolver->sum_completed_revenue( $rows ),
 		];
+		$this->paywall_direct_cache[ $cache_key ] = $result;
+		return $result;
 	}
 
 	// --- Section 1: Gate exposure ---------------------------------------

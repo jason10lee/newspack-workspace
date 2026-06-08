@@ -288,4 +288,77 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 
 		$this->assertTrue( $result['pending'] );
 	}
+
+	/**
+	 * Avg revenue per conversion: non-empty BQ rows but zero matched orders -> placeholder.
+	 *
+	 * The realistic production case: paywall impressions led to checkout attempts,
+	 * but none completed within the 30-min window. Distinct from the empty-rows
+	 * path (no impressions at all).
+	 */
+	public function test_avg_revenue_per_paywall_conversion_with_zero_matched_orders() {
+		$bq_rows = [
+			[
+				'user_pseudo_id' => '1',
+				'session_id'     => 's1',
+				'attempt_ts'     => '1000000000000000',
+			],
+			[
+				'user_pseudo_id' => '2',
+				'session_id'     => 's2',
+				'attempt_ts'     => '1000001000000000',
+			],
+		];
+
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( $bq_rows );
+
+		$resolver = $this->createMock( Woo_Order_Resolver::class );
+		$resolver->method( 'count_completed_orders' )->willReturn( 0 );
+		$resolver->method( 'sum_completed_revenue' )->willReturn( 0.0 );
+
+		$metric = new Gates_Metric( $proxy, $resolver );
+		$result = $metric->get_avg_revenue_per_paywall_conversion( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertTrue( $result['pending'] );
+	}
+
+	/**
+	 * Two revenue-side methods in the same request share a single BQ proxy call.
+	 *
+	 * Regression test: `get_total_paywall_revenue_direct` and
+	 * `get_avg_revenue_per_paywall_conversion` both source from
+	 * `gates_paywall_revenue_direct`. The orchestrator memoizes the join result
+	 * so we never round-trip the hub twice per request for identical data.
+	 */
+	public function test_revenue_methods_share_single_proxy_call() {
+		$bq_rows = [
+			[
+				'user_pseudo_id' => '1',
+				'session_id'     => 's1',
+				'attempt_ts'     => '1000000000000000',
+			],
+		];
+
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		// `expects($this->once())` is the regression guard: a second call fails the test.
+		$proxy->expects( $this->once() )
+			->method( 'query' )
+			->with( 'gates_paywall_revenue_direct', $this->isInstanceOf( DateTimeImmutable::class ), $this->isInstanceOf( DateTimeImmutable::class ) )
+			->willReturn( $bq_rows );
+
+		$resolver = $this->createMock( Woo_Order_Resolver::class );
+		$resolver->method( 'count_completed_orders' )->willReturn( 1 );
+		$resolver->method( 'sum_completed_revenue' )->willReturn( 50.00 );
+
+		$metric = new Gates_Metric( $proxy, $resolver );
+		$start  = $this->make_date( '2026-03-22' );
+		$end    = $this->make_date( '2026-04-21' );
+
+		$total = $metric->get_total_paywall_revenue_direct( $start, $end );
+		$avg   = $metric->get_avg_revenue_per_paywall_conversion( $start, $end );
+
+		$this->assertSame( 50.00, $total['value'] );
+		$this->assertSame( 50.0, $avg['value'] );
+	}
 }
