@@ -108,7 +108,7 @@ class Test_Woo_Order_Resolver extends WP_UnitTestCase {
 	 */
 	public function test_counts_completed_order_in_window() {
 		$attempt_ts_micros = ( strtotime( '2026-04-15 12:00:00 UTC' ) * 1000000 );
-		$this->make_order( $this->customer_a, 'completed', '2026-04-15 12:10:00', 25.00 );
+		$this->make_order( $this->customer_a, 'completed', '2026-04-15 12:10:00 UTC', 25.00 );
 
 		$rows = [ $this->row( $this->customer_a, 'sess1', $attempt_ts_micros ) ];
 		$resolver = new Woo_Order_Resolver();
@@ -123,7 +123,7 @@ class Test_Woo_Order_Resolver extends WP_UnitTestCase {
 	 */
 	public function test_excludes_orders_outside_window() {
 		$attempt_ts_micros = ( strtotime( '2026-04-15 12:00:00 UTC' ) * 1000000 );
-		$this->make_order( $this->customer_a, 'completed', '2026-04-15 12:45:00', 25.00 ); // 45 min later — out of window.
+		$this->make_order( $this->customer_a, 'completed', '2026-04-15 12:45:00 UTC', 25.00 ); // 45 min later — out of window.
 
 		$rows = [ $this->row( $this->customer_a, 'sess1', $attempt_ts_micros ) ];
 		$resolver = new Woo_Order_Resolver();
@@ -137,7 +137,7 @@ class Test_Woo_Order_Resolver extends WP_UnitTestCase {
 	 */
 	public function test_excludes_non_completed_orders() {
 		$attempt_ts_micros = ( strtotime( '2026-04-15 12:00:00 UTC' ) * 1000000 );
-		$this->make_order( $this->customer_a, 'pending', '2026-04-15 12:05:00', 25.00 );
+		$this->make_order( $this->customer_a, 'pending', '2026-04-15 12:05:00 UTC', 25.00 );
 
 		$rows = [ $this->row( $this->customer_a, 'sess1', $attempt_ts_micros ) ];
 		$resolver = new Woo_Order_Resolver();
@@ -150,7 +150,7 @@ class Test_Woo_Order_Resolver extends WP_UnitTestCase {
 	 */
 	public function test_processing_counts_as_completed() {
 		$attempt_ts_micros = ( strtotime( '2026-04-15 12:00:00 UTC' ) * 1000000 );
-		$this->make_order( $this->customer_a, 'processing', '2026-04-15 12:05:00', 30.00 );
+		$this->make_order( $this->customer_a, 'processing', '2026-04-15 12:05:00 UTC', 30.00 );
 
 		$rows = [ $this->row( $this->customer_a, 'sess1', $attempt_ts_micros ) ];
 		$resolver = new Woo_Order_Resolver();
@@ -163,8 +163,8 @@ class Test_Woo_Order_Resolver extends WP_UnitTestCase {
 	 */
 	public function test_counts_attempt_once_when_multiple_orders_match() {
 		$attempt_ts_micros = ( strtotime( '2026-04-15 12:00:00 UTC' ) * 1000000 );
-		$this->make_order( $this->customer_a, 'completed', '2026-04-15 12:05:00', 25.00 );
-		$this->make_order( $this->customer_a, 'completed', '2026-04-15 12:25:00', 30.00 );
+		$this->make_order( $this->customer_a, 'completed', '2026-04-15 12:05:00 UTC', 25.00 );
+		$this->make_order( $this->customer_a, 'completed', '2026-04-15 12:25:00 UTC', 30.00 );
 
 		$rows = [ $this->row( $this->customer_a, 'sess1', $attempt_ts_micros ) ];
 		$resolver = new Woo_Order_Resolver();
@@ -180,8 +180,8 @@ class Test_Woo_Order_Resolver extends WP_UnitTestCase {
 	public function test_unique_users_dedupes_across_sessions() {
 		$attempt_a = ( strtotime( '2026-04-15 12:00:00 UTC' ) * 1000000 );
 		$attempt_b = ( strtotime( '2026-04-16 12:00:00 UTC' ) * 1000000 );
-		$this->make_order( $this->customer_a, 'completed', '2026-04-15 12:05:00', 25.00 );
-		$this->make_order( $this->customer_a, 'completed', '2026-04-16 12:05:00', 25.00 );
+		$this->make_order( $this->customer_a, 'completed', '2026-04-15 12:05:00 UTC', 25.00 );
+		$this->make_order( $this->customer_a, 'completed', '2026-04-16 12:05:00 UTC', 25.00 );
 
 		$rows = [
 			$this->row( $this->customer_a, 'sess1', $attempt_a ),

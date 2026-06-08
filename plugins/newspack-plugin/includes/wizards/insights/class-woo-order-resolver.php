@@ -7,9 +7,13 @@
  * time window (default 30 minutes from `attempt_ts`).
  *
  * Input row shape (from the hub's `gates_paywall_*` queries):
- *   - `user_pseudo_id` (string) — used as `wp_wc_orders.customer_id`.
- *   - `session_id` (string) — passthrough.
- *   - `attempt_ts` (string|int) — GA4 microsecond timestamp.
+ *   - `user_pseudo_id` (string) — **interpreted as integer `wp_wc_orders.customer_id`**.
+ *     The upstream BQ query is expected to use `COALESCE(user_id, user_pseudo_id)`
+ *     so this value is a numeric WP user ID for logged-in conversions. Anonymous
+ *     conversions (where `user_pseudo_id` is a non-numeric GA4 pseudo ID) fail
+ *     the `(int)` cast to 0 and are silently dropped.
+ *   - `session_id` (string) — passthrough; not used in the Woo join.
+ *   - `attempt_ts` (string|int) — GA4 microsecond timestamp (Unix epoch × 10^6).
  *
  * @package Newspack
  */
@@ -204,10 +208,10 @@ class Woo_Order_Resolver {
 	 * `wp_wc_orders.date_created_gmt`). Falls back to `get_date_paid()` when the
 	 * order object does not expose creation (e.g. the test-suite Woo mocks).
 	 *
-	 * @param object $order Woo order.
+	 * @param \WC_Order $order Woo order.
 	 * @return int Epoch seconds, or 0 if neither date is available.
 	 */
-	private function get_order_timestamp( $order ): int {
+	private function get_order_timestamp( \WC_Order $order ): int {
 		if ( method_exists( $order, 'get_date_created' ) ) {
 			$dt = $order->get_date_created();
 			if ( $dt ) {
