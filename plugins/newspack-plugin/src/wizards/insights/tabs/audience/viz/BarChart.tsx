@@ -33,7 +33,12 @@ const BarChart = ( { bars }: BarChartProps ) => {
 	return (
 		<div className="newspack-insights__bars" role="img" aria-label={ __( 'Bar chart', 'newspack-plugin' ) }>
 			{ bars.map( bar => (
-				<div className="newspack-insights__bar-col" key={ bar.label } title={ `${ bar.label }: ${ formatNumber( bar.value ) }` }>
+				<div className="newspack-insights__bar-col" key={ bar.label }>
+					{ /* Dark hover panel (NPPD-1649 fix #5), shown on column hover via CSS. */ }
+					<div className="newspack-insights__chart-tooltip newspack-insights__chart-tooltip--bar">
+						<span className="newspack-insights__chart-tooltip-label">{ bar.label }</span>
+						<span className="newspack-insights__chart-tooltip-value">{ formatNumber( bar.value ) }</span>
+					</div>
 					<div className="newspack-insights__bar-track">
 						<div
 							className="newspack-insights__bar-fill is-series-0"

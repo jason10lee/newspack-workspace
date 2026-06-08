@@ -51,7 +51,7 @@ const CompositionSection = ( { current, previous }: SectionProps ) => (
 				previous={ previous?.local_reader_rate }
 			/>
 		</div>
-		<div className="newspack-insights__chart-grid">
+		<div className="newspack-insights__chart-grid newspack-insights__chart-grid--cols-3">
 			<ChartCard title={ __( 'Newsletter Subscriber Composition', 'newspack-plugin' ) } payload={ current.newsletter_subscriber_composition }>
 				<PieChart segments={ toSeries( current.newsletter_subscriber_composition, 'label', 'value' ) } />
 			</ChartCard>

@@ -66,8 +66,6 @@ const formatValue = ( v: number, fmt: MetricFormat ): string => {
 	}
 };
 
-const PLACEHOLDER = '—';
-
 const MetricCard = ( props: MetricCardProps ) => {
 	const {
 		label,
@@ -89,7 +87,6 @@ const MetricCard = ( props: MetricCardProps ) => {
 			<div className="newspack-insights__metric-card newspack-insights__metric-card--note">
 				<div className="newspack-insights__metric-card-label">{ label }</div>
 				<div className="newspack-insights__metric-card-body">
-					<div className="newspack-insights__metric-card-value newspack-insights__metric-card-value--muted">{ PLACEHOLDER }</div>
 					<MetricNote overlay={ overlay } error={ !! error } notConfigured={ notConfigured } />
 				</div>
 				{ description && <div className="newspack-insights__metric-card-description">{ description }</div> }

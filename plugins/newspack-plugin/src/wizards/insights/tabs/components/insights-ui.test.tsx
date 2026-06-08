@@ -32,7 +32,8 @@ describe( 'MetricCard graceful states', () => {
 		);
 		expect( screen.getByText( 'is_newsletter_subscriber' ) ).toBeInTheDocument();
 		expect( screen.getByText( /Custom dimension/ ) ).toBeInTheDocument();
-		expect( screen.getByText( '—' ) ).toBeInTheDocument();
+		// No dash placeholder above the note (NPPD-1649 fix #4).
+		expect( screen.queryByText( '—' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'renders an error state', () => {

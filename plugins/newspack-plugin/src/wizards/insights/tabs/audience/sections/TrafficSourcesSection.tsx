@@ -29,23 +29,27 @@ const TrafficSourcesSection = ( { current }: SectionProps ) => (
 		<p className="newspack-insights__section-caption">
 			{ __( 'Where your readers come from, and which campaigns drive them.', 'newspack-plugin' ) }
 		</p>
-		<div className="newspack-insights__chart-grid">
+		{ /* Channel breakdown (left ~40%) reads as a unit with the campaigns
+		     driving each channel (right ~60%) — NPPD-1649 fix #3. */ }
+		<div className="newspack-insights__traffic-grid">
 			<ChartCard title={ __( 'Traffic Sources Breakdown', 'newspack-plugin' ) } payload={ current.traffic_sources_breakdown }>
 				<PieChart segments={ toSeries( current.traffic_sources_breakdown, 'channel', 'readers' ) } />
 			</ChartCard>
+			<div>
+				<h3 className="newspack-insights__chart-card-title">{ __( 'Top Campaigns', 'newspack-plugin' ) }</h3>
+				<MetricTable
+					payload={ current.top_campaigns }
+					emptyMessage={ __( 'No campaign traffic in this timeframe.', 'newspack-plugin' ) }
+					columns={ [
+						{ key: 'source', label: __( 'Source', 'newspack-plugin' ) },
+						{ key: 'medium', label: __( 'Medium', 'newspack-plugin' ) },
+						{ key: 'campaign', label: __( 'Campaign', 'newspack-plugin' ) },
+						{ key: 'readers', label: __( 'Readers', 'newspack-plugin' ), format: 'number', align: 'right' },
+						{ key: 'sessions', label: __( 'Sessions', 'newspack-plugin' ), format: 'number', align: 'right' },
+					] }
+				/>
+			</div>
 		</div>
-		<h3 className="newspack-insights__chart-card-title">{ __( 'Top Campaigns', 'newspack-plugin' ) }</h3>
-		<MetricTable
-			payload={ current.top_campaigns }
-			emptyMessage={ __( 'No campaign traffic in this timeframe.', 'newspack-plugin' ) }
-			columns={ [
-				{ key: 'source', label: __( 'Source', 'newspack-plugin' ) },
-				{ key: 'medium', label: __( 'Medium', 'newspack-plugin' ) },
-				{ key: 'campaign', label: __( 'Campaign', 'newspack-plugin' ) },
-				{ key: 'readers', label: __( 'Readers', 'newspack-plugin' ), format: 'number', align: 'right' },
-				{ key: 'sessions', label: __( 'Sessions', 'newspack-plugin' ), format: 'number', align: 'right' },
-			] }
-		/>
 	</section>
 );
 

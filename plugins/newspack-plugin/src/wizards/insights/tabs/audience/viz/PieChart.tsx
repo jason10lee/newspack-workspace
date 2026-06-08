@@ -43,6 +43,8 @@ const PieChart = ( { segments }: PieChartProps ) => {
 				{ segments.map( ( segment, i ) => {
 					const fraction = segment.value / total;
 					const dash = fraction * CIRCUMFERENCE;
+					// No hover tooltip on pie segments — the legend already shows
+					// label + value + percent (NPPD-1649 fix #6).
 					const circle = (
 						<circle
 							key={ segment.label }
@@ -52,9 +54,7 @@ const PieChart = ( { segments }: PieChartProps ) => {
 							r={ RADIUS }
 							strokeDasharray={ `${ dash } ${ CIRCUMFERENCE - dash }` }
 							strokeDashoffset={ CIRCUMFERENCE / 4 - offset }
-						>
-							<title>{ `${ segment.label }: ${ formatNumber( segment.value ) } (${ formatPercent( fraction ) })` }</title>
-						</circle>
+						/>
 					);
 					offset += dash;
 					return circle;

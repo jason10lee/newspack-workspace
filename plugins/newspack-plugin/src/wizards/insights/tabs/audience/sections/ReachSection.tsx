@@ -28,7 +28,8 @@ const ReachSection = ( { current, previous }: SectionProps ) => (
 		<p className="newspack-insights__section-caption">
 			{ __( 'How many readers and sessions you reached in this timeframe.', 'newspack-plugin' ) }
 		</p>
-		<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-5">
+		{ /* Max 4 cards per row (NPPD-1649 fix #1): 3 + 2. */ }
+		<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-3">
 			<Scorecard
 				label={ __( 'Active Readers', 'newspack-plugin' ) }
 				description={ __( 'Distinct readers in this timeframe', 'newspack-plugin' ) }
@@ -47,6 +48,8 @@ const ReachSection = ( { current, previous }: SectionProps ) => (
 				current={ current.pageviews }
 				previous={ previous?.pageviews }
 			/>
+		</div>
+		<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-2">
 			<Scorecard
 				label={ __( 'Avg Sessions per Reader', 'newspack-plugin' ) }
 				description={ __( 'How often a typical reader comes back', 'newspack-plugin' ) }
