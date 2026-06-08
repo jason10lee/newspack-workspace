@@ -179,6 +179,11 @@ class Gates_REST_Controller extends WP_REST_Controller {
 	/**
 	 * Whether every scorecard/viz in a window payload is pending.
 	 *
+	 * Returns `true` as long as no metric reports `pending: false`. Treats
+	 * unrecognized payload shapes (no `pending` key, scalar values, etc.) as
+	 * pending — i.e. the banner stays up when in doubt. The `window` key is
+	 * date metadata, not a metric, so it's skipped.
+	 *
 	 * @param array $window The shape returned by `build_window()`.
 	 * @return bool
 	 */
