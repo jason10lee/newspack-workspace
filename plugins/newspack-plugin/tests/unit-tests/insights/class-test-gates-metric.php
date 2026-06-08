@@ -476,4 +476,102 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 		$this->assertSame( 0, $result['buckets'][2]['count'] );  // bucket '3-5' (missing).
 		$this->assertSame( 20, $result['buckets'][3]['count'] ); // bucket '6+'.
 	}
+
+	/**
+	 * Performance by gate: maps BQ rows and enriches gate_post_id with post titles.
+	 */
+	public function test_performance_by_gate_enriches_titles() {
+		// Seed two gates.
+		$gate_a = $this->factory->post->create(
+			[
+				'post_title' => 'Welcome paywall',
+				'post_type'  => 'newspack_popups_cpt',
+			] 
+		);
+		$gate_b = $this->factory->post->create(
+			[
+				'post_title' => 'Member regwall',
+				'post_type'  => 'newspack_popups_cpt',
+			] 
+		);
+
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )
+			->willReturn(
+				[
+					[
+						'gate_post_id'            => (string) $gate_a,
+						'impressions'             => 5000,
+						'unique_viewers'          => 1200,
+						'registrations'           => 0,
+						'regwall_conversion_rate' => null,
+						'paywall_attempts'        => 80,
+						'paywall_attempt_rate'    => 0.04,
+					],
+					[
+						'gate_post_id'            => (string) $gate_b,
+						'impressions'             => 3000,
+						'unique_viewers'          => 900,
+						'registrations'           => 150,
+						'regwall_conversion_rate' => 0.07,
+						'paywall_attempts'        => 0,
+						'paywall_attempt_rate'    => null,
+					],
+				]
+			);
+
+		$metric = new Gates_Metric( $proxy );
+		$result = $metric->get_performance_by_gate( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertFalse( $result['pending'] );
+		$this->assertCount( 2, $result['rows'] );
+
+		$this->assertSame( 'Welcome paywall', $result['rows'][0]['gate_name'] );
+		$this->assertSame( 5000, $result['rows'][0]['impressions'] );
+		$this->assertNull( $result['rows'][0]['regwall_conversion_rate'] );
+
+		$this->assertSame( 'Member regwall', $result['rows'][1]['gate_name'] );
+		$this->assertNull( $result['rows'][1]['paywall_attempt_rate'] );
+	}
+
+	/**
+	 * Performance by gate: falls back when proxy errors.
+	 */
+	public function test_performance_by_gate_falls_back_on_error() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( new \WP_Error( 'bigquery_query_failed', 'BQ down' ) );
+
+		$metric = new Gates_Metric( $proxy );
+		$result = $metric->get_performance_by_gate( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertTrue( $result['pending'] );
+		$this->assertSame( [], $result['rows'] );
+	}
+
+	/**
+	 * Performance by gate: missing gate post ID falls back to a generic label.
+	 */
+	public function test_performance_by_gate_handles_missing_title() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )
+			->willReturn(
+				[
+					[
+						'gate_post_id'            => '999999', // No such post.
+						'impressions'             => 100,
+						'unique_viewers'          => 50,
+						'registrations'           => 5,
+						'regwall_conversion_rate' => 0.05,
+						'paywall_attempts'        => 0,
+						'paywall_attempt_rate'    => null,
+					],
+				]
+			);
+
+		$metric = new Gates_Metric( $proxy );
+		$result = $metric->get_performance_by_gate( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertCount( 1, $result['rows'] );
+		$this->assertStringContainsString( '999999', $result['rows'][0]['gate_name'] ); // Generic fallback.
+	}
 }

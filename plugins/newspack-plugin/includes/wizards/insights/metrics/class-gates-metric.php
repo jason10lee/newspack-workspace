@@ -517,10 +517,66 @@ final class Gates_Metric {
 	 * @return array{pending: bool, rows: array}
 	 */
 	public function get_performance_by_gate( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
+		$rows = $this->proxy->query( 'gates_performance_by_gate', $start, $end );
+		if ( is_wp_error( $rows ) || ! is_array( $rows ) || empty( $rows ) ) {
+			return [
+				'pending' => true,
+				'rows'    => [],
+			];
+		}
+
+		$mapped = [];
+		foreach ( $rows as $row ) {
+			$gate_post_id = (int) ( $row['gate_post_id'] ?? 0 );
+			$mapped[]     = [
+				'gate_post_id'            => $gate_post_id,
+				'gate_name'               => null, // filled below by enrich_with_gate_titles().
+				'impressions'             => (int) ( $row['impressions'] ?? 0 ),
+				'unique_viewers'          => (int) ( $row['unique_viewers'] ?? 0 ),
+				'registrations'           => (int) ( $row['registrations'] ?? 0 ),
+				'regwall_conversion_rate' => isset( $row['regwall_conversion_rate'] ) && null !== $row['regwall_conversion_rate'] ? (float) $row['regwall_conversion_rate'] : null,
+				'paywall_attempts'        => (int) ( $row['paywall_attempts'] ?? 0 ),
+				'paywall_attempt_rate'    => isset( $row['paywall_attempt_rate'] ) && null !== $row['paywall_attempt_rate'] ? (float) $row['paywall_attempt_rate'] : null,
+			];
+		}
+
 		return [
-			'pending' => true,
-			'rows'    => [],
+			'pending' => false,
+			'rows'    => $this->enrich_with_gate_titles( $mapped ),
 		];
+	}
+
+	/**
+	 * Enrich performance rows with the `post_title` of each `gate_post_id`.
+	 *
+	 * @param array $rows Rows containing `gate_post_id` int.
+	 * @return array Rows with `gate_name` filled in.
+	 */
+	private function enrich_with_gate_titles( array $rows ): array {
+		$ids = array_filter( array_unique( array_column( $rows, 'gate_post_id' ) ) );
+		if ( empty( $ids ) ) {
+			return $rows;
+		}
+		// Use `get_post()` per unique ID rather than `get_posts( post_type => 'any' )`:
+		// the popup CPT (`newspack_popups_cpt`) is registered with
+		// `exclude_from_search = true`, which excludes it from the `'any'` query.
+		// `get_post()` works regardless of post-type registration and is cached
+		// by `WP_Object_Cache`, so repeat lookups in the same request are free.
+		$titles = [];
+		foreach ( $ids as $id ) {
+			$post = get_post( $id );
+			if ( $post && '' !== $post->post_title ) {
+				$titles[ $id ] = $post->post_title;
+			}
+		}
+		foreach ( $rows as &$row ) {
+			$id               = $row['gate_post_id'];
+			$row['gate_name'] = isset( $titles[ $id ] )
+				? $titles[ $id ]
+				/* translators: %d is a Newspack popup post ID. */
+				: sprintf( __( 'Gate #%d', 'newspack-plugin' ), $id );
+		}
+		unset( $row );
+		return $rows;
 	}
 }
