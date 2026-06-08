@@ -123,4 +123,38 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 
 		$this->assertTrue( $result['pending'] );
 	}
+
+	/**
+	 * Section 1 scorecards fall back to placeholder when the catalog returns a non-numeric value.
+	 *
+	 * Covers the `! is_numeric()` branch in `compute_metric_from_proxy()`. This protects
+	 * against upstream catalog drift where a builder might return a string or null.
+	 */
+	public function test_section_1_falls_back_on_non_numeric_value() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( [ [ 'gate_impressions' => 'banana' ] ] );
+
+		$metric = new Gates_Metric( $proxy );
+		$result = $metric->get_total_gate_impressions( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertTrue( $result['pending'] );
+		$this->assertFalse( $result['computable'] );
+	}
+
+	/**
+	 * Section 1 count metrics fall back when the catalog returns a non-integer numeric value.
+	 *
+	 * A `count` should always be a whole number; a float (e.g. 3.7) indicates upstream
+	 * catalog drift and is rejected to surface the contract break rather than silently
+	 * truncate.
+	 */
+	public function test_section_1_count_metric_rejects_non_integer() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( [ [ 'gate_impressions' => 3.7 ] ] );
+
+		$metric = new Gates_Metric( $proxy );
+		$result = $metric->get_total_gate_impressions( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertTrue( $result['pending'] );
+	}
 }

@@ -109,6 +109,11 @@ final class Gates_Metric {
 		if ( ! is_numeric( $value ) ) {
 			return $this->placeholder( $placeholder_type );
 		}
+		// For count metrics, reject values that aren't representable as integers
+		// (e.g. a float column would indicate catalog drift; fall back loudly).
+		if ( 'count' === $placeholder_type && (float) $value !== (float) (int) $value ) {
+			return $this->placeholder( $placeholder_type );
+		}
 		return [
 			'value'            => 'count' === $placeholder_type ? (int) $value : (float) $value,
 			'computable'       => true,
