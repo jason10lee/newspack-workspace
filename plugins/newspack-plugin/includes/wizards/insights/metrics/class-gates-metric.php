@@ -179,8 +179,7 @@ final class Gates_Metric {
 	 * @return array
 	 */
 	public function get_regwall_conversion_direct( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder( 'rate' );
+		return $this->compute_metric_from_proxy( 'gates_regwall_conversion_direct', 'regwall_conversion_rate_direct', 'rate', $start, $end );
 	}
 
 	/**
@@ -191,8 +190,7 @@ final class Gates_Metric {
 	 * @return array
 	 */
 	public function get_regwall_conversion_influenced_7d( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder( 'rate' );
+		return $this->compute_metric_from_proxy( 'gates_regwall_conversion_influenced_7d', 'regwall_conversion_influenced', 'rate', $start, $end );
 	}
 
 	// --- Section 3: Paid reader conversion ------------------------------
