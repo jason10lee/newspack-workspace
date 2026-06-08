@@ -149,17 +149,22 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 		$prefix    = $wpdb->prefix;
 		$donations = $this->id_list( $this->donation_product_ids );
 
+		// Per-line-item attribution: normalize each donation line item's own
+		// recurring total (`_line_total`) to a monthly rate. Using the line
+		// item total rather than the subscription's `total_amount` keeps a
+		// multi-line-item donation subscription from summing the full
+		// subscription total once per line item (which would overstate MRR).
 		$sql = "SELECT SUM(
 				CASE
 					WHEN prd.meta_value = 'month' AND CAST(pri.meta_value AS UNSIGNED) > 0
-						THEN o.total_amount / CAST(pri.meta_value AS UNSIGNED)
+						THEN CAST(lt.meta_value AS DECIMAL(20,2)) / CAST(pri.meta_value AS UNSIGNED)
 					WHEN prd.meta_value = 'year'  AND CAST(pri.meta_value AS UNSIGNED) > 0
-						THEN o.total_amount / (12 * CAST(pri.meta_value AS UNSIGNED))
+						THEN CAST(lt.meta_value AS DECIMAL(20,2)) / (12 * CAST(pri.meta_value AS UNSIGNED))
 					WHEN prd.meta_value = 'week'  AND CAST(pri.meta_value AS UNSIGNED) > 0
-						THEN o.total_amount * (52/12) / CAST(pri.meta_value AS UNSIGNED)
+						THEN CAST(lt.meta_value AS DECIMAL(20,2)) * (52/12) / CAST(pri.meta_value AS UNSIGNED)
 					WHEN prd.meta_value = 'day'   AND CAST(pri.meta_value AS UNSIGNED) > 0
-						THEN o.total_amount * 30 / CAST(pri.meta_value AS UNSIGNED)
-					ELSE o.total_amount / 12
+						THEN CAST(lt.meta_value AS DECIMAL(20,2)) * 30 / CAST(pri.meta_value AS UNSIGNED)
+					ELSE CAST(lt.meta_value AS DECIMAL(20,2)) / 12
 				END
 			)
 			FROM {$prefix}wc_orders o
@@ -167,6 +172,8 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 				ON oi.order_id = o.id AND oi.order_item_type = 'line_item'
 			JOIN {$prefix}woocommerce_order_itemmeta oim
 				ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+			JOIN {$prefix}woocommerce_order_itemmeta lt
+				ON lt.order_item_id = oi.order_item_id AND lt.meta_key = '_line_total'
 			JOIN {$prefix}postmeta prd
 				ON prd.post_id = CAST(oim.meta_value AS UNSIGNED) AND prd.meta_key = '_subscription_period'
 			JOIN {$prefix}postmeta pri

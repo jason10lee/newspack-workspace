@@ -222,6 +222,11 @@ class Insights_Wizard extends Wizard {
 			? \Newspack\Insights\Storage_Detector::detect()
 			: 'legacy';
 
+		// Constrain to statuses that represent actual donation activity:
+		// completed/processing/refunded one-time orders, and subscriptions that
+		// have genuinely existed (active through expired). This keeps failed,
+		// pending, trash, auto-draft, and checkout-draft objects from surfacing
+		// the tab on a site that never actually took a donation.
 		if ( 'hpos' === $backend ) {
 			$sql = "SELECT EXISTS (
 				SELECT 1 FROM {$wpdb->prefix}wc_orders o
@@ -229,7 +234,10 @@ class Insights_Wizard extends Wizard {
 				JOIN {$wpdb->prefix}woocommerce_order_itemmeta meta
 					ON meta.order_item_id = items.order_item_id
 					AND meta.meta_key = '_product_id'
-				WHERE o.type IN ('shop_order', 'shop_subscription')
+				WHERE (
+					( o.type = 'shop_order' AND o.status IN ('wc-completed', 'wc-processing', 'wc-refunded') )
+					OR ( o.type = 'shop_subscription' AND o.status IN ('wc-active', 'wc-on-hold', 'wc-pending-cancel', 'wc-cancelled', 'wc-expired') )
+				)
 				  AND meta.meta_value IN ($donations_list)
 				LIMIT 1
 			) AS has_activity";
@@ -240,7 +248,10 @@ class Insights_Wizard extends Wizard {
 				JOIN {$wpdb->prefix}woocommerce_order_itemmeta meta
 					ON meta.order_item_id = items.order_item_id
 					AND meta.meta_key = '_product_id'
-				WHERE p.post_type IN ('shop_order', 'shop_subscription')
+				WHERE (
+					( p.post_type = 'shop_order' AND p.post_status IN ('wc-completed', 'wc-processing', 'wc-refunded') )
+					OR ( p.post_type = 'shop_subscription' AND p.post_status IN ('wc-active', 'wc-on-hold', 'wc-pending-cancel', 'wc-cancelled', 'wc-expired') )
+				)
 				  AND meta.meta_value IN ($donations_list)
 				LIMIT 1
 			) AS has_activity";

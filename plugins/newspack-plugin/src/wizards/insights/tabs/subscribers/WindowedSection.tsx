@@ -11,7 +11,7 @@
  * `{value, computable, denominator}` shape so the UI can:
  *   - render a small-cohort 0% as "0% of N orders" with inline context
  *   - swap to a per-card empty state when the denominator is 0
- *     ("No refunds in this timeframe.")
+ *     ("No subscription orders in this timeframe." for refund rate)
  * Same pattern as Tab 7's RetentionSection.
  */
 
@@ -138,7 +138,9 @@ const WindowedSection = ( { range, current, previous }: WindowedSectionProps ) =
 				) : (
 					<div className="newspack-insights__metric-card newspack-insights__metric-card--empty">
 						<div className="newspack-insights__metric-card-label">{ __( 'Refund rate', 'newspack-plugin' ) }</div>
-						<p className="newspack-insights__metric-card-empty-note">{ __( 'No refunds in this timeframe.', 'newspack-plugin' ) }</p>
+						<p className="newspack-insights__metric-card-empty-note">
+							{ __( 'No subscription orders in this timeframe.', 'newspack-plugin' ) }
+						</p>
 					</div>
 				) }
 				{ retry.computable ? (

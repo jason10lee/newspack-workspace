@@ -80,13 +80,21 @@ class HPOS_Storage implements Storage_Interface {
 	}
 
 	/**
-	 * Format a datetime for SQL comparison.
+	 * Format a datetime for SQL comparison, in UTC.
+	 *
+	 * Every column these queries compare against stores UTC: the `*_gmt`
+	 * order/post columns and the WooCommerce Subscriptions `_schedule_*` meta
+	 * (which WCS persists as UTC datetime strings). Window bounds arrive in the
+	 * site timezone (built from `wp_timezone()` in the REST controller), so we
+	 * format the absolute instant in UTC here to keep the window aligned on
+	 * non-UTC sites. Uses `getTimestamp()` so the result is correct regardless
+	 * of the input DateTime's own timezone.
 	 *
 	 * @param DateTimeInterface $dt DateTime to format.
-	 * @return string `Y-m-d H:i:s` formatted string.
+	 * @return string `Y-m-d H:i:s` UTC-formatted string.
 	 */
 	private function fmt( DateTimeInterface $dt ): string {
-		return $dt->format( 'Y-m-d H:i:s' );
+		return gmdate( 'Y-m-d H:i:s', $dt->getTimestamp() );
 	}
 
 	/**
