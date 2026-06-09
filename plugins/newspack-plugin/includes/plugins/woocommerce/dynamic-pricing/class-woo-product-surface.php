@@ -354,16 +354,17 @@ final class WooProduct_Surface implements Price_Surface {
 		if ( ! is_cart() && ! is_checkout() ) {
 			return;
 		}
-		$plugin_url = defined( 'NEWSPACK_PLUGIN_URL' ) ? NEWSPACK_PLUGIN_URL : plugins_url( '/', dirname( __DIR__, 4 ) );
-		$asset_path = defined( 'NEWSPACK_ABSPATH' ) ? NEWSPACK_ABSPATH : trailingslashit( dirname( __DIR__, 4 ) );
-		$asset_file = $asset_path . 'dist/other-scripts/dynamic-pricing-blocks-checkout.asset.php';
+		if ( ! class_exists( '\Newspack\Newspack' ) || ! defined( 'NEWSPACK_ABSPATH' ) ) {
+			return;
+		}
+		$asset_file = NEWSPACK_ABSPATH . 'dist/other-scripts/dynamic-pricing-blocks-checkout.asset.php';
 		if ( ! file_exists( $asset_file ) ) {
 			return;
 		}
 		$asset = include $asset_file;
 		wp_enqueue_script(
 			'newspack-dynamic-pricing-blocks-checkout',
-			$plugin_url . 'dist/other-scripts/dynamic-pricing-blocks-checkout.js',
+			\Newspack\Newspack::plugin_url() . '/dist/other-scripts/dynamic-pricing-blocks-checkout.js',
 			$asset['dependencies'] ?? [],
 			$asset['version'] ?? '1.0',
 			true
