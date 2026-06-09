@@ -34,7 +34,8 @@ export interface MetricCardProps {
 	label: string;
 	value: number;
 	format: MetricFormat;
-	previousValue?: number;
+	/** Null is treated the same as undefined — no comparison delta is rendered. */
+	previousValue?: number | null;
 	description?: string;
 	lowerIsBetter?: boolean;
 	/**
@@ -86,6 +87,7 @@ const MetricCard = ( props: MetricCardProps ) => {
 			<div className="newspack-insights__metric-card-label">{ label }</div>
 			<div className="newspack-insights__metric-card-body">
 				<div className="newspack-insights__metric-card-value">{ formatValue( value, format ) }</div>
+				{ secondary && <div className="newspack-insights__metric-card-secondary">{ secondary }</div> }
 				{ hasComparison && delta && (
 					<div
 						className={ `newspack-insights__metric-card-delta newspack-insights__metric-card-delta--${ tone }` }

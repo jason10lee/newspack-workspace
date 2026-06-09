@@ -178,11 +178,12 @@ class Subscribers_REST_Controller extends WP_REST_Controller {
 		$response = [
 			'classification' => $metric->get_classification_metadata(),
 			'snapshot'       => [
-				'active_subscribers'    => $metric->get_active_non_donation_subscribers(),
-				'mrr'                   => $metric->get_mrr(),
-				'arr'                   => $metric->get_arr(),
-				'tenure_distribution'   => $metric->get_subscription_tenure_distribution(),
-				'upcoming_renewals_30d' => $metric->get_upcoming_renewals_30d(),
+				'active_subscribers'         => $metric->get_active_non_donation_subscribers(),
+				'mrr'                        => $metric->get_mrr(),
+				'arr'                        => $metric->get_arr(),
+				'tenure_distribution'        => $metric->get_subscription_tenure_distribution(),
+				'upcoming_renewals_30d'      => $metric->get_upcoming_renewals_30d(),
+				'upcoming_cancellations_30d' => $metric->get_upcoming_cancellations_30d(),
 			],
 			'current'        => $this->build_window( $metric, $start, $end ),
 			'previous'       => null,
@@ -215,7 +216,7 @@ class Subscribers_REST_Controller extends WP_REST_Controller {
 			'revenue_net'               => $metric->get_subscription_revenue_net( $start, $end ),
 			'refund_rate'               => $metric->get_subscription_refund_rate( $start, $end ),
 			'failed_payment_retry_rate' => $metric->get_failed_payment_retry_rate( $start, $end ),
-			'performance_by_product'    => $metric->get_performance_by_product( $start, $end ),
+			'subscriptions_by_product'  => $metric->get_subscriptions_by_product( $start, $end ),
 			'cancellation_reasons'      => $metric->get_cancellation_reasons( $start, $end ),
 		];
 	}

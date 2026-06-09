@@ -14,6 +14,18 @@ import apiFetch from '@wordpress/api-fetch';
 
 export type StorageBackend = 'hpos' | 'legacy';
 
+/**
+ * A rate metric whose denominator may legitimately be zero. The UI
+ * uses `computable` to decide between rendering the value and a
+ * "no data yet" empty state, and surfaces `denominator` inline as
+ * context when the value is real but the cohort is small.
+ */
+export interface SubscribersRateValue {
+	value: number;
+	computable: boolean;
+	denominator: number;
+}
+
 export interface SubscribersClassification {
 	backend: StorageBackend;
 	donation_product_count: number;
@@ -30,12 +42,18 @@ export interface UpcomingRenewals {
 	total_value: number;
 }
 
+export interface UpcomingCancellations {
+	count: number;
+	total_value: number;
+}
+
 export interface SubscribersSnapshot {
 	active_subscribers: number;
 	mrr: number;
 	arr: number;
 	tenure_distribution: TenureDistributionRow[];
 	upcoming_renewals_30d: UpcomingRenewals;
+	upcoming_cancellations_30d: UpcomingCancellations;
 }
 
 export interface PerformanceVariationRow {
@@ -70,9 +88,18 @@ export interface SubscribersWindow {
 	churned_subscribers: number;
 	revenue_gross: number;
 	revenue_net: number;
-	refund_rate: number;
-	failed_payment_retry_rate: number;
-	performance_by_product: PerformanceRow[];
+	/**
+	 * Refunds ÷ subscription orders in the window. `computable: false`
+	 * when there are no subscription orders in the window — UI renders
+	 * a "No subscription orders in this timeframe" empty state.
+	 */
+	refund_rate: SubscribersRateValue;
+	/**
+	 * Recoveries ÷ retry attempts in the window. Same shape and UI
+	 * contract as `refund_rate`.
+	 */
+	failed_payment_retry_rate: SubscribersRateValue;
+	subscriptions_by_product: PerformanceRow[];
 	cancellation_reasons: CancellationReasonRow[];
 }
 

@@ -42,7 +42,7 @@ class Subscribers_Metric {
 	 *
 	 * @var string
 	 */
-	const CACHE_PREFIX = 'newspack_insights_tab6_v2:';
+	const CACHE_PREFIX = 'newspack_insights_tab6_v4:';
 
 	/**
 	 * Cache TTL for windowed and snapshot metrics (30 min).
@@ -236,12 +236,18 @@ class Subscribers_Metric {
 	/**
 	 * Subscription refund rate in window.
 	 *
+	 * Returns the explicit `{value, computable, denominator}` shape
+	 * from storage. UI renders a "No subscription orders in this
+	 * timeframe" empty state when `computable` is false and surfaces
+	 * `denominator` inline so small-cohort 0% reads as "0% of N
+	 * orders" rather than bare 0%.
+	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return float
+	 * @return array{value: float, computable: bool, denominator: int}
 	 */
-	public function get_subscription_refund_rate( DateTimeInterface $start, DateTimeInterface $end ): float {
-		return (float) $this->cached(
+	public function get_subscription_refund_rate( DateTimeInterface $start, DateTimeInterface $end ): array {
+		return (array) $this->cached(
 			'subscription_refund_rate',
 			$this->window_key( $start, $end ),
 			self::TTL_DEFAULT,
@@ -294,14 +300,33 @@ class Subscribers_Metric {
 	}
 
 	/**
+	 * Upcoming cancellations (count + total value) in the next 30 days.
+	 *
+	 * @return array{count: int, total_value: float}
+	 */
+	public function get_upcoming_cancellations_30d(): array {
+		return (array) $this->cached(
+			'upcoming_cancellations_30d',
+			[],
+			self::TTL_DEFAULT,
+			function () {
+				return $this->storage->get_upcoming_cancellations_30d();
+			}
+		);
+	}
+
+	/**
 	 * Failed payment retry rate (recoveries / attempts) in window.
+	 *
+	 * See {@see get_subscription_refund_rate()} for the response shape
+	 * and UI contract.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return float
+	 * @return array{value: float, computable: bool, denominator: int}
 	 */
-	public function get_failed_payment_retry_rate( DateTimeInterface $start, DateTimeInterface $end ): float {
-		return (float) $this->cached(
+	public function get_failed_payment_retry_rate( DateTimeInterface $start, DateTimeInterface $end ): array {
+		return (array) $this->cached(
 			'failed_payment_retry_rate',
 			$this->window_key( $start, $end ),
 			self::TTL_DEFAULT,
@@ -318,13 +343,13 @@ class Subscribers_Metric {
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array<int, array{product_id: int, product_name: string, active_subs: int, churned_subs: int, active_value: float, lifetime_revenue: float}>
 	 */
-	public function get_performance_by_product( DateTimeInterface $start, DateTimeInterface $end ): array {
+	public function get_subscriptions_by_product( DateTimeInterface $start, DateTimeInterface $end ): array {
 		return (array) $this->cached(
-			'performance_by_product',
+			'subscriptions_by_product',
 			$this->window_key( $start, $end ),
 			self::TTL_HEAVY,
 			function () use ( $start, $end ) {
-				return $this->storage->get_performance_by_product( $start, $end );
+				return $this->storage->get_subscriptions_by_product( $start, $end );
 			}
 		);
 	}
