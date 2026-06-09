@@ -60,6 +60,29 @@
 		}
 	}
 
+	// Table-in-card (e.g. Top Campaigns): the chart-card supplies the border, so
+	// drop the table-wrap's own frame to avoid a double border.
+	&__chart-card &__table-wrap {
+		border: 0;
+		border-radius: 0;
+	}
+
+	// Inline scope pill next to a table title (e.g. "Showing: United States").
+	// Muted, smaller than the title, vertically centered with the title text.
+	&__scope-pill {
+		display: inline-block;
+		margin-left: 8px;
+		padding: 2px 8px;
+		border-radius: 5px;
+		background: wp-colors.$gray-100;
+		color: wp-colors.$gray-700;
+		font-size: 12px;
+		font-weight: 400;
+		line-height: 1.4;
+		vertical-align: middle;
+		white-space: nowrap;
+	}
+
 	// Standalone table heading (Geographic / Content performance, where each
 	// table has its own title above the canonical table-wrap).
 	&__table-grid &__chart-card-title {

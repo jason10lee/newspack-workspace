@@ -7,8 +7,33 @@
 /**
  * Internal dependencies
  */
-import { payloadToCard, toSeries } from './metrics';
+import { payloadToCard, toSeries, uniformValue } from './metrics';
 import { formatDuration } from './format';
+
+describe( 'uniformValue', () => {
+	it( 'returns the shared value when every row matches', () => {
+		const rows = [
+			{ country: 'United States', n: 1 },
+			{ country: 'United States', n: 2 },
+		];
+		expect( uniformValue( rows, 'country' ) ).toBe( 'United States' );
+	} );
+
+	it( 'returns null when rows span multiple values', () => {
+		const rows = [ { country: 'United States' }, { country: 'Canada' } ];
+		expect( uniformValue( rows, 'country' ) ).toBeNull();
+	} );
+
+	it( 'does not collapse on (not set) / empty / missing values', () => {
+		expect( uniformValue( [ { country: '(not set)' }, { country: '(not set)' } ], 'country' ) ).toBeNull();
+		expect( uniformValue( [ { country: '' }, { country: '' } ], 'country' ) ).toBeNull();
+		expect( uniformValue( [ { country: null }, { country: null } ], 'country' ) ).toBeNull();
+	} );
+
+	it( 'returns null for an empty row set', () => {
+		expect( uniformValue( [], 'country' ) ).toBeNull();
+	} );
+} );
 
 describe( 'payloadToCard', () => {
 	it( 'skips hidden_in_v1 metrics', () => {

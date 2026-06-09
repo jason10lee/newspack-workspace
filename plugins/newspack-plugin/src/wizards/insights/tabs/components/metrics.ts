@@ -20,6 +20,25 @@ export type MetricPayloadType = 'count' | 'decimal' | 'rate' | 'duration' | 'bre
 
 export type MetricRow = Record< string, string | number | null >;
 
+/** Values that should never trigger uniform-column collapse (data-quality gaps stay visible). */
+const NON_COLLAPSIBLE_VALUES = [ '', '(not set)' ];
+
+/**
+ * If every row shares the same meaningful value for `key`, return it (as a
+ * string); otherwise null. Unset / empty / "(not set)" never collapse. Used to
+ * hide a uniform column (e.g. country) and to label the scope pill above it.
+ */
+export const uniformValue = ( rows: MetricRow[], key: string ): string | null => {
+	if ( ! rows || rows.length === 0 ) {
+		return null;
+	}
+	const first = rows[ 0 ][ key ];
+	if ( first === null || first === undefined || NON_COLLAPSIBLE_VALUES.includes( String( first ) ) ) {
+		return null;
+	}
+	return rows.every( row => row[ key ] === first ) ? String( first ) : null;
+};
+
 /**
  * Union-ish payload covering both scorecard and rows metrics. The orchestrator
  * only ever sets the fields relevant to a given metric; consumers branch on the

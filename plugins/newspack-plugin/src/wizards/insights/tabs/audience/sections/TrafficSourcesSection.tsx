@@ -33,8 +33,9 @@ const TrafficSourcesSection = ( { current }: SectionProps ) => (
 			<ChartCard title={ __( 'Traffic Sources Breakdown', 'newspack-plugin' ) } payload={ current.traffic_sources_breakdown }>
 				<PieChart segments={ toSeries( current.traffic_sources_breakdown, 'channel', 'readers' ) } />
 			</ChartCard>
-			<div>
-				<h3 className="newspack-insights__chart-card-title">{ __( 'Top Campaigns', 'newspack-plugin' ) }</h3>
+			{ /* Wrap the table in a matching card so both halves read as parallel
+			     bordered cards with the title inside (table-in-card pattern). */ }
+			<ChartCard title={ __( 'Top Campaigns', 'newspack-plugin' ) } payload={ current.top_campaigns }>
 				<MetricTable
 					payload={ current.top_campaigns }
 					emptyMessage={ __( 'No campaign traffic in this timeframe.', 'newspack-plugin' ) }
@@ -46,7 +47,7 @@ const TrafficSourcesSection = ( { current }: SectionProps ) => (
 						{ key: 'sessions', label: __( 'Sessions', 'newspack-plugin' ), format: 'number', align: 'right' },
 					] }
 				/>
-			</div>
+			</ChartCard>
 		</div>
 	</section>
 );

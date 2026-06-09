@@ -11,13 +11,14 @@
 /**
  * WordPress dependencies
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
  */
 import { formatCurrency, formatDecimal, formatDuration, formatNumber, formatPercent } from './format';
 import MetricNote from './MetricNote';
+import { uniformValue } from './metrics';
 import type { MetricPayload, MetricRow } from './metrics';
 
 export interface MetricTableColumn {
@@ -34,27 +35,14 @@ export interface MetricTableProps {
 	emptyMessage: string;
 	rowLimit?: number;
 	/**
-	 * Key of a column to collapse when every displayed row shares the same
-	 * meaningful value (e.g. "country"). The column is hidden and a "Showing
-	 * {value}" caption is shown above the table. Unset / empty / "(not set)"
-	 * values never collapse, so data-quality gaps stay visible.
+	 * Key of a column to hide when every displayed row shares the same
+	 * meaningful value (e.g. "country"). The consumer renders the scope label
+	 * (see ScopePill) next to the title; this just drops the redundant column.
+	 * Unset / empty / "(not set)" values never collapse, so data-quality gaps
+	 * stay visible.
 	 */
 	collapseColumn?: string;
 }
-
-const UNSET_VALUES = [ '', '(not set)' ];
-
-/** Returns the shared value if `key` is uniform-and-meaningful across rows, else null. */
-const uniformValue = ( rows: MetricRow[], key: string ): string | null => {
-	if ( rows.length === 0 ) {
-		return null;
-	}
-	const first = rows[ 0 ][ key ];
-	if ( first === null || first === undefined || UNSET_VALUES.includes( String( first ) ) ) {
-		return null;
-	}
-	return rows.every( row => row[ key ] === first ) ? String( first ) : null;
-};
 
 const formatCell = ( value: string | number | null, format?: MetricTableColumn[ 'format' ] ): string => {
 	if ( value === null || value === undefined ) {
@@ -94,7 +82,8 @@ const MetricTable = ( { payload, columns, emptyMessage, rowLimit = 10, collapseC
 		return <p className="newspack-insights__section-empty">{ emptyMessage }</p>;
 	}
 
-	// Collapse a uniform column (e.g. country) into a caption above the table.
+	// Hide a uniform column (e.g. country) — the consumer surfaces the value as a
+	// scope pill next to the title.
 	const collapsedValue = collapseColumn ? uniformValue( rows, collapseColumn ) : null;
 	const displayColumns = collapsedValue !== null ? columns.filter( col => col.key !== collapseColumn ) : columns;
 
@@ -108,15 +97,6 @@ const MetricTable = ( { payload, columns, emptyMessage, rowLimit = 10, collapseC
 						&#9432;
 					</span>
 					<span>{ __( 'Singular content filter unavailable; showing all URLs.', 'newspack-plugin' ) }</span>
-				</p>
-			) }
-			{ collapsedValue !== null && (
-				<p className="newspack-insights__chart-card-caption">
-					{ sprintf(
-						/* translators: %s: the single value shared by every row (e.g. a country name). */
-						__( 'Showing %s', 'newspack-plugin' ),
-						collapsedValue
-					) }
 				</p>
 			) }
 			<div className="newspack-insights__table-wrap">
