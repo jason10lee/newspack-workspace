@@ -15,6 +15,15 @@
 
 set -u
 
+# Hermeticity: git exports its repo-local env vars (GIT_DIR/GIT_INDEX_FILE/
+# GIT_WORK_TREE + object dirs) into hooks and any caller that sets them. This suite
+# runs git on throwaway fixtures via `git -C <dir>`, but those vars OVERRIDE -C and
+# would redirect every git command -- including `git push` -- at the REAL repo and
+# its remote. Scrub them so the suite is hermetic whether run directly, with
+# GIT_DIR set, or from a git hook.
+unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_OBJECT_DIRECTORY \
+      GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_NAMESPACE GIT_PREFIX
+
 BIN="$(cd "$(dirname "$0")/../bin" && pwd)"
 FIX="$(mktemp -d)"
 trap 'rm -rf "$FIX"' EXIT
