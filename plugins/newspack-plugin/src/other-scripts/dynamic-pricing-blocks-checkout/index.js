@@ -27,44 +27,23 @@ const registerFilters = () => {
 
 	blocksCheckout.registerCheckoutFilters( NAMESPACE, {
 		/**
-		 * Append the policy label to the cart item name.
+		 * Append the policy label as a suffix to the cart item name. We deliberately
+		 * do NOT modify `subtotalPriceFormat` / `cartItemPrice` — when `set_price()`
+		 * differs from `regular_price`, WCS already renders its native sale UI
+		 * (`<del>original</del> new + "Save $X / month"` tag), and prepending the
+		 * original a second time is redundant noise. The label suffix here is the
+		 * only signal we add in Blocks contexts.
+		 *
+		 * Legacy contexts (cart/checkout shortcodes, Newspack-Blocks modal) keep
+		 * their PHP-rendered strikethrough + disclaimer via `woocommerce_cart_item_*`
+		 * filters in WooProduct_Surface — those paths don't get the WCS native UI.
 		 */
 		itemName: ( defaultValue, extensions ) => {
 			const data = extensions && extensions[ NAMESPACE ];
-			log( 'itemName fired', { defaultValue, hasData: !! data, publicized: !! ( data && data.publicized ) } );
 			if ( ! data || ! data.publicized ) {
 				return defaultValue;
 			}
 			return `${ defaultValue } — ${ data.label }`;
-		},
-
-		/**
-		 * Subtotal price format used by the Checkout block summary. WC Blocks REQUIRES
-		 * the `<price/>` placeholder to remain in the string — without it, WC silently
-		 * falls back to the default format.
-		 */
-		subtotalPriceFormat: ( defaultValue, extensions ) => {
-			const data = extensions && extensions[ NAMESPACE ];
-			log( 'subtotalPriceFormat fired', { defaultValue, hasData: !! data, publicized: !! ( data && data.publicized ) } );
-			if ( ! data || ! data.publicized || ! data.original_formatted ) {
-				return defaultValue;
-			}
-			const result = `${ data.original_formatted } → ${ defaultValue }`;
-			log( 'subtotalPriceFormat returning', result );
-			return result;
-		},
-
-		/**
-		 * Cart block uses cartItemPrice (singular line-item price), not subtotalPriceFormat.
-		 * Same validation rule: must preserve `<price/>`.
-		 */
-		cartItemPrice: ( defaultValue, extensions ) => {
-			const data = extensions && extensions[ NAMESPACE ];
-			log( 'cartItemPrice fired', { defaultValue, hasData: !! data, publicized: !! ( data && data.publicized ) } );
-			if ( ! data || ! data.publicized || ! data.original_formatted ) {
-				return defaultValue;
-			}
-			return `${ data.original_formatted } → ${ defaultValue }`;
 		},
 	} );
 

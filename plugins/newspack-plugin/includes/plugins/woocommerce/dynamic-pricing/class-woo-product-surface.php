@@ -362,10 +362,13 @@ final class WooProduct_Surface implements Price_Surface {
 			return;
 		}
 		$asset = include $asset_file;
+		// Explicitly declare wc-blocks-checkout so WC's dependency detection doesn't warn;
+		// merge with whatever webpack inferred.
+		$deps = array_unique( array_merge( [ 'wc-blocks-checkout' ], $asset['dependencies'] ?? [] ) );
 		wp_enqueue_script(
 			'newspack-dynamic-pricing-blocks-checkout',
 			\Newspack\Newspack::plugin_url() . '/dist/other-scripts/dynamic-pricing-blocks-checkout.js',
-			$asset['dependencies'] ?? [],
+			$deps,
 			$asset['version'] ?? '1.0',
 			true
 		);
