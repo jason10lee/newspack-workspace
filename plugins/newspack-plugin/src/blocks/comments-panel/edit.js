@@ -3,6 +3,7 @@
  */
 import { useEffect, useState } from '@wordpress/element';
 import { InnerBlocks, useBlockProps } from '@wordpress/block-editor';
+import { useSelect } from '@wordpress/data';
 
 /**
  * Internal dependencies
@@ -36,11 +37,20 @@ export default function CommentsPanelEdit( { clientId } ) {
 	// Delegate the actual toggle to the content block via its registered ref function.
 	const togglePreview = () => panelToggles.get( clientId )?.();
 
+	// Only the first Comments Panel renders a real panel, so only it shows the toggle.
+	const isFirstInstance = useSelect(
+		select => {
+			const ids = select( 'core/block-editor' ).getBlocksByName( 'newspack/comments-panel' );
+			return ! ids.length || ids[ 0 ] === clientId;
+		},
+		[ clientId ]
+	);
+
 	const blockProps = useBlockProps( { className: 'is-layout-flex' } );
 
 	return (
 		<>
-			<PanelPreviewToggle isOpen={ isPreviewOpen } onToggle={ togglePreview } />
+			{ isFirstInstance && <PanelPreviewToggle isOpen={ isPreviewOpen } onToggle={ togglePreview } /> }
 			<div { ...blockProps }>
 				<InnerBlocks
 					template={ BLOCKS_TEMPLATE }

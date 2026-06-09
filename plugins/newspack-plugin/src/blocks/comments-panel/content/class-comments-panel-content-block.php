@@ -62,7 +62,6 @@ final class Comments_Panel_Content_Block {
 
 		$overlay_color = $attributes['overlayColor'] ?? '';
 
-		// Fixed right-side drawer — matches the original template part.
 		$panel_class = 'comments-panel__panel is-layout-constrained comments-panel__panel--right';
 
 		$extra_attributes = [

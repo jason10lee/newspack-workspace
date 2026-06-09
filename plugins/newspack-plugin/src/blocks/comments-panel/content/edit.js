@@ -21,13 +21,8 @@ import { Notice } from '@wordpress/components';
 import PanelPreviewToggle from '../panel-preview-toggle';
 import { panelToggles, notifySubscribers } from '../preview-refs';
 
-// Fixed right-side drawer at the small width — matches the original template part
-// (overlay-contents--position--right). Slide direction / width are intentionally not
-// exposed for now to keep the block simple; they can be added later.
 const PANEL_CLASSES = 'comments-panel__panel is-layout-constrained comments-panel__panel--right';
 
-// Default comments layout — mirrors the theme's comments-contents.html. The panel
-// is restricted to a single core/comments query loop; everything below lives inside it.
 const INNER_BLOCKS_TEMPLATE = [
 	[
 		'core/comments',
@@ -109,12 +104,7 @@ export default function CommentsPanelContentEdit( { attributes, clientId, setAtt
 		}
 	};
 
-	// Render-phase registration (fallback for transitions that haven't committed yet).
-	if ( parentClientId ) {
-		panelToggles.set( parentClientId, () => toggleFnRef.current?.() );
-	}
-
-	// Authoritative registration + cleanup in the commit phase.
+	// Register the toggle (and clean it up) in the commit phase.
 	useLayoutEffect( () => {
 		if ( ! parentClientId ) {
 			return;

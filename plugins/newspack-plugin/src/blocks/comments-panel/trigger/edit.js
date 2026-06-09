@@ -2,7 +2,6 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { postComments as commentsIcon } from '@wordpress/icons';
 // eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 import { __unstableStripHTML as stripHTML } from '@wordpress/dom';
 import { useEffect, useState } from '@wordpress/element';
@@ -14,6 +13,7 @@ import { useSelect } from '@wordpress/data';
  */
 import PanelPreviewToggle from '../panel-preview-toggle';
 import { panelToggles, subscribeToPanel } from '../preview-refs';
+import { comments as commentsIcon } from '../../../../packages/icons';
 
 /**
  * Edit component for the Comments Panel Trigger block.
@@ -36,6 +36,15 @@ export default function CommentsPanelTriggerEdit( { attributes, setAttributes, c
 	// The content block registers its toggle under the parent's clientId.
 	const parentClientId = useSelect( select => select( 'core/block-editor' ).getBlockRootClientId( clientId ), [ clientId ] );
 
+	// Only the first Comments Panel renders a real panel, so only its trigger shows the toggle.
+	const isFirstInstance = useSelect(
+		select => {
+			const ids = select( 'core/block-editor' ).getBlocksByName( 'newspack/comments-panel' );
+			return ! ids.length || ids[ 0 ] === parentClientId;
+		},
+		[ parentClientId ]
+	);
+
 	// Mirror the panel's open state so the toolbar button label and isPressed stay correct.
 	const [ isPanelOpen, setIsPanelOpen ] = useState( false );
 	useEffect( () => {
@@ -51,17 +60,11 @@ export default function CommentsPanelTriggerEdit( { attributes, setAttributes, c
 
 	return (
 		<>
-			<PanelPreviewToggle isOpen={ isPanelOpen } onToggle={ () => panelToggles.get( parentClientId )?.() } />
+			{ isFirstInstance && <PanelPreviewToggle isOpen={ isPanelOpen } onToggle={ () => panelToggles.get( parentClientId )?.() } /> }
 
 			<div className="wp-block-buttons is-layout-flex">
 				<div className="wp-block-button">
-					<button
-						{ ...blockProps }
-						type="button"
-						aria-controls="newspack-comments-panel"
-						aria-label={ ! triggerText || ! triggerText.trim() ? __( 'Comments', 'newspack-plugin' ) : undefined }
-						onClick={ e => e.preventDefault() }
-					>
+					<button { ...blockProps } type="button" aria-controls="newspack-comments-panel" onClick={ e => e.preventDefault() }>
 						{ showTriggerIcon && (
 							<span className="comments-panel__icon" aria-hidden="true">
 								{ commentsIcon }

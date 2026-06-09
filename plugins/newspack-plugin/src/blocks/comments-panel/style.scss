@@ -2,7 +2,6 @@
 @use "../../../packages/colors/colors.module" as colors;
 
 .wp-block-newspack-comments-panel {
-	// ─── Block editor only ────────────────────────────────────────────────────
 	.comments-panel__editor-panel-hidden {
 		display: none;
 	}
@@ -52,9 +51,6 @@
 .comments-panel__content {
 	padding-top: var( --wp--preset--spacing--30 );
 
-	// The theme template part wrapped the comments in a margin:0 group; replicate
-	// that here so the query loop doesn't stack its own vertical margin on top of
-	// the content padding.
 	.wp-block-comments {
 		margin-top: 0;
 		margin-bottom: 0;
@@ -66,9 +62,6 @@
 .comments-panel__panel {
 	--comments-panel-slide-duration: 325ms;
 
-	// Opaque drawer background — a side panel sits over the page, so it needs a
-	// solid background (unlike the full-screen search overlay). Matches the theme's
-	// original .overlay-contents defaults; not exposed as a setting.
 	background: var( --wp--preset--color--base, #fff );
 	bottom: 0;
 	color: var( --wp--preset--color--contrast, #1e1e1e );
@@ -80,12 +73,7 @@
 	transition:
 		opacity 125ms ease-in-out,
 		left var( --comments-panel-slide-duration ) ease-in-out,
-		right var( --comments-panel-slide-duration ) ease-in-out,
-		top var( --comments-panel-slide-duration ) ease-in-out,
-		bottom var( --comments-panel-slide-duration ) ease-in-out,
-		transform var( --comments-panel-slide-duration ) ease-in-out;
-	// Matches the theme's comments overlay (.overlay-contents base): content-size
-	// plus horizontal padding. content-size is 680px on the block theme.
+		right var( --comments-panel-slide-duration ) ease-in-out;
 	max-width: calc( var( --wp--preset--spacing--30, 1rem ) + var( --wp--style--global--content-size, 680px ) + var( --wp--preset--spacing--30, 1rem ) );
 	width: 100%;
 	z-index: 99998;

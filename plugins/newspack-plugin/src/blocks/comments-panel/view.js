@@ -2,9 +2,9 @@
  * Comments Panel Block — Frontend Script
  *
  * One panel per page (id="newspack-comments-panel"), controlled by any number of
- * trigger buttons. Adapts the overlay-menu open/close controller (Part A) and adds
- * comment-specific behaviors (Part B): inline pagination, inline form submission,
- * loading state, and auto-open on comment links.
+ * trigger buttons. Handles opening and closing the panel, plus the comment-specific
+ * behaviors inside it: inline pagination, inline form submission, loading state,
+ * and auto-opening when the page loads on a comment link or paginated view.
  */
 
 /**
@@ -58,7 +58,7 @@ const createCommentsPanel = ( panel, triggers ) => {
 	// ancestor CSS transforms / stacking contexts.
 	document.body.appendChild( panel );
 
-	// ─── Part A: open/close shell ───────────────────────────────────────────────
+	// ─── Open/close: overlay, slide animation, focus trap, and trigger wiring ────
 
 	const showOverlay = color => {
 		overlay = document.createElement( 'div' );
@@ -195,7 +195,7 @@ const createCommentsPanel = ( panel, triggers ) => {
 		} );
 	}
 
-	// ─── Part B: comment behaviors (ported from theme comments.js) ───────────────
+	// ─── Comment behaviors: inline pagination and form submission ────────────────
 
 	// Swaps the .wp-block-comments element inside the panel with the one in the
 	// fetched document, updates the URL, scrolls, and re-creates the focus trap.

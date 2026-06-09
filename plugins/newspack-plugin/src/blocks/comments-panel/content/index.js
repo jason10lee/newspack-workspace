@@ -1,7 +1,6 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
 import { postComments as icon } from '@wordpress/icons';
 import { InnerBlocks, useBlockProps } from '@wordpress/block-editor';
 
@@ -12,14 +11,12 @@ import metadata from './block.json';
 import Edit from './edit';
 import colors from '../../../../packages/colors/colors.module.scss';
 
-export const title = __( 'Comments Panel Content', 'newspack-plugin' );
-
 const { name } = metadata;
 
 export { metadata, name };
 
 export const settings = {
-	title,
+	title: metadata.title,
 	icon: {
 		src: icon,
 		foreground: colors[ 'primary-400' ],
