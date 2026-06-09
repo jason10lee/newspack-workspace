@@ -2,8 +2,9 @@
  * EngagementTab (Tab 2, NPPD-1649).
  *
  * GA4-backed Engagement tab. Fetches the Engagement orchestrator endpoint and
- * renders four sections, with the same connect-banner / loading / error
- * lifecycle as AudienceTab.
+ * renders three sections — Overall engagement quality, Reader segments, Content
+ * engagement — with the same connect-banner / loading / error lifecycle as
+ * AudienceTab.
  */
 
 /**

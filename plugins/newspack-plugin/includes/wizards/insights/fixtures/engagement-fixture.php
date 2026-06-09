@@ -7,8 +7,10 @@
  * is truthy. Returns the same { current, previous } shape the live
  * controller assembles, computed date-relative so it never goes stale.
  *
- * Fully populated — no overlay/error states — so fixture mode renders the whole
- * tab cleanly. (Overlay/error render paths are covered by component unit tests.)
+ * Deliberately fully populated — no overlay/error states — so the Engagement tab
+ * renders cleanly for visual QA. The overlay (missing-custom-dimension) and error
+ * render paths are exercised by the Audience fixture and by component unit tests
+ * (insights-ui.test.tsx), so they don't need to be duplicated here.
  *   - realistic values across scorecards and tables
  *   - hidden_in_v1 (skip-renders): the four BQ-only metrics
  *   - comparison deltas in both directions

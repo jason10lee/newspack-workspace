@@ -45,7 +45,11 @@ export interface MetricCardProps {
 	pending?: boolean;
 	/** Missing-custom-dimension state. */
 	overlay?: MetricCardOverlay;
-	/** Generic failure message (presence triggers the note; text shown in title). */
+	/**
+	 * Failure flag. Any truthy value (the orchestrator passes the error string)
+	 * triggers the shared generic note ("Data temporarily unavailable."); the raw
+	 * message is intentionally not surfaced to readers — it stays server-side.
+	 */
 	error?: string;
 	/** Metric needs configuration (e.g. coverage area not set). */
 	notConfigured?: boolean;

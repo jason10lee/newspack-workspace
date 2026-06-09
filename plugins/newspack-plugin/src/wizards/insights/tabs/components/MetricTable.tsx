@@ -66,7 +66,11 @@ const formatCell = ( value: string | number | null, format?: MetricTableColumn[ 
 };
 
 const MetricTable = ( { payload, columns, emptyMessage, rowLimit = 10, collapseColumn }: MetricTableProps ) => {
-	if ( payload?.overlay ) {
+	// A degraded payload also carries an overlay object, but it's an informational
+	// note over a still-valid table (rendered below with an inline note) — not a
+	// replacement state. Only the non-degraded overlay (missing custom dimension)
+	// short-circuits to the overlay note.
+	if ( payload?.overlay && ! payload.degraded ) {
 		return <MetricNote overlay={ payload.overlay } />;
 	}
 	if ( payload?.error ) {
