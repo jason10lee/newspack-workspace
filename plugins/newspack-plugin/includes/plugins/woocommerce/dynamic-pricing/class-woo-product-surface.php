@@ -172,10 +172,16 @@ final class WooProduct_Surface implements Price_Surface {
 	}
 
 	/**
-	 * Filter: when a publicized policy applies, prepend the original price (strikethrough)
-	 * to the rendered subtotal. Format respects the WCS recurring-price wrapper.
+	 * Filter: when a publicized policy applies, prepend the original price
+	 * (strikethrough) and append a disclaimer noting the price is for THIS payment.
 	 *
-	 * @param string $subtotal       Already-formatted subtotal (may include WCS "/month" suffix).
+	 * The disclaimer is deliberately vague about future cycles — stepped pricing,
+	 * percent discounts, and overlapping policies make any "renews at $X" claim
+	 * fragile, especially under priority_exclusive / min() composition. We don't
+	 * try to forecast the next cycle here; we just signal that the recurring
+	 * framing from WCS doesn't reflect future cycles.
+	 *
+	 * @param string $subtotal       Already-formatted subtotal (includes WCS "/month").
 	 * @param array  $cart_item      Cart item array.
 	 * @param string $cart_item_key  Cart item key.
 	 */
@@ -188,7 +194,14 @@ final class WooProduct_Surface implements Price_Surface {
 		$original_each = (float) $applied['original'];
 		$original_line = $original_each * max( 1, $qty );
 
-		return '<del style="opacity: 0.6">' . wc_price( $original_line ) . '</del> ' . $subtotal;
+		$disclaimer = esc_html__( 'Applies to this payment. Renewal price may differ.', 'newspack-plugin' );
+
+		return sprintf(
+			'<del style="opacity: 0.6">%s</del> %s<br><small style="display:block;color:#666;font-weight:normal;margin-top:2px">%s</small>',
+			wc_price( $original_line ),
+			$subtotal,
+			$disclaimer
+		);
 	}
 
 	/**
