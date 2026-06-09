@@ -46,9 +46,23 @@ final class Subscription_Surface implements Price_Surface {
 	 */
 	public static function on_payment_complete( \WC_Subscription $sub ): void {
 		$surface = Pricing_Engine::instance()->surface( 'subscription' );
-		if ( ! $surface ) {
+		if ( ! $surface instanceof self ) {
 			return;
 		}
+
+		// Guard: bail if the subscription has no recurring line item, or its product
+		// has been deleted (`wc_get_product()` returns false). The Pricing_Context
+		// constructor declares $product as non-nullable, so this guard prevents a
+		// TypeError on the payment_complete hook.
+		$line = $surface->get_recurring_line_item( $sub );
+		if ( ! $line ) {
+			return;
+		}
+		$product = wc_get_product( $line->get_variation_id() ?: $line->get_product_id() );
+		if ( ! $product instanceof \WC_Product ) {
+			return;
+		}
+
 		$ctx = $surface->context( $sub, self::TRIGGER_SCHEDULED_STEP );
 		$d   = Pricing_Engine::instance()->resolve( $ctx );
 		if ( $d ) {

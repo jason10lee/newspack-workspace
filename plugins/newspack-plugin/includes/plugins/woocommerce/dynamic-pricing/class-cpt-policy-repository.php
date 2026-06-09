@@ -71,8 +71,10 @@ final class CPT_Policy_Repository implements Policy_Repository {
 	public static function flush_cache(): void {
 		if ( function_exists( 'wp_cache_flush_group' ) ) {
 			wp_cache_flush_group( self::CACHE_GROUP );
-		} else {
-			wp_cache_flush();
 		}
+		// If wp_cache_flush_group() is unavailable (older WP without that helper),
+		// accept up to CACHE_TTL seconds of staleness rather than flushing the whole
+		// object cache — wp_cache_flush() would cause a thundering herd on Memcached-
+		// backed sites.
 	}
 }

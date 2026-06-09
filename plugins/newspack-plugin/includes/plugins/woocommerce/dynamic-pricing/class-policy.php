@@ -35,7 +35,12 @@ final class Policy {
 		$p->id           = (string) $post->ID;
 		$p->title        = $post->post_title;
 		$p->strategy_id  = (string) get_post_meta( $post->ID, '_strategy_id', true );
-		$p->priority     = (int) get_post_meta( $post->ID, '_priority', true );
+
+		// Preserve class default (100) when meta is absent — `(int) ''` returns 0,
+		// which would sort this policy first instead of in the middle.
+		$priority_meta = get_post_meta( $post->ID, '_priority', true );
+		$p->priority   = '' === $priority_meta ? 100 : (int) $priority_meta;
+
 		$p->compose_mode = (string) get_post_meta( $post->ID, '_compose_mode', true ) ?: 'min';
 		$p->scope_type   = (string) get_post_meta( $post->ID, '_scope_type', true );
 		$p->scope_ids    = self::resolve_scope_ids( $post->ID, $p->scope_type );

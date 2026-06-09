@@ -122,6 +122,35 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 		( new Subscription_Surface() )->apply( $ctx, $d );
 	}
 
+	public function test_on_payment_complete_bails_when_product_is_deleted() {
+		// Mock subscription with a line item that points at a non-existent product
+		// (wc_get_product returns false). The guard in on_payment_complete() must
+		// catch this before Pricing_Context's non-nullable $product constructor
+		// param triggers a TypeError.
+		$item = $this->getMockBuilder( \WC_Order_Item_Product::class )
+			->disableOriginalConstructor()
+			->onlyMethods( [ 'get_product_id' ] )
+			->addMethods( [ 'get_variation_id' ] )
+			->getMock();
+		$item->method( 'get_variation_id' )->willReturn( 0 );
+		$item->method( 'get_product_id' )->willReturn( 999999 ); // does not exist.
+		$sub = $this->getMockBuilder( \WC_Subscription::class )
+			->disableOriginalConstructor()
+			->onlyMethods( [ 'get_items' ] )
+			->addMethods( [ 'get_payment_count' ] )
+			->getMock();
+		$sub->method( 'get_items' )->willReturn( [ $item ] );
+
+		// Wire up the singleton with this surface registered so on_payment_complete can find it.
+		$engine = \Newspack\Dynamic_Pricing\Pricing_Engine::instance();
+		$engine->reset_for_tests();
+		$engine->add_surface( new Subscription_Surface() );
+
+		// Must not throw.
+		Subscription_Surface::on_payment_complete( $sub );
+		$this->assertTrue( true ); // reached without TypeError.
+	}
+
 	/**
 	 * Mock a recurring line item with a configurable subtotal.
 	 *

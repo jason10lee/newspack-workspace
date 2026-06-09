@@ -50,6 +50,14 @@ class Newspack_Test_Policy extends WP_UnitTestCase {
 		$this->assertSame( 'min', $policy->compose_mode );
 	}
 
+	public function test_priority_defaults_to_100_when_meta_absent() {
+		$post_id = $this->factory->post->create( [ 'post_type' => 'shop_pricing_policy' ] );
+		update_post_meta( $post_id, '_strategy_id', 'stepped_by_cycle' );
+		// Do NOT set _priority meta.
+		$policy = Policy::from_post( get_post( $post_id ) );
+		$this->assertSame( 100, $policy->priority );
+	}
+
 	public function test_is_active_now_true_when_dates_open() {
 		$p = $this->make_policy( [] );
 		$this->assertTrue( $p->is_active_now() );
