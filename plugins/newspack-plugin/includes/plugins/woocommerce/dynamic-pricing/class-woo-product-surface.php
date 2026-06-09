@@ -42,9 +42,20 @@ final class WooProduct_Surface implements Price_Surface {
 		// from a previous iteration don't leak into the new render.
 		add_action( 'woocommerce_before_calculate_totals', [ __CLASS__, 'reset_publicized_registry' ], 19, 1 );
 
-		// Reader-facing communication of publicized policies.
+		// Legacy reader-facing communication (shortcode-based cart/checkout).
 		add_filter( 'woocommerce_cart_item_subtotal', [ __CLASS__, 'filter_cart_item_subtotal' ], 20, 3 );
 		add_filter( 'woocommerce_cart_item_name', [ __CLASS__, 'filter_cart_item_name' ], 20, 3 );
+
+		// Newspack Blocks Modal Checkout — its JS does textContent = price_summary so our
+		// PHP-filtered HTML in the <strong> wrapper gets overwritten. Hook the modal's own
+		// summary filter and inject plain-text policy info.
+		add_filter( 'newspack_modal_checkout_price_summary', [ __CLASS__, 'filter_modal_price_summary' ], 20, 2 );
+
+		// WC Blocks Checkout / StoreAPI extension — register publicize data on the
+		// cart-item endpoint so the React-rendered cart can display it via JS filters
+		// (see src/other-scripts/dynamic-pricing-blocks-checkout/).
+		add_action( 'woocommerce_blocks_loaded', [ __CLASS__, 'register_store_api_extension' ] );
+		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_blocks_checkout_script' ] );
 	}
 
 	public static function on_calculate_totals( $cart ): void {
@@ -213,5 +224,142 @@ final class WooProduct_Surface implements Price_Surface {
 			return $name;
 		}
 		return $name . ' <span class="newspack-dp-badge" style="display:inline-block;padding:2px 8px;margin-left:6px;border-radius:10px;background:#e7f5ff;color:#1c7ed6;font-size:11px;font-weight:600;vertical-align:middle">' . esc_html( $applied['label'] ) . '</span>';
+	}
+
+	/**
+	 * Filter: Newspack Blocks Modal Checkout price summary. Output is plain text
+	 * (JS does textContent = price_summary), so we can't inject HTML; we append
+	 * "(Label — was $original)" inline.
+	 *
+	 * @param string $summary    Pre-formatted summary like "Test Subscription: $5.00 / month".
+	 * @param int    $product_id Product (or variation) id displayed in the modal.
+	 */
+	public static function filter_modal_price_summary( string $summary, $product_id ): string {
+		if ( ! function_exists( 'WC' ) || ! WC() || ! WC()->cart ) {
+			return $summary;
+		}
+		$pid = (int) $product_id;
+		foreach ( WC()->cart->get_cart() as $cart_item_key => $cart_item ) {
+			$item_pid = (int) ( $cart_item['variation_id'] ?: $cart_item['product_id'] );
+			if ( $item_pid !== $pid ) {
+				continue;
+			}
+			$applied = self::get_publicized_apply_for( (string) $cart_item_key );
+			if ( ! $applied ) {
+				return $summary;
+			}
+			$original_plain = wp_strip_all_tags( html_entity_decode( wc_price( (float) $applied['original'] ), ENT_QUOTES ) );
+			return sprintf(
+				/* translators: 1: WCS-formatted summary, 2: policy label, 3: original price (plain text) */
+				__( '%1$s (%2$s — was %3$s)', 'newspack-plugin' ),
+				$summary,
+				$applied['label'],
+				$original_plain
+			);
+		}
+		return $summary;
+	}
+
+	/**
+	 * StoreAPI extension: attach publicize data to each cart item so WC Blocks
+	 * Checkout can read it via `extensions['newspack-dynamic-pricing']`. The JS
+	 * side registers checkout filters that consume this data — see
+	 * `src/other-scripts/dynamic-pricing-blocks-checkout/`.
+	 */
+	public static function register_store_api_extension(): void {
+		if ( ! function_exists( 'woocommerce_store_api_register_endpoint_data' ) ) {
+			return;
+		}
+		\woocommerce_store_api_register_endpoint_data(
+			[
+				'endpoint'        => 'cart-item',
+				'namespace'       => 'newspack-dynamic-pricing',
+				'data_callback'   => [ __CLASS__, 'store_api_cart_item_data' ],
+				'schema_callback' => [ __CLASS__, 'store_api_cart_item_schema' ],
+			]
+		);
+	}
+
+	/**
+	 * StoreAPI cart-item extension data payload.
+	 */
+	public static function store_api_cart_item_data( array $cart_item ): array {
+		$key     = isset( $cart_item['key'] ) && is_string( $cart_item['key'] ) ? $cart_item['key'] : '';
+		$applied = '' === $key ? null : self::get_publicized_apply_for( $key );
+		if ( ! $applied ) {
+			return [ 'publicized' => false ];
+		}
+		return [
+			'publicized'         => true,
+			'original'           => (float) $applied['original'],
+			'discounted'         => (float) $applied['discounted'],
+			'label'              => (string) $applied['label'],
+			'original_formatted' => wp_strip_all_tags( html_entity_decode( wc_price( (float) $applied['original'] ), ENT_QUOTES ) ),
+		];
+	}
+
+	/**
+	 * StoreAPI cart-item extension schema.
+	 */
+	public static function store_api_cart_item_schema(): array {
+		return [
+			'publicized'         => [
+				'description' => __( 'Whether a publicized pricing policy is applied to this item.', 'newspack-plugin' ),
+				'type'        => 'boolean',
+				'context'     => [ 'view', 'edit' ],
+				'readonly'    => true,
+			],
+			'original'           => [
+				'description' => __( 'Pre-policy (catalog) recurring price.', 'newspack-plugin' ),
+				'type'        => 'number',
+				'context'     => [ 'view', 'edit' ],
+				'readonly'    => true,
+			],
+			'discounted'         => [
+				'description' => __( 'Policy-resolved amount.', 'newspack-plugin' ),
+				'type'        => 'number',
+				'context'     => [ 'view', 'edit' ],
+				'readonly'    => true,
+			],
+			'label'              => [
+				'description' => __( 'Human-readable policy label.', 'newspack-plugin' ),
+				'type'        => 'string',
+				'context'     => [ 'view', 'edit' ],
+				'readonly'    => true,
+			],
+			'original_formatted' => [
+				'description' => __( 'Original price as plain-text-formatted currency.', 'newspack-plugin' ),
+				'type'        => 'string',
+				'context'     => [ 'view', 'edit' ],
+				'readonly'    => true,
+			],
+		];
+	}
+
+	/**
+	 * Enqueue the WC Blocks Checkout filter JS on cart/checkout pages. The bundle is
+	 * built by newspack-plugin's webpack as `dist/other-scripts/dynamic-pricing-blocks-checkout.js`.
+	 */
+	public static function enqueue_blocks_checkout_script(): void {
+		if ( ! function_exists( 'is_cart' ) || ! function_exists( 'is_checkout' ) ) {
+			return;
+		}
+		if ( ! is_cart() && ! is_checkout() ) {
+			return;
+		}
+		$plugin_url = defined( 'NEWSPACK_PLUGIN_URL' ) ? NEWSPACK_PLUGIN_URL : plugins_url( '/', dirname( __DIR__, 4 ) );
+		$asset_path = defined( 'NEWSPACK_ABSPATH' ) ? NEWSPACK_ABSPATH : trailingslashit( dirname( __DIR__, 4 ) );
+		$asset_file = $asset_path . 'dist/other-scripts/dynamic-pricing-blocks-checkout.asset.php';
+		if ( ! file_exists( $asset_file ) ) {
+			return;
+		}
+		$asset = include $asset_file;
+		wp_enqueue_script(
+			'newspack-dynamic-pricing-blocks-checkout',
+			$plugin_url . 'dist/other-scripts/dynamic-pricing-blocks-checkout.js',
+			$asset['dependencies'] ?? [],
+			$asset['version'] ?? '1.0',
+			true
+		);
 	}
 }
