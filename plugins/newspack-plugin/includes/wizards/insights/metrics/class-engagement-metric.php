@@ -535,6 +535,16 @@ final class Engagement_Metric {
 				'avg_engagement_seconds' => $readers > 0 ? self::num( $row, 1 ) / $readers : 0,
 			];
 		}
+		// The query orders by total userEngagementDuration to pull a strong
+		// candidate set (authors with real readership, not one-reader outliers);
+		// re-sort that set by the computed per-reader average so the ranking
+		// actually matches the metric — "Top Authors by Avg Engagement Time".
+		usort(
+			$out,
+			static function ( $a, $b ) {
+				return $b['avg_engagement_seconds'] <=> $a['avg_engagement_seconds'];
+			}
+		);
 		return [
 			'rows'       => $out,
 			'computable' => true,
@@ -883,7 +893,7 @@ final class Engagement_Metric {
 		return [
 			'value'      => null,
 			'computable' => false,
-			'error'      => 'BQ path not yet implemented. See NPPD-1630.',
+			'error'      => __( 'BQ path not yet implemented. See NPPD-1630.', 'newspack-plugin' ),
 		];
 	}
 }

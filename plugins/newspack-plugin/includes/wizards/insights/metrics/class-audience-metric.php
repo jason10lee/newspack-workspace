@@ -14,7 +14,9 @@
  *
  * Payload shapes:
  *   scalar  : { value, computable, type: count|decimal }
- *   rate    : { value (0-1), computable, type: rate, numerator, denominator }
+ *   rate    : { value (0-1), computable, type: rate[, numerator, denominator] }
+ *             (numerator/denominator included where meaningful; some rates that
+ *             come straight from a GA4 metric omit them)
  *   rows    : { rows: [...], computable, type: breakdown|table|timeseries }
  *   overlay : { value: null, computable: false, overlay: { type, dimensions } }
  *   hidden  : { value: null, computable: false, hidden_in_v1: true }
@@ -692,7 +694,7 @@ final class Audience_Metric {
 				'value'      => null,
 				'computable' => false,
 				'type'       => 'rate',
-				'error'      => 'Local Reader Rate could not be computed: the geo breakdown exceeded the row limit and was truncated.',
+				'error'      => __( 'Local Reader Rate could not be computed: the geo breakdown exceeded the row limit and was truncated.', 'newspack-plugin' ),
 			];
 		}
 
@@ -1038,7 +1040,7 @@ final class Audience_Metric {
 		return [
 			'value'      => null,
 			'computable' => false,
-			'error'      => 'BQ path not yet implemented. See NPPD-1630.',
+			'error'      => __( 'BQ path not yet implemented. See NPPD-1630.', 'newspack-plugin' ),
 		];
 	}
 }
