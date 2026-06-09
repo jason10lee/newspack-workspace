@@ -13,7 +13,7 @@ newspack_plugins=(
 	"newspack-popups"
 	"newspack-sponsors"
 	"republication-tracker-tool"
-	"super-cool-ad-inserter-plugin"
+	"super-cool-ad-inserter"
 	"newspack-multibranded-site"
 	"newspack-network"
 	"newspack-story-budget"
