@@ -4,18 +4,11 @@
  * Per spec at ~/Sites/insights-docs/component-design-spec.md. Owns
  * page-level layout (header, tab nav, tab content area) plus styles for
  * the chrome-only components (DateRangePicker, ComparisonToggle,
- * LastUpdated, tab stub).
- *
- * Also forwards the shared cross-tab chrome — sections, metric cards,
- * tables, tab loading/error — from `tabs/components/sections.scss` so
- * every tab inherits them without having to import on its own.
- *
- * Per-component metric viz styles live in
+ * LastUpdated, tab stub). Per-component metric viz styles live in
  * packages/components/src/<component>/ and don't belong here.
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
-@use "tabs/components/sections";
 
 .newspack-insights {
 	max-width: 1200px;
@@ -116,19 +109,13 @@
 		gap: 8px;
 	}
 
+	// SelectControl + CheckboxControl from @wordpress/components carry
+	// their own admin-pattern styles, focus rings, and a11y. We only
+	// keep a wrapper override here for the SelectControl so it sits
+	// flush with the picker row (the component's default margin-bottom
+	// is opted out via __nextHasNoMarginBottom on the JS side).
 	&__date-range-picker-select {
-		font-size: 13px;
-		padding: 6px 10px;
-		border: 1px solid wp-colors.$gray-300;
-		border-radius: 4px;
-		background: #fff;
-		color: wp-colors.$gray-900;
-		cursor: pointer;
-
-		&:focus-visible {
-			outline: 2px solid var(--wp-admin-theme-color);
-			outline-offset: -2px;
-		}
+		width: auto;
 	}
 
 	&__date-range-picker-custom {
@@ -143,28 +130,17 @@
 			border-radius: 4px;
 			background: #fff;
 			color: wp-colors.$gray-900;
+
+			&:focus-visible {
+				outline: 2px solid var(--wp-admin-theme-color);
+				outline-offset: 1px;
+			}
 		}
 	}
 
 	&__date-range-picker-sep {
 		color: wp-colors.$gray-600;
 		font-size: 13px;
-	}
-
-	// Comparison toggle
-
-	&__comparison-toggle {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		font-size: 13px;
-		font-weight: 400;
-		color: wp-colors.$gray-700;
-		cursor: pointer;
-
-		input[type="checkbox"] {
-			margin: 0;
-		}
 	}
 
 	// Tab navigation
