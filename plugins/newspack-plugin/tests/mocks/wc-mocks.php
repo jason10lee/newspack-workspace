@@ -451,7 +451,8 @@ if ( ! class_exists( 'WC_Subscriptions_Switcher' ) ) {
 	 * caller passed the expected sign-up-fee mode and orders_to_include list.
 	 */
 	class WC_Subscriptions_Switcher {
-		public static function cart_contains_switches() {
+		public static function cart_contains_switches( $item_action = 'any' ) {
+			unset( $item_action );
 			return false;
 		}
 

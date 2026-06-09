@@ -107,9 +107,13 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			/**
 			 * Get the product subtotal.
 			 *
+			 * @param object $product Product.
+			 * @param int    $quantity Quantity.
+			 *
 			 * @return string
 			 */
-			public function get_product_subtotal() {
+			public function get_product_subtotal( $product = null, $quantity = 1 ) {
+				unset( $product, $quantity );
 				return $this->subtotal;
 			}
 		};
