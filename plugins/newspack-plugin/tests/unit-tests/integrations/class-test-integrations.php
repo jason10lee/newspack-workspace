@@ -1726,4 +1726,42 @@ class Test_Integrations extends \WP_UnitTestCase {
 		$this->assertArrayHasKey( 'with-deps', $settings );
 		$this->assertSame( $declared, $settings['with-deps']['required_plugins'] );
 	}
+
+	/**
+	 * Integrations that don't override is_connected() report themselves as
+	 * connected, so the audience UI routes their card to the configure view
+	 * rather than an external setup page.
+	 */
+	public function test_is_connected_defaults_to_true() {
+		$integration = new Sample_Integration( 'no-overrides', 'No Overrides' );
+
+		$this->assertTrue( $integration->is_connected() );
+	}
+
+	/**
+	 * The settings payload that drives the audience UI card surfaces the
+	 * is_connected flag, including a child override reporting a disconnected
+	 * external service.
+	 */
+	public function test_get_all_integration_settings_surfaces_is_connected() {
+		$connected    = new Sample_Integration( 'connected', 'Connected' );
+		$disconnected = new class( 'disconnected', 'Disconnected' ) extends Sample_Integration {
+			/**
+			 * Force this mock to report its external service as not connected.
+			 *
+			 * @return bool
+			 */
+			public function is_connected() {
+				return false;
+			}
+		};
+
+		Integrations::register( $connected );
+		Integrations::register( $disconnected );
+
+		$settings = Integrations::get_all_integration_settings();
+
+		$this->assertTrue( $settings['connected']['is_connected'] );
+		$this->assertFalse( $settings['disconnected']['is_connected'] );
+	}
 }

@@ -35,6 +35,22 @@ class ESP extends Integration {
 	}
 
 	/**
+	 * Whether a newsletter provider is connected in Newspack Newsletters.
+	 *
+	 * Checks STORED configuration only (provider option + credentials
+	 * status) — never the live provider API. See is_set_up() for why.
+	 *
+	 * @return bool True if a provider is selected and its credentials are stored.
+	 */
+	public function is_connected() {
+		$newsletters_configuration_manager = Configuration_Managers::configuration_manager_class_for_plugin_slug( 'newspack-newsletters' );
+		if ( ! $newsletters_configuration_manager || is_wp_error( $newsletters_configuration_manager ) ) {
+			return false;
+		}
+		return (bool) $newsletters_configuration_manager->is_esp_set_up();
+	}
+
+	/**
 	 * Whether the ESP integration is ready to sync.
 	 *
 	 * Checks STORED configuration only — provider option set + master list
@@ -51,14 +67,7 @@ class ESP extends Integration {
 	 * @return bool True if a provider is selected and a master list ID is stored.
 	 */
 	public function is_set_up() {
-		$newsletters_configuration_manager = Configuration_Managers::configuration_manager_class_for_plugin_slug( 'newspack-newsletters' );
-		if ( ! $newsletters_configuration_manager || is_wp_error( $newsletters_configuration_manager ) ) {
-			return false;
-		}
-		if ( ! $newsletters_configuration_manager->is_esp_set_up() ) {
-			return false;
-		}
-		return (bool) $this->get_master_list_id();
+		return $this->is_connected() && (bool) $this->get_master_list_id();
 	}
 
 	/**

@@ -140,6 +140,24 @@ abstract class Integration {
 	}
 
 	/**
+	 * Whether the external service this integration depends on is connected.
+	 *
+	 * Distinct from is_set_up(): "connected" covers only the third-party
+	 * prerequisite configured at its source (provider chosen, API key
+	 * entered), while is_set_up() additionally requires the integration's
+	 * own settings to be complete. The Integrations UI routes the card's
+	 * primary action on this: not connected sends the user to get_setup_url(),
+	 * connected-but-not-set-up sends them to the integration's settings view.
+	 * Like is_set_up(), this is a stored-state check by contract — no live
+	 * API calls. Returns true by default.
+	 *
+	 * @return bool True if connected, false otherwise.
+	 */
+	public function is_connected() {
+		return true;
+	}
+
+	/**
 	 * Get the URL where the user can set up this integration.
 	 *
 	 * Child classes should override this to return the admin page where

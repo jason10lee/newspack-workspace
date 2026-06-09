@@ -57,7 +57,7 @@ export const SettingsSection = ( { integrations, loading, activating = {}, onTog
 					<Grid columns={ 2 } gutter={ 16 }>
 						{ integrationIds.map( id => {
 							const integration = integrations[ id ];
-							const { enabled, is_set_up: isSetUp, setup_url, name, description } = integration;
+							const { enabled, is_set_up: isSetUp, is_connected: isConnected = true, setup_url, name, description } = integration;
 							const missingPlugins = getMissingPlugins( integration );
 							const requiresInstallPlugins = missingPlugins.filter( plugin => ! plugin.is_installed );
 							// Only offer Activate when every missing plugin is at least installed;
@@ -74,12 +74,24 @@ export const SettingsSection = ( { integrations, loading, activating = {}, onTog
 								  )
 								: undefined;
 							const isEnabled = enabled;
-							const needsSetup = ! isSetUp && !! setup_url;
+							// "Connect" only while the external service itself is not connected; once it
+							// is, an incomplete integration routes to its own configure view, where the
+							// remaining settings (e.g. the ESP master list) live.
+							const needsConnection = ! isConnected && !! setup_url;
+							const needsConfiguration = ! isSetUp && ! needsConnection;
 							const goToSetup = () => {
 								window.location.href = setup_url;
 							};
-							let enableLabel = isSetUp ? __( 'Enable', 'newspack-plugin' ) : __( 'Connect', 'newspack-plugin' );
-							let onEnable = needsSetup ? goToSetup : () => onToggleEnabled( id, true );
+							const goToConfigure = () => history?.push( `/settings/${ id }` );
+							let enableLabel = __( 'Enable', 'newspack-plugin' );
+							let onEnable = () => onToggleEnabled( id, true );
+							if ( needsConnection ) {
+								enableLabel = __( 'Connect', 'newspack-plugin' );
+								onEnable = goToSetup;
+							} else if ( needsConfiguration ) {
+								enableLabel = __( 'Finish setup', 'newspack-plugin' );
+								onEnable = goToConfigure;
+							}
 							if ( canActivate ) {
 								enableLabel = isActivating ? __( 'Activating…', 'newspack-plugin' ) : __( 'Activate', 'newspack-plugin' );
 								onEnable = () => onActivatePlugin( activatablePlugins.map( plugin => plugin.slug ) );
@@ -94,9 +106,8 @@ export const SettingsSection = ( { integrations, loading, activating = {}, onTog
 									requirements={ requirements }
 									requirementsActionable={ canActivate }
 									enableLabel={ enableLabel }
-									configureLabel={ needsSetup ? __( 'Configure', 'newspack-plugin' ) : undefined }
 									onEnable={ onEnable }
-									onConfigure={ needsSetup ? goToSetup : () => history?.push( `/settings/${ id }` ) }
+									onConfigure={ needsConnection ? goToSetup : goToConfigure }
 									moreControls={
 										isEnabled
 											? [
