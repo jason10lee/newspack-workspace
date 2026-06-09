@@ -290,11 +290,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				 * Get updated cart total to update the "Place Order" button.
 				 */
 				function getOrderReviewCartTotal() {
-					return $( '.order-review-wrapper tr.order-total:not(.recurring-total) .amount' )
-						.first()
-						.text()
-						.replace( /\s+/g, ' ' )
-						.trim();
+					return $( '.order-review-wrapper tr.order-total:not(.recurring-total) .amount' ).first().text().replace( /\s+/g, ' ' ).trim();
 				}
 				let cartTotalRequest = false;
 				function requestUpdatedCartTotal( cb ) {

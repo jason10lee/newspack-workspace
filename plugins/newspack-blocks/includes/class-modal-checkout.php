@@ -1791,23 +1791,27 @@ final class Modal_Checkout {
 			return '';
 		}
 
-		ob_start();
-		echo apply_filters(
+		$allowed_html     = self::get_cart_product_summary_allowed_html();
+		$product_name     = apply_filters(
 			'woocommerce_cart_item_name',
 			$_product->get_name(),
 			$cart_item,
 			$cart_item_key
-		) . ': '; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
-		if ( function_exists( 'wc_get_formatted_cart_item_data' ) ) {
-			echo wc_get_formatted_cart_item_data( $cart_item ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-		}
-		echo apply_filters(
+		); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
+		$product_subtotal = apply_filters(
 			'woocommerce_cart_item_subtotal',
 			$cart->get_product_subtotal( $_product, $cart_item['quantity'] ),
 			$cart_item,
 			$cart_item_key
-		); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
-		return wp_kses( ob_get_clean(), self::get_cart_product_summary_allowed_html() );
+		); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
+
+		ob_start();
+		echo wp_kses( $product_name, $allowed_html ) . ': ';
+		if ( function_exists( 'wc_get_formatted_cart_item_data' ) ) {
+			echo wp_kses( wc_get_formatted_cart_item_data( $cart_item ), $allowed_html );
+		}
+		echo wp_kses( $product_subtotal, $allowed_html );
+		return wp_kses( ob_get_clean(), $allowed_html );
 	}
 
 	/**
