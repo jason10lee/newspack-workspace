@@ -1,0 +1,187 @@
+<?php
+/**
+ * Subscription Surface — stateful: persist single recurring line item + idempotency + audit.
+ *
+ * @package Newspack
+ */
+
+namespace Newspack\Dynamic_Pricing\Subscriptions;
+
+use Newspack\Dynamic_Pricing\Price_Decision;
+use Newspack\Dynamic_Pricing\Price_Surface;
+use Newspack\Dynamic_Pricing\Pricing_Context;
+use Newspack\Dynamic_Pricing\Pricing_Engine;
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Stateful price surface for WooCommerce Subscriptions.
+ *
+ * Owns the `woocommerce_subscription_payment_complete` listener and, when the
+ * Pricing_Engine produces a durable decision, writes it to the subscription's
+ * single recurring line item. Multi-line subscriptions are excluded upstream
+ * by the engine, so this surface always operates on the first line item.
+ *
+ * Idempotency: an amount-equality short-circuit and a per-policy state map
+ * stored on `_newspack_dynamic_pricing_state` ensure repeated invocations are
+ * no-ops once a policy has applied at a given dimension value.
+ */
+final class Subscription_Surface implements Price_Surface {
+	const STATE_META_KEY         = '_newspack_dynamic_pricing_state';
+	const TRIGGER_SCHEDULED_STEP = 'scheduled_step';
+
+	public function id(): string        { return 'subscription'; }
+	public function is_stateful(): bool { return true; }
+	public function triggers(): array   { return [ self::TRIGGER_SCHEDULED_STEP ]; }
+
+	/**
+	 * Bind the WCS payment-complete listener.
+	 */
+	public static function init(): void {
+		add_action( 'woocommerce_subscription_payment_complete', [ __CLASS__, 'on_payment_complete' ], 20, 1 );
+	}
+
+	/**
+	 * WCS payment-complete callback — resolves a decision and applies it.
+	 */
+	public static function on_payment_complete( \WC_Subscription $sub ): void {
+		$surface = Pricing_Engine::instance()->surface( 'subscription' );
+		if ( ! $surface ) {
+			return;
+		}
+		$ctx = $surface->context( $sub, self::TRIGGER_SCHEDULED_STEP );
+		$d   = Pricing_Engine::instance()->resolve( $ctx );
+		if ( $d ) {
+			$surface->apply( $ctx, $d );
+		}
+	}
+
+	/**
+	 * Build a Pricing_Context from a subscription + trigger.
+	 *
+	 * `completed_cycles` is `completed_payment_count + 1` — the *upcoming* cycle
+	 * the surface is pricing, not the cycle that just paid. Strategies key off
+	 * this value (stepped pricing dimension anchor).
+	 *
+	 * @param mixed  $sub     A WC_Subscription instance.
+	 * @param string $trigger Lifecycle event id.
+	 */
+	public function context( $sub, string $trigger ): Pricing_Context {
+		$upcoming_cycle = $sub->get_payment_count( 'completed' ) + 1;
+
+		$line     = $this->get_recurring_line_item( $sub );
+		$product  = $line ? wc_get_product( $line->get_variation_id() ?: $line->get_product_id() ) : null;
+		$customer = $sub->get_user_id() ? new \WC_Customer( $sub->get_user_id() ) : null;
+
+		$base_price = 0.0;
+		if ( $product ) {
+			$base_price = class_exists( '\WC_Subscriptions_Product' )
+				? (float) \WC_Subscriptions_Product::get_price( $product )
+				: (float) $product->get_regular_price();
+		}
+
+		return new Pricing_Context(
+			$trigger,
+			$product,
+			$customer,
+			$base_price,
+			[ 'completed_cycles' => $upcoming_cycle ],
+			$sub
+		);
+	}
+
+	/**
+	 * Persist a durable decision onto the recurring line item.
+	 *
+	 * One-time decisions (`Price_Decision::ONE_TIME`) are not the
+	 * subscription surface's concern — they are handled at checkout. Decisions
+	 * whose amount already matches the current line subtotal short-circuit
+	 * before any writes (no audit note, no state). Decisions whose
+	 * `(policy_id, dimension_value, amount)` triple already appears in the
+	 * state map also short-circuit (idempotency).
+	 *
+	 * @param Pricing_Context $ctx Context (target is the \WC_Subscription).
+	 * @param Price_Decision  $d   Resolved decision from the Pricing_Engine.
+	 */
+	public function apply( Pricing_Context $ctx, Price_Decision $d ): void {
+		if ( Price_Decision::DURABLE !== $d->durability ) {
+			return;
+		}
+
+		$sub  = $ctx->target;
+		$line = $this->get_recurring_line_item( $sub );
+		if ( ! $line ) {
+			return;
+		}
+
+		if ( abs( (float) $line->get_subtotal() - $d->amount ) < 0.01 ) {
+			return;
+		}
+
+		if ( $this->already_applied( $sub, $d ) ) {
+			return;
+		}
+
+		$line->set_subtotal( $d->amount );
+		$line->set_total( $d->amount );
+		$line->save();
+
+		$sub->calculate_totals();
+		$sub->add_order_note(
+			sprintf(
+				/* translators: 1: policy id, 2: formatted price, 3: human label */
+				__( 'Newspack Dynamic Pricing [policy %1$s]: recurring price set to %2$s (%3$s).', 'newspack-plugin' ),
+				$d->policy_id,
+				wc_price( $d->amount ),
+				$d->label
+			)
+		);
+		$this->record_state( $sub, $d );
+		$sub->save();
+	}
+
+	/**
+	 * Has this `(policy, dimension_value, amount)` triple already been applied?
+	 */
+	private function already_applied( \WC_Subscription $sub, Price_Decision $d ): bool {
+		$state = $sub->get_meta( self::STATE_META_KEY );
+		if ( ! is_array( $state ) ) {
+			return false;
+		}
+		$prior = $state[ $d->policy_id ] ?? null;
+		return $prior
+			&& ( $prior['dimension_value'] ?? null ) === $d->dimension_value
+			&& abs( (float) ( $prior['amount'] ?? 0 ) - $d->amount ) < 0.01;
+	}
+
+	/**
+	 * Record an applied decision on the subscription's state meta map.
+	 */
+	private function record_state( \WC_Subscription $sub, Price_Decision $d ): void {
+		$state = $sub->get_meta( self::STATE_META_KEY );
+		if ( ! is_array( $state ) ) {
+			$state = [];
+		}
+		$state[ $d->policy_id ] = [
+			'strategy_id'     => $d->strategy_id,
+			'amount'          => $d->amount,
+			'dimension_value' => $d->dimension_value,
+			'reason'          => $d->reason,
+			'applied_at'      => current_time( 'mysql', true ),
+		];
+		$sub->update_meta_data( self::STATE_META_KEY, $state );
+	}
+
+	/**
+	 * Return the first (only) recurring line item; multi-line subs are excluded
+	 * upstream by Pricing_Engine::is_excluded().
+	 *
+	 * @return \WC_Order_Item_Product|null
+	 */
+	private function get_recurring_line_item( \WC_Subscription $sub ): ?\WC_Order_Item_Product {
+		foreach ( $sub->get_items( 'line_item' ) as $item ) {
+			return $item;
+		}
+		return null;
+	}
+}
