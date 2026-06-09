@@ -27,7 +27,7 @@ const CompositionSection = ( { current }: SectionProps ) => (
 		<h2 id="newspack-insights-audience-composition" className="newspack-insights__section-heading">
 			{ __( 'Audience composition', 'newspack-plugin' ) }
 		</h2>
-		<p className="newspack-insights__section-caption">{ __( "Who's reading you.", 'newspack-plugin' ) }</p>
+		<p className="newspack-insights__section-caption">{ __( "Who's reading your stories.", 'newspack-plugin' ) }</p>
 		<div className="newspack-insights__chart-grid newspack-insights__chart-grid--cols-4">
 			<ChartCard
 				title={ __( 'Newsletter Subscriber Composition', 'newspack-plugin' ) }
