@@ -11,21 +11,27 @@
 
 const NAMESPACE = 'newspack-dynamic-pricing';
 
+const log = ( ...args ) => {
+	if ( typeof window !== 'undefined' && window.console ) {
+		window.console.log( '[newspack-dynamic-pricing]', ...args );
+	}
+};
+
 const registerFilters = () => {
 	const blocksCheckout = window.wc && window.wc.blocksCheckout;
 	if ( ! blocksCheckout || typeof blocksCheckout.registerCheckoutFilters !== 'function' ) {
 		return false;
 	}
 
+	log( 'registering checkout filters' );
+
 	blocksCheckout.registerCheckoutFilters( NAMESPACE, {
 		/**
 		 * Append the policy label to the cart item name.
-		 *
-		 * @param {string} defaultValue Existing item name.
-		 * @param {Object} extensions   StoreAPI extension payload keyed by namespace.
 		 */
 		itemName: ( defaultValue, extensions ) => {
 			const data = extensions && extensions[ NAMESPACE ];
+			log( 'itemName fired', { defaultValue, hasData: !! data, publicized: !! ( data && data.publicized ) } );
 			if ( ! data || ! data.publicized ) {
 				return defaultValue;
 			}
@@ -33,37 +39,44 @@ const registerFilters = () => {
 		},
 
 		/**
-		 * Reformat the subtotal price to include the original (struck-through-ish)
-		 * before the resolved amount.
-		 *
-		 * WC Blocks subtotal format accepts a string with `<price/>` placeholder.
-		 * The placeholder is replaced with the actual formatted price by WC.
-		 *
-		 * @param {string} defaultValue The default format string (typically `<price/>`).
-		 * @param {Object} extensions   StoreAPI extension payload keyed by namespace.
+		 * Subtotal price format used by the Checkout block summary. WC Blocks REQUIRES
+		 * the `<price/>` placeholder to remain in the string — without it, WC silently
+		 * falls back to the default format.
 		 */
 		subtotalPriceFormat: ( defaultValue, extensions ) => {
 			const data = extensions && extensions[ NAMESPACE ];
+			log( 'subtotalPriceFormat fired', { defaultValue, hasData: !! data, publicized: !! ( data && data.publicized ) } );
 			if ( ! data || ! data.publicized || ! data.original_formatted ) {
 				return defaultValue;
 			}
-			// Inline strikethrough rendering uses Unicode (~~) lookalike since WC Blocks
-			// renders this string as text; HTML tags would be escaped.
+			const result = `${ data.original_formatted } → ${ defaultValue }`;
+			log( 'subtotalPriceFormat returning', result );
+			return result;
+		},
+
+		/**
+		 * Cart block uses cartItemPrice (singular line-item price), not subtotalPriceFormat.
+		 * Same validation rule: must preserve `<price/>`.
+		 */
+		cartItemPrice: ( defaultValue, extensions ) => {
+			const data = extensions && extensions[ NAMESPACE ];
+			log( 'cartItemPrice fired', { defaultValue, hasData: !! data, publicized: !! ( data && data.publicized ) } );
+			if ( ! data || ! data.publicized || ! data.original_formatted ) {
+				return defaultValue;
+			}
 			return `${ data.original_formatted } → ${ defaultValue }`;
 		},
 	} );
 
+	log( 'filters registered for namespace', NAMESPACE );
 	return true;
 };
 
-// WC Blocks Checkout JS may not be on the page yet when this script runs. Retry
-// briefly on DOMContentLoaded; fall back to a one-shot wait via requestAnimationFrame.
 if ( ! registerFilters() ) {
 	const onReady = () => {
 		if ( registerFilters() ) {
 			return;
 		}
-		// Retry a few frames in case WC Blocks loads after us.
 		let tries = 0;
 		const interval = setInterval( () => {
 			tries++;
