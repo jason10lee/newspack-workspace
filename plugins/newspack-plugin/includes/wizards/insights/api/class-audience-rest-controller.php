@@ -92,6 +92,12 @@ class Audience_REST_Controller extends WP_REST_Controller {
 	 * @return \WP_REST_Response|WP_Error
 	 */
 	public function get_audience_data( WP_REST_Request $request ) {
+		// Dev smoke-test path: serve canned fixture data so the UI renders
+		// without a GA4 connection. Never enable in production.
+		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
+			return rest_ensure_response( Audience_Metric::get_fixture() );
+		}
+
 		$tz = $this->site_timezone();
 
 		try {
