@@ -7,6 +7,7 @@
 
 use Newspack\Dynamic_Pricing\Subscriptions\Stepped_By_Cycle_Strategy;
 use Newspack\Dynamic_Pricing\Subscriptions\Subscription_Surface;
+use Newspack\Dynamic_Pricing\WooProduct_Surface;
 use Newspack\Dynamic_Pricing\Amount_Calculator;
 use Newspack\Dynamic_Pricing\Pricing_Context;
 use Newspack\Dynamic_Pricing\Price_Decision;
@@ -15,11 +16,12 @@ use Newspack\Dynamic_Pricing\Price_Decision;
  * @group Dynamic_Pricing
  */
 class Newspack_Test_Stepped_By_Cycle_Strategy extends WP_UnitTestCase {
-	public function test_applies_only_on_scheduled_step_trigger_with_signal() {
+	public function test_applies_on_scheduled_step_or_cart_trigger_with_signal() {
 		$s = new Stepped_By_Cycle_Strategy();
 		$this->assertTrue( $s->applies_to( $this->ctx( Subscription_Surface::TRIGGER_SCHEDULED_STEP, [ 'completed_cycles' => 2 ] ), [] ) );
-		$this->assertFalse( $s->applies_to( $this->ctx( 'cart', [ 'completed_cycles' => 2 ] ), [] ) );
-		$this->assertFalse( $s->applies_to( $this->ctx( Subscription_Surface::TRIGGER_SCHEDULED_STEP, [] ), [] ) );
+		$this->assertTrue( $s->applies_to( $this->ctx( WooProduct_Surface::TRIGGER_CART, [ 'completed_cycles' => 1 ] ), [] ), 'Cart trigger should apply (acquisition path).' );
+		$this->assertFalse( $s->applies_to( $this->ctx( 'unknown_trigger', [ 'completed_cycles' => 2 ] ), [] ) );
+		$this->assertFalse( $s->applies_to( $this->ctx( Subscription_Surface::TRIGGER_SCHEDULED_STEP, [] ), [] ), 'No completed_cycles signal should not apply.' );
 	}
 
 	public function test_decide_selects_highest_step_le_cycle_with_fixed_price() {

@@ -11,6 +11,7 @@ use Newspack\Dynamic_Pricing\Amount_Calculator;
 use Newspack\Dynamic_Pricing\Price_Decision;
 use Newspack\Dynamic_Pricing\Pricing_Context;
 use Newspack\Dynamic_Pricing\Pricing_Strategy;
+use Newspack\Dynamic_Pricing\WooProduct_Surface;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -39,7 +40,11 @@ final class Stepped_By_Cycle_Strategy implements Pricing_Strategy {
 	}
 
 	public function applies_to( Pricing_Context $ctx, array $params ): bool {
-		return Subscription_Surface::TRIGGER_SCHEDULED_STEP === $ctx->trigger
+		$valid_triggers = [
+			Subscription_Surface::TRIGGER_SCHEDULED_STEP,
+			WooProduct_Surface::TRIGGER_CART,
+		];
+		return in_array( $ctx->trigger, $valid_triggers, true )
 			&& isset( $ctx->signals['completed_cycles'] );
 	}
 

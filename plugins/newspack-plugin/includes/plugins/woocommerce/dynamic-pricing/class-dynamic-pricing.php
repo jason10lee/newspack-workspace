@@ -30,6 +30,11 @@ final class Dynamic_Pricing {
 		$engine->register_scope( new Product_Ids_Scope_Matcher() );
 		$engine->register_scope( new Category_Scope_Matcher() );
 
+		// Cart-time surface: foundation-level (no WCS dependency at registration time;
+		// the strategy's applies_to() filters cart context to subscription products via scope).
+		$engine->add_surface( new WooProduct_Surface() );
+		WooProduct_Surface::init();
+
 		// Cache invalidation hooks.
 		add_action( 'save_post_' . self::CPT, [ CPT_Policy_Repository::class, 'flush_cache' ] );
 		add_action( 'deleted_post', [ __CLASS__, 'maybe_flush_cache_on_delete' ], 10, 2 );
