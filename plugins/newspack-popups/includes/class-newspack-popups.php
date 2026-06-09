@@ -89,6 +89,8 @@ final class Newspack_Popups {
 		add_action( 'init', [ __CLASS__, 'disable_prompts_for_protected_pages' ] );
 		add_action( 'init', [ __CLASS__, 'maybe_create_temp_reader_session' ] );
 		add_action( 'enqueue_block_assets', [ __CLASS__, 'enqueue_block_assets' ] );
+		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_block_editor_assets' ] );
+		add_action( 'add_meta_boxes_' . self::NEWSPACK_POPUPS_CPT, [ __CLASS__, 'remove_custom_fields_meta_box' ], 99 );
 		add_filter( 'display_post_states', [ __CLASS__, 'display_post_states' ], 10, 2 );
 		add_action( 'save_post_' . self::NEWSPACK_POPUPS_CPT, [ __CLASS__, 'popup_default_fields' ], 10, 3 );
 		add_action( 'transition_post_status', [ __CLASS__, 'prevent_default_category_on_publish' ], 10, 3 );
@@ -175,6 +177,13 @@ final class Newspack_Popups {
 			'menu_icon'    => 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgdmlld0JveD0iMCAwIDI0IDI0IiByb2xlPSJpbWciIGFyaWEtaGlkZGVuPSJ0cnVlIiBmb2N1c2FibGU9ImZhbHNlIj48cGF0aCBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik02Ljg2MyAxMy42NDRMNSAxMy4yNWgtLjVhLjUuNSAwIDAxLS41LS41di0zYS41LjUgMCAwMS41LS41SDVMMTggNi41aDJWMTZoLTJsLTMuODU0LS44MTUuMDI2LjAwOGEzLjc1IDMuNzUgMCAwMS03LjMxLTEuNTQ5em0xLjQ3Ny4zMTNhMi4yNTEgMi4yNTEgMCAwMDQuMzU2LjkyMWwtNC4zNTYtLjkyMXptLTIuODQtMy4yOEwxOC4xNTcgOGguMzQzdjYuNWgtLjM0M0w1LjUgMTEuODIzdi0xLjE0NnoiIGNsaXAtcnVsZT0iZXZlbm9kZCIgZmlsbD0id2hpdGUiPjwvcGF0aD48L3N2Zz4K',
 		];
 		\register_post_type( self::NEWSPACK_POPUPS_CPT, $cpt_args );
+	}
+
+	/**
+	 * Remove the core Custom Fields metabox from the Prompt editor.
+	 */
+	public static function remove_custom_fields_meta_box() {
+		remove_meta_box( 'postcustom', self::NEWSPACK_POPUPS_CPT, 'normal' );
 	}
 
 	/**
@@ -688,19 +697,19 @@ final class Newspack_Popups {
 	}
 
 	/**
-	 * Load up common JS/CSS for the editor.
+	 * Load block assets in the editor.
 	 */
 	public static function enqueue_block_assets() {
 		if ( ! is_admin() ) {
 			return;
 		}
-		$screen = get_current_screen();
 
 		// Block assets for Custom Placement and Prompt blocks.
+		$blocks_asset = require dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/blocks.asset.php';
 		\wp_enqueue_script(
 			'newspack-popups-blocks',
 			plugins_url( '../dist/blocks.js', __FILE__ ),
-			[],
+			$blocks_asset['dependencies'],
 			filemtime( dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/blocks.js' ),
 			true
 		);
@@ -724,6 +733,17 @@ final class Newspack_Popups {
 		);
 		wp_style_add_data( 'newspack-popups-blocks', 'rtl', 'replace' );
 		wp_enqueue_style( 'newspack-popups-blocks' );
+	}
+
+	/**
+	 * Load prompt editor UI assets.
+	 */
+	public static function enqueue_block_editor_assets() {
+		if ( ! is_admin() ) {
+			return;
+		}
+
+		$screen = get_current_screen();
 
 		// Don't enqueue Prompt editor files if we don't have a valid post type or ID (e.g. on the Widget Blocks screen).
 		if ( empty( $screen->post_type ) || empty( get_the_ID() ) ) {
@@ -736,10 +756,11 @@ final class Newspack_Popups {
 			$supported_post_types = Newspack_Popups_Model::get_default_popup_post_types();
 			if ( in_array( $screen->post_type, $supported_post_types, true ) ) {
 				// But it's a supported post type.
+				$document_settings_asset = require dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/documentSettings.asset.php';
 				\wp_enqueue_script(
 					'newspack-popups',
 					plugins_url( '../dist/documentSettings.js', __FILE__ ),
-					[],
+					$document_settings_asset['dependencies'],
 					filemtime( dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/documentSettings.js' ),
 					true
 				);
@@ -748,10 +769,11 @@ final class Newspack_Popups {
 			return;
 		}
 
+		$editor_asset = require dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/editor.asset.php';
 		\wp_enqueue_script(
 			'newspack-popups',
 			plugins_url( '../dist/editor.js', __FILE__ ),
-			[ 'wp-components' ],
+			$editor_asset['dependencies'],
 			filemtime( dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/editor.js' ),
 			true
 		);
