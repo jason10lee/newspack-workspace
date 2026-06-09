@@ -1775,6 +1775,9 @@ final class Modal_Checkout {
 	 * @param \WC_Cart|null $cart Cart object.
 	 */
 	private static function get_cart_product_summary( $cart = null ) {
+		if ( ! function_exists( 'WC' ) ) {
+			return '';
+		}
 		if ( ! $cart ) {
 			$cart = \WC()->cart;
 		}
@@ -1802,7 +1805,33 @@ final class Modal_Checkout {
 			$cart_item,
 			$cart_item_key
 		); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
-		return ob_get_clean();
+		return wp_kses( ob_get_clean(), self::get_cart_product_summary_allowed_html() );
+	}
+
+	/**
+	 * Get allowed HTML for the modal checkout product summary.
+	 *
+	 * @return array Allowed HTML tags and attributes.
+	 */
+	private static function get_cart_product_summary_allowed_html() {
+		$allowed_html = wp_kses_allowed_html( 'post' );
+
+		$allowed_html['bdi'] = [
+			'class' => true,
+			'dir'   => true,
+		];
+
+		if ( ! isset( $allowed_html['span'] ) ) {
+			$allowed_html['span'] = [];
+		}
+		$allowed_html['span']['class'] = true;
+
+		if ( ! isset( $allowed_html['small'] ) ) {
+			$allowed_html['small'] = [];
+		}
+		$allowed_html['small']['class'] = true;
+
+		return $allowed_html;
 	}
 
 	/**
