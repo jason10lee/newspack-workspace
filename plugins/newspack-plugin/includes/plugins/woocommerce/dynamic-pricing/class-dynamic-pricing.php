@@ -11,6 +11,7 @@ use Newspack\Dynamic_Pricing\Admin\Policy_Edit_UI;
 use Newspack\Dynamic_Pricing\Matchers\All_Subscriptions_Scope_Matcher;
 use Newspack\Dynamic_Pricing\Matchers\Product_Ids_Scope_Matcher;
 use Newspack\Dynamic_Pricing\Matchers\Category_Scope_Matcher;
+use Newspack\Dynamic_Pricing\Matchers\First_Time_Only_Condition_Matcher;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -29,6 +30,7 @@ final class Dynamic_Pricing {
 		$engine->register_scope( new All_Subscriptions_Scope_Matcher() );
 		$engine->register_scope( new Product_Ids_Scope_Matcher() );
 		$engine->register_scope( new Category_Scope_Matcher() );
+		$engine->register_condition( new First_Time_Only_Condition_Matcher() );
 
 		// Cart-time surface: foundation-level (no WCS dependency at registration time;
 		// the strategy's applies_to() filters cart context to subscription products via scope).

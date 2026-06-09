@@ -51,6 +51,14 @@ final class Policy_Edit_UI {
 			'normal',
 			'high'
 		);
+		add_meta_box(
+			'newspack_dp_conditions',
+			__( 'Eligibility Conditions', 'newspack-plugin' ),
+			[ __CLASS__, 'render_conditions_metabox' ],
+			Dynamic_Pricing::CPT,
+			'normal',
+			'default'
+		);
 	}
 
 	public static function render_settings_metabox( \WP_Post $post ): void {
@@ -137,6 +145,51 @@ final class Policy_Edit_UI {
 			</tr>
 		</table>
 		<?php
+	}
+
+	public static function render_conditions_metabox( \WP_Post $post ): void {
+		$conditions      = self::read_conditions( $post->ID );
+		$first_time_only = self::condition_value( $conditions, 'first_time_only' );
+		?>
+		<p class="description">
+			<?php esc_html_e( 'Conditions gate whether this policy applies to a given purchase. All checked conditions must pass; an unchecked policy has no eligibility restrictions.', 'newspack-plugin' ); ?>
+		</p>
+		<table class="form-table">
+			<tr>
+				<th scope="row"><?php esc_html_e( 'First-time only', 'newspack-plugin' ); ?></th>
+				<td>
+					<label>
+						<input type="checkbox" name="newspack_dp_conditions[first_time_only]" value="1" <?php checked( (bool) $first_time_only ); ?> />
+						<?php esc_html_e( 'Only apply if the customer has never had a subscription to the scoped product (any status).', 'newspack-plugin' ); ?>
+					</label>
+					<p class="description">
+						<?php esc_html_e( 'Prevents a cancelled subscriber from re-triggering an intro step by purchasing again. Acquisition (cart) only — renewal cycles always pass so stepped policies keep applying after the first cycle. For "intro only, no stepping" promos, pair with a single-step policy. Guests are treated as first-time.', 'newspack-plugin' ); ?>
+					</p>
+				</td>
+			</tr>
+		</table>
+		<?php
+	}
+
+	private static function read_conditions( int $post_id ): array {
+		$raw = get_post_meta( $post_id, '_conditions', true );
+		if ( is_array( $raw ) ) {
+			return $raw;
+		}
+		if ( is_string( $raw ) && '' !== $raw ) {
+			$decoded = json_decode( $raw, true );
+			return is_array( $decoded ) ? $decoded : [];
+		}
+		return [];
+	}
+
+	private static function condition_value( array $conditions, string $type ): mixed {
+		foreach ( $conditions as $c ) {
+			if ( is_array( $c ) && ( $c['type'] ?? null ) === $type ) {
+				return $c['value'] ?? null;
+			}
+		}
+		return null;
 	}
 
 	public static function render_steps_metabox( \WP_Post $post ): void {
@@ -296,6 +349,22 @@ final class Policy_Edit_UI {
 		}
 		usort( $steps_out, fn( array $a, array $b ): int => $a['at'] <=> $b['at'] );
 		update_post_meta( $post_id, '_params', wp_json_encode( [ 'steps' => $steps_out ] ) );
+
+		// Conditions: read the structured array from $_POST, build a normalized list of
+		// {type, value} entries, and persist as JSON for Policy::from_post() to decode.
+		$conditions_in  = isset( $_POST['newspack_dp_conditions'] ) && is_array( $_POST['newspack_dp_conditions'] ) ? wp_unslash( $_POST['newspack_dp_conditions'] ) : [];
+		$conditions_out = [];
+		if ( ! empty( $conditions_in['first_time_only'] ) ) {
+			$conditions_out[] = [
+				'type'  => 'first_time_only',
+				'value' => true,
+			];
+		}
+		if ( empty( $conditions_out ) ) {
+			delete_post_meta( $post_id, '_conditions' );
+		} else {
+			update_post_meta( $post_id, '_conditions', wp_json_encode( $conditions_out ) );
+		}
 	}
 
 	public static function enqueue_assets( string $hook ): void {
