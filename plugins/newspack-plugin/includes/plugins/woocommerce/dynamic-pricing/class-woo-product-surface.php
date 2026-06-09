@@ -124,9 +124,51 @@ final class WooProduct_Surface implements Price_Surface {
 		}
 	}
 
-	/** @internal — for tests + filter callbacks. */
+	/**
+	 * Returns the publicized apply payload for a cart item, lazy-resolving via the
+	 * engine if the registry hasn't been populated yet.
+	 *
+	 * Why lazy: on some render paths (notably Newspack Blocks modal checkout's
+	 * `render_before_checkout_form`), the cart item filters fire BEFORE
+	 * `WC_Cart::calculate_totals()` runs in the same request. The eager population
+	 * in `apply()` only happens under `woocommerce_before_calculate_totals`, so
+	 * the registry is empty when the filter callback runs. We re-resolve the policy
+	 * from the cart item directly, memoize in the registry, and the second filter
+	 * call (`woocommerce_cart_item_name` after `woocommerce_cart_item_subtotal`)
+	 * hits the cache.
+	 *
+	 * @internal — used by both tests and the cart filter callbacks.
+	 */
 	public static function get_publicized_apply_for( string $cart_item_key ): ?array {
-		return self::$publicized_applies[ $cart_item_key ] ?? null;
+		if ( isset( self::$publicized_applies[ $cart_item_key ] ) ) {
+			return self::$publicized_applies[ $cart_item_key ];
+		}
+
+		if ( ! function_exists( 'WC' ) || ! WC() || ! WC()->cart ) {
+			return null;
+		}
+		$cart_item = WC()->cart->get_cart_item( $cart_item_key );
+		if ( ! is_array( $cart_item ) || ! isset( $cart_item['data'] ) || ! ( $cart_item['data'] instanceof \WC_Product ) ) {
+			return null;
+		}
+
+		$surface = Pricing_Engine::instance()->surface( 'woo_product' );
+		if ( ! $surface instanceof self ) {
+			return null;
+		}
+		$ctx = $surface->context( $cart_item, self::TRIGGER_CART );
+		$d   = Pricing_Engine::instance()->resolve( $ctx );
+		if ( ! $d || ! $d->publicize ) {
+			return null;
+		}
+
+		self::$publicized_applies[ $cart_item_key ] = [
+			'original'   => $ctx->base_price,
+			'discounted' => $d->amount,
+			'label'      => $d->label,
+			'policy_id'  => (string) ( $d->policy_id ?? '' ),
+		];
+		return self::$publicized_applies[ $cart_item_key ];
 	}
 
 	/**
