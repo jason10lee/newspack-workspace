@@ -209,6 +209,65 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				} );
 
 				/**
+				 * Keep the static product summary aligned with recalculated order-review totals.
+				 */
+				function setProductSummary( productDetails ) {
+					const $productDetails = $( '#modal-checkout-product-details strong' );
+					if ( ! $productDetails.length || ! productDetails ) {
+						return false;
+					}
+					if ( $productDetails.html() !== productDetails ) {
+						$productDetails.html( productDetails );
+					}
+					return true;
+				}
+				function getCheckoutPostData() {
+					return $form.serialize();
+				}
+				function getUpdatedProductSummary() {
+					let productSummary;
+					$.ajax( {
+						url: newspackBlocksModalCheckout.ajax_url,
+						method: 'POST',
+						async: false,
+						data: {
+							action: 'get_cart_product_summary',
+							post_data: getCheckoutPostData(),
+						},
+						success: response => {
+							productSummary = response;
+						},
+					} );
+					return productSummary;
+				}
+				function updateProductSummaryFromOrderReview() {
+					const $cartItem = $( '.order-review-wrapper .woocommerce-checkout-review-order-table tr.cart_item' ).first();
+					if ( ! $cartItem.length ) {
+						return;
+					}
+
+					const $productName = $cartItem.find( '.product-name' ).clone();
+					$productName.find( '.product-quantity' ).remove();
+					const productName = $productName.text().replace( /\s+/g, ' ' ).trim();
+					const productTotal = $cartItem.find( '.product-total' ).text().replace( /\s+/g, ' ' ).trim();
+					if ( productName && productTotal ) {
+						setProductSummary( `${ productName }: ${ productTotal }` );
+					}
+				}
+				function syncProductSummary() {
+					if ( ! setProductSummary( getUpdatedProductSummary() ) ) {
+						updateProductSummaryFromOrderReview();
+					}
+					window.setTimeout( function () {
+						if ( ! setProductSummary( getUpdatedProductSummary() ) ) {
+							updateProductSummaryFromOrderReview();
+						}
+					}, 0 );
+				}
+				$( document ).on( 'updated_checkout', syncProductSummary );
+				$( document.body ).on( 'updated_checkout', syncProductSummary );
+
+				/**
 				 * Toggle Transaction Details
 				 */
 				$( document ).on( 'click', '#order_review_heading', function () {
@@ -224,6 +283,15 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				 * Get updated cart total to update the "Place Order" button.
 				 */
 				function getUpdatedCartTotal() {
+					const orderReviewTotal = $( '.order-review-wrapper tr.order-total:not(.recurring-total) .amount' )
+						.first()
+						.text()
+						.replace( /\s+/g, ' ' )
+						.trim();
+					if ( orderReviewTotal ) {
+						return orderReviewTotal;
+					}
+
 					let cartTotal;
 					$.ajax( {
 						url: newspackBlocksModalCheckout.ajax_url,
@@ -231,6 +299,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						async: false,
 						data: {
 							action: 'get_cart_total',
+							post_data: getCheckoutPostData(),
 						},
 						success: response => {
 							cartTotal = response;
@@ -244,7 +313,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				/**
 				 * Update Place Order button text.
 				 */
-				$( document ).on( 'updated_checkout', function () {
+				function syncPlaceOrderButton() {
 					// Update "Place Order" button to include current price.
 					let processOrderText = newspackBlocksModalCheckout.labels.complete_button;
 					if ( ! processOrderText ) {
@@ -261,7 +330,8 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 					}
 					$( '#place_order' ).html( processOrderText );
 					$( '#place_order_clone' ).html( processOrderText );
-				} );
+				}
+				$( document ).on( 'updated_checkout', syncPlaceOrderButton );
 
 				/**
 				 * Handle gift options.
@@ -558,6 +628,8 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 
 						// Disable 'Place Order' button if Subscription Confirmation is required.
 						handleSubscriptionConfirmation();
+						syncProductSummary();
+						syncPlaceOrderButton();
 					}
 					$form.triggerHandler( 'editing_details', [ isEditingDetails ] );
 					// Scroll to top.
