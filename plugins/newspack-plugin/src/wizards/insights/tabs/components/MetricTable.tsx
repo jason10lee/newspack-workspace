@@ -9,12 +9,6 @@
  */
 
 /**
- * WordPress dependencies
- */
-import { __ } from '@wordpress/i18n';
-import { useState } from '@wordpress/element';
-
-/**
  * Internal dependencies
  */
 import { formatCurrency, formatDecimal, formatDuration, formatNumber, formatPercent } from './format';
@@ -74,15 +68,8 @@ const formatCell = ( value: string | number | null, format?: MetricTableColumn[ 
 	return String( value );
 };
 
-const MetricTable = ( { payload, columns, emptyMessage, rowLimit = 10, collapseColumn, defaultRowLimit, expandable = false }: MetricTableProps ) => {
-	// Hook must run unconditionally, before any early return.
-	const [ expanded, setExpanded ] = useState( false );
-
-	// A degraded payload also carries an overlay object, but it's an informational
-	// note over a still-valid table (rendered below with an inline note) — not a
-	// replacement state. Only the non-degraded overlay (missing custom dimension)
-	// short-circuits to the overlay note.
-	if ( payload?.overlay && ! payload.degraded ) {
+const MetricTable = ( { payload, columns, emptyMessage, rowLimit = 10, collapseColumn }: MetricTableProps ) => {
+	if ( payload?.overlay ) {
 		return <MetricNote overlay={ payload.overlay } />;
 	}
 	if ( payload?.error ) {
@@ -111,50 +98,30 @@ const MetricTable = ( { payload, columns, emptyMessage, rowLimit = 10, collapseC
 	const numClass = ( col: MetricTableColumn ) => ( col.align === 'right' ? 'newspack-insights__table-num' : undefined );
 
 	return (
-		<>
-			{ payload?.degraded && (
-				<p className="newspack-insights__metric-note">
-					<span className="newspack-insights__metric-note-icon" aria-hidden="true">
-						&#9432;
-					</span>
-					<span>{ __( 'Singular content filter unavailable; showing all URLs.', 'newspack-plugin' ) }</span>
-				</p>
-			) }
-			<div className="newspack-insights__table-wrap">
-				<table className="newspack-insights__table">
-					<thead>
-						<tr>
+		<div className="newspack-insights__table-wrap">
+			<table className="newspack-insights__table">
+				<thead>
+					<tr>
+						{ displayColumns.map( col => (
+							<th key={ col.key } className={ numClass( col ) }>
+								{ col.label }
+							</th>
+						) ) }
+					</tr>
+				</thead>
+				<tbody>
+					{ rows.map( ( row, i ) => (
+						<tr key={ i }>
 							{ displayColumns.map( col => (
-								<th key={ col.key } className={ numClass( col ) }>
-									{ col.label }
-								</th>
+								<td key={ col.key } className={ numClass( col ) }>
+									{ formatCell( row[ col.key ] ?? null, col.format ) }
+								</td>
 							) ) }
 						</tr>
-					</thead>
-					<tbody>
-						{ visibleRows.map( ( row, i ) => (
-							<tr key={ i }>
-								{ displayColumns.map( col => (
-									<td key={ col.key } className={ numClass( col ) }>
-										{ formatCell( row[ col.key ] ?? null, col.format ) }
-									</td>
-								) ) }
-							</tr>
-						) ) }
-					</tbody>
-				</table>
-			</div>
-			{ collapsible && (
-				<button
-					type="button"
-					className="newspack-insights__table-toggle"
-					aria-expanded={ expanded }
-					onClick={ () => setExpanded( ! expanded ) }
-				>
-					{ expanded ? __( 'See less', 'newspack-plugin' ) : __( 'See more', 'newspack-plugin' ) }
-				</button>
-			) }
-		</>
+					) ) }
+				</tbody>
+			</table>
+		</div>
 	);
 };
 
