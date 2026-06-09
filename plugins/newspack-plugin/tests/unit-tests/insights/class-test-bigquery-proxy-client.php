@@ -235,4 +235,39 @@ class Test_BigQuery_Proxy_Client extends WP_UnitTestCase {
 		$this->assertWPError( $result );
 		$this->assertSame( 'bigquery_proxy_invalid_response', $result->get_error_code() );
 	}
+
+	/**
+	 * Failures fire the newspack_log action so Logstash can pick them up.
+	 */
+	public function test_failure_fires_newspack_log() {
+		if ( ! class_exists( '\Newspack\Logger' ) ) {
+			$this->markTestSkipped( 'Newspack\Logger not loaded.' );
+		}
+
+		$captured = null;
+		add_action(
+			'newspack_log',
+			function ( $code, $message, $data ) use ( &$captured ) {
+				if ( 'newspack_insights_bigquery_proxy_failed' === $code ) {
+					$captured = compact( 'code', 'message', 'data' );
+				}
+			},
+			10,
+			3
+		);
+
+		$this->stub_response = new \WP_Error( 'http_request_failed', 'Could not connect' );
+
+		$client = new BigQuery_Proxy_Client( 'https://hub.example.com/x?api_key=k', 'k' );
+		$client->query( 'gates_total_impressions', $this->date( '2026-03-22' ), $this->date( '2026-04-21' ) );
+
+		$this->assertNotNull( $captured );
+		$this->assertSame( 'newspack_insights_bigquery_proxy_failed', $captured['code'] );
+		// Newspack\Logger::newspack_log wraps the caller's $data inside a 'data' sub-key
+		// alongside type/user_email/file/log_level metadata.
+		$this->assertArrayHasKey( 'data', $captured['data'] );
+		$this->assertSame( 'gates_total_impressions', $captured['data']['data']['query_name'] );
+		$this->assertSame( 'http_request_failed', $captured['data']['data']['error_code'] );
+		$this->assertSame( '20260322', $captured['data']['data']['start_date'] );
+	}
 }

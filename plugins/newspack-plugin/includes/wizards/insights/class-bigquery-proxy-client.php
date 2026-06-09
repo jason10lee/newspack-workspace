@@ -46,6 +46,13 @@ class BigQuery_Proxy_Client {
 	const REQUEST_TIMEOUT = 30;
 
 	/**
+	 * Logger header so all BQ proxy failures land in one Logstash bucket.
+	 *
+	 * @var string
+	 */
+	const LOGGER_HEADER = 'NEWSPACK-INSIGHTS-BIGQUERY';
+
+	/**
 	 * Constructor.
 	 *
 	 * Resolves the hub URL via `Newspack_Manager::authenticate_manager_admin_url()`
@@ -88,6 +95,42 @@ class BigQuery_Proxy_Client {
 	}
 
 	/**
+	 * Emit a `newspack_log` action with context about a proxy failure.
+	 *
+	 * Picked up by Newspack Manager and forwarded to Logstash. Safe to call
+	 * even when Logger isn't loaded (no-op).
+	 *
+	 * @param WP_Error          $error      The error being returned to the caller.
+	 * @param string            $query_name The catalog query that failed.
+	 * @param DateTimeInterface $start      Window start.
+	 * @param DateTimeInterface $end        Window end.
+	 * @return void
+	 */
+	private function log_failure( WP_Error $error, string $query_name, DateTimeInterface $start, DateTimeInterface $end ): void {
+		if ( ! class_exists( '\Newspack\Logger' ) ) {
+			return;
+		}
+		\Newspack\Logger::newspack_log(
+			'newspack_insights_bigquery_proxy_failed',
+			sprintf(
+				'[%s] %s: %s',
+				$query_name,
+				$error->get_error_code(),
+				$error->get_error_message()
+			),
+			[
+				'query_name'  => $query_name,
+				'error_code'  => $error->get_error_code(),
+				'start_date'  => $start->format( 'Ymd' ),
+				'end_date'    => $end->format( 'Ymd' ),
+				'http_status' => $error->get_error_data()['status'] ?? null,
+				'header'      => self::LOGGER_HEADER,
+			],
+			'error'
+		);
+	}
+
+	/**
 	 * Dispatch a catalog query against the hub. Returns rows on success, `WP_Error` on any failure path.
 	 *
 	 * Dates are formatted as `YYYYMMDD` in UTC (the GA4 daily-shard partition convention).
@@ -100,10 +143,12 @@ class BigQuery_Proxy_Client {
 	 */
 	public function query( string $query_name, DateTimeInterface $start, DateTimeInterface $end ) {
 		if ( ! $this->is_configured() ) {
-			return new WP_Error(
+			$error = new WP_Error(
 				'bigquery_proxy_not_configured',
 				__( 'Newspack Manager is not configured for BigQuery proxy calls.', 'newspack-plugin' )
 			);
+			$this->log_failure( $error, $query_name, $start, $end );
+			return $error;
 		}
 
 		$utc = new \DateTimeZone( 'UTC' );
@@ -129,6 +174,7 @@ class BigQuery_Proxy_Client {
 		);
 
 		if ( is_wp_error( $response ) ) {
+			$this->log_failure( $response, $query_name, $start, $end );
 			return $response;
 		}
 
@@ -136,7 +182,7 @@ class BigQuery_Proxy_Client {
 		$raw  = wp_remote_retrieve_body( $response );
 
 		if ( ! json_validate( $raw ) ) {
-			return new WP_Error(
+			$error = new WP_Error(
 				'bigquery_proxy_invalid_response',
 				sprintf(
 					/* translators: %d HTTP status. */
@@ -144,20 +190,26 @@ class BigQuery_Proxy_Client {
 					$code
 				)
 			);
+			$this->log_failure( $error, $query_name, $start, $end );
+			return $error;
 		}
 		$decoded = json_decode( $raw, true );
 
 		if ( 200 !== $code ) {
 			$error_code    = is_array( $decoded ) && isset( $decoded['code'] ) ? (string) $decoded['code'] : 'bigquery_proxy_http_error';
 			$error_message = is_array( $decoded ) && isset( $decoded['message'] ) ? (string) $decoded['message'] : sprintf( 'HTTP %d', $code );
-			return new WP_Error( $error_code, $error_message, [ 'status' => $code ] );
+			$error         = new WP_Error( $error_code, $error_message, [ 'status' => $code ] );
+			$this->log_failure( $error, $query_name, $start, $end );
+			return $error;
 		}
 
 		if ( ! is_array( $decoded ) ) {
-			return new WP_Error(
+			$error = new WP_Error(
 				'bigquery_proxy_invalid_response',
 				__( 'BigQuery proxy returned a non-array success body.', 'newspack-plugin' )
 			);
+			$this->log_failure( $error, $query_name, $start, $end );
+			return $error;
 		}
 
 		return $decoded;
