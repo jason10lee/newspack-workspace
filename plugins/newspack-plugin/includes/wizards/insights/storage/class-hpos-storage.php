@@ -429,7 +429,7 @@ class HPOS_Storage implements Storage_Interface {
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return float
+	 * @return array{value: float, computable: bool, denominator: int}
 	 */
 	public function get_subscription_refund_rate( DateTimeInterface $start, DateTimeInterface $end ): array {
 		global $wpdb;
@@ -614,7 +614,7 @@ class HPOS_Storage implements Storage_Interface {
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return float
+	 * @return array{value: float, computable: bool, denominator: int}
 	 */
 	public function get_failed_payment_retry_rate( DateTimeInterface $start, DateTimeInterface $end ): array {
 		global $wpdb;

@@ -281,11 +281,12 @@ class Insights_Wizard extends Wizard {
 			// detection, NPPD-1598). Subscribers stays all-on for now;
 			// Tab 6 visibility detection (non-donation subscription
 			// product presence) is a separate follow-up. Donors hides
-			// when there are no donation products on the publisher,
-			// using the shared Donation_Product_Classifier (cached 1h)
-			// as the single source of truth. Gates is gated to the
-			// preview constant NEWSPACK_INSIGHTS_GATES_PREVIEW while
-			// Phase 1 (placeholder data) is being validated.
+			// when there's no donation activity — has_donation_activity()
+			// uses the Donation_Product_Classifier to find donation
+			// products, then checks for actual orders/subscriptions in
+			// qualifying statuses (result cached for a day). Gates is
+			// gated to the preview constant NEWSPACK_INSIGHTS_GATES_PREVIEW
+			// while Phase 1 (placeholder data) is being validated.
 			'tabs'              => [
 				'audience'    => true,
 				'engagement'  => true,
