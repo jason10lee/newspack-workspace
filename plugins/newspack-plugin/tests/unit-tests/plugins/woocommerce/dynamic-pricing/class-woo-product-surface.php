@@ -85,4 +85,56 @@ class Newspack_Test_WooProduct_Surface extends WP_UnitTestCase {
 		( new WooProduct_Surface() )->apply( $ctx, $d );
 		$this->assertTrue( true );
 	}
+
+	public function test_apply_does_not_record_publicized_state_when_flag_is_off() {
+		$cart_item_key = 'silent_key';
+		$product = $this->mock_product_with_set_price();
+		$ctx = new Pricing_Context(
+			WooProduct_Surface::TRIGGER_CART,
+			$product,
+			null,
+			10.0,
+			[ 'completed_cycles' => 1 ],
+			[ 'data' => $product, 'key' => $cart_item_key ]
+		);
+		$d = new Price_Decision( 8.0, Price_Decision::DURABLE, 'r', 'Intro', 'stepped_by_cycle', 1 );
+		$d->policy_id = 'pol_silent';
+		$d->publicize = false;
+
+		( new WooProduct_Surface() )->apply( $ctx, $d );
+
+		$this->assertNull( WooProduct_Surface::get_publicized_apply_for( $cart_item_key ) );
+	}
+
+	public function test_apply_records_publicized_state_when_flag_is_on() {
+		$cart_item_key = 'loud_key';
+		$product = $this->mock_product_with_set_price();
+		$ctx = new Pricing_Context(
+			WooProduct_Surface::TRIGGER_CART,
+			$product,
+			null,
+			10.0,
+			[ 'completed_cycles' => 1 ],
+			[ 'data' => $product, 'key' => $cart_item_key ]
+		);
+		$d = new Price_Decision( 2.0, Price_Decision::DURABLE, 'step_at_1_fixed_price', 'Intro', 'stepped_by_cycle', 1 );
+		$d->policy_id = 'pol_loud';
+		$d->publicize = true;
+
+		( new WooProduct_Surface() )->apply( $ctx, $d );
+
+		$applied = WooProduct_Surface::get_publicized_apply_for( $cart_item_key );
+		$this->assertIsArray( $applied );
+		$this->assertSame( 10.0, $applied['original'] );
+		$this->assertSame( 2.0, $applied['discounted'] );
+		$this->assertSame( 'Intro', $applied['label'] );
+		$this->assertSame( 'pol_loud', $applied['policy_id'] );
+	}
+
+	private function mock_product_with_set_price(): \WC_Product {
+		return $this->getMockBuilder( \WC_Product::class )
+			->disableOriginalConstructor()
+			->addMethods( [ 'set_price' ] )
+			->getMock();
+	}
 }

@@ -23,12 +23,28 @@ defined( 'ABSPATH' ) || exit;
 final class WooProduct_Surface implements Price_Surface {
 	const TRIGGER_CART = 'cart';
 
+	/**
+	 * Request-scoped registry of publicized applies, keyed by cart item key.
+	 * The cart filter callbacks read from this to render strikethrough + label.
+	 *
+	 * @var array<string, array{original: float, discounted: float, label: string, policy_id: string}>
+	 */
+	private static array $publicized_applies = [];
+
 	public function id(): string        { return 'woo_product'; }
 	public function is_stateful(): bool { return false; }
 	public function triggers(): array   { return [ self::TRIGGER_CART ]; }
 
 	public static function init(): void {
 		add_action( 'woocommerce_before_calculate_totals', [ __CLASS__, 'on_calculate_totals' ], 20, 1 );
+
+		// Reset the per-request registry at the start of each cart calc so stale entries
+		// from a previous iteration don't leak into the new render.
+		add_action( 'woocommerce_before_calculate_totals', [ __CLASS__, 'reset_publicized_registry' ], 19, 1 );
+
+		// Reader-facing communication of publicized policies.
+		add_filter( 'woocommerce_cart_item_subtotal', [ __CLASS__, 'filter_cart_item_subtotal' ], 20, 3 );
+		add_filter( 'woocommerce_cart_item_name', [ __CLASS__, 'filter_cart_item_name' ], 20, 3 );
 	}
 
 	public static function on_calculate_totals( $cart ): void {
@@ -89,5 +105,58 @@ final class WooProduct_Surface implements Price_Surface {
 			return;
 		}
 		$ctx->target['data']->set_price( $d->amount );
+
+		// Record publicized applies so the cart filters can render strikethrough + label.
+		if ( $d->publicize && isset( $ctx->target['key'] ) && is_string( $ctx->target['key'] ) ) {
+			self::$publicized_applies[ $ctx->target['key'] ] = [
+				'original'   => $ctx->base_price,
+				'discounted' => $d->amount,
+				'label'      => $d->label,
+				'policy_id'  => (string) ( $d->policy_id ?? '' ),
+			];
+		}
+	}
+
+	/** @internal — reset state at the start of each cart calc pass. */
+	public static function reset_publicized_registry( $cart ): void {
+		if ( $cart instanceof \WC_Cart ) {
+			self::$publicized_applies = [];
+		}
+	}
+
+	/** @internal — for tests + filter callbacks. */
+	public static function get_publicized_apply_for( string $cart_item_key ): ?array {
+		return self::$publicized_applies[ $cart_item_key ] ?? null;
+	}
+
+	/**
+	 * Filter: when a publicized policy applies, prepend the original price (strikethrough)
+	 * to the rendered subtotal. Format respects the WCS recurring-price wrapper.
+	 *
+	 * @param string $subtotal       Already-formatted subtotal (may include WCS "/month" suffix).
+	 * @param array  $cart_item      Cart item array.
+	 * @param string $cart_item_key  Cart item key.
+	 */
+	public static function filter_cart_item_subtotal( string $subtotal, array $cart_item, string $cart_item_key ): string {
+		$applied = self::get_publicized_apply_for( $cart_item_key );
+		if ( ! $applied || abs( $applied['original'] - $applied['discounted'] ) < 0.01 ) {
+			return $subtotal;
+		}
+		$qty           = isset( $cart_item['quantity'] ) ? (int) $cart_item['quantity'] : 1;
+		$original_each = (float) $applied['original'];
+		$original_line = $original_each * max( 1, $qty );
+
+		return '<del style="opacity: 0.6">' . wc_price( $original_line ) . '</del> ' . $subtotal;
+	}
+
+	/**
+	 * Filter: append a small label badge to the cart item name announcing the active policy.
+	 */
+	public static function filter_cart_item_name( string $name, array $cart_item, string $cart_item_key ): string {
+		$applied = self::get_publicized_apply_for( $cart_item_key );
+		if ( ! $applied || '' === $applied['label'] ) {
+			return $name;
+		}
+		return $name . ' <span class="newspack-dp-badge" style="display:inline-block;padding:2px 8px;margin-left:6px;border-radius:10px;background:#e7f5ff;color:#1c7ed6;font-size:11px;font-weight:600;vertical-align:middle">' . esc_html( $applied['label'] ) . '</span>';
 	}
 }

@@ -26,6 +26,10 @@ final class Price_Decision {
 	 * @param string|null $policy_id       Set by the engine after decide() returns.
 	 * @param bool        $is_locked       Set by Pricing_Guardrails::compose() when a priority_exclusive
 	 *                                     policy wins; runtime-only, never persisted.
+	 * @param bool        $publicize       Set by the engine from Policy::$publicize. Runtime-only,
+	 *                                     never persisted. Surfaces use it to decide whether to
+	 *                                     communicate the policy to the reader (cart strikethrough,
+	 *                                     label badge, etc.).
 	 */
 	public function __construct(
 		public float $amount,
@@ -35,6 +39,7 @@ final class Price_Decision {
 		public string $strategy_id,
 		public mixed $dimension_value,
 		public ?string $policy_id = null,
-		public bool $is_locked = false
+		public bool $is_locked = false,
+		public bool $publicize = false
 	) {}
 }

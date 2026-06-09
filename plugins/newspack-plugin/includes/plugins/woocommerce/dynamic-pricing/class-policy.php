@@ -26,6 +26,11 @@ final class Policy {
 	public ?int $active_from     = null;
 	public ?int $active_until    = null;
 	public array $conditions     = [];
+	/**
+	 * Whether the engine should communicate this policy to the reader (cart strikethrough,
+	 * label badge, etc.). Default false (silent application).
+	 */
+	public bool $publicize       = false;
 
 	/**
 	 * Hydrate a Policy from a `shop_pricing_policy` post.
@@ -49,6 +54,8 @@ final class Policy {
 		$active_until = get_post_meta( $post->ID, '_active_until', true );
 		$p->active_from  = '' === $active_from  ? null : (int) $active_from;
 		$p->active_until = '' === $active_until ? null : (int) $active_until;
+
+		$p->publicize = '1' === (string) get_post_meta( $post->ID, '_publicize', true );
 
 		$params     = get_post_meta( $post->ID, '_params', true );
 		$conditions = get_post_meta( $post->ID, '_conditions', true );

@@ -61,6 +61,7 @@ final class Policy_Edit_UI {
 		$scope_value  = self::scope_value_string( $post->ID, $scope_type );
 		$active_from  = (string) get_post_meta( $post->ID, '_active_from', true );
 		$active_until = (string) get_post_meta( $post->ID, '_active_until', true );
+		$publicize    = '1' === (string) get_post_meta( $post->ID, '_publicize', true );
 
 		wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD );
 		?>
@@ -122,6 +123,16 @@ final class Policy_Edit_UI {
 				<td>
 					<input type="datetime-local" name="newspack_dp_active_until" id="newspack_dp_active_until" value="<?php echo esc_attr( self::ts_to_local( $active_until ) ); ?>" />
 					<p class="description"><?php esc_html_e( 'Optional. UTC. Empty = no expiry.', 'newspack-plugin' ); ?></p>
+				</td>
+			</tr>
+			<tr>
+				<th><label for="newspack_dp_publicize"><?php esc_html_e( 'Communicate to reader', 'newspack-plugin' ); ?></label></th>
+				<td>
+					<label>
+						<input type="checkbox" name="newspack_dp_publicize" id="newspack_dp_publicize" value="1" <?php checked( $publicize ); ?> />
+						<?php esc_html_e( 'Show this policy in cart / checkout (strikethrough original price + label badge)', 'newspack-plugin' ); ?>
+					</label>
+					<p class="description"><?php esc_html_e( 'When off, the policy applies silently — the reader sees only the resolved price, no indication a discount or change occurred.', 'newspack-plugin' ); ?></p>
 				</td>
 			</tr>
 		</table>
@@ -262,6 +273,9 @@ final class Policy_Edit_UI {
 		} else {
 			update_post_meta( $post_id, '_active_until', $until_ts );
 		}
+
+		$publicize = isset( $_POST['newspack_dp_publicize'] ) && '1' === sanitize_text_field( wp_unslash( $_POST['newspack_dp_publicize'] ) );
+		update_post_meta( $post_id, '_publicize', $publicize ? '1' : '' );
 
 		$steps_in  = isset( $_POST['newspack_dp_steps'] ) && is_array( $_POST['newspack_dp_steps'] ) ? wp_unslash( $_POST['newspack_dp_steps'] ) : [];
 		$steps_out = [];

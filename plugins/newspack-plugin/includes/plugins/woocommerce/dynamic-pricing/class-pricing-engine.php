@@ -80,7 +80,8 @@ final class Pricing_Engine {
 				continue;
 			}
 			$d->policy_id = $policy->id;
-			$decision = $this->guardrails->compose( $decision, $d, $policy, $ctx );
+			$d->publicize = $policy->publicize;
+			$decision     = $this->guardrails->compose( $decision, $d, $policy, $ctx );
 		}
 		return $decision ? $this->guardrails->guard( $decision, $ctx ) : null;
 	}

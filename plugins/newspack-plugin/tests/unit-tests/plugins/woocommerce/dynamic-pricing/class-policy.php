@@ -43,6 +43,17 @@ class Newspack_Test_Policy extends WP_UnitTestCase {
 		$this->assertNull( $policy->active_until );
 	}
 
+	public function test_publicize_defaults_false_and_reads_meta() {
+		$post_id = $this->factory->post->create( [ 'post_type' => 'shop_pricing_policy' ] );
+		update_post_meta( $post_id, '_strategy_id', 'stepped_by_cycle' );
+		$silent = Policy::from_post( get_post( $post_id ) );
+		$this->assertFalse( $silent->publicize, 'publicize defaults to false when meta absent.' );
+
+		update_post_meta( $post_id, '_publicize', '1' );
+		$loud = Policy::from_post( get_post( $post_id ) );
+		$this->assertTrue( $loud->publicize, 'publicize reads true from _publicize meta.' );
+	}
+
 	public function test_compose_mode_defaults_to_min_when_meta_absent() {
 		$post_id = $this->factory->post->create( [ 'post_type' => 'shop_pricing_policy' ] );
 		update_post_meta( $post_id, '_strategy_id', 'stepped_by_cycle' );
