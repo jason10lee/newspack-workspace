@@ -27,16 +27,9 @@ const registerFilters = () => {
 
 	blocksCheckout.registerCheckoutFilters( NAMESPACE, {
 		/**
-		 * Append the policy label as a suffix to the cart item name. We deliberately
-		 * do NOT modify `subtotalPriceFormat` / `cartItemPrice` — when `set_price()`
-		 * differs from `regular_price`, WCS already renders its native sale UI
-		 * (`<del>original</del> new + "Save $X / month"` tag), and prepending the
-		 * original a second time is redundant noise. The label suffix here is the
-		 * only signal we add in Blocks contexts.
-		 *
-		 * Legacy contexts (cart/checkout shortcodes, Newspack-Blocks modal) keep
-		 * their PHP-rendered strikethrough + disclaimer via `woocommerce_cart_item_*`
-		 * filters in WooProduct_Surface — those paths don't get the WCS native UI.
+		 * Append the policy label as a suffix to the cart item name. WCS's native
+		 * sale UI handles the visual price strikethrough when `set_price()` differs
+		 * from `regular_price`, so we don't prepend the original amount here.
 		 */
 		itemName: ( defaultValue, extensions ) => {
 			const data = extensions && extensions[ NAMESPACE ];
@@ -44,6 +37,20 @@ const registerFilters = () => {
 				return defaultValue;
 			}
 			return `${ defaultValue } — ${ data.label }`;
+		},
+
+		/**
+		 * The format string we receive is something like `<price/> every month` (WCS
+		 * recurring framing). That's misleading under stepped pricing where only
+		 * cycle 1 charges this amount. Append a clarifier — the WC Blocks filter
+		 * only requires `<price/>` to remain present; surrounding text is free.
+		 */
+		subtotalPriceFormat: ( defaultValue, extensions ) => {
+			const data = extensions && extensions[ NAMESPACE ];
+			if ( ! data || ! data.publicized ) {
+				return defaultValue;
+			}
+			return `${ defaultValue } (this payment)`;
 		},
 	} );
 
