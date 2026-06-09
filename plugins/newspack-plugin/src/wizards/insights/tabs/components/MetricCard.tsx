@@ -1,5 +1,5 @@
 /**
- * MetricCard (NPPD-1616).
+ * MetricCard (NPPD-1616, extended for NPPD-1604).
  *
  * Scorecard atom: label (top) → value + optional delta (vertically
  * centered hero region) → description (pinned to the bottom). Every
@@ -9,6 +9,13 @@
  *
  * `lowerIsBetter` flips the green/red delta tone for metrics where a
  * decrease is desirable (refund rate, churned subscriber count).
+ *
+ * `pending` (NPPD-1604) renders the value normally but suppresses the
+ * comparison delta even when `previousValue` is supplied. Used by Tab
+ * 4's Phase 1 placeholder cards: the value is a real "0" / "0%" /
+ * etc., so it visually matches the surrounding chrome — the
+ * top-of-tab banner is the only Phase 1 signal. Additive: Tab 6/7
+ * never set `pending`, so their rendering is unchanged.
  */
 
 /**
@@ -19,9 +26,9 @@ import { __, sprintf } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
-import { formatCurrency, formatNumber, formatPercent, formatDelta, deltaTone } from './format';
+import { formatCurrency, formatDecimal, formatNumber, formatPercent, formatDelta, deltaTone } from './format';
 
-export type MetricFormat = 'number' | 'currency' | 'percent';
+export type MetricFormat = 'number' | 'currency' | 'percent' | 'decimal';
 
 export interface MetricCardProps {
 	label: string;
@@ -30,6 +37,21 @@ export interface MetricCardProps {
 	previousValue?: number;
 	description?: string;
 	lowerIsBetter?: boolean;
+	/**
+	 * Short secondary snippet rendered below the value, before the
+	 * delta. Used for compressed paired metrics (e.g. "$X annualized"
+	 * under MRR, "$Y one-time + $Z recurring" under Total Revenue, or
+	 * "N active recurring" under Active Donors) so we can ship the
+	 * paired insight without spending a whole card on it.
+	 */
+	secondary?: string;
+	/**
+	 * Phase 1 placeholder marker (NPPD-1604). When true, the card
+	 * renders the value normally but suppresses the comparison delta
+	 * even if `previousValue` is provided — there's no real delta to
+	 * show while a metric is pending real data.
+	 */
+	pending?: boolean;
 }
 
 const formatValue = ( v: number, fmt: MetricFormat ): string => {
@@ -39,12 +61,15 @@ const formatValue = ( v: number, fmt: MetricFormat ): string => {
 	if ( fmt === 'percent' ) {
 		return formatPercent( v );
 	}
+	if ( fmt === 'decimal' ) {
+		return formatDecimal( v );
+	}
 	return formatNumber( v );
 };
 
 const MetricCard = ( props: MetricCardProps ) => {
-	const { label, value, format, previousValue, description, lowerIsBetter = false } = props;
-	const hasComparison = typeof previousValue === 'number';
+	const { label, value, format, previousValue, description, lowerIsBetter = false, secondary, pending = false } = props;
+	const hasComparison = ! pending && typeof previousValue === 'number';
 	const delta = hasComparison ? formatDelta( value, previousValue as number ) : null;
 	const tone = hasComparison ? deltaTone( value, previousValue as number, lowerIsBetter ) : 'neutral';
 	const deltaA11y =
