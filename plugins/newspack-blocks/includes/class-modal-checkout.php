@@ -1775,10 +1775,10 @@ final class Modal_Checkout {
 	 * @param \WC_Cart|null $cart Cart object.
 	 */
 	private static function get_cart_product_summary( $cart = null ) {
-		if ( ! function_exists( 'WC' ) ) {
-			return '';
-		}
 		if ( ! $cart ) {
+			if ( ! function_exists( 'WC' ) ) {
+				return '';
+			}
 			$cart = \WC()->cart;
 		}
 		if ( ! $cart || 1 !== $cart->get_cart_contents_count() ) {
@@ -1798,7 +1798,9 @@ final class Modal_Checkout {
 			$cart_item,
 			$cart_item_key
 		) . ': '; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
-		echo wc_get_formatted_cart_item_data( $cart_item ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		if ( function_exists( 'wc_get_formatted_cart_item_data' ) ) {
+			echo wc_get_formatted_cart_item_data( $cart_item ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		}
 		echo apply_filters(
 			'woocommerce_cart_item_subtotal',
 			$cart->get_product_subtotal( $_product, $cart_item['quantity'] ),
@@ -2052,7 +2054,7 @@ final class Modal_Checkout {
 			if ( $post_data ) {
 				wp_parse_str( $post_data, $parsed_post_data );
 				if ( isset( $parsed_post_data['billing_email'] ) && is_string( $parsed_post_data['billing_email'] ) ) {
-					$billing_email = sanitize_email( wp_unslash( $parsed_post_data['billing_email'] ) );
+					$billing_email = sanitize_email( $parsed_post_data['billing_email'] );
 				}
 			}
 		}
@@ -2338,7 +2340,7 @@ final class Modal_Checkout {
 	 * @param int            $user_id The user ID.
 	 */
 	public static function subscriptions_product_limited_for_user( $is_limited_for_user, $product, $user_id ) {
-		if ( $user_id !== 0 ) {
+		if ( ! self::is_modal_checkout() || $user_id !== 0 ) {
 			return $is_limited_for_user;
 		}
 		$id_from_email = self::get_user_id_from_email();

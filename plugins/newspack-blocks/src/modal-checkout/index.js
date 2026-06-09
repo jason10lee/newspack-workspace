@@ -223,9 +223,6 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 					}
 					return true;
 				}
-				function getCheckoutPostData() {
-					return $form.serialize();
-				}
 				let productSummaryRequest = false;
 				function requestUpdatedProductSummary() {
 					if ( productSummaryRequest ) {
@@ -236,7 +233,6 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						method: 'POST',
 						data: {
 							action: 'get_cart_product_summary',
-							post_data: getCheckoutPostData(),
 						},
 						success: response => {
 							if ( productSummaryRequest === request ) {
@@ -310,7 +306,6 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						method: 'POST',
 						data: {
 							action: 'get_cart_total',
-							post_data: getCheckoutPostData(),
 						},
 						success: response => {
 							if ( response && cartTotalRequest === request ) {
@@ -348,7 +343,9 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						requestUpdatedCartTotal( syncPlaceOrderButton );
 					}
 				}
-				$( document ).on( 'updated_checkout', syncPlaceOrderButton );
+				$( document ).on( 'updated_checkout', function () {
+					syncPlaceOrderButton();
+				} );
 
 				/**
 				 * Handle gift options.
