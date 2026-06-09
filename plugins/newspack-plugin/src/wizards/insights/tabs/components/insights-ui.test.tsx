@@ -40,6 +40,29 @@ describe( 'MetricCard graceful states', () => {
 		render( <MetricCard label="Local Reader Rate" error="boom" /> );
 		expect( screen.getByText( 'Data temporarily unavailable.' ) ).toBeInTheDocument();
 	} );
+
+	it( 'prefixes an up arrow on a rising delta and a down arrow on a falling one', () => {
+		const { rerender } = render( <MetricCard label="x" value={ 120 } previousValue={ 100 } format="number" /> );
+		expect( screen.getByText( '↑' ) ).toBeInTheDocument();
+		expect( screen.getByText( '20%' ) ).toBeInTheDocument();
+		rerender( <MetricCard label="x" value={ 80 } previousValue={ 100 } format="number" /> );
+		expect( screen.getByText( '↓' ) ).toBeInTheDocument();
+		expect( screen.getByText( '20%' ) ).toBeInTheDocument();
+	} );
+
+	it( 'shows no arrow for a zero delta', () => {
+		render( <MetricCard label="x" value={ 100 } previousValue={ 100 } format="number" /> );
+		expect( screen.getByText( '0%' ) ).toBeInTheDocument();
+		expect( screen.queryByText( '↑' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( '↓' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'keeps arrow direction factual while tone follows lowerIsBetter (down arrow, positive tone)', () => {
+		const { container } = render( <MetricCard label="Bounce Rate" value={ 40 } previousValue={ 50 } format="percent" lowerIsBetter /> );
+		expect( screen.getByText( '↓' ) ).toBeInTheDocument();
+		// A decrease is good news when lowerIsBetter → positive (green) tone.
+		expect( container.querySelector( '.newspack-insights__metric-card-delta--positive' ) ).toBeTruthy();
+	} );
 } );
 
 describe( 'payloadToCard', () => {

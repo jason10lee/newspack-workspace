@@ -95,15 +95,32 @@ const MetricCard = ( props: MetricCardProps ) => {
 	}
 
 	const hasComparison = ! pending && typeof previousValue === 'number';
+	// `delta` is null only when there's no comparison or previous is 0 (no ratio).
 	const delta = hasComparison ? formatDelta( value, previousValue as number ) : null;
 	const tone = hasComparison ? deltaTone( value, previousValue as number, lowerIsBetter ) : 'neutral';
+	// The glyph reflects the factual direction of change (↑ rose / ↓ fell), while
+	// the tone color says whether that's good or bad (lowerIsBetter-aware). No
+	// glyph for a zero delta — just "0%". Magnitude is shown unsigned since the
+	// arrow carries the direction.
+	const ratio = delta !== null ? ( value - ( previousValue as number ) ) / ( previousValue as number ) : 0;
+	let arrow = '';
+	let directionWord = '';
+	if ( ratio > 0 ) {
+		arrow = '↑';
+		directionWord = __( 'up', 'newspack-plugin' );
+	} else if ( ratio < 0 ) {
+		arrow = '↓';
+		directionWord = __( 'down', 'newspack-plugin' );
+	}
+	const magnitude = delta !== null ? formatPercent( Math.abs( ratio ) ) : null;
 	const deltaA11y =
-		hasComparison && delta
+		magnitude !== null
 			? sprintf(
-					/* translators: %s: signed percent change from previous timeframe */
-					__( '%s vs previous timeframe', 'newspack-plugin' ),
-					delta
-			  )
+					/* translators: 1: "up" or "down" (empty when unchanged), 2: percent change from previous timeframe. */
+					__( '%1$s %2$s vs previous timeframe', 'newspack-plugin' ),
+					directionWord,
+					magnitude
+			  ).trim()
 			: null;
 
 	return (
@@ -112,12 +129,17 @@ const MetricCard = ( props: MetricCardProps ) => {
 			<div className="newspack-insights__metric-card-body">
 				<div className="newspack-insights__metric-card-value">{ formatValue( value, format ) }</div>
 				{ secondary && <div className="newspack-insights__metric-card-secondary">{ secondary }</div> }
-				{ hasComparison && delta && (
+				{ magnitude !== null && (
 					<div
 						className={ `newspack-insights__metric-card-delta newspack-insights__metric-card-delta--${ tone }` }
 						aria-label={ deltaA11y ?? undefined }
 					>
-						{ delta }
+						{ arrow && (
+							<span className="newspack-insights__metric-card-delta-arrow" aria-hidden="true">
+								{ arrow }
+							</span>
+						) }
+						{ magnitude }
 					</div>
 				) }
 			</div>
