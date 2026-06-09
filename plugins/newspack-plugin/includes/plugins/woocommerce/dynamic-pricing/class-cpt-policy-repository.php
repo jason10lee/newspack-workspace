@@ -10,12 +10,24 @@ namespace Newspack\Dynamic_Pricing;
 defined( 'ABSPATH' ) || exit;
 
 final class CPT_Policy_Repository implements Policy_Repository {
-	const CACHE_GROUP = 'newspack_dynamic_pricing';
-	const CACHE_TTL   = MINUTE_IN_SECONDS;
+	const CACHE_GROUP          = 'newspack_dynamic_pricing';
+	const CACHE_TTL            = MINUTE_IN_SECONDS;
+	const CACHE_VERSION_OPTION = 'newspack_dynamic_pricing_cache_version';
+
+	/**
+	 * Cache version is keyed into the cache key. Bumping it on policy save invalidates
+	 * all previous entries without relying on `wp_cache_flush_group` (which is a no-op
+	 * on the default `WP_Object_Cache` and on some persistent backends). Old entries
+	 * orphan and TTL out naturally; new requests miss the cache and refresh.
+	 */
+	public static function get_cache_version(): int {
+		$v = (int) get_option( self::CACHE_VERSION_OPTION, 1 );
+		return $v > 0 ? $v : 1;
+	}
 
 	public function for_context( Pricing_Context $ctx ): array {
 		$product_id = (int) $ctx->product->get_id();
-		$cache_key  = "policies_for_product_{$product_id}";
+		$cache_key  = 'policies_for_product_' . $product_id . '_v' . self::get_cache_version();
 
 		$cached = wp_cache_get( $cache_key, self::CACHE_GROUP );
 		if ( false !== $cached ) {
@@ -68,13 +80,13 @@ final class CPT_Policy_Repository implements Policy_Repository {
 		return array_map( [ Policy::class, 'from_post' ], $posts );
 	}
 
+	/**
+	 * Bumps the cache version. Old entries become orphaned (different cache key) and
+	 * TTL out via CACHE_TTL. Works on any object-cache backend regardless of whether
+	 * `wp_cache_flush_group` is supported.
+	 */
 	public static function flush_cache(): void {
-		if ( function_exists( 'wp_cache_flush_group' ) ) {
-			wp_cache_flush_group( self::CACHE_GROUP );
-		}
-		// If wp_cache_flush_group() is unavailable (older WP without that helper),
-		// accept up to CACHE_TTL seconds of staleness rather than flushing the whole
-		// object cache — wp_cache_flush() would cause a thundering herd on Memcached-
-		// backed sites.
+		$current = self::get_cache_version();
+		update_option( self::CACHE_VERSION_OPTION, $current + 1, false );
 	}
 }

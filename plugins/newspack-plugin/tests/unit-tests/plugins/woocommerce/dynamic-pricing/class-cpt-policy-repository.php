@@ -72,20 +72,36 @@ class Newspack_Test_CPT_Policy_Repository extends WP_UnitTestCase {
 
 		$ctx    = $this->mock_context( $this->mock_product( 42 ) );
 		$first  = $this->repo->for_context( $ctx );
-		$cached = wp_cache_get( 'policies_for_product_42', CPT_Policy_Repository::CACHE_GROUP );
+		$v = CPT_Policy_Repository::get_cache_version();
+		$cached = wp_cache_get( 'policies_for_product_42_v' . $v, CPT_Policy_Repository::CACHE_GROUP );
 		$this->assertSame( $first, $cached );
 	}
 
-	public function test_flush_cache_clears_group() {
+	public function test_flush_cache_bumps_version() {
+		$before = CPT_Policy_Repository::get_cache_version();
+		CPT_Policy_Repository::flush_cache();
+		$after = CPT_Policy_Repository::get_cache_version();
+		$this->assertSame( $before + 1, $after, 'flush_cache must increment the cache version.' );
+	}
+
+	public function test_flush_cache_invalidates_subsequent_for_context_calls() {
 		$this->seed_policy( 'publish', [
 			'_strategy_id' => 'stepped_by_cycle',
 			'_scope_type'  => 'product_ids',
 		], [ 42 ] );
 
-		$ctx = $this->mock_context( $this->mock_product( 42 ) );
-		$this->repo->for_context( $ctx );
+		$ctx    = $this->mock_context( $this->mock_product( 42 ) );
+		$first  = $this->repo->for_context( $ctx );
+		$v1     = CPT_Policy_Repository::get_cache_version();
+		$cached1 = wp_cache_get( 'policies_for_product_42_v' . $v1, CPT_Policy_Repository::CACHE_GROUP );
+		$this->assertNotEmpty( $cached1, 'First lookup should populate the versioned cache.' );
+
 		CPT_Policy_Repository::flush_cache();
-		$this->assertFalse( wp_cache_get( 'policies_for_product_42', CPT_Policy_Repository::CACHE_GROUP ) );
+		$v2 = CPT_Policy_Repository::get_cache_version();
+		$this->assertNotSame( $v1, $v2 );
+
+		$cached_new = wp_cache_get( 'policies_for_product_42_v' . $v2, CPT_Policy_Repository::CACHE_GROUP );
+		$this->assertFalse( $cached_new, 'After flush, the new versioned key should be empty until next lookup.' );
 	}
 
 	private function seed_policy( string $post_status, array $meta, array $scope_product_ids = [] ): int {
