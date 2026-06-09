@@ -54,7 +54,14 @@ final class WooProduct_Surface implements Price_Surface {
 		// WC Blocks Checkout / StoreAPI extension — register publicize data on the
 		// cart-item endpoint so the React-rendered cart can display it via JS filters
 		// (see src/other-scripts/dynamic-pricing-blocks-checkout/).
-		add_action( 'woocommerce_blocks_loaded', [ __CLASS__, 'register_store_api_extension' ] );
+		// Note: `woocommerce_blocks_loaded` fires before our `plugins_loaded` priority 20,
+		// so a delayed add_action would never run. Call directly when the registrar is
+		// available; otherwise defer via the action for older WC versions where it fires later.
+		if ( function_exists( 'woocommerce_store_api_register_endpoint_data' ) ) {
+			self::register_store_api_extension();
+		} else {
+			add_action( 'woocommerce_blocks_loaded', [ __CLASS__, 'register_store_api_extension' ] );
+		}
 		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_blocks_checkout_script' ] );
 	}
 
