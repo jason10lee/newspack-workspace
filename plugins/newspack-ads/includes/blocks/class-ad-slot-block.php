@@ -58,21 +58,47 @@ final class Ad_Slot_Block {
 	 * classic-theme context, or unknown key), or the hook produces no output
 	 * (no ad unit bound, suppressed, provider not active).
 	 *
-	 * @param array $attrs Block attributes.
+	 * @param array    $attributes Block attributes.
+	 * @param string   $content    Block content.
+	 * @param WP_Block $block      Block instance.
 	 *
 	 * @return string Rendered HTML.
 	 */
-	public static function render_block( $attrs ) {
-		if ( empty( $attrs['placement'] ) ) {
+	public static function render_block( $attributes, $content = '', $block = null ) {
+		if ( empty( $attributes['placement'] ) ) {
 			return '';
 		}
-		$hook_name = Placements::get_block_hook_name( $attrs['placement'] );
+		$hook_name = Placements::get_block_hook_name( $attributes['placement'] );
 		if ( ! has_action( $hook_name ) ) {
 			return '';
 		}
+
+		// Forward the block's margin/padding onto the .newspack_global_ad wrapper
+		// so it collapses together with the ad when GAM hides an empty slot.
+		// Scoped to this render only — the filter is removed immediately after,
+		// so other placements (widgets, sidebars, hooks) never see it.
+		$spacing_css = '';
+		$spacing     = $attributes['style']['spacing'] ?? [];
+		if ( ! empty( $spacing ) ) {
+			$engine_styles = wp_style_engine_get_styles( [ 'spacing' => $spacing ] );
+			$spacing_css   = $engine_styles['css'] ?? '';
+		}
+		$inject = static function () use ( $spacing_css ) {
+			return $spacing_css;
+		};
+		if ( $spacing_css ) {
+			add_filter( 'newspack_ads_placement_inline_style', $inject );
+		}
+
 		ob_start();
 		do_action( $hook_name );
-		return ob_get_clean();
+		$output = ob_get_clean();
+
+		if ( $spacing_css ) {
+			remove_filter( 'newspack_ads_placement_inline_style', $inject );
+		}
+
+		return $output;
 	}
 }
 Ad_Slot_Block::init();

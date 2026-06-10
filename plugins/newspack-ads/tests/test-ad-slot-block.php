@@ -87,4 +87,38 @@ class AdSlotBlockTest extends WP_UnitTestCase {
 		remove_action( 'newspack_ads_block_placement_global_above_header', $listener, 999 );
 		remove_filter( 'newspack_ads_is_block_theme', '__return_true' );
 	}
+
+	/**
+	 * The block forwards its spacing attributes onto the placement wrapper via the
+	 * `newspack_ads_placement_inline_style` filter (consumed by inject_placement_ad).
+	 */
+	public function test_render_forwards_block_spacing() {
+		add_filter( 'newspack_ads_is_block_theme', '__return_true' );
+
+		$ref  = new \ReflectionClass( \Newspack_Ads\Placements::class );
+		$prop = $ref->getProperty( 'placements' );
+		$prop->setAccessible( true );
+		$prop->setValue( null, [] );
+		\Newspack_Ads\Placements::register_default_placements();
+
+		// Stand in for the wrapper: echo whatever the block forwarded through the filter.
+		$listener = function () {
+			echo esc_attr( apply_filters( 'newspack_ads_placement_inline_style', '', 'global_above_header', '', [] ) );
+		};
+		add_action( 'newspack_ads_block_placement_global_above_header', $listener, 999 );
+
+		$html = \Newspack_Ads\Ad_Slot_Block::render_block(
+			[
+				'placement' => 'global_above_header',
+				'style'     => [ 'spacing' => [ 'margin' => [ 'bottom' => 'var:preset|spacing|80' ] ] ],
+			]
+		);
+		self::assertStringContainsString( 'margin-bottom:var(--wp--preset--spacing--80)', $html );
+
+		// And the filter is cleaned up after the render, leaving other placements untouched.
+		self::assertSame( '', apply_filters( 'newspack_ads_placement_inline_style', '', 'global_above_header', '', [] ) );
+
+		remove_action( 'newspack_ads_block_placement_global_above_header', $listener, 999 );
+		remove_filter( 'newspack_ads_is_block_theme', '__return_true' );
+	}
 }

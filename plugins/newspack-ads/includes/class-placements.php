@@ -835,8 +835,20 @@ final class Placements {
 
 		$classnames_str = implode( ' ', array_keys( array_filter( $classnames ) ) );
 
+		/**
+		 * Filters an inline style string applied to the ad container. Empty by
+		 * default; the ad-slot block uses it to forward block-level spacing onto
+		 * the wrapper so it collapses together with a hidden empty ad.
+		 *
+		 * @param string Inline style string (without the `style=""` wrapper).
+		 * @param string Placement key.
+		 * @param string Hook key.
+		 * @param array  Placement data.
+		 */
+		$inline_style = apply_filters( 'newspack_ads_placement_inline_style', '', $placement_key, $hook_key, $placement_data );
+
 		?>
-		<div class='<?php echo esc_attr( $classnames_str ); ?>'>
+		<div class='<?php echo esc_attr( $classnames_str ); ?>'<?php echo $inline_style ? ' style="' . esc_attr( $inline_style ) . '"' : ''; ?>>
 			<?php if ( 'sticky' === $placement_key ) : ?>
 				<button class='newspack_sticky_ad__close'></button>
 			<?php endif; ?>
