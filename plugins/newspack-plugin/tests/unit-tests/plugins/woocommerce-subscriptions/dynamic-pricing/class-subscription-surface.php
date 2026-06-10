@@ -157,6 +157,37 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 		( new Subscription_Surface() )->apply( $ctx, $d );
 	}
 
+	public function test_note_acquisition_on_subscription_notes_policy_priced_lines() {
+		// Seed the cart surface's applied registry the way checkout would: via apply().
+		\Newspack\Dynamic_Pricing\WooProduct_Surface::reset_publicized_registry( new \WC_Cart() );
+		$product = $this->getMockBuilder( \WC_Product::class )
+			->disableOriginalConstructor()
+			->addMethods( [ 'set_price' ] )
+			->getMock();
+		$ctx = new Pricing_Context(
+			'cart',
+			$product,
+			null,
+			10.0,
+			[ 'completed_cycles' => 1 ],
+			[ 'data' => $product, 'key' => 'sub_note_key' ]
+		);
+		$d = new Price_Decision( 5.0, Price_Decision::DURABLE, 'step_at_1_fixed_price', 'Intro', 'stepped_by_cycle', 1 );
+		$d->policy_id = '18';
+		$d->publicize = false; // Silent policies must still be noted.
+		( new \Newspack\Dynamic_Pricing\WooProduct_Surface() )->apply( $ctx, $d );
+
+		$recurring_cart = new \WC_Cart( [ 'sub_note_key' => [ 'data' => $product ] ] );
+
+		$line = $this->mock_line_item( 5.0 );
+		$sub  = $this->mock_subscription( completed_payments: 0, line_item: $line );
+		$sub->expects( $this->once() )
+			->method( 'add_order_note' )
+			->with( $this->logicalAnd( $this->stringContains( '[policy 18]' ), $this->stringContains( 'acquisition' ) ) );
+
+		Subscription_Surface::note_acquisition_on_subscription( $sub, null, $recurring_cart );
+	}
+
 	public function test_on_payment_complete_bails_when_product_is_deleted() {
 		// Mock subscription with a line item that points at a non-existent product
 		// (wc_get_product returns false). The guard in on_payment_complete() must

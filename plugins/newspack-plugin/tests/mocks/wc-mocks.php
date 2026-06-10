@@ -203,6 +203,19 @@ class WC_Product {
 	}
 }
 
+class WC_Cart {
+	public $cart_contents = [];
+	public function __construct( $cart_contents = [] ) {
+		$this->cart_contents = $cart_contents;
+	}
+	public function get_cart() {
+		return $this->cart_contents;
+	}
+	public function get_cart_item( $key ) {
+		return $this->cart_contents[ $key ] ?? [];
+	}
+}
+
 /**
  * Register a mock product in the global products database.
  *

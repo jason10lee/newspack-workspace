@@ -51,6 +51,16 @@ final class WooProduct_Surface implements Price_Surface {
 	 */
 	private static array $publicized_applies = [];
 
+	/**
+	 * Request-scoped registry of EVERY applied decision, keyed by cart item key —
+	 * including silent (non-publicized) policies. Publicize is reader-facing;
+	 * this registry feeds the operator-facing audit trail (order/subscription
+	 * notes at checkout), which must record all policy interactions.
+	 *
+	 * @var array<string, array{policy_id: string, label: string, reason: string, amount: float, original: float, item_name: string, quantity: int}>
+	 */
+	private static array $applied_decisions = [];
+
 	public function id(): string        { return 'woo_product'; }
 	public function is_stateful(): bool { return false; }
 	public function triggers(): array   { return [ self::TRIGGER_CART ]; }
@@ -83,6 +93,12 @@ final class WooProduct_Surface implements Price_Surface {
 			add_action( 'woocommerce_blocks_loaded', [ __CLASS__, 'register_store_api_extension' ] );
 		}
 		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_blocks_checkout_script' ] );
+
+		// Operator-facing audit: note the acquisition pricing on the order created
+		// at checkout. Classic checkout and Store API (WC Blocks) checkout fire
+		// different hooks; the handler is shared and idempotent.
+		add_action( 'woocommerce_checkout_order_processed', [ __CLASS__, 'note_acquisition_on_order' ], 20, 1 );
+		add_action( 'woocommerce_store_api_checkout_order_processed', [ __CLASS__, 'note_acquisition_on_order' ], 20, 1 );
 	}
 
 	public static function on_calculate_totals( $cart ): void {
@@ -232,11 +248,34 @@ final class WooProduct_Surface implements Price_Surface {
 		}
 		$ctx->target['data']->set_price( $d->amount );
 
-		// Record the publicize outcome (payload or negative memo) so the cart
-		// filters can render strikethrough + label without re-resolving.
 		if ( isset( $ctx->target['key'] ) && is_string( $ctx->target['key'] ) ) {
-			self::$publicized_applies[ $ctx->target['key'] ] = $d->publicize ? self::publicized_payload( $ctx, $d ) : false;
+			$key = $ctx->target['key'];
+
+			// Record the publicize outcome (payload or negative memo) so the cart
+			// filters can render strikethrough + label without re-resolving.
+			self::$publicized_applies[ $key ] = $d->publicize ? self::publicized_payload( $ctx, $d ) : false;
+
+			// Record EVERY apply (silent ones included) for the audit trail.
+			self::$applied_decisions[ $key ] = [
+				'policy_id' => (string) ( $d->policy_id ?? '' ),
+				'label'     => $d->label,
+				'reason'    => $d->reason,
+				'amount'    => $d->amount,
+				'original'  => $ctx->base_price,
+				'item_name' => (string) $ctx->product->get_name(),
+				'quantity'  => isset( $ctx->target['quantity'] ) ? max( 1, (int) $ctx->target['quantity'] ) : 1,
+			];
 		}
+	}
+
+	/**
+	 * The applied decision for a cart item, silent policies included.
+	 * Audit-trail consumers (checkout note writers) read this.
+	 *
+	 * @internal Public for the subscriptions layer and tests.
+	 */
+	public static function get_applied_for( string $cart_item_key ): ?array {
+		return self::$applied_decisions[ $cart_item_key ] ?? null;
 	}
 
 	/**
@@ -252,11 +291,63 @@ final class WooProduct_Surface implements Price_Surface {
 		];
 	}
 
-	/** @internal — reset state at the start of each cart calc pass. */
+	/** @internal — reset request-scoped registries at the start of each cart calc pass. */
 	public static function reset_publicized_registry( $cart ): void {
 		if ( $cart instanceof \WC_Cart ) {
 			self::$publicized_applies = [];
+			self::$applied_decisions  = [];
 		}
+	}
+
+	/**
+	 * Audit trail: when the order created at checkout contains policy-priced
+	 * lines, record one order note per line stating which policy set which price
+	 * — silent policies included. Without this, an operator looking at a $5
+	 * parent order of a $10 product has no way to tell why.
+	 *
+	 * Hooked to both `woocommerce_checkout_order_processed` (classic checkout,
+	 * first arg is the order id) and `woocommerce_store_api_checkout_order_processed`
+	 * (WC Blocks checkout, first arg is the order). Both fire in the same request
+	 * as the final cart calculation, so the applied registry is populated.
+	 *
+	 * @param int|\WC_Order $order_or_id Order id (classic) or order (Store API).
+	 */
+	public static function note_acquisition_on_order( $order_or_id ): void {
+		$order = $order_or_id instanceof \WC_Order ? $order_or_id : wc_get_order( (int) $order_or_id );
+		if ( ! $order || empty( self::$applied_decisions ) ) {
+			return;
+		}
+		// Idempotency across checkout flows that might fire both hooks.
+		if ( $order->get_meta( '_newspack_dp_acquisition_noted' ) ) {
+			return;
+		}
+
+		foreach ( self::$applied_decisions as $applied ) {
+			$order->add_order_note( self::acquisition_note( $applied ) );
+		}
+		$order->update_meta_data( '_newspack_dp_acquisition_noted', '1' );
+		$order->save();
+	}
+
+	/**
+	 * Operator-facing audit copy for an acquisition apply. Shared by the order
+	 * note and the subscriptions layer's acquisition note.
+	 *
+	 * @internal Public for the subscriptions layer and tests.
+	 *
+	 * @param array $applied Entry from the applied-decisions registry.
+	 */
+	public static function acquisition_note( array $applied ): string {
+		$descriptor = '' !== (string) $applied['label'] ? (string) $applied['label'] : (string) $applied['reason'];
+		return sprintf(
+			/* translators: 1: policy id, 2: product name, 3: charged price, 4: catalog price, 5: policy label or reason */
+			__( 'Newspack Dynamic Pricing [policy %1$s]: "%2$s" priced at %3$s — catalog price %4$s (%5$s).', 'newspack-plugin' ),
+			$applied['policy_id'],
+			$applied['item_name'],
+			wc_price( (float) $applied['amount'] ),
+			wc_price( (float) $applied['original'] ),
+			$descriptor
+		);
 	}
 
 	/**

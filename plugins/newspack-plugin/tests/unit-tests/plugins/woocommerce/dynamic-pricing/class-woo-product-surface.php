@@ -9,10 +9,23 @@ use Newspack\Dynamic_Pricing\WooProduct_Surface;
 use Newspack\Dynamic_Pricing\Price_Decision;
 use Newspack\Dynamic_Pricing\Pricing_Context;
 
+// `wc_price` is not provided by tests/mocks/wc-mocks.php; the audit-note
+// formatter needs it.
+if ( ! function_exists( 'wc_price' ) ) {
+	function wc_price( $price ) {
+		return '$' . number_format( (float) $price, 2 );
+	}
+}
+
 /**
  * @group Dynamic_Pricing
  */
 class Newspack_Test_WooProduct_Surface extends WP_UnitTestCase {
+	public function set_up() {
+		parent::set_up();
+		// Clear the request-scoped registries between tests.
+		WooProduct_Surface::reset_publicized_registry( new \WC_Cart() );
+	}
 	public function test_id_is_stable() {
 		$this->assertSame( 'woo_product', ( new WooProduct_Surface() )->id() );
 	}
@@ -166,6 +179,111 @@ class Newspack_Test_WooProduct_Surface extends WP_UnitTestCase {
 		$this->assertSame( 2.0, $applied['discounted'] );
 		$this->assertSame( 'Intro', $applied['label'] );
 		$this->assertSame( 'pol_loud', $applied['policy_id'] );
+	}
+
+	public function test_apply_records_applied_decision_even_when_silent() {
+		$product = $this->mock_product_with_set_price();
+		$ctx = new Pricing_Context(
+			WooProduct_Surface::TRIGGER_CART,
+			$product,
+			null,
+			10.0,
+			[ 'completed_cycles' => 1 ],
+			[ 'data' => $product, 'key' => 'audit_key', 'quantity' => 2 ]
+		);
+		$d = new Price_Decision( 5.0, Price_Decision::DURABLE, 'simple_fixed_price', 'Promo', 'simple_price', 1 );
+		$d->policy_id = 'pol_audit';
+		$d->publicize = false;
+
+		( new WooProduct_Surface() )->apply( $ctx, $d );
+
+		$this->assertNull( WooProduct_Surface::get_publicized_apply_for( 'audit_key' ), 'Silent policies must not publicize.' );
+		$applied = WooProduct_Surface::get_applied_for( 'audit_key' );
+		$this->assertIsArray( $applied, 'Silent policies MUST still be recorded for the audit trail.' );
+		$this->assertSame( 'pol_audit', $applied['policy_id'] );
+		$this->assertSame( 5.0, $applied['amount'] );
+		$this->assertSame( 10.0, $applied['original'] );
+		$this->assertSame( 2, $applied['quantity'] );
+	}
+
+	public function test_reset_clears_applied_registry() {
+		$product = $this->mock_product_with_set_price();
+		$ctx = new Pricing_Context( WooProduct_Surface::TRIGGER_CART, $product, null, 10.0, [], [ 'data' => $product, 'key' => 'reset_key' ] );
+		$d = new Price_Decision( 5.0, Price_Decision::DURABLE, 'r', 'l', 'simple_price', 1 );
+		( new WooProduct_Surface() )->apply( $ctx, $d );
+		$this->assertNotNull( WooProduct_Surface::get_applied_for( 'reset_key' ) );
+
+		WooProduct_Surface::reset_publicized_registry( new \WC_Cart() );
+		$this->assertNull( WooProduct_Surface::get_applied_for( 'reset_key' ) );
+	}
+
+	public function test_acquisition_note_names_policy_product_and_both_prices() {
+		$note = WooProduct_Surface::acquisition_note( [
+			'policy_id' => '18',
+			'label'     => 'Intro',
+			'reason'    => 'step_at_1_discount_percent',
+			'amount'    => 5.0,
+			'original'  => 10.0,
+			'item_name' => 'Test Subscription',
+			'quantity'  => 1,
+		] );
+		$this->assertStringContainsString( '[policy 18]', $note );
+		$this->assertStringContainsString( 'Test Subscription', $note );
+		$this->assertStringContainsString( '$5.00', $note );
+		$this->assertStringContainsString( '$10.00', $note );
+		$this->assertStringContainsString( 'Intro', $note );
+	}
+
+	public function test_acquisition_note_falls_back_to_reason_when_label_empty() {
+		$note = WooProduct_Surface::acquisition_note( [
+			'policy_id' => '18',
+			'label'     => '',
+			'reason'    => 'simple_discount_percent',
+			'amount'    => 8.0,
+			'original'  => 10.0,
+			'item_name' => 'Test Subscription',
+			'quantity'  => 1,
+		] );
+		$this->assertStringContainsString( 'simple_discount_percent', $note );
+	}
+
+	public function test_note_acquisition_on_order_notes_each_priced_line_once() {
+		// Seed the registry via apply (one silent line).
+		$product = $this->mock_product_with_set_price();
+		$ctx = new Pricing_Context( WooProduct_Surface::TRIGGER_CART, $product, null, 10.0, [], [ 'data' => $product, 'key' => 'order_note_key' ] );
+		$d = new Price_Decision( 5.0, Price_Decision::DURABLE, 'simple_fixed_price', 'Promo', 'simple_price', 1 );
+		$d->policy_id = 'pol_o';
+		( new WooProduct_Surface() )->apply( $ctx, $d );
+
+		$order = $this->getMockBuilder( \WC_Order::class )
+			->disableOriginalConstructor()
+			->onlyMethods( [ 'get_meta', 'save' ] )
+			->addMethods( [ 'add_order_note', 'update_meta_data' ] )
+			->getMock();
+		$order->method( 'get_meta' )->willReturn( '' );
+		$order->expects( $this->once() )->method( 'add_order_note' )->with( $this->stringContains( '[policy pol_o]' ) );
+		$order->expects( $this->once() )->method( 'update_meta_data' )->with( '_newspack_dp_acquisition_noted', '1' );
+		$order->expects( $this->once() )->method( 'save' );
+
+		WooProduct_Surface::note_acquisition_on_order( $order );
+	}
+
+	public function test_note_acquisition_on_order_is_idempotent() {
+		$product = $this->mock_product_with_set_price();
+		$ctx = new Pricing_Context( WooProduct_Surface::TRIGGER_CART, $product, null, 10.0, [], [ 'data' => $product, 'key' => 'idem_key' ] );
+		$d = new Price_Decision( 5.0, Price_Decision::DURABLE, 'r', 'l', 'simple_price', 1 );
+		( new WooProduct_Surface() )->apply( $ctx, $d );
+
+		$order = $this->getMockBuilder( \WC_Order::class )
+			->disableOriginalConstructor()
+			->onlyMethods( [ 'get_meta', 'save' ] )
+			->addMethods( [ 'add_order_note', 'update_meta_data' ] )
+			->getMock();
+		// Already noted (e.g., the other checkout hook fired first).
+		$order->method( 'get_meta' )->willReturn( '1' );
+		$order->expects( $this->never() )->method( 'add_order_note' );
+
+		WooProduct_Surface::note_acquisition_on_order( $order );
 	}
 
 	private function mock_product_with_set_price(): \WC_Product {

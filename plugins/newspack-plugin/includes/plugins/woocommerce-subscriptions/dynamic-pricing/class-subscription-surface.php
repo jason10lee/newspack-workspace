@@ -12,6 +12,7 @@ use Newspack\Dynamic_Pricing\Price_Decision;
 use Newspack\Dynamic_Pricing\Price_Surface;
 use Newspack\Dynamic_Pricing\Pricing_Context;
 use Newspack\Dynamic_Pricing\Pricing_Engine;
+use Newspack\Dynamic_Pricing\WooProduct_Surface;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -40,6 +41,42 @@ final class Subscription_Surface implements Price_Surface {
 	 */
 	public static function init(): void {
 		add_action( 'woocommerce_subscription_payment_complete', [ __CLASS__, 'on_payment_complete' ], 20, 1 );
+
+		// Audit trail: WCS fires this for each subscription created at checkout
+		// (both classic and Store API flows route through WCS checkout creation).
+		// The acquisition (cycle 1) price was applied by WooProduct_Surface on the
+		// cart; without a note here the subscription has no record of why its
+		// first cycle differs from catalog.
+		add_action( 'woocommerce_checkout_subscription_created', [ __CLASS__, 'note_acquisition_on_subscription' ], 20, 3 );
+	}
+
+	/**
+	 * Note the acquisition pricing on a newly created subscription.
+	 *
+	 * Recurring carts are keyed clones of the main cart, so their item keys map
+	 * directly onto WooProduct_Surface's applied-decisions registry.
+	 *
+	 * @param \WC_Subscription $subscription   Newly created subscription.
+	 * @param \WC_Order        $order          Parent order.
+	 * @param \WC_Cart         $recurring_cart Recurring cart this subscription was created from.
+	 */
+	public static function note_acquisition_on_subscription( $subscription, $order, $recurring_cart ): void {
+		if ( ! $subscription instanceof \WC_Subscription || ! $recurring_cart instanceof \WC_Cart ) {
+			return;
+		}
+		foreach ( $recurring_cart->get_cart() as $cart_item_key => $cart_item ) {
+			$applied = WooProduct_Surface::get_applied_for( (string) $cart_item_key );
+			if ( ! $applied ) {
+				continue;
+			}
+			$subscription->add_order_note(
+				sprintf(
+					/* translators: 1: acquisition audit line (policy, product, prices) */
+					__( '%1$s Applied at acquisition (cycle 1); renewals are repriced after each payment.', 'newspack-plugin' ),
+					WooProduct_Surface::acquisition_note( $applied )
+				)
+			);
+		}
 	}
 
 	/**
