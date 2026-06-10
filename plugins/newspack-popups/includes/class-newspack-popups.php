@@ -734,14 +734,17 @@ final class Newspack_Popups {
 			]
 		);
 
-		\wp_register_style(
-			'newspack-popups-blocks',
-			plugins_url( '../dist/blocks.css', __FILE__ ),
-			[],
-			filemtime( trailingslashit( $dist_dir ) . 'blocks.css' )
-		);
-		wp_style_add_data( 'newspack-popups-blocks', 'rtl', 'replace' );
-		wp_enqueue_style( 'newspack-popups-blocks' );
+		$blocks_style_path = trailingslashit( $dist_dir ) . 'blocks.css';
+		if ( file_exists( $blocks_style_path ) ) {
+			\wp_register_style(
+				'newspack-popups-blocks',
+				plugins_url( '../dist/blocks.css', __FILE__ ),
+				[],
+				filemtime( $blocks_style_path )
+			);
+			wp_style_add_data( 'newspack-popups-blocks', 'rtl', 'replace' );
+			wp_enqueue_style( 'newspack-popups-blocks' );
+		}
 	}
 
 	/**
@@ -828,12 +831,15 @@ final class Newspack_Popups {
 				'segmentation_enabled'         => self::$segmentation_enabled,
 			]
 		);
-		\wp_enqueue_style(
-			'newspack-popups-editor',
-			plugins_url( '../dist/editor.css', __FILE__ ),
-			null,
-			filemtime( dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/editor.css' )
-		);
+		$editor_style_path = dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/editor.css';
+		if ( file_exists( $editor_style_path ) ) {
+			\wp_enqueue_style(
+				'newspack-popups-editor',
+				plugins_url( '../dist/editor.css', __FILE__ ),
+				null,
+				filemtime( $editor_style_path )
+			);
+		}
 	}
 
 	/**
