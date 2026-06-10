@@ -7,12 +7,12 @@
  * a cancelled subscriber who re-purchases would otherwise re-trigger the intro
  * step at cycle 1.
  *
- * Renewal-trigger contexts (`scheduled_step`) ALWAYS pass — the matcher only
- * gates acquisition. Without this, a stepped policy with `first_time_only` on
- * would fail at every renewal and the engine would abstain, leaving the line
- * item frozen at cycle-1 forever. Operators who want a strict
- * "no stepping after returners" policy should split into two: an intro-only
- * policy with `first_time_only` on, plus an unconditioned stepped policy.
+ * Renewal-intent contexts ALWAYS pass — the matcher only gates acquisition.
+ * Without this, a stepped policy with `first_time_only` on would fail at every
+ * renewal and the engine would abstain, leaving the line item frozen at
+ * cycle-1 forever. Operators who want a strict "no stepping after returners"
+ * policy should split into two: an intro-only policy with `first_time_only`
+ * on, plus an unconditioned stepped policy.
  *
  * @package Newspack
  */
@@ -21,7 +21,6 @@ namespace Newspack\Dynamic_Pricing\Matchers;
 
 use Newspack\Dynamic_Pricing\Condition_Matcher;
 use Newspack\Dynamic_Pricing\Pricing_Context;
-use Newspack\Dynamic_Pricing\WooProduct_Surface;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -38,7 +37,7 @@ final class First_Time_Only_Condition_Matcher implements Condition_Matcher {
 
 		// Only gate the acquisition path. Renewals always pass so stepped policies
 		// keep applying their schedule to existing subscribers.
-		if ( WooProduct_Surface::TRIGGER_CART !== $ctx->trigger ) {
+		if ( Pricing_Context::INTENT_ACQUISITION !== $ctx->intent ) {
 			return true;
 		}
 

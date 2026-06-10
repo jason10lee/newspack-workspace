@@ -79,8 +79,8 @@ class Newspack_Test_Dynamic_Pricing_End_To_End extends WP_UnitTestCase {
 		// Seed wc-mocks product database so Subscription_Surface::context()'s
 		// wc_get_product( $product_id ) returns the same instance the policy scopes to.
 		// `_subscription_price` is what WC_Subscriptions_Product::get_price() reads to
-		// drive Pricing_Context::base_price (the basis for the strategy's "step amount
-		// equals base ⇒ no decision" short-circuit at cycle 1).
+		// drive Pricing_Context::base_price (the amount the cycle-1 step resolves equal
+		// to, exercising the apply()-side no-op guard on the first walk step).
 		wc_create_mock_product( [
 			'id'   => self::PRODUCT_ID,
 			'type' => 'subscription',
@@ -113,12 +113,21 @@ class Newspack_Test_Dynamic_Pricing_End_To_End extends WP_UnitTestCase {
 		$surface = Pricing_Engine::instance()->surface( 'subscription' );
 		$this->assertNotNull( $surface, 'Subscription surface must be registered after bootstrap wiring.' );
 
-		// --- Cycle 1 paid: upcoming=2; step_at_1 ($1) === base ⇒ strategy returns null. ---
+		// --- Cycle 1 paid: upcoming=2; step_at_1 ($1) === base. On this price-persisting
+		// surface the strategy still EMITS the decision (abstaining would leave a prior
+		// write in place forever); the surface's apply() is the no-op layer, bailing on
+		// the subtotal-equality guard before any writes.
 		$this->completed_payments = 1;
 		$ctx = $surface->context( $this->sub, Subscription_Surface::TRIGGER_SCHEDULED_STEP );
 		$this->assertSame( 2, $ctx->signals['completed_cycles'] );
+		$this->assertTrue( $ctx->persists_price, 'Subscription surface contexts must declare price persistence.' );
 		$d = Pricing_Engine::instance()->resolve( $ctx );
-		$this->assertNull( $d, 'No decision expected at cycle 1 (step_at_1 amount equals base).' );
+		$this->assertNotNull( $d, 'Strategy must emit base-equal decisions on a price-persisting surface.' );
+		$this->assertSame( 1.0, $d->amount );
+
+		$surface->apply( $ctx, $d );
+		$this->assertSame( self::BASE_PRICE, $this->line_subtotal, 'Apply must short-circuit when subtotal already matches.' );
+		$this->assertSame( [], $this->state_meta, 'No-op apply must not record state.' );
 
 		// --- Cycle 3 paid: upcoming=4; step_at_4 ($8) ≠ base ⇒ persist $8. ---
 		$this->completed_payments = 3;

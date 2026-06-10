@@ -51,6 +51,8 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 		$this->assertSame( 4, $ctx->signals['completed_cycles'] );
 		$this->assertSame( Subscription_Surface::TRIGGER_SCHEDULED_STEP, $ctx->trigger );
 		$this->assertSame( $sub, $ctx->target );
+		$this->assertSame( Pricing_Context::INTENT_RENEWAL, $ctx->intent );
+		$this->assertTrue( $ctx->persists_price, 'Stateful surface contexts must declare price persistence.' );
 	}
 
 	public function test_apply_persists_amount_onto_recurring_line_item() {

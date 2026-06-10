@@ -100,7 +100,9 @@ final class Subscription_Surface implements Price_Surface {
 			$customer,
 			$base_price,
 			[ 'completed_cycles' => $upcoming_cycle ],
-			$sub
+			$sub,
+			Pricing_Context::INTENT_RENEWAL,
+			$this->is_stateful()
 		);
 	}
 

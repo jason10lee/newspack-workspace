@@ -42,7 +42,7 @@ class Newspack_Test_First_Time_Only_Condition_Matcher extends WP_UnitTestCase {
 	}
 
 	public function test_off_value_passes() {
-		$ctx = $this->build_context( WooProduct_Surface::TRIGGER_CART, 42, 100 );
+		$ctx = $this->build_context( Pricing_Context::INTENT_ACQUISITION, 42, 100 );
 		// Even if user has a prior sub, value=false (condition off) short-circuits.
 		$this->seed_prior_sub( 100, 42 );
 		$this->assertTrue( $this->matcher->matches( $ctx, false ) );
@@ -50,38 +50,38 @@ class Newspack_Test_First_Time_Only_Condition_Matcher extends WP_UnitTestCase {
 		$this->assertTrue( $this->matcher->matches( $ctx, 0 ) );
 	}
 
-	public function test_renewal_trigger_passes_for_returner() {
-		$ctx = $this->build_context( 'scheduled_step', 42, 100 );
+	public function test_renewal_intent_passes_for_returner() {
+		$ctx = $this->build_context( Pricing_Context::INTENT_RENEWAL, 42, 100 );
 		$this->seed_prior_sub( 100, 42 );
 		// Renewal context — matcher always passes so stepped policies keep stepping.
 		$this->assertTrue( $this->matcher->matches( $ctx, true ) );
 	}
 
 	public function test_guest_is_first_time() {
-		$ctx = $this->build_context( WooProduct_Surface::TRIGGER_CART, 42, 0 );
+		$ctx = $this->build_context( Pricing_Context::INTENT_ACQUISITION, 42, 0 );
 		$this->assertTrue( $this->matcher->matches( $ctx, true ) );
 	}
 
-	public function test_first_timer_passes_on_cart() {
-		$ctx = $this->build_context( WooProduct_Surface::TRIGGER_CART, 42, 100 );
+	public function test_first_timer_passes_on_acquisition() {
+		$ctx = $this->build_context( Pricing_Context::INTENT_ACQUISITION, 42, 100 );
 		// No prior subs seeded — user is first-time for this product.
 		$this->assertTrue( $this->matcher->matches( $ctx, true ) );
 	}
 
-	public function test_returner_fails_on_cart() {
-		$ctx = $this->build_context( WooProduct_Surface::TRIGGER_CART, 42, 100 );
+	public function test_returner_fails_on_acquisition() {
+		$ctx = $this->build_context( Pricing_Context::INTENT_ACQUISITION, 42, 100 );
 		$this->seed_prior_sub( 100, 42 );
 		$this->assertFalse( $this->matcher->matches( $ctx, true ) );
 	}
 
 	public function test_returner_to_different_product_passes() {
-		$ctx = $this->build_context( WooProduct_Surface::TRIGGER_CART, 42, 100 );
+		$ctx = $this->build_context( Pricing_Context::INTENT_ACQUISITION, 42, 100 );
 		// User had a sub to product 99, NOT product 42 — first-time for 42.
 		$this->seed_prior_sub( 100, 99 );
 		$this->assertTrue( $this->matcher->matches( $ctx, true ) );
 	}
 
-	private function build_context( string $trigger, int $product_id, int $user_id ): Pricing_Context {
+	private function build_context( string $intent, int $product_id, int $user_id ): Pricing_Context {
 		$product = $this->getMockBuilder( \WC_Product::class )->disableOriginalConstructor()->getMock();
 		$product->method( 'get_id' )->willReturn( $product_id );
 		$product->method( 'get_type' )->willReturn( 'subscription' );
@@ -92,7 +92,8 @@ class Newspack_Test_First_Time_Only_Condition_Matcher extends WP_UnitTestCase {
 			$customer->method( 'get_id' )->willReturn( $user_id );
 		}
 
-		return new Pricing_Context( $trigger, $product, $customer, 10.0, [], null );
+		$trigger = Pricing_Context::INTENT_ACQUISITION === $intent ? WooProduct_Surface::TRIGGER_CART : 'scheduled_step';
+		return new Pricing_Context( $trigger, $product, $customer, 10.0, [], null, $intent, Pricing_Context::INTENT_RENEWAL === $intent );
 	}
 
 	private function seed_prior_sub( int $user_id, int $product_id ): void {

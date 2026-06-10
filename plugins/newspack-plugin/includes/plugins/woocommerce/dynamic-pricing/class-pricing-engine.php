@@ -91,6 +91,12 @@ final class Pricing_Engine {
 	 * Newspack-specific exclusions (donations, group subscriptions, pause meta)
 	 * hook in via the `newspack_dynamic_pricing_is_excluded` filter from
 	 * Newspack\Dynamic_Pricing_Bridges (Task 11). See spec §16.1.
+	 *
+	 * These checks gate WC_Subscription targets, i.e. the renewal surface. The
+	 * acquisition-side mirror lives in WooProduct_Surface::is_eligible_cart_item():
+	 * a cart item whose future subscription would be excluded here (gifted,
+	 * multi-line) must not receive an acquisition grant either, or the
+	 * subscription is frozen at the granted price forever. Keep the two in sync.
 	 */
 	private function is_excluded( \WC_Product $product, mixed $target ): bool {
 		if (

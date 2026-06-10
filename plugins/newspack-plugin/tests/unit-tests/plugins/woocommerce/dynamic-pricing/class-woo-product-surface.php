@@ -29,6 +29,46 @@ class Newspack_Test_WooProduct_Surface extends WP_UnitTestCase {
 		$this->assertSame( 'cart', WooProduct_Surface::TRIGGER_CART );
 	}
 
+	public function test_eligible_cart_item_requires_product_data() {
+		$this->assertFalse( WooProduct_Surface::is_eligible_cart_item( null ) );
+		$this->assertFalse( WooProduct_Surface::is_eligible_cart_item( [] ) );
+		$this->assertFalse( WooProduct_Surface::is_eligible_cart_item( [ 'data' => 'not-a-product' ] ) );
+		$this->assertTrue( WooProduct_Surface::is_eligible_cart_item( [ 'data' => $this->mock_product_with_set_price() ] ) );
+	}
+
+	public function test_renewal_family_cart_items_are_not_eligible() {
+		$product = $this->mock_product_with_set_price();
+		foreach ( [ 'subscription_renewal', 'subscription_resubscribe', 'subscription_switch' ] as $key ) {
+			$this->assertFalse(
+				WooProduct_Surface::is_eligible_cart_item( [ 'data' => $product, $key => [ 'subscription_id' => 99 ] ] ),
+				"Cart items flagged {$key} are not acquisitions and must not be priced by this surface."
+			);
+		}
+	}
+
+	public function test_gifted_cart_items_are_not_eligible() {
+		$product = $this->mock_product_with_set_price();
+		$this->assertFalse(
+			WooProduct_Surface::is_eligible_cart_item( [ 'data' => $product, 'wcsg_gift_recipients_email' => 'recipient@example.com' ] ),
+			'Gifted items produce subscriptions the renewal surface excludes; no acquisition grant.'
+		);
+	}
+
+	public function test_context_declares_acquisition_intent_without_price_persistence() {
+		$product = $this->getMockBuilder( \WC_Product::class )
+			->disableOriginalConstructor()
+			->onlyMethods( [ 'get_type' ] )
+			->addMethods( [ 'get_regular_price' ] )
+			->getMock();
+		$product->method( 'get_type' )->willReturn( 'subscription' );
+		$product->method( 'get_regular_price' )->willReturn( '10' );
+
+		$ctx = ( new WooProduct_Surface() )->context( [ 'data' => $product ], WooProduct_Surface::TRIGGER_CART );
+
+		$this->assertSame( Pricing_Context::INTENT_ACQUISITION, $ctx->intent );
+		$this->assertFalse( $ctx->persists_price );
+	}
+
 	public function test_context_signals_completed_cycles_is_one() {
 		$product = $this->getMockBuilder( \WC_Product::class )
 			->disableOriginalConstructor()

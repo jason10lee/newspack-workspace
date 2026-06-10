@@ -11,7 +11,6 @@ use Newspack\Dynamic_Pricing\Amount_Calculator;
 use Newspack\Dynamic_Pricing\Price_Decision;
 use Newspack\Dynamic_Pricing\Pricing_Context;
 use Newspack\Dynamic_Pricing\Pricing_Strategy;
-use Newspack\Dynamic_Pricing\WooProduct_Surface;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -40,12 +39,9 @@ final class Stepped_By_Cycle_Strategy implements Pricing_Strategy {
 	}
 
 	public function applies_to( Pricing_Context $ctx, array $params ): bool {
-		$valid_triggers = [
-			Subscription_Surface::TRIGGER_SCHEDULED_STEP,
-			WooProduct_Surface::TRIGGER_CART,
-		];
-		return in_array( $ctx->trigger, $valid_triggers, true )
-			&& isset( $ctx->signals['completed_cycles'] );
+		// The strategy's real dependency is the cycle signal, not a list of known
+		// surfaces: any surface that can say which cycle it is pricing can be stepped.
+		return isset( $ctx->signals['completed_cycles'] );
 	}
 
 	public function decide( Pricing_Context $ctx, array $params ): ?Price_Decision {
@@ -69,7 +65,12 @@ final class Stepped_By_Cycle_Strategy implements Pricing_Strategy {
 			(float) $step['value'],
 			$ctx->base_price
 		);
-		if ( abs( $amount - $ctx->base_price ) < 0.01 ) {
+		// On a stateless surface, abstaining IS the catalog price, so a step that
+		// resolves to base is a no-op and abstaining avoids pointless publicity.
+		// On a price-persisting surface the last written amount sticks: a restore
+		// step (amount == base) MUST be emitted so the surface writes the price
+		// back up — Subscription_Surface::apply() short-circuits true no-ops.
+		if ( ! $ctx->persists_price && abs( $amount - $ctx->base_price ) < 0.01 ) {
 			return null;
 		}
 

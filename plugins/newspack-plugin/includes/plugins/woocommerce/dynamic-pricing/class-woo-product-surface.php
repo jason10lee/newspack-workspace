@@ -7,11 +7,29 @@
  * via `$cart_item['data']->set_price()` so WC totals are computed against the
  * policy-resolved amount.
  *
- * Acquisition contract: a cart-time context resolves with
+ * Acquisition contract: this surface prices ACQUISITIONS ONLY — cart items
+ * that create a new subscription. Contexts carry
+ * `Pricing_Context::INTENT_ACQUISITION` and resolve with
  * `signals['completed_cycles'] = 1` so a `Stepped_By_Cycle_Strategy` policy
  * grants its `step_at_1` price at checkout (cycle 1 = first invoice). After
- * `payment_complete` fires, the stateful `Subscription_Surface` takes over for
- * cycles 2+.
+ * `payment_complete` fires, the stateful `Subscription_Surface` owns all
+ * subsequent repricing (cycles 2+).
+ *
+ * Two classes of cart item are therefore ineligible (see is_eligible_cart_item):
+ *
+ * 1. WCS renewal-family items (`subscription_renewal`, `subscription_resubscribe`,
+ *    `subscription_switch`) — not acquisitions. WCS seeds their price from the
+ *    existing subscription; repricing them here would grant the cycle-1 intro
+ *    price to a manual/early renewal, a lapsed-subscriber resubscribe (a
+ *    cancel-and-resubscribe loophole around stepped pricing), or a prorated switch.
+ *
+ * 2. Items whose future subscription the renewal surface will refuse to manage —
+ *    the acquisition-side mirror of Pricing_Engine::is_excluded(): gifted items
+ *    (recipient ≠ purchaser) and items that will be grouped into a multi-line
+ *    subscription. Granting an intro price at cart while the renewal surface is
+ *    excluded would freeze the subscription at the intro amount forever.
+ *    (Currency has no cart mirror: a subscription is created in the current
+ *    store currency, so a mismatch cannot exist at acquisition time.)
  *
  * @package Newspack
  */
@@ -75,7 +93,7 @@ final class WooProduct_Surface implements Price_Surface {
 		}
 
 		foreach ( $cart->get_cart() as $cart_item ) {
-			if ( ! isset( $cart_item['data'] ) || ! ( $cart_item['data'] instanceof \WC_Product ) ) {
+			if ( ! self::is_eligible_cart_item( $cart_item ) ) {
 				continue;
 			}
 			$ctx = $surface->context( $cart_item, self::TRIGGER_CART );
@@ -84,6 +102,65 @@ final class WooProduct_Surface implements Price_Surface {
 				$surface->apply( $ctx, $d );
 			}
 		}
+	}
+
+	/**
+	 * Whether this surface may price a cart item. See the file header for the
+	 * acquisition contract this enforces. Shared by the totals pass and every
+	 * display path (via get_publicized_apply_for) so the price applied and the
+	 * price communicated can never disagree on eligibility.
+	 *
+	 * @internal Public for tests.
+	 *
+	 * @param mixed $cart_item Cart item array.
+	 */
+	public static function is_eligible_cart_item( $cart_item ): bool {
+		if ( ! is_array( $cart_item ) || ! isset( $cart_item['data'] ) || ! ( $cart_item['data'] instanceof \WC_Product ) ) {
+			return false;
+		}
+
+		// WCS renewal-family items are not acquisitions.
+		foreach ( [ 'subscription_renewal', 'subscription_resubscribe', 'subscription_switch' ] as $key ) {
+			if ( ! empty( $cart_item[ $key ] ) ) {
+				return false;
+			}
+		}
+
+		// Gifted: the resulting subscription belongs to the recipient and the
+		// renewal surface excludes it (Pricing_Engine::is_excluded), so an intro
+		// grant here could never be stepped afterwards.
+		if ( ! empty( $cart_item['wcsg_gift_recipients_email'] ) ) {
+			return false;
+		}
+
+		// Multi-line-bound: WCS groups cart items sharing a recurring cart key
+		// into ONE subscription with multiple line items, which the renewal
+		// surface excludes. Don't grant at cart what renewal can't manage.
+		if (
+			class_exists( '\WC_Subscriptions_Cart' )
+			&& class_exists( '\WC_Subscriptions_Product' )
+			&& method_exists( '\WC_Subscriptions_Cart', 'get_recurring_cart_key' )
+			&& \WC_Subscriptions_Product::is_subscription( $cart_item['data'] )
+			&& function_exists( 'WC' ) && WC() && WC()->cart
+		) {
+			$item_key = \WC_Subscriptions_Cart::get_recurring_cart_key( $cart_item );
+			$siblings = 0;
+			foreach ( WC()->cart->get_cart() as $other ) {
+				if (
+					isset( $other['data'] )
+					&& $other['data'] instanceof \WC_Product
+					&& \WC_Subscriptions_Product::is_subscription( $other['data'] )
+					&& \WC_Subscriptions_Cart::get_recurring_cart_key( $other ) === $item_key
+				) {
+					$siblings++;
+				}
+			}
+			if ( $siblings > 1 ) {
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	public function context( $target, string $trigger ): Pricing_Context {
@@ -112,7 +189,9 @@ final class WooProduct_Surface implements Price_Surface {
 			$customer,
 			$base_price,
 			[ 'completed_cycles' => 1 ],
-			$target
+			$target,
+			Pricing_Context::INTENT_ACQUISITION,
+			$this->is_stateful()
 		);
 	}
 
@@ -166,7 +245,7 @@ final class WooProduct_Surface implements Price_Surface {
 			return null;
 		}
 		$cart_item = WC()->cart->get_cart_item( $cart_item_key );
-		if ( ! is_array( $cart_item ) || ! isset( $cart_item['data'] ) || ! ( $cart_item['data'] instanceof \WC_Product ) ) {
+		if ( ! self::is_eligible_cart_item( $cart_item ) ) {
 			return null;
 		}
 
