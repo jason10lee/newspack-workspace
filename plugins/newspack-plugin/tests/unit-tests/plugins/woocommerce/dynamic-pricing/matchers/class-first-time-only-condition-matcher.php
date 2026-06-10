@@ -9,12 +9,19 @@ use Newspack\Dynamic_Pricing\Matchers\First_Time_Only_Condition_Matcher;
 use Newspack\Dynamic_Pricing\Pricing_Context;
 use Newspack\Dynamic_Pricing\WooProduct_Surface;
 
-// Mock for wcs_user_has_subscription — driven by a global so tests can seed prior subs.
+// Mock for wcs_user_has_subscription — driven by a global mapping
+// [user_id][product_id] => subscription status, honoring the $status filter the
+// way WCS does (empty = any status; string or array = only those).
 if ( ! function_exists( 'wcs_user_has_subscription' ) ) {
 	function wcs_user_has_subscription( $user_id, $product_id = 0, $status = '' ) {
 		global $newspack_test_dp_prior_subs;
 		$newspack_test_dp_prior_subs = $newspack_test_dp_prior_subs ?? [];
-		return isset( $newspack_test_dp_prior_subs[ (int) $user_id ][ (int) $product_id ] );
+		$sub_status = $newspack_test_dp_prior_subs[ (int) $user_id ][ (int) $product_id ] ?? null;
+		if ( null === $sub_status ) {
+			return false;
+		}
+		$statuses = array_filter( (array) $status );
+		return empty( $statuses ) || in_array( $sub_status, $statuses, true );
 	}
 }
 
@@ -81,6 +88,21 @@ class Newspack_Test_First_Time_Only_Condition_Matcher extends WP_UnitTestCase {
 		$this->assertTrue( $this->matcher->matches( $ctx, true ) );
 	}
 
+	public function test_in_flight_pending_subscription_does_not_count_as_prior() {
+		$ctx = $this->build_context( Pricing_Context::INTENT_ACQUISITION, 42, 100 );
+		// WCS creates a `pending` subscription during the very checkout being
+		// priced (and `on-hold` after a failed first payment) — neither marks a
+		// real prior subscriber, or a payment retry would lose the intro price.
+		$this->seed_prior_sub( 100, 42, 'pending' );
+		$this->assertTrue( $this->matcher->matches( $ctx, true ) );
+
+		$this->seed_prior_sub( 100, 42, 'on-hold' );
+		$this->assertTrue( $this->matcher->matches( $ctx, true ) );
+
+		$this->seed_prior_sub( 100, 42, 'expired' );
+		$this->assertFalse( $this->matcher->matches( $ctx, true ), 'An expired subscription is a real prior subscriber.' );
+	}
+
 	private function build_context( string $intent, int $product_id, int $user_id ): Pricing_Context {
 		$product = $this->getMockBuilder( \WC_Product::class )->disableOriginalConstructor()->getMock();
 		$product->method( 'get_id' )->willReturn( $product_id );
@@ -96,8 +118,8 @@ class Newspack_Test_First_Time_Only_Condition_Matcher extends WP_UnitTestCase {
 		return new Pricing_Context( $trigger, $product, $customer, 10.0, [], null, $intent, Pricing_Context::INTENT_RENEWAL === $intent );
 	}
 
-	private function seed_prior_sub( int $user_id, int $product_id ): void {
+	private function seed_prior_sub( int $user_id, int $product_id, string $status = 'active' ): void {
 		global $newspack_test_dp_prior_subs;
-		$newspack_test_dp_prior_subs[ $user_id ][ $product_id ] = true;
+		$newspack_test_dp_prior_subs[ $user_id ][ $product_id ] = $status;
 	}
 }

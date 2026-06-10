@@ -17,6 +17,7 @@ namespace Newspack\Dynamic_Pricing\Admin;
 
 use Newspack\Dynamic_Pricing\Amount_Calculator;
 use Newspack\Dynamic_Pricing\Dynamic_Pricing;
+use Newspack\Dynamic_Pricing\Policy;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -62,14 +63,17 @@ final class Policy_Edit_UI {
 	}
 
 	public static function render_settings_metabox( \WP_Post $post ): void {
-		$strategy_id  = (string) get_post_meta( $post->ID, '_strategy_id', true ) ?: 'stepped_by_cycle';
-		$priority     = (int) ( get_post_meta( $post->ID, '_priority', true ) ?: 100 );
-		$compose_mode = (string) get_post_meta( $post->ID, '_compose_mode', true ) ?: 'min';
-		$scope_type   = (string) get_post_meta( $post->ID, '_scope_type', true ) ?: 'all_subscriptions';
-		$scope_value  = self::scope_value_string( $post->ID, $scope_type );
-		$active_from  = (string) get_post_meta( $post->ID, '_active_from', true );
-		$active_until = (string) get_post_meta( $post->ID, '_active_until', true );
-		$publicize    = '1' === (string) get_post_meta( $post->ID, '_publicize', true );
+		// Hydrate through the entity — Policy::from_post() is the one canonical
+		// decoder of policy meta; the UI must not re-implement it.
+		$policy       = Policy::from_post( $post );
+		$strategy_id  = $policy->strategy_id ?: 'stepped_by_cycle';
+		$priority     = $policy->priority;
+		$compose_mode = $policy->compose_mode;
+		$scope_type   = $policy->scope_type;
+		$scope_value  = implode( ', ', $policy->scope_ids );
+		$active_from  = $policy->active_from;
+		$active_until = $policy->active_until;
+		$publicize    = $policy->publicize;
 
 		wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD );
 		?>
@@ -123,14 +127,14 @@ final class Policy_Edit_UI {
 				<th><label for="newspack_dp_active_from"><?php esc_html_e( 'Active from', 'newspack-plugin' ); ?></label></th>
 				<td>
 					<input type="datetime-local" name="newspack_dp_active_from" id="newspack_dp_active_from" value="<?php echo esc_attr( self::ts_to_local( $active_from ) ); ?>" />
-					<p class="description"><?php esc_html_e( 'Optional. UTC. Empty = active immediately.', 'newspack-plugin' ); ?></p>
+					<p class="description"><?php esc_html_e( 'Optional. Site timezone. Empty = active immediately.', 'newspack-plugin' ); ?></p>
 				</td>
 			</tr>
 			<tr>
 				<th><label for="newspack_dp_active_until"><?php esc_html_e( 'Active until', 'newspack-plugin' ); ?></label></th>
 				<td>
 					<input type="datetime-local" name="newspack_dp_active_until" id="newspack_dp_active_until" value="<?php echo esc_attr( self::ts_to_local( $active_until ) ); ?>" />
-					<p class="description"><?php esc_html_e( 'Optional. UTC. Empty = no expiry.', 'newspack-plugin' ); ?></p>
+					<p class="description"><?php esc_html_e( 'Optional. Site timezone. Empty = no expiry.', 'newspack-plugin' ); ?></p>
 				</td>
 			</tr>
 			<tr>
@@ -148,8 +152,7 @@ final class Policy_Edit_UI {
 	}
 
 	public static function render_conditions_metabox( \WP_Post $post ): void {
-		$conditions      = self::read_conditions( $post->ID );
-		$first_time_only = self::condition_value( $conditions, 'first_time_only' );
+		$first_time_only = self::condition_value( Policy::from_post( $post )->conditions, 'first_time_only' );
 		?>
 		<p class="description">
 			<?php esc_html_e( 'Conditions gate whether this policy applies to a given purchase. All checked conditions must pass; an unchecked policy has no eligibility restrictions.', 'newspack-plugin' ); ?>
@@ -171,18 +174,6 @@ final class Policy_Edit_UI {
 		<?php
 	}
 
-	private static function read_conditions( int $post_id ): array {
-		$raw = get_post_meta( $post_id, '_conditions', true );
-		if ( is_array( $raw ) ) {
-			return $raw;
-		}
-		if ( is_string( $raw ) && '' !== $raw ) {
-			$decoded = json_decode( $raw, true );
-			return is_array( $decoded ) ? $decoded : [];
-		}
-		return [];
-	}
-
 	private static function condition_value( array $conditions, string $type ): mixed {
 		foreach ( $conditions as $c ) {
 			if ( is_array( $c ) && ( $c['type'] ?? null ) === $type ) {
@@ -193,9 +184,8 @@ final class Policy_Edit_UI {
 	}
 
 	public static function render_steps_metabox( \WP_Post $post ): void {
-		$params_raw = get_post_meta( $post->ID, '_params', true );
-		$params     = is_string( $params_raw ) ? ( json_decode( $params_raw, true ) ?: [] ) : ( is_array( $params_raw ) ? $params_raw : [] );
-		$steps      = is_array( $params['steps'] ?? null ) ? $params['steps'] : [];
+		$params = Policy::from_post( $post )->params;
+		$steps  = is_array( $params['steps'] ?? null ) ? $params['steps'] : [];
 		?>
 		<p class="description"><?php esc_html_e( 'Each step has: cycle threshold (at), calculation type, value, and a human label. The strategy picks the highest "at" ≤ completed_cycles+1.', 'newspack-plugin' ); ?></p>
 		<table id="newspack_dp_steps_table" class="widefat striped" style="margin-top: 10px">
@@ -301,10 +291,7 @@ final class Policy_Edit_UI {
 
 		if ( in_array( $scope_type, [ 'product_ids', 'category' ], true ) ) {
 			$scope_raw = isset( $_POST['newspack_dp_scope_value'] ) ? sanitize_text_field( wp_unslash( $_POST['newspack_dp_scope_value'] ) ) : '';
-			$ids       = array_filter(
-				array_map( 'intval', array_map( 'trim', explode( ',', $scope_raw ) ) ),
-				fn( int $i ): bool => $i > 0
-			);
+			$ids       = array_filter( wp_parse_id_list( $scope_raw ), fn( int $i ): bool => $i > 0 );
 			$meta_key  = 'product_ids' === $scope_type ? '_scope_product_id' : '_scope_category_id';
 			foreach ( $ids as $id ) {
 				add_post_meta( $post_id, $meta_key, $id );
@@ -348,7 +335,9 @@ final class Policy_Edit_UI {
 			];
 		}
 		usort( $steps_out, fn( array $a, array $b ): int => $a['at'] <=> $b['at'] );
-		update_post_meta( $post_id, '_params', wp_json_encode( [ 'steps' => $steps_out ] ) );
+		// wp_slash: update_metadata() wp_unslash()es its value, which would strip the
+		// backslashes JSON uses to escape quotes inside labels and corrupt the blob.
+		update_post_meta( $post_id, '_params', wp_slash( wp_json_encode( [ 'steps' => $steps_out ] ) ) );
 
 		// Conditions: read the structured array from $_POST, build a normalized list of
 		// {type, value} entries, and persist as JSON for Policy::from_post() to decode.
@@ -363,7 +352,7 @@ final class Policy_Edit_UI {
 		if ( empty( $conditions_out ) ) {
 			delete_post_meta( $post_id, '_conditions' );
 		} else {
-			update_post_meta( $post_id, '_conditions', wp_json_encode( $conditions_out ) );
+			update_post_meta( $post_id, '_conditions', wp_slash( wp_json_encode( $conditions_out ) ) );
 		}
 	}
 
@@ -444,41 +433,44 @@ JS;
 	}
 
 	public static function render_list_column( string $column, int $post_id ): void {
+		$post = get_post( $post_id );
+		if ( ! $post ) {
+			return;
+		}
+		$policy = Policy::from_post( $post );
 		switch ( $column ) {
 			case 'newspack_dp_strategy':
-				echo esc_html( (string) get_post_meta( $post_id, '_strategy_id', true ) );
+				echo esc_html( $policy->strategy_id );
 				break;
 			case 'newspack_dp_scope':
-				$scope_type = (string) get_post_meta( $post_id, '_scope_type', true );
-				$value      = self::scope_value_string( $post_id, $scope_type );
-				echo esc_html( '' !== $value ? "{$scope_type}: {$value}" : $scope_type );
+				$value = implode( ', ', $policy->scope_ids );
+				echo esc_html( '' !== $value ? "{$policy->scope_type}: {$value}" : $policy->scope_type );
 				break;
 			case 'newspack_dp_priority':
-				echo esc_html( (string) (int) ( get_post_meta( $post_id, '_priority', true ) ?: 100 ) );
+				echo esc_html( (string) $policy->priority );
 				break;
 		}
 	}
 
-	private static function scope_value_string( int $post_id, string $scope_type ): string {
-		return match ( $scope_type ) {
-			'product_ids' => implode( ', ', array_map( 'intval', (array) get_post_meta( $post_id, '_scope_product_id', false ) ) ),
-			'category'    => implode( ', ', array_map( 'intval', (array) get_post_meta( $post_id, '_scope_category_id', false ) ) ),
-			default       => '',
-		};
-	}
-
-	private static function ts_to_local( string $ts ): string {
-		if ( '' === $ts ) {
+	/**
+	 * UTC timestamp → site-timezone string for the datetime-local input.
+	 */
+	private static function ts_to_local( ?int $ts ): string {
+		if ( null === $ts ) {
 			return '';
 		}
-		return gmdate( 'Y-m-d\TH:i', (int) $ts );
+		return get_date_from_gmt( gmdate( 'Y-m-d H:i:s', $ts ), 'Y-m-d\TH:i' );
 	}
 
+	/**
+	 * Site-timezone datetime-local input value → UTC timestamp.
+	 */
 	private static function local_to_ts( string $local ): ?int {
 		if ( '' === $local ) {
 			return null;
 		}
-		$ts = strtotime( $local . ':00 UTC' );
-		return false === $ts ? null : (int) $ts;
+		$gmt = get_gmt_from_date( str_replace( 'T', ' ', $local ) . ':00' );
+		$ts  = strtotime( $gmt . ' UTC' );
+		return false === $ts ? null : $ts;
 	}
 }

@@ -23,6 +23,13 @@ class Newspack_Test_All_Subscriptions_Scope_Matcher extends WP_UnitTestCase {
 		$this->assertTrue( ( new All_Subscriptions_Scope_Matcher() )->matches( $product, null ) );
 	}
 
+	public function test_matches_subscription_variation_product() {
+		// Surfaces resolve the VARIATION for variable subscriptions — it must match.
+		$product = $this->getMockBuilder( \WC_Product::class )->disableOriginalConstructor()->getMock();
+		$product->method( 'get_type' )->willReturn( 'subscription_variation' );
+		$this->assertTrue( ( new All_Subscriptions_Scope_Matcher() )->matches( $product, null ) );
+	}
+
 	public function test_does_not_match_simple_product() {
 		$product = $this->getMockBuilder( \WC_Product::class )->disableOriginalConstructor()->getMock();
 		$product->method( 'get_type' )->willReturn( 'simple' );

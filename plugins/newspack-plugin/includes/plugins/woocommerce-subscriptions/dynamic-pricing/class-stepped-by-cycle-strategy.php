@@ -19,6 +19,11 @@ final class Stepped_By_Cycle_Strategy implements Pricing_Strategy {
 		return 'stepped_by_cycle';
 	}
 
+	/**
+	 * Declared constraints for `params`. Enforced by normalized_steps() — the
+	 * strategy is the single validation layer, so policies authored via the admin
+	 * UI, WP-CLI, or raw meta all get the same treatment at decision time.
+	 */
 	public function config_schema(): array {
 		return [
 			'steps' => [
@@ -46,13 +51,10 @@ final class Stepped_By_Cycle_Strategy implements Pricing_Strategy {
 
 	public function decide( Pricing_Context $ctx, array $params ): ?Price_Decision {
 		$cycle = (int) ( $ctx->signals['completed_cycles'] ?? 0 );
-		$steps = is_array( $params['steps'] ?? null ) ? $params['steps'] : [];
 		$step  = null;
-		foreach ( $steps as $candidate ) {
-			if ( ! is_array( $candidate ) || ! isset( $candidate['at'] ) ) {
-				continue;
-			}
-			if ( $cycle >= (int) $candidate['at'] ) {
+		foreach ( $this->normalized_steps( $params ) as $candidate ) {
+			// Highest `at` ≤ cycle wins — independent of authored order.
+			if ( $cycle >= $candidate['at'] && ( null === $step || $candidate['at'] > $step['at'] ) ) {
 				$step = $candidate;
 			}
 		}
@@ -82,5 +84,35 @@ final class Stepped_By_Cycle_Strategy implements Pricing_Strategy {
 			$this->id(),
 			$cycle
 		);
+	}
+
+	/**
+	 * Enforce config_schema() on raw params: drop malformed steps (missing/invalid
+	 * `at`, unsupported calc_type, negative value) and coerce field types, so the
+	 * decision logic only ever sees well-formed steps regardless of author path.
+	 *
+	 * @return array<int, array{at: int, calc_type: string, value: float, label: string}>
+	 */
+	private function normalized_steps( array $params ): array {
+		$raw   = is_array( $params['steps'] ?? null ) ? $params['steps'] : [];
+		$steps = [];
+		foreach ( $raw as $candidate ) {
+			if ( ! is_array( $candidate ) || ! isset( $candidate['at'] ) ) {
+				continue;
+			}
+			$at        = (int) $candidate['at'];
+			$calc_type = (string) ( $candidate['calc_type'] ?? '' );
+			$value     = (float) ( $candidate['value'] ?? -1 );
+			if ( $at < 1 || $value < 0 || ! in_array( $calc_type, Amount_Calculator::supported_types(), true ) ) {
+				continue;
+			}
+			$steps[] = [
+				'at'        => $at,
+				'calc_type' => $calc_type,
+				'value'     => $value,
+				'label'     => (string) ( $candidate['label'] ?? '' ),
+			];
+		}
+		return $steps;
 	}
 }

@@ -61,6 +61,14 @@ class Newspack_Test_Policy extends WP_UnitTestCase {
 		$this->assertSame( 'min', $policy->compose_mode );
 	}
 
+	public function test_scope_type_defaults_to_all_subscriptions_when_meta_absent() {
+		$post_id = $this->factory->post->create( [ 'post_type' => 'shop_pricing_policy' ] );
+		update_post_meta( $post_id, '_strategy_id', 'stepped_by_cycle' );
+		// No _scope_type meta — '' would resolve no matcher and kill the policy.
+		$policy = Policy::from_post( get_post( $post_id ) );
+		$this->assertSame( 'all_subscriptions', $policy->scope_type );
+	}
+
 	public function test_priority_defaults_to_100_when_meta_absent() {
 		$post_id = $this->factory->post->create( [ 'post_type' => 'shop_pricing_policy' ] );
 		update_post_meta( $post_id, '_strategy_id', 'stepped_by_cycle' );

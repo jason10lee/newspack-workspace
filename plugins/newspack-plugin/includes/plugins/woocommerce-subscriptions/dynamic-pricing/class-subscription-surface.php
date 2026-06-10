@@ -7,6 +7,7 @@
 
 namespace Newspack\Dynamic_Pricing\Subscriptions;
 
+use Newspack\Dynamic_Pricing\Amount_Calculator;
 use Newspack\Dynamic_Pricing\Price_Decision;
 use Newspack\Dynamic_Pricing\Price_Surface;
 use Newspack\Dynamic_Pricing\Pricing_Context;
@@ -87,12 +88,7 @@ final class Subscription_Surface implements Price_Surface {
 		$product  = $line ? wc_get_product( $line->get_variation_id() ?: $line->get_product_id() ) : null;
 		$customer = $sub->get_user_id() ? new \WC_Customer( $sub->get_user_id() ) : null;
 
-		$base_price = 0.0;
-		if ( $product ) {
-			$base_price = class_exists( '\WC_Subscriptions_Product' )
-				? (float) \WC_Subscriptions_Product::get_price( $product )
-				: (float) $product->get_regular_price();
-		}
+		$base_price = $product ? Amount_Calculator::base_price_for( $product ) : 0.0;
 
 		return new Pricing_Context(
 			$trigger,
@@ -130,7 +126,11 @@ final class Subscription_Surface implements Price_Surface {
 			return;
 		}
 
-		if ( abs( (float) $line->get_subtotal() - $d->amount ) < 0.01 ) {
+		// The decision amount is PER UNIT; line subtotal/total aggregate quantity.
+		$qty         = max( 1, (int) $line->get_quantity() );
+		$line_amount = round( $d->amount * $qty, 2 );
+
+		if ( abs( (float) $line->get_subtotal() - $line_amount ) < 0.01 ) {
 			return;
 		}
 
@@ -138,8 +138,8 @@ final class Subscription_Surface implements Price_Surface {
 			return;
 		}
 
-		$line->set_subtotal( $d->amount );
-		$line->set_total( $d->amount );
+		$line->set_subtotal( $line_amount );
+		$line->set_total( $line_amount );
 		$line->save();
 
 		$sub->calculate_totals();

@@ -23,6 +23,22 @@ class Newspack_Test_Product_Ids_Scope_Matcher extends WP_UnitTestCase {
 		$this->assertFalse( ( new Product_Ids_Scope_Matcher() )->matches( $product, [ 10, 42, 99 ] ) );
 	}
 
+	public function test_variation_matches_via_parent_product_id() {
+		// Admins configure PARENT ids; surfaces resolve VARIATIONS — the parent
+		// fallback is what makes variable subscriptions match.
+		$variation = $this->getMockBuilder( \WC_Product::class )->disableOriginalConstructor()->getMock();
+		$variation->method( 'get_id' )->willReturn( 4201 );
+		$variation->method( 'get_parent_id' )->willReturn( 42 );
+		$this->assertTrue( ( new Product_Ids_Scope_Matcher() )->matches( $variation, [ 42 ] ) );
+	}
+
+	public function test_variation_does_not_match_when_parent_absent_from_list() {
+		$variation = $this->getMockBuilder( \WC_Product::class )->disableOriginalConstructor()->getMock();
+		$variation->method( 'get_id' )->willReturn( 4201 );
+		$variation->method( 'get_parent_id' )->willReturn( 43 );
+		$this->assertFalse( ( new Product_Ids_Scope_Matcher() )->matches( $variation, [ 42 ] ) );
+	}
+
 	public function test_empty_list_matches_nothing() {
 		$product = $this->getMockBuilder( \WC_Product::class )->disableOriginalConstructor()->getMock();
 		$product->method( 'get_id' )->willReturn( 42 );

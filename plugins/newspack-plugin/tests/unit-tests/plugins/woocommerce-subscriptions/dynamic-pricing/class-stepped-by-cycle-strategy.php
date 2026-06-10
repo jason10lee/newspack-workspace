@@ -86,6 +86,32 @@ class Newspack_Test_Stepped_By_Cycle_Strategy extends WP_UnitTestCase {
 		$this->assertNull( $s->decide( $this->ctx( Subscription_Surface::TRIGGER_SCHEDULED_STEP, [ 'completed_cycles' => 4 ], 10.0 ), [ 'steps' => 'not-an-array' ] ) );
 	}
 
+	public function test_decide_picks_highest_at_step_regardless_of_authored_order() {
+		$s = new Stepped_By_Cycle_Strategy();
+		// WP-CLI/JSON-authored policies aren't sorted by the admin UI — reverse order.
+		$params = [ 'steps' => [
+			[ 'at' => 13, 'calc_type' => Amount_Calculator::FIXED_PRICE, 'value' => 10, 'label' => 'Year 2' ],
+			[ 'at' => 1,  'calc_type' => Amount_Calculator::FIXED_PRICE, 'value' => 1,  'label' => 'Intro' ],
+			[ 'at' => 4,  'calc_type' => Amount_Calculator::FIXED_PRICE, 'value' => 8,  'label' => 'Standard' ],
+		] ];
+		$d = $s->decide( $this->ctx( Subscription_Surface::TRIGGER_SCHEDULED_STEP, [ 'completed_cycles' => 5 ], 20.0 ), $params );
+		$this->assertNotNull( $d );
+		$this->assertSame( 8.0, $d->amount, 'Highest at ≤ cycle must win, not array order.' );
+	}
+
+	public function test_decide_drops_steps_violating_config_schema() {
+		$s = new Stepped_By_Cycle_Strategy();
+		$params = [ 'steps' => [
+			[ 'at' => 0, 'calc_type' => Amount_Calculator::FIXED_PRICE, 'value' => 1, 'label' => 'bad at' ],
+			[ 'at' => 2, 'calc_type' => 'bogus_calc', 'value' => 1, 'label' => 'bad calc' ],
+			[ 'at' => 3, 'calc_type' => Amount_Calculator::FIXED_PRICE, 'value' => -5, 'label' => 'bad value' ],
+			[ 'at' => 1, 'calc_type' => Amount_Calculator::FIXED_PRICE, 'value' => 4, 'label' => 'valid' ],
+		] ];
+		$d = $s->decide( $this->ctx( Subscription_Surface::TRIGGER_SCHEDULED_STEP, [ 'completed_cycles' => 5 ], 10.0 ), $params );
+		$this->assertNotNull( $d );
+		$this->assertSame( 4.0, $d->amount, 'Only the schema-valid step may decide.' );
+	}
+
 	private function ctx( string $trigger, array $signals, float $base = 10.0, bool $persists_price = false ): Pricing_Context {
 		$product = $this->getMockBuilder( \WC_Product::class )->disableOriginalConstructor()->getMock();
 		$product->method( 'get_id' )->willReturn( 1 );

@@ -57,9 +57,14 @@ final class First_Time_Only_Condition_Matcher implements Condition_Matcher {
 		}
 
 		$product_id = (int) $ctx->product->get_id();
-		// Empty $status arg = ANY status (active, on-hold, cancelled, expired, etc.).
-		// We want to fail for anyone who has *ever* held this subscription.
-		$has_prior = wcs_user_has_subscription( $user_id, $product_id );
+		// Statuses that mark a real prior subscriber. Deliberately excludes
+		// `pending` and `on-hold`: WCS creates the subscription as pending during
+		// the very checkout being priced (and parks it on-hold after a failed
+		// initial payment), so including them would make a first-timer their own
+		// "returner" on a payment retry. Someone whose subscription never got past
+		// those states never successfully paid — still first-time.
+		$prior_statuses = [ 'active', 'pending-cancel', 'cancelled', 'expired', 'switched' ];
+		$has_prior      = wcs_user_has_subscription( $user_id, $product_id, $prior_statuses );
 		return ! $has_prior;
 	}
 }

@@ -42,10 +42,12 @@ final class WooProduct_Surface implements Price_Surface {
 	const TRIGGER_CART = 'cart';
 
 	/**
-	 * Request-scoped registry of publicized applies, keyed by cart item key.
+	 * Request-scoped memo of publicized applies, keyed by cart item key.
+	 * `array` = publicized payload; `false` = resolved with nothing to publicize
+	 * (negative memo so display filters don't re-run the engine per callback).
 	 * The cart filter callbacks read from this to render strikethrough + label.
 	 *
-	 * @var array<string, array{original: float, discounted: float, label: string, policy_id: string}>
+	 * @var array<string, array{original: float, discounted: float, label: string, policy_id: string}|false>
 	 */
 	private static array $publicized_applies = [];
 
@@ -96,12 +98,50 @@ final class WooProduct_Surface implements Price_Surface {
 			if ( ! self::is_eligible_cart_item( $cart_item ) ) {
 				continue;
 			}
-			$ctx = $surface->context( $cart_item, self::TRIGGER_CART );
-			$d   = Pricing_Engine::instance()->resolve( $ctx );
-			if ( $d ) {
-				$surface->apply( $ctx, $d );
+			$resolved = self::resolve_for_cart_item( $cart_item );
+			if ( $resolved ) {
+				$surface->apply( $resolved[0], $resolved[1] );
+			} elseif ( isset( $cart_item['key'] ) && is_string( $cart_item['key'] ) ) {
+				// Negative memo: display filters must not re-run the engine for
+				// items the totals pass already resolved to "no decision".
+				self::$publicized_applies[ $cart_item['key'] ] = false;
 			}
 		}
+	}
+
+	/**
+	 * Single resolution path for a cart item — used by the totals pass AND the
+	 * lazy display resolver, so the price applied and the price communicated come
+	 * from the same logic.
+	 *
+	 * No-harm clamp: at acquisition, a policy may only ever lower the price the
+	 * customer would otherwise pay. The decision computes off the catalog base
+	 * (regular/WCS price), so on a product with an active sale price the result
+	 * could exceed the effective price the customer was shown — in that case the
+	 * policy abstains and WC's native pricing stands. Strictly-greater comparison:
+	 * a decision equal to the current price still applies (re-application on
+	 * subsequent calc passes must keep populating the publicize memo).
+	 *
+	 * @param array $cart_item Cart item array (must already be eligible).
+	 * @return array{0: Pricing_Context, 1: Price_Decision}|null
+	 */
+	private static function resolve_for_cart_item( array $cart_item ): ?array {
+		$surface = Pricing_Engine::instance()->surface( 'woo_product' );
+		if ( ! $surface instanceof self ) {
+			return null;
+		}
+		$ctx = $surface->context( $cart_item, self::TRIGGER_CART );
+		$d   = Pricing_Engine::instance()->resolve( $ctx );
+		if ( ! $d ) {
+			return null;
+		}
+
+		$effective = (float) $cart_item['data']->get_price();
+		if ( $effective > 0 && $d->amount > $effective + 0.005 ) {
+			return null;
+		}
+
+		return [ $ctx, $d ];
 	}
 
 	/**
@@ -164,19 +204,8 @@ final class WooProduct_Surface implements Price_Surface {
 	}
 
 	public function context( $target, string $trigger ): Pricing_Context {
-		$product = $target['data'];
-
-		// Catalog recurring price; same precedence as Subscription_Surface.
-		$base_price = 0.0;
-		if (
-			class_exists( '\WC_Subscriptions_Product' )
-			&& in_array( $product->get_type(), [ 'subscription', 'variable-subscription', 'subscription_variation' ], true )
-		) {
-			$base_price = (float) \WC_Subscriptions_Product::get_price( $product );
-		}
-		if ( $base_price <= 0 ) {
-			$base_price = (float) $product->get_regular_price();
-		}
+		$product    = $target['data'];
+		$base_price = Amount_Calculator::base_price_for( $product );
 
 		$customer = null;
 		if ( function_exists( 'WC' ) && WC() && WC()->customer ) {
@@ -203,15 +232,24 @@ final class WooProduct_Surface implements Price_Surface {
 		}
 		$ctx->target['data']->set_price( $d->amount );
 
-		// Record publicized applies so the cart filters can render strikethrough + label.
-		if ( $d->publicize && isset( $ctx->target['key'] ) && is_string( $ctx->target['key'] ) ) {
-			self::$publicized_applies[ $ctx->target['key'] ] = [
-				'original'   => $ctx->base_price,
-				'discounted' => $d->amount,
-				'label'      => $d->label,
-				'policy_id'  => (string) ( $d->policy_id ?? '' ),
-			];
+		// Record the publicize outcome (payload or negative memo) so the cart
+		// filters can render strikethrough + label without re-resolving.
+		if ( isset( $ctx->target['key'] ) && is_string( $ctx->target['key'] ) ) {
+			self::$publicized_applies[ $ctx->target['key'] ] = $d->publicize ? self::publicized_payload( $ctx, $d ) : false;
 		}
+	}
+
+	/**
+	 * The one construction site for the publicized payload — used by apply() and
+	 * the lazy display resolver.
+	 */
+	private static function publicized_payload( Pricing_Context $ctx, Price_Decision $d ): array {
+		return [
+			'original'   => $ctx->base_price,
+			'discounted' => $d->amount,
+			'label'      => $d->label,
+			'policy_id'  => (string) ( $d->policy_id ?? '' ),
+		];
 	}
 
 	/** @internal — reset state at the start of each cart calc pass. */
@@ -237,34 +275,29 @@ final class WooProduct_Surface implements Price_Surface {
 	 * @internal — used by both tests and the cart filter callbacks.
 	 */
 	public static function get_publicized_apply_for( string $cart_item_key ): ?array {
-		if ( isset( self::$publicized_applies[ $cart_item_key ] ) ) {
-			return self::$publicized_applies[ $cart_item_key ];
+		if ( array_key_exists( $cart_item_key, self::$publicized_applies ) ) {
+			$memo = self::$publicized_applies[ $cart_item_key ];
+			return is_array( $memo ) ? $memo : null;
 		}
 
+		// Cart not booted yet — don't memoize, a later callback may succeed.
 		if ( ! function_exists( 'WC' ) || ! WC() || ! WC()->cart ) {
 			return null;
 		}
+
 		$cart_item = WC()->cart->get_cart_item( $cart_item_key );
-		if ( ! self::is_eligible_cart_item( $cart_item ) ) {
+		if ( ! is_array( $cart_item ) || ! self::is_eligible_cart_item( $cart_item ) ) {
+			self::$publicized_applies[ $cart_item_key ] = false;
 			return null;
 		}
 
-		$surface = Pricing_Engine::instance()->surface( 'woo_product' );
-		if ( ! $surface instanceof self ) {
-			return null;
-		}
-		$ctx = $surface->context( $cart_item, self::TRIGGER_CART );
-		$d   = Pricing_Engine::instance()->resolve( $ctx );
-		if ( ! $d || ! $d->publicize ) {
+		$resolved = self::resolve_for_cart_item( $cart_item );
+		if ( ! $resolved || ! $resolved[1]->publicize ) {
+			self::$publicized_applies[ $cart_item_key ] = false;
 			return null;
 		}
 
-		self::$publicized_applies[ $cart_item_key ] = [
-			'original'   => $ctx->base_price,
-			'discounted' => $d->amount,
-			'label'      => $d->label,
-			'policy_id'  => (string) ( $d->policy_id ?? '' ),
-		];
+		self::$publicized_applies[ $cart_item_key ] = self::publicized_payload( $resolved[0], $resolved[1] );
 		return self::$publicized_applies[ $cart_item_key ];
 	}
 
@@ -293,10 +326,11 @@ final class WooProduct_Surface implements Price_Surface {
 
 		$disclaimer = esc_html__( 'Applies to this payment. Renewal price may differ.', 'newspack-plugin' );
 
+		// wc_format_sale_price produces WC's standard <del>/<ins> sale markup
+		// (with screen-reader text) that all WC themes style.
 		return sprintf(
-			'<del style="opacity: 0.6">%s</del> %s<br><small style="display:block;color:#666;font-weight:normal;margin-top:2px">%s</small>',
-			wc_price( $original_line ),
-			$subtotal,
+			'%s<br><small style="display:block;color:#666;font-weight:normal;margin-top:2px">%s</small>',
+			wc_format_sale_price( wc_price( $original_line ), $subtotal ),
 			$disclaimer
 		);
 	}
@@ -381,6 +415,10 @@ final class WooProduct_Surface implements Price_Surface {
 			'discounted'         => (float) $applied['discounted'],
 			'label'              => (string) $applied['label'],
 			'original_formatted' => wp_strip_all_tags( html_entity_decode( wc_price( (float) $applied['original'] ), ENT_QUOTES ) ),
+			// Display-ready, server-translated strings — the JS filters append these
+			// verbatim instead of composing English client-side.
+			'name_suffix'        => '' === $applied['label'] ? '' : sprintf( ' — %s', $applied['label'] ),
+			'price_suffix'       => ' ' . __( '(this payment)', 'newspack-plugin' ),
 		];
 	}
 
@@ -419,6 +457,18 @@ final class WooProduct_Surface implements Price_Surface {
 				'context'     => [ 'view', 'edit' ],
 				'readonly'    => true,
 			],
+			'name_suffix'        => [
+				'description' => __( 'Display-ready suffix appended to the cart item name.', 'newspack-plugin' ),
+				'type'        => 'string',
+				'context'     => [ 'view', 'edit' ],
+				'readonly'    => true,
+			],
+			'price_suffix'       => [
+				'description' => __( 'Display-ready, translated suffix appended to the price format.', 'newspack-plugin' ),
+				'type'        => 'string',
+				'context'     => [ 'view', 'edit' ],
+				'readonly'    => true,
+			],
 		];
 	}
 
@@ -431,6 +481,10 @@ final class WooProduct_Surface implements Price_Surface {
 			return;
 		}
 		if ( ! is_cart() && ! is_checkout() ) {
+			return;
+		}
+		// No policies on the site → the filters would never have data to render.
+		if ( ! CPT_Policy_Repository::has_policies() ) {
 			return;
 		}
 		if ( ! class_exists( '\Newspack\Newspack' ) || ! defined( 'NEWSPACK_ABSPATH' ) ) {

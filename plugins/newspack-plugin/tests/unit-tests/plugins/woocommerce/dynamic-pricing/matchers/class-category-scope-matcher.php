@@ -41,6 +41,19 @@ class Newspack_Test_Category_Scope_Matcher extends WP_UnitTestCase {
 		$this->assertTrue( ( new Category_Scope_Matcher() )->matches( $product, [ (int) $term['term_id'] ] ) );
 	}
 
+	public function test_variation_matches_via_parent_product_terms() {
+		// product_cat terms live on the PARENT; a variation must match through it.
+		$term      = wp_insert_term( 'News', 'product_cat' );
+		$parent_id = $this->factory->post->create( [ 'post_type' => 'product' ] );
+		wp_set_object_terms( $parent_id, [ (int) $term['term_id'] ], 'product_cat' );
+
+		$variation = $this->getMockBuilder( \WC_Product::class )->disableOriginalConstructor()->getMock();
+		$variation->method( 'get_id' )->willReturn( $parent_id + 1000 ); // variation post id — has no terms.
+		$variation->method( 'get_parent_id' )->willReturn( $parent_id );
+
+		$this->assertTrue( ( new Category_Scope_Matcher() )->matches( $variation, [ (int) $term['term_id'] ] ) );
+	}
+
 	public function test_does_not_match_when_product_lacks_scoped_category() {
 		$post_id = $this->factory->post->create( [ 'post_type' => 'product' ] );
 

@@ -64,17 +64,22 @@ class Newspack_Test_CPT_Policy_Repository extends WP_UnitTestCase {
 		$this->assertSame( [], $this->repo->for_context( $this->mock_context( $this->mock_product( 7 ) ) ) );
 	}
 
-	public function test_for_context_caches_result() {
+	public function test_for_context_caches_full_active_list_under_one_versioned_key() {
 		$this->seed_policy( 'publish', [
 			'_strategy_id' => 'stepped_by_cycle',
 			'_scope_type'  => 'product_ids',
 		], [ 42 ] );
 
-		$ctx    = $this->mock_context( $this->mock_product( 42 ) );
-		$first  = $this->repo->for_context( $ctx );
-		$v = CPT_Policy_Repository::get_cache_version();
-		$cached = wp_cache_get( 'policies_for_product_42_v' . $v, CPT_Policy_Repository::CACHE_GROUP );
-		$this->assertSame( $first, $cached );
+		$result = $this->repo->for_context( $this->mock_context( $this->mock_product( 42 ) ) );
+		$this->assertCount( 1, $result );
+
+		// The cache holds ALL active policies (per-product filtering is in-memory) —
+		// a second product's lookup must hit the same single cached list.
+		$v      = CPT_Policy_Repository::get_cache_version();
+		$cached = wp_cache_get( 'active_policies_v' . $v, CPT_Policy_Repository::CACHE_GROUP );
+		$this->assertIsArray( $cached );
+		$this->assertCount( 1, $cached, 'Cache stores the full active-policy list.' );
+		$this->assertSame( [], $this->repo->for_context( $this->mock_context( $this->mock_product( 7 ) ) ), 'Non-matching product filters in memory.' );
 	}
 
 	public function test_flush_cache_bumps_version() {
@@ -90,18 +95,39 @@ class Newspack_Test_CPT_Policy_Repository extends WP_UnitTestCase {
 			'_scope_type'  => 'product_ids',
 		], [ 42 ] );
 
-		$ctx    = $this->mock_context( $this->mock_product( 42 ) );
-		$first  = $this->repo->for_context( $ctx );
-		$v1     = CPT_Policy_Repository::get_cache_version();
-		$cached1 = wp_cache_get( 'policies_for_product_42_v' . $v1, CPT_Policy_Repository::CACHE_GROUP );
+		$this->repo->for_context( $this->mock_context( $this->mock_product( 42 ) ) );
+		$v1      = CPT_Policy_Repository::get_cache_version();
+		$cached1 = wp_cache_get( 'active_policies_v' . $v1, CPT_Policy_Repository::CACHE_GROUP );
 		$this->assertNotEmpty( $cached1, 'First lookup should populate the versioned cache.' );
 
 		CPT_Policy_Repository::flush_cache();
 		$v2 = CPT_Policy_Repository::get_cache_version();
 		$this->assertNotSame( $v1, $v2 );
 
-		$cached_new = wp_cache_get( 'policies_for_product_42_v' . $v2, CPT_Policy_Repository::CACHE_GROUP );
+		$cached_new = wp_cache_get( 'active_policies_v' . $v2, CPT_Policy_Repository::CACHE_GROUP );
 		$this->assertFalse( $cached_new, 'After flush, the new versioned key should be empty until next lookup.' );
+	}
+
+	public function test_has_policies_reflects_published_policy_presence() {
+		delete_option( CPT_Policy_Repository::HAS_POLICIES_OPTION );
+		$this->assertFalse( CPT_Policy_Repository::has_policies(), 'No policies → false (self-healing recompute).' );
+
+		$this->seed_policy( 'publish', [
+			'_strategy_id' => 'stepped_by_cycle',
+			'_scope_type'  => 'product_ids',
+		], [ 42 ] );
+		// seed_policy fires save_post → flush_cache → flag refresh.
+		$this->assertTrue( CPT_Policy_Repository::has_policies() );
+	}
+
+	public function test_for_context_short_circuits_when_no_policies_exist() {
+		delete_option( CPT_Policy_Repository::HAS_POLICIES_OPTION );
+		$this->assertSame( [], $this->repo->for_context( $this->mock_context( $this->mock_product( 42 ) ) ) );
+		$v = CPT_Policy_Repository::get_cache_version();
+		$this->assertFalse(
+			wp_cache_get( 'active_policies_v' . $v, CPT_Policy_Repository::CACHE_GROUP ),
+			'Zero-policy sites must not even populate the policy cache.'
+		);
 	}
 
 	private function seed_policy( string $post_status, array $meta, array $scope_product_ids = [] ): int {

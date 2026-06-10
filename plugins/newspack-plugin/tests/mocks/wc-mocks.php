@@ -145,6 +145,9 @@ class WC_Order_Item_Product {
 	public function get_product_id() {
 		return $this->data['product_id'] ?? 0;
 	}
+	public function get_quantity() {
+		return $this->data['quantity'] ?? 1;
+	}
 	public function get_subtotal() {
 		return $this->data['subtotal'] ?? 0;
 	}
@@ -188,6 +191,12 @@ class WC_Product {
 	}
 	public function get_children() {
 		return $this->data['children'] ?? [];
+	}
+	public function get_regular_price() {
+		return $this->data['regular_price'] ?? ( $this->meta['_regular_price'] ?? 0 );
+	}
+	public function get_price() {
+		return $this->data['price'] ?? ( $this->meta['_price'] ?? $this->get_regular_price() );
 	}
 	public function get_meta( $key, $single = true ) {
 		return $this->meta[ $key ] ?? '';

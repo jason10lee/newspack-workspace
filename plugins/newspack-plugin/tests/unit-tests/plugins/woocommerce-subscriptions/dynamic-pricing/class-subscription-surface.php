@@ -89,6 +89,39 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 		$this->assertSame( 'step_at_4_fixed_price', $captured_state['pol_1']['reason'] );
 	}
 
+	public function test_apply_multiplies_per_unit_amount_by_line_quantity() {
+		// Decision amounts are per unit; a qty-3 line must total 3 × $8 = $24.
+		$line = $this->mock_line_item( 30.0, 3 );
+		$line->expects( $this->once() )->method( 'set_subtotal' )->with( 24.0 );
+		$line->expects( $this->once() )->method( 'set_total' )->with( 24.0 );
+		$line->expects( $this->once() )->method( 'save' );
+
+		$sub = $this->mock_subscription( completed_payments: 3, line_item: $line );
+
+		$ctx = $this->ctx( $sub, base_price: 10.0 );
+		$d   = new Price_Decision( 8.0, Price_Decision::DURABLE, 'step_at_4_fixed_price', 'Standard', 'stepped_by_cycle', 4 );
+		$d->policy_id = 'pol_1';
+
+		( new Subscription_Surface() )->apply( $ctx, $d );
+	}
+
+	public function test_apply_quantity_aware_idempotency_short_circuit() {
+		// Line already aggregates 3 × $8 = $24 — applying the same $8/unit decision
+		// must be a no-op even though 24 ≠ 8 (the per-unit amount).
+		$line = $this->mock_line_item( 24.0, 3 );
+		$line->expects( $this->never() )->method( 'set_subtotal' );
+		$line->expects( $this->never() )->method( 'save' );
+
+		$sub = $this->mock_subscription( completed_payments: 3, line_item: $line );
+		$sub->expects( $this->never() )->method( 'save' );
+
+		$ctx = $this->ctx( $sub, base_price: 10.0 );
+		$d   = new Price_Decision( 8.0, Price_Decision::DURABLE, 'step_at_4_fixed_price', 'Standard', 'stepped_by_cycle', 5 );
+		$d->policy_id = 'pol_1';
+
+		( new Subscription_Surface() )->apply( $ctx, $d );
+	}
+
 	public function test_apply_short_circuits_when_amount_already_matches() {
 		$line = $this->mock_line_item( 8.0 );
 		$line->expects( $this->never() )->method( 'set_subtotal' );
@@ -160,14 +193,15 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 	 * shim does not declare `get_variation_id`, `set_subtotal`, `set_total`, or
 	 * `save` — the real WC class does.
 	 */
-	private function mock_line_item( float $subtotal ): \WC_Order_Item_Product {
+	private function mock_line_item( float $subtotal, int $quantity = 1 ): \WC_Order_Item_Product {
 		$line = $this->getMockBuilder( \WC_Order_Item_Product::class )
 			->disableOriginalConstructor()
-			->onlyMethods( [ 'get_subtotal', 'get_product_id' ] )
+			->onlyMethods( [ 'get_subtotal', 'get_product_id', 'get_quantity' ] )
 			->addMethods( [ 'get_variation_id', 'set_subtotal', 'set_total', 'save' ] )
 			->getMock();
 		$line->method( 'get_subtotal' )->willReturn( $subtotal );
 		$line->method( 'get_product_id' )->willReturn( self::PRODUCT_ID );
+		$line->method( 'get_quantity' )->willReturn( $quantity );
 		$line->method( 'get_variation_id' )->willReturn( 0 );
 		return $line;
 	}
@@ -198,16 +232,11 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 
 	/**
 	 * Build a Pricing_Context targeting the mocked subscription.
-	 *
-	 * `addMethods()` adds `get_regular_price`, which the wc-mocks `WC_Product`
-	 * shim does not declare. The surface falls back to this when
-	 * `WC_Subscriptions_Product::get_price` is unavailable.
 	 */
 	private function ctx( \WC_Subscription $sub, float $base_price ): Pricing_Context {
 		$product = $this->getMockBuilder( \WC_Product::class )
 			->disableOriginalConstructor()
-			->onlyMethods( [ 'get_id' ] )
-			->addMethods( [ 'get_regular_price' ] )
+			->onlyMethods( [ 'get_id', 'get_regular_price' ] )
 			->getMock();
 		$product->method( 'get_id' )->willReturn( 1 );
 		$product->method( 'get_regular_price' )->willReturn( $base_price );
@@ -217,7 +246,9 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 			null,
 			$base_price,
 			[ 'completed_cycles' => $sub->get_payment_count( 'completed' ) + 1 ],
-			$sub
+			$sub,
+			Pricing_Context::INTENT_RENEWAL,
+			true
 		);
 	}
 }

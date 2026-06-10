@@ -47,7 +47,9 @@ final class Policy {
 		$p->priority   = '' === $priority_meta ? 100 : (int) $priority_meta;
 
 		$p->compose_mode = (string) get_post_meta( $post->ID, '_compose_mode', true ) ?: 'min';
-		$p->scope_type   = (string) get_post_meta( $post->ID, '_scope_type', true );
+		// Preserve the class default when meta is absent — '' would resolve no
+		// scope matcher and silently kill the policy.
+		$p->scope_type   = (string) get_post_meta( $post->ID, '_scope_type', true ) ?: $p->scope_type;
 		$p->scope_ids    = self::resolve_scope_ids( $post->ID, $p->scope_type );
 
 		$active_from  = get_post_meta( $post->ID, '_active_from', true );
@@ -87,11 +89,9 @@ final class Policy {
 		if ( ! $matcher ) {
 			return false;
 		}
-		$value = match ( $this->scope_type ) {
-			'product_ids', 'category' => $this->scope_ids,
-			default                   => null,
-		};
-		return $matcher->matches( $product, $value );
+		// resolve_scope_ids() already returns [] for scope types without ids, so the
+		// matcher value is always just the ids — matchers that don't need them ignore it.
+		return $matcher->matches( $product, $this->scope_ids );
 	}
 
 	/**

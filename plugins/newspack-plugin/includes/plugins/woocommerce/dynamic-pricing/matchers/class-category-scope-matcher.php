@@ -23,7 +23,10 @@ final class Category_Scope_Matcher implements Scope_Matcher {
 		if ( ! is_array( $value ) || empty( $value ) ) {
 			return false;
 		}
-		$product_terms = wc_get_product_term_ids( (int) $product->get_id(), 'product_cat' );
+		// product_cat terms are assigned to the parent product, never to variations —
+		// look up the parent when the surface hands us a variation.
+		$term_lookup_id = (int) ( $product->get_parent_id() ?: $product->get_id() );
+		$product_terms  = wc_get_product_term_ids( $term_lookup_id, 'product_cat' );
 		return ! empty( array_intersect( array_map( 'intval', $value ), $product_terms ) );
 	}
 }

@@ -57,8 +57,7 @@ class Newspack_Test_WooProduct_Surface extends WP_UnitTestCase {
 	public function test_context_declares_acquisition_intent_without_price_persistence() {
 		$product = $this->getMockBuilder( \WC_Product::class )
 			->disableOriginalConstructor()
-			->onlyMethods( [ 'get_type' ] )
-			->addMethods( [ 'get_regular_price' ] )
+			->onlyMethods( [ 'get_type', 'get_regular_price' ] )
 			->getMock();
 		$product->method( 'get_type' )->willReturn( 'subscription' );
 		$product->method( 'get_regular_price' )->willReturn( '10' );
@@ -72,8 +71,7 @@ class Newspack_Test_WooProduct_Surface extends WP_UnitTestCase {
 	public function test_context_signals_completed_cycles_is_one() {
 		$product = $this->getMockBuilder( \WC_Product::class )
 			->disableOriginalConstructor()
-			->onlyMethods( [ 'get_type' ] )
-			->addMethods( [ 'get_regular_price' ] )
+			->onlyMethods( [ 'get_type', 'get_regular_price' ] )
 			->getMock();
 		$product->method( 'get_type' )->willReturn( 'subscription' );
 		$product->method( 'get_regular_price' )->willReturn( '10' );
@@ -89,8 +87,7 @@ class Newspack_Test_WooProduct_Surface extends WP_UnitTestCase {
 	public function test_context_base_price_falls_back_to_regular_price_when_wcs_unavailable() {
 		$product = $this->getMockBuilder( \WC_Product::class )
 			->disableOriginalConstructor()
-			->onlyMethods( [ 'get_type' ] )
-			->addMethods( [ 'get_regular_price' ] )
+			->onlyMethods( [ 'get_type', 'get_regular_price' ] )
 			->getMock();
 		$product->method( 'get_type' )->willReturn( 'simple' );
 		$product->method( 'get_regular_price' )->willReturn( '25' );
