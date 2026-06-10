@@ -130,6 +130,94 @@ class Newspack_Test_CPT_Policy_Repository extends WP_UnitTestCase {
 		);
 	}
 
+	public function test_renewal_intent_excludes_deal_class_policies() {
+		// Default application is deal — it must not live-resolve at renewal.
+		$this->seed_policy( 'publish', [
+			'_strategy_id' => 'stepped_by_cycle',
+			'_scope_type'  => 'product_ids',
+		], [ 42 ] );
+
+		$this->assertCount( 1, $this->repo->for_context( $this->mock_context( $this->mock_product( 42 ) ) ), 'Deal policies resolve at acquisition.' );
+		$this->assertSame( [], $this->repo->for_context( $this->renewal_context( $this->mock_product( 42 ) ) ), 'Deal policies reach renewals only through pinned snapshots.' );
+	}
+
+	public function test_renewal_intent_includes_live_class_policies() {
+		$this->seed_policy( 'publish', [
+			'_strategy_id' => 'stepped_by_cycle',
+			'_scope_type'  => 'product_ids',
+			'_application' => 'live',
+		], [ 42 ] );
+
+		$result = $this->repo->for_context( $this->renewal_context( $this->mock_product( 42 ) ) );
+		$this->assertCount( 1, $result );
+		$this->assertSame( Policy::APPLICATION_LIVE, $result[0]->application );
+	}
+
+	public function test_renewal_intent_returns_pinned_deal_plus_live_policies() {
+		$this->seed_policy( 'publish', [
+			'_strategy_id' => 'stepped_by_cycle',
+			'_scope_type'  => 'product_ids',
+			'_application' => 'live',
+		], [ 42 ] );
+
+		$ctx    = $this->renewal_context( $this->mock_product( 42 ), $this->mock_pinned_subscription( $this->snapshot_fixture() ) );
+		$result = $this->repo->for_context( $ctx );
+
+		$this->assertCount( 2, $result );
+		$this->assertSame( '777', $result[0]->id, 'Pinned deal is sourced first.' );
+		$this->assertSame( [ 'steps' => [ [ 'at' => 1, 'calc_type' => 'fixed_price', 'value' => 5, 'label' => 'Intro' ] ] ], $result[0]->params );
+		$this->assertSame( Policy::APPLICATION_LIVE, $result[1]->application );
+	}
+
+	public function test_pinned_deal_resolves_even_with_zero_policies() {
+		// The snapshot outlives its policy row by design — has_policies must not block it.
+		delete_option( CPT_Policy_Repository::HAS_POLICIES_OPTION );
+		$this->assertFalse( CPT_Policy_Repository::has_policies() );
+
+		$ctx    = $this->renewal_context( $this->mock_product( 42 ), $this->mock_pinned_subscription( $this->snapshot_fixture() ) );
+		$result = $this->repo->for_context( $ctx );
+
+		$this->assertCount( 1, $result );
+		$this->assertSame( '777', $result[0]->id );
+	}
+
+	public function test_invalid_snapshot_is_ignored() {
+		$ctx = $this->renewal_context(
+			$this->mock_product( 42 ),
+			$this->mock_pinned_subscription( [ 'schema_version' => 99, 'strategy_id' => 'stepped_by_cycle' ] )
+		);
+		$this->assertSame( [], $this->repo->for_context( $ctx ), 'Unknown snapshot schema versions must not resolve.' );
+	}
+
+	private function snapshot_fixture(): array {
+		return [
+			'schema_version' => 1,
+			'policy_id'      => '777',
+			'pinned_at'      => '2026-06-10 12:00:00',
+			'title'          => 'Pinned deal',
+			'strategy_id'    => 'stepped_by_cycle',
+			'params'         => [ 'steps' => [ [ 'at' => 1, 'calc_type' => 'fixed_price', 'value' => 5, 'label' => 'Intro' ] ] ],
+			'priority'       => 50,
+			'compose_mode'   => 'min',
+			'publicize'      => true,
+		];
+	}
+
+	private function mock_pinned_subscription( array $snapshot ): \WC_Subscription {
+		// The wc-mocks line item shim returns constructor-provided meta verbatim.
+		$line = new \WC_Order_Item_Product( [ 'meta' => [ \Newspack\Dynamic_Pricing\Subscription_Pin::DEAL_META_KEY => $snapshot ] ] );
+		$sub  = $this->getMockBuilder( \WC_Subscription::class )
+			->disableOriginalConstructor()
+			->onlyMethods( [ 'get_items' ] )
+			->getMock();
+		$sub->method( 'get_items' )->willReturn( [ $line ] );
+		return $sub;
+	}
+
+	private function renewal_context( \WC_Product $product, mixed $target = null ): Pricing_Context {
+		return new Pricing_Context( 'scheduled_step', $product, null, 10.0, [ 'completed_cycles' => 2 ], $target, Pricing_Context::INTENT_RENEWAL, true );
+	}
+
 	private function seed_policy( string $post_status, array $meta, array $scope_product_ids = [] ): int {
 		$post_id = $this->factory->post->create( [ 'post_type' => 'shop_pricing_policy', 'post_status' => $post_status ] );
 		foreach ( $meta as $k => $v ) {

@@ -41,19 +41,55 @@ final class CPT_Policy_Repository implements Policy_Repository {
 		return 'yes' === $flag;
 	}
 
+	/**
+	 * The policy set for a pricing context. Intent-aware (docs 03):
+	 *
+	 * - Acquisition: every matching repository policy, deal- and live-class —
+	 *   v1 semantics. A winning deal-class policy gets pinned downstream.
+	 * - Renewal: the target subscription's pinned deal snapshot (if any) plus
+	 *   matching LIVE-class policies. Deal-class repository policies are
+	 *   excluded entirely — their renewal effect flows only through snapshots,
+	 *   so no policy edit can leak into an existing deal.
+	 */
 	public function for_context( Pricing_Context $ctx ): array {
+		$is_renewal = Pricing_Context::INTENT_RENEWAL === $ctx->intent;
+		$pinned     = $is_renewal ? self::pinned_deal_for( $ctx->target ) : null;
+
+		// The zero-policy short-circuit must not block pinned deals: a snapshot
+		// outlives its policy row by design (it may be the only policy left).
 		if ( ! self::has_policies() ) {
-			return [];
+			return $pinned ? [ $pinned ] : [];
 		}
 
 		$engine   = Pricing_Engine::instance();
-		$policies = [];
+		$policies = $pinned ? [ $pinned ] : [];
 		foreach ( $this->all_active() as $policy ) {
+			if ( $is_renewal && Policy::APPLICATION_DEAL === $policy->application ) {
+				continue;
+			}
 			if ( $policy->matches_product( $ctx->product, $engine ) ) {
 				$policies[] = $policy;
 			}
 		}
 		return $policies;
+	}
+
+	/**
+	 * Read the pinned deal snapshot off a renewal target's recurring line item
+	 * and hydrate it. Multi-line subscriptions are excluded upstream, so the
+	 * first line item is the recurring line.
+	 *
+	 * @param mixed $target Surface-native target; only WC_Subscription carries pins.
+	 */
+	public static function pinned_deal_for( mixed $target ): ?Policy {
+		if ( ! $target instanceof \WC_Subscription ) {
+			return null;
+		}
+		foreach ( $target->get_items( 'line_item' ) as $line ) {
+			$snapshot = Subscription_Pin::snapshot( $line );
+			return $snapshot ? Policy::from_snapshot( $snapshot ) : null;
+		}
+		return null;
 	}
 
 	/**

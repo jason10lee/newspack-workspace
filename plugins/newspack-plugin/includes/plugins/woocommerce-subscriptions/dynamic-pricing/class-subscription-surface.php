@@ -8,10 +8,12 @@
 namespace Newspack\Dynamic_Pricing\Subscriptions;
 
 use Newspack\Dynamic_Pricing\Amount_Calculator;
+use Newspack\Dynamic_Pricing\Policy;
 use Newspack\Dynamic_Pricing\Price_Decision;
 use Newspack\Dynamic_Pricing\Price_Surface;
 use Newspack\Dynamic_Pricing\Pricing_Context;
 use Newspack\Dynamic_Pricing\Pricing_Engine;
+use Newspack\Dynamic_Pricing\Subscription_Pin;
 use Newspack\Dynamic_Pricing\WooProduct_Surface;
 
 defined( 'ABSPATH' ) || exit;
@@ -48,6 +50,76 @@ final class Subscription_Surface implements Price_Surface {
 		// cart; without a note here the subscription has no record of why its
 		// first cycle differs from catalog.
 		add_action( 'woocommerce_checkout_subscription_created', [ __CLASS__, 'note_acquisition_on_subscription' ], 20, 3 );
+
+		// Policy pinning (docs 03): when the acquisition price came from a
+		// deal-class policy, snapshot that policy's config onto the subscription —
+		// renewals resolve from the snapshot, so later policy edits affect new
+		// acquisitions only. Priority 25: the acquisition note above lands first.
+		add_action( 'woocommerce_checkout_subscription_created', [ __CLASS__, 'pin_deal_on_subscription' ], 25, 3 );
+	}
+
+	/**
+	 * Pin the winning deal-class policy onto a newly created subscription.
+	 *
+	 * The applied registry holds the winning decision's policy id per cart item
+	 * key; the policy row is read fresh (same request as resolution) and its
+	 * config snapshotted onto the matching recurring line item. Live-class
+	 * policies never pin.
+	 *
+	 * @param \WC_Subscription $subscription   Newly created subscription.
+	 * @param \WC_Order        $order          Parent order.
+	 * @param \WC_Cart         $recurring_cart Recurring cart this subscription was created from.
+	 */
+	public static function pin_deal_on_subscription( $subscription, $order, $recurring_cart ): void {
+		if ( ! $subscription instanceof \WC_Subscription || ! $recurring_cart instanceof \WC_Cart ) {
+			return;
+		}
+		foreach ( $recurring_cart->get_cart() as $cart_item_key => $cart_item ) {
+			$applied = WooProduct_Surface::get_applied_for( (string) $cart_item_key );
+			if ( ! $applied || '' === (string) $applied['policy_id'] ) {
+				continue;
+			}
+			$post = get_post( (int) $applied['policy_id'] );
+			if ( ! $post ) {
+				continue;
+			}
+			$policy = Policy::from_post( $post );
+			if ( Policy::APPLICATION_DEAL !== $policy->application ) {
+				continue;
+			}
+
+			$line = self::find_line_for_cart_item( $subscription, $cart_item );
+			if ( ! $line ) {
+				continue;
+			}
+			Subscription_Pin::pin( $line, $policy );
+			$subscription->add_order_note(
+				sprintf(
+					/* translators: 1: policy id */
+					__( 'Newspack Dynamic Pricing [policy %1$s]: deal pinned — renewals follow this policy as configured at purchase; later policy edits affect new purchases only.', 'newspack-plugin' ),
+					$policy->id
+				)
+			);
+		}
+	}
+
+	/**
+	 * The subscription line item matching a recurring-cart item's product, with
+	 * a first-line fallback (multi-line subscriptions are excluded upstream).
+	 *
+	 * @param \WC_Subscription $subscription Subscription to search.
+	 * @param array            $cart_item    Recurring cart item.
+	 * @return \WC_Order_Item_Product|null
+	 */
+	private static function find_line_for_cart_item( \WC_Subscription $subscription, array $cart_item ): ?\WC_Order_Item_Product {
+		$target_pid = (int) ( ! empty( $cart_item['variation_id'] ) ? $cart_item['variation_id'] : ( $cart_item['product_id'] ?? 0 ) );
+		foreach ( $subscription->get_items( 'line_item' ) as $line ) {
+			$line_pid = (int) ( $line->get_variation_id() ?: $line->get_product_id() );
+			if ( 0 === $target_pid || $line_pid === $target_pid ) {
+				return $line;
+			}
+		}
+		return null;
 	}
 
 	/**

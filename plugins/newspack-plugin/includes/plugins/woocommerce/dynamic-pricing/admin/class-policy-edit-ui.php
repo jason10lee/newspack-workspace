@@ -82,6 +82,7 @@ final class Policy_Edit_UI {
 		$active_from  = $policy->active_from;
 		$active_until = $policy->active_until;
 		$publicize    = $policy->publicize;
+		$application  = $policy->application;
 
 		wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD );
 		?>
@@ -101,6 +102,16 @@ final class Policy_Edit_UI {
 				<td>
 					<input type="number" name="newspack_dp_priority" id="newspack_dp_priority" value="<?php echo esc_attr( (string) $priority ); ?>" min="0" />
 					<p class="description"><?php esc_html_e( 'Resolution order (lowest priority first). Lower numbers win for priority_exclusive policies.', 'newspack-plugin' ); ?></p>
+				</td>
+			</tr>
+			<tr>
+				<th><label for="newspack_dp_application"><?php esc_html_e( 'How this policy applies', 'newspack-plugin' ); ?></label></th>
+				<td>
+					<select name="newspack_dp_application" id="newspack_dp_application">
+						<option value="<?php echo esc_attr( Policy::APPLICATION_DEAL ); ?>" <?php selected( $application, Policy::APPLICATION_DEAL ); ?>><?php esc_html_e( 'Deal — pinned at purchase (default)', 'newspack-plugin' ); ?></option>
+						<option value="<?php echo esc_attr( Policy::APPLICATION_LIVE ); ?>" <?php selected( $application, Policy::APPLICATION_LIVE ); ?>><?php esc_html_e( 'Live — re-evaluated at every payment event', 'newspack-plugin' ); ?></option>
+					</select>
+					<p class="description"><?php esc_html_e( 'Deal: the configuration is copied onto each subscription at purchase; editing the policy affects new purchases only. Live: existing subscriptions follow the current configuration at every renewal (retention offers, fleet-wide adjustments).', 'newspack-plugin' ); ?></p>
 				</td>
 			</tr>
 			<tr>
@@ -332,6 +343,10 @@ final class Policy_Edit_UI {
 		if ( ! in_array( $compose_mode, [ 'min', 'priority_exclusive' ], true ) ) {
 			$compose_mode = 'min';
 		}
+		$application = isset( $_POST['newspack_dp_application'] ) ? sanitize_text_field( wp_unslash( $_POST['newspack_dp_application'] ) ) : Policy::APPLICATION_DEAL;
+		if ( ! in_array( $application, [ Policy::APPLICATION_DEAL, Policy::APPLICATION_LIVE ], true ) ) {
+			$application = Policy::APPLICATION_DEAL;
+		}
 		if ( ! in_array( $scope_type, [ 'all_subscriptions', 'product_ids', 'category' ], true ) ) {
 			$scope_type = 'all_subscriptions';
 		}
@@ -339,6 +354,7 @@ final class Policy_Edit_UI {
 		update_post_meta( $post_id, '_strategy_id', $strategy_id );
 		update_post_meta( $post_id, '_priority', $priority );
 		update_post_meta( $post_id, '_compose_mode', $compose_mode );
+		update_post_meta( $post_id, '_application', $application );
 		update_post_meta( $post_id, '_scope_type', $scope_type );
 
 		delete_post_meta( $post_id, '_scope_product_id' );

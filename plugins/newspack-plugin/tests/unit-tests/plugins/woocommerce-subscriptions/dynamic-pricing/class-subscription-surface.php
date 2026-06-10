@@ -188,6 +188,77 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 		Subscription_Surface::note_acquisition_on_subscription( $sub, null, $recurring_cart );
 	}
 
+	public function test_pin_deal_on_subscription_snapshots_winning_deal_policy() {
+		\Newspack\Dynamic_Pricing\WooProduct_Surface::reset_publicized_registry( new \WC_Cart() );
+
+		// A real deal-class policy post (no _application meta = deal default).
+		register_post_type( 'shop_pricing_policy', [ 'public' => false ] );
+		$policy_id = $this->factory->post->create( [ 'post_type' => 'shop_pricing_policy', 'post_status' => 'publish', 'post_title' => 'Intro ramp' ] );
+		update_post_meta( $policy_id, '_strategy_id', 'stepped_by_cycle' );
+		update_post_meta( $policy_id, '_params', wp_json_encode( [ 'steps' => [ [ 'at' => 1, 'calc_type' => 'fixed_price', 'value' => 5, 'label' => 'Intro' ] ] ] ) );
+
+		// Seed the applied registry as checkout would.
+		$product = $this->getMockBuilder( \WC_Product::class )->disableOriginalConstructor()->addMethods( [ 'set_price' ] )->getMock();
+		$ctx = new Pricing_Context( 'cart', $product, null, 10.0, [ 'completed_cycles' => 1 ], [ 'data' => $product, 'key' => 'pin_key' ] );
+		$d   = new Price_Decision( 5.0, Price_Decision::DURABLE, 'step_at_1_fixed_price', 'Intro', 'stepped_by_cycle', 1 );
+		$d->policy_id = (string) $policy_id;
+		( new \Newspack\Dynamic_Pricing\WooProduct_Surface() )->apply( $ctx, $d );
+
+		$line = $this->getMockBuilder( \WC_Order_Item_Product::class )
+			->disableOriginalConstructor()
+			->onlyMethods( [ 'get_product_id' ] )
+			->addMethods( [ 'get_variation_id', 'update_meta_data', 'save' ] )
+			->getMock();
+		$line->method( 'get_variation_id' )->willReturn( 0 );
+		$line->method( 'get_product_id' )->willReturn( 0 );
+		$captured_snapshot = null;
+		$line->expects( $this->once() )->method( 'update_meta_data' )->willReturnCallback(
+			function ( $key, $value ) use ( &$captured_snapshot ) {
+				if ( \Newspack\Dynamic_Pricing\Subscription_Pin::DEAL_META_KEY === $key ) {
+					$captured_snapshot = $value;
+				}
+			}
+		);
+		$line->expects( $this->once() )->method( 'save' );
+
+		$sub = $this->mock_subscription( completed_payments: 0, line_item: $line );
+		$sub->expects( $this->once() )->method( 'add_order_note' )->with( $this->stringContains( 'deal pinned' ) );
+
+		Subscription_Surface::pin_deal_on_subscription( $sub, null, new \WC_Cart( [ 'pin_key' => [ 'data' => $product ] ] ) );
+
+		$this->assertIsArray( $captured_snapshot );
+		$this->assertSame( 1, $captured_snapshot['schema_version'] );
+		$this->assertSame( (string) $policy_id, $captured_snapshot['policy_id'] );
+		$this->assertSame( 'stepped_by_cycle', $captured_snapshot['strategy_id'] );
+		$this->assertNotEmpty( $captured_snapshot['params']['steps'] );
+	}
+
+	public function test_pin_deal_on_subscription_skips_live_policies() {
+		\Newspack\Dynamic_Pricing\WooProduct_Surface::reset_publicized_registry( new \WC_Cart() );
+
+		register_post_type( 'shop_pricing_policy', [ 'public' => false ] );
+		$policy_id = $this->factory->post->create( [ 'post_type' => 'shop_pricing_policy', 'post_status' => 'publish' ] );
+		update_post_meta( $policy_id, '_strategy_id', 'stepped_by_cycle' );
+		update_post_meta( $policy_id, '_application', 'live' );
+
+		$product = $this->getMockBuilder( \WC_Product::class )->disableOriginalConstructor()->addMethods( [ 'set_price' ] )->getMock();
+		$ctx = new Pricing_Context( 'cart', $product, null, 10.0, [], [ 'data' => $product, 'key' => 'live_key' ] );
+		$d   = new Price_Decision( 5.0, Price_Decision::DURABLE, 'r', 'l', 'stepped_by_cycle', 1 );
+		$d->policy_id = (string) $policy_id;
+		( new \Newspack\Dynamic_Pricing\WooProduct_Surface() )->apply( $ctx, $d );
+
+		$line = $this->getMockBuilder( \WC_Order_Item_Product::class )
+			->disableOriginalConstructor()
+			->onlyMethods( [ 'get_product_id' ] )
+			->addMethods( [ 'get_variation_id', 'update_meta_data', 'save' ] )
+			->getMock();
+		$line->expects( $this->never() )->method( 'update_meta_data' );
+
+		$sub = $this->mock_subscription( completed_payments: 0, line_item: $line );
+
+		Subscription_Surface::pin_deal_on_subscription( $sub, null, new \WC_Cart( [ 'live_key' => [ 'data' => $product ] ] ) );
+	}
+
 	public function test_on_payment_complete_bails_when_product_is_deleted() {
 		// Mock subscription with a line item that points at a non-existent product
 		// (wc_get_product returns false). The guard in on_payment_complete() must

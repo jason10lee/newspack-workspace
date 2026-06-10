@@ -61,6 +61,40 @@ class Newspack_Test_Policy extends WP_UnitTestCase {
 		$this->assertSame( 'min', $policy->compose_mode );
 	}
 
+	public function test_application_defaults_to_deal_and_reads_live() {
+		$post_id = $this->factory->post->create( [ 'post_type' => 'shop_pricing_policy' ] );
+		update_post_meta( $post_id, '_strategy_id', 'stepped_by_cycle' );
+		$this->assertSame( Policy::APPLICATION_DEAL, Policy::from_post( get_post( $post_id ) )->application, 'Deals are the default — prospective edits, pinned at purchase.' );
+
+		update_post_meta( $post_id, '_application', 'live' );
+		$this->assertSame( Policy::APPLICATION_LIVE, Policy::from_post( get_post( $post_id ) )->application );
+
+		update_post_meta( $post_id, '_application', 'bogus' );
+		$this->assertSame( Policy::APPLICATION_DEAL, Policy::from_post( get_post( $post_id ) )->application, 'Unknown values fall back to deal.' );
+	}
+
+	public function test_snapshot_roundtrip_preserves_decision_relevant_config() {
+		$p = $this->make_policy( [] );
+		$p->params       = [ 'steps' => [ [ 'at' => 1, 'calc_type' => 'fixed_price', 'value' => 5, 'label' => 'Intro' ] ] ];
+		$p->priority     = 42;
+		$p->compose_mode = 'priority_exclusive';
+		$p->publicize    = true;
+
+		$snapshot = $p->to_snapshot();
+		$this->assertSame( 1, $snapshot['schema_version'] );
+		$this->assertSame( '1', $snapshot['policy_id'] );
+
+		$hydrated = Policy::from_snapshot( $snapshot );
+		$this->assertSame( $p->strategy_id, $hydrated->strategy_id );
+		$this->assertSame( $p->params, $hydrated->params );
+		$this->assertSame( 42, $hydrated->priority );
+		$this->assertSame( 'priority_exclusive', $hydrated->compose_mode );
+		$this->assertTrue( $hydrated->publicize );
+		$this->assertSame( [], $hydrated->conditions, 'A pinned deal is unconditional.' );
+		$this->assertNull( $hydrated->active_from, 'A pinned deal has no window — deal lifetime is subscription lifetime.' );
+		$this->assertTrue( $hydrated->is_active_now() );
+	}
+
 	public function test_scope_type_defaults_to_all_subscriptions_when_meta_absent() {
 		$post_id = $this->factory->post->create( [ 'post_type' => 'shop_pricing_policy' ] );
 		update_post_meta( $post_id, '_strategy_id', 'stepped_by_cycle' );

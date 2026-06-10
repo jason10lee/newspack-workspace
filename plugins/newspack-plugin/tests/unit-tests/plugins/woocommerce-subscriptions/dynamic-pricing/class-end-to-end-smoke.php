@@ -187,6 +187,9 @@ class Newspack_Test_Dynamic_Pricing_End_To_End extends WP_UnitTestCase {
 		update_post_meta( $policy_id, '_strategy_id', 'stepped_by_cycle' );
 		update_post_meta( $policy_id, '_priority', 100 );
 		update_post_meta( $policy_id, '_compose_mode', 'min' );
+		// Live-class: this walk exercises repository-resolved renewals. Deal-class
+		// policies reach renewals only through pinned snapshots (docs 03).
+		update_post_meta( $policy_id, '_application', 'live' );
 		update_post_meta( $policy_id, '_scope_type', 'product_ids' );
 		add_post_meta( $policy_id, '_scope_product_id', $product_id );
 		update_post_meta(

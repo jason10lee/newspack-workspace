@@ -15,6 +15,20 @@ defined( 'ABSPATH' ) || exit;
  * `post_status='publish'` is the active/draft signal; there is no `_status` meta key.
  */
 final class Policy {
+	/**
+	 * Deal: participates in acquisition resolution only. When it wins at
+	 * checkout, its config is snapshotted onto the subscription and renewals
+	 * resolve from the snapshot — editing or deleting the policy affects new
+	 * acquisitions only. The default. See docs 03-policy-pinning-design.
+	 */
+	const APPLICATION_DEAL = 'deal';
+
+	/**
+	 * Live: resolved fresh at every pricing event (acquisition and renewal),
+	 * never snapshots. For retention offers, win-backs, fleet-wide adjustments.
+	 */
+	const APPLICATION_LIVE = 'live';
+
 	public string $id;
 	public string $title;
 	public string $strategy_id;
@@ -26,6 +40,7 @@ final class Policy {
 	public ?int $active_from     = null;
 	public ?int $active_until    = null;
 	public array $conditions     = [];
+	public string $application   = self::APPLICATION_DEAL;
 	/**
 	 * Whether the engine should communicate this policy to the reader (cart strikethrough,
 	 * label badge, etc.). Default false (silent application).
@@ -59,12 +74,61 @@ final class Policy {
 
 		$p->publicize = '1' === (string) get_post_meta( $post->ID, '_publicize', true );
 
+		$application    = (string) get_post_meta( $post->ID, '_application', true );
+		$p->application = self::APPLICATION_LIVE === $application ? self::APPLICATION_LIVE : self::APPLICATION_DEAL;
+
 		$params     = get_post_meta( $post->ID, '_params', true );
 		$conditions = get_post_meta( $post->ID, '_conditions', true );
 		$p->params     = is_string( $params )     ? ( json_decode( $params, true ) ?: [] ) : ( is_array( $params ) ? $params : [] );
 		$p->conditions = is_string( $conditions ) ? ( json_decode( $conditions, true ) ?: [] ) : ( is_array( $conditions ) ? $conditions : [] );
 
 		return $p;
+	}
+
+	/**
+	 * Hydrate a Policy from a deal snapshot pinned on a subscription line item.
+	 *
+	 * Snapshots are self-contained: they survive policy deletion and carry the
+	 * config as authored at pin time (the FORMULA, not resolved amounts — a
+	 * pinned percent deal floats with catalog price; see docs 03 §7).
+	 * Deliberately unconditional (the deal, once made, has no eligibility gates)
+	 * and windowless (deal lifetime = subscription lifetime).
+	 *
+	 * @param array $snapshot Decoded `_newspack_dp_deal` line item meta.
+	 */
+	public static function from_snapshot( array $snapshot ): self {
+		$p = new self();
+		$p->id           = (string) ( $snapshot['policy_id'] ?? '' );
+		$p->title        = (string) ( $snapshot['title'] ?? '' );
+		$p->strategy_id  = (string) ( $snapshot['strategy_id'] ?? '' );
+		$p->params       = is_array( $snapshot['params'] ?? null ) ? $snapshot['params'] : [];
+		$p->priority     = isset( $snapshot['priority'] ) ? (int) $snapshot['priority'] : 100;
+		$p->compose_mode = in_array( $snapshot['compose_mode'] ?? '', [ 'min', 'priority_exclusive' ], true ) ? $snapshot['compose_mode'] : 'min';
+		$p->publicize    = ! empty( $snapshot['publicize'] );
+		$p->application  = self::APPLICATION_DEAL;
+		// Scope is irrelevant post-pin: the snapshot is already bound to its
+		// subscription. all_subscriptions makes matches_product() pass for the
+		// pinned product without an id lookup.
+		$p->scope_type = 'all_subscriptions';
+		return $p;
+	}
+
+	/**
+	 * Build the snapshot payload that pins this policy onto a subscription.
+	 * The inverse of from_snapshot(); the single source of the snapshot shape.
+	 */
+	public function to_snapshot(): array {
+		return [
+			'schema_version' => 1,
+			'policy_id'      => $this->id,
+			'pinned_at'      => current_time( 'mysql', true ),
+			'title'          => $this->title,
+			'strategy_id'    => $this->strategy_id,
+			'params'         => $this->params,
+			'priority'       => $this->priority,
+			'compose_mode'   => $this->compose_mode,
+			'publicize'      => $this->publicize,
+		];
 	}
 
 	/**
