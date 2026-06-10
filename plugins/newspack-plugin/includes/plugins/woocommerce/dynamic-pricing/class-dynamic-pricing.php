@@ -12,6 +12,7 @@ use Newspack\Dynamic_Pricing\Matchers\All_Subscriptions_Scope_Matcher;
 use Newspack\Dynamic_Pricing\Matchers\Product_Ids_Scope_Matcher;
 use Newspack\Dynamic_Pricing\Matchers\Category_Scope_Matcher;
 use Newspack\Dynamic_Pricing\Matchers\First_Time_Only_Condition_Matcher;
+use Newspack\Dynamic_Pricing\Matchers\Subscription_Started_After_Condition_Matcher;
 use Newspack\Dynamic_Pricing\Strategies\Simple_Price_Strategy;
 
 defined( 'ABSPATH' ) || exit;
@@ -32,6 +33,7 @@ final class Dynamic_Pricing {
 		$engine->register_scope( new Product_Ids_Scope_Matcher() );
 		$engine->register_scope( new Category_Scope_Matcher() );
 		$engine->register_condition( new First_Time_Only_Condition_Matcher() );
+		$engine->register_condition( new Subscription_Started_After_Condition_Matcher() );
 
 		// Foundation-level strategy: no WCS dependency (the cycle signal is
 		// surface-provided). WCS-specific strategies register in Subscriptions_Bootstrap.

@@ -172,7 +172,9 @@ final class Policy_Edit_UI {
 	}
 
 	public static function render_conditions_metabox( \WP_Post $post ): void {
-		$first_time_only = self::condition_value( Policy::from_post( $post )->conditions, 'first_time_only' );
+		$conditions      = Policy::from_post( $post )->conditions;
+		$first_time_only = self::condition_value( $conditions, 'first_time_only' );
+		$started_after   = (int) self::condition_value( $conditions, 'subscription_started_after' );
 		?>
 		<p class="description">
 			<?php esc_html_e( 'Conditions gate whether this policy applies to a given purchase. All checked conditions must pass; an unchecked policy has no eligibility restrictions.', 'newspack-plugin' ); ?>
@@ -187,6 +189,20 @@ final class Policy_Edit_UI {
 					</label>
 					<p class="description">
 						<?php esc_html_e( 'Prevents a cancelled subscriber from re-triggering an intro step by purchasing again. Acquisition (cart) only — renewal cycles always pass so stepped policies keep applying after the first cycle. For "intro only, no stepping" promos, pair with a single-step policy. Guests are treated as first-time.', 'newspack-plugin' ); ?>
+					</p>
+				</td>
+			</tr>
+			<tr>
+				<th scope="row"><label for="newspack_dp_started_after"><?php esc_html_e( 'Subscriptions started on/after', 'newspack-plugin' ); ?></label></th>
+				<td>
+					<input
+						type="datetime-local"
+						name="newspack_dp_conditions[subscription_started_after]"
+						id="newspack_dp_started_after"
+						value="<?php echo esc_attr( self::ts_to_local( $started_after > 0 ? $started_after : null ) ); ?>"
+					/>
+					<p class="description">
+						<?php esc_html_e( 'Cohort gate (site timezone, empty = no restriction). Renewals: only subscriptions started on/after this moment match — a Live policy created today won\'t reach back into older subscriptions. Checkout: the policy applies only once this moment has passed.', 'newspack-plugin' ); ?>
 					</p>
 				</td>
 			</tr>
@@ -434,6 +450,13 @@ final class Policy_Edit_UI {
 			$conditions_out[] = [
 				'type'  => 'first_time_only',
 				'value' => true,
+			];
+		}
+		$started_after = self::local_to_ts( sanitize_text_field( (string) ( $conditions_in['subscription_started_after'] ?? '' ) ) );
+		if ( null !== $started_after ) {
+			$conditions_out[] = [
+				'type'  => 'subscription_started_after',
+				'value' => $started_after,
 			];
 		}
 		if ( empty( $conditions_out ) ) {
