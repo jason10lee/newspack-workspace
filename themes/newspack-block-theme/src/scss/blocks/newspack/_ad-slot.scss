@@ -5,3 +5,14 @@
 		/* padding: 0; */
 	}
 }
+
+// Stopgap: drop the header's bottom margin when a populated below-header ad
+// follows, so the ad tucks under the header and owns the gap to the content via
+// its own spacing. GAM sets `display: none` on empty slots, so the margin stays
+// intact when there's no ad — hence matching on the inline display, not presence.
+header:has( > .global_below_header:not( [style*="display: none"] ) ) {
+	.header-desktop > .wp-block-group,
+	.header-mobile > .wp-block-group {
+		margin-bottom: 0 !important;
+	}
+}
