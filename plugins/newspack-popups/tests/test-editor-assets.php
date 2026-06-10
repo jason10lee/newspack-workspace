@@ -180,6 +180,13 @@ class EditorAssetsTest extends WP_UnitTestCase {
 	 * Test prompt meta is not editable through the stale core Custom Fields metabox.
 	 */
 	public function test_prompt_editor_removes_core_custom_fields_meta_box() {
+		$post_id = self::factory()->post->create(
+			[
+				'post_type' => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+			]
+		);
+		$post    = get_post( $post_id );
+
 		self::assertTrue( post_type_supports( Newspack_Popups::NEWSPACK_POPUPS_CPT, 'custom-fields' ) );
 
 		add_meta_box(
@@ -194,7 +201,7 @@ class EditorAssetsTest extends WP_UnitTestCase {
 		self::assertSame( 99, has_action( 'add_meta_boxes_' . Newspack_Popups::NEWSPACK_POPUPS_CPT, [ Newspack_Popups::class, 'remove_custom_fields_meta_box' ] ) );
 		self::assertIsArray( $GLOBALS['wp_meta_boxes'][ Newspack_Popups::NEWSPACK_POPUPS_CPT ]['normal']['core']['postcustom'] );
 
-		do_action( 'add_meta_boxes_' . Newspack_Popups::NEWSPACK_POPUPS_CPT, get_post() );
+		do_action( 'add_meta_boxes_' . Newspack_Popups::NEWSPACK_POPUPS_CPT, $post );
 
 		self::assertFalse( $GLOBALS['wp_meta_boxes'][ Newspack_Popups::NEWSPACK_POPUPS_CPT ]['normal']['core']['postcustom'] );
 	}

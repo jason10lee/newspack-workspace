@@ -181,8 +181,10 @@ final class Newspack_Popups {
 
 	/**
 	 * Remove the core Custom Fields metabox from the Prompt editor.
+	 *
+	 * @param WP_Post $post The current post object.
 	 */
-	public static function remove_custom_fields_meta_box() {
+	public static function remove_custom_fields_meta_box( $post ) {
 		remove_meta_box( 'postcustom', self::NEWSPACK_POPUPS_CPT, 'normal' );
 	}
 
@@ -705,12 +707,19 @@ final class Newspack_Popups {
 		}
 
 		// Block assets for Custom Placement and Prompt blocks.
-		$blocks_asset = require dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/blocks.asset.php';
+		$dist_dir           = dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist';
+		$blocks_asset_path  = trailingslashit( $dist_dir ) . 'blocks.asset.php';
+		$blocks_script_path = trailingslashit( $dist_dir ) . 'blocks.js';
+		if ( ! file_exists( $blocks_asset_path ) || ! file_exists( $blocks_script_path ) ) {
+			return;
+		}
+
+		$blocks_asset = require $blocks_asset_path;
 		\wp_enqueue_script(
 			'newspack-popups-blocks',
 			plugins_url( '../dist/blocks.js', __FILE__ ),
 			$blocks_asset['dependencies'],
-			filemtime( dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/blocks.js' ),
+			filemtime( $blocks_script_path ),
 			true
 		);
 
@@ -729,7 +738,7 @@ final class Newspack_Popups {
 			'newspack-popups-blocks',
 			plugins_url( '../dist/blocks.css', __FILE__ ),
 			[],
-			filemtime( dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/blocks.css' )
+			filemtime( trailingslashit( $dist_dir ) . 'blocks.css' )
 		);
 		wp_style_add_data( 'newspack-popups-blocks', 'rtl', 'replace' );
 		wp_enqueue_style( 'newspack-popups-blocks' );
@@ -756,12 +765,18 @@ final class Newspack_Popups {
 			$supported_post_types = Newspack_Popups_Model::get_default_popup_post_types();
 			if ( in_array( $screen->post_type, $supported_post_types, true ) ) {
 				// But it's a supported post type.
-				$document_settings_asset = require dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/documentSettings.asset.php';
+				$document_settings_asset_path  = dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/documentSettings.asset.php';
+				$document_settings_script_path = dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/documentSettings.js';
+				if ( ! file_exists( $document_settings_asset_path ) || ! file_exists( $document_settings_script_path ) ) {
+					return;
+				}
+
+				$document_settings_asset = require $document_settings_asset_path;
 				\wp_enqueue_script(
 					'newspack-popups',
 					plugins_url( '../dist/documentSettings.js', __FILE__ ),
 					$document_settings_asset['dependencies'],
-					filemtime( dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/documentSettings.js' ),
+					filemtime( $document_settings_script_path ),
 					true
 				);
 			}
@@ -769,12 +784,18 @@ final class Newspack_Popups {
 			return;
 		}
 
-		$editor_asset = require dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/editor.asset.php';
+		$editor_asset_path  = dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/editor.asset.php';
+		$editor_script_path = dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/editor.js';
+		if ( ! file_exists( $editor_asset_path ) || ! file_exists( $editor_script_path ) ) {
+			return;
+		}
+
+		$editor_asset = require $editor_asset_path;
 		\wp_enqueue_script(
 			'newspack-popups',
 			plugins_url( '../dist/editor.js', __FILE__ ),
 			$editor_asset['dependencies'],
-			filemtime( dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/editor.js' ),
+			filemtime( $editor_script_path ),
 			true
 		);
 
