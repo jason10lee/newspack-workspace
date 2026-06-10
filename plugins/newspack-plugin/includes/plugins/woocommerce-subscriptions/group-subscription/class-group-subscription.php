@@ -282,7 +282,7 @@ class Group_Subscription {
 	public static function update_members( $subscription, $members_to_add, $members_to_remove = [] ) {
 		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
 		if ( ! $subscription ) {
-			return new \WP_Error( 'newspack_group_subscription_update_members', __( 'Subscription not found.', 'newspack-plugin' ) );
+			return new \WP_Error( 'newspack_group_subscription_update_members', __( 'Subscription not found.', 'newspack-plugin' ), [ 'status' => 404 ] );
 		}
 		$subscription_settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
 
@@ -311,7 +311,7 @@ class Group_Subscription {
 
 		$existing_members = self::get_members( $subscription );
 		if ( $subscription_settings['limit'] > 0 && count( $existing_members ) + count( $members_to_add ) > $subscription_settings['limit'] ) {
-			return new \WP_Error( 'newspack_group_subscription_update_members', __( 'Member limit reached. Please remove some members or increase the limit.', 'newspack-plugin' ) );
+			return new \WP_Error( 'newspack_group_subscription_update_members', __( 'Member limit reached. Please remove some members or increase the limit.', 'newspack-plugin' ), [ 'status' => 409 ] );
 		}
 
 		// Add new members.
