@@ -29,18 +29,37 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
-		global $subscriptions_database, $products_database;
+		global $subscriptions_database, $products_database, $orders_database;
 		$subscriptions_database = [];
 		$products_database      = [];
+		$orders_database        = [];
+
+		// The meta-box registration is gated behind the content-gates feature flag.
+		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
+			define( 'NEWSPACK_CONTENT_GATES', true );
+		}
+
+		// Start each meta-box test from a clean registry.
+		$GLOBALS['wp_meta_boxes'] = [];
 	}
 
 	/**
 	 * Tear down: reset subscriptions and products databases.
 	 */
 	public function tear_down() {
-		global $subscriptions_database, $products_database;
-		$subscriptions_database = [];
-		$products_database      = [];
+		global $subscriptions_database, $products_database, $orders_database;
+		$subscriptions_database   = [];
+		$products_database        = [];
+		$orders_database          = [];
+		$GLOBALS['wp_meta_boxes'] = [];
+		$prefix                   = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+		unset(
+			$_POST['woocommerce_meta_nonce'],
+			$_POST[ $prefix . 'meta_box' ],
+			$_POST[ $prefix . 'enabled' ],
+			$_POST[ $prefix . 'limit' ],
+			$_POST[ $prefix . 'name' ]
+		);
 		parent::tear_down();
 	}
 
@@ -241,5 +260,163 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 		$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
 
 		$this->assertSame( Group_Subscription::get_label( 'singular' ), $settings['name'], 'When neither name meta nor a product name is set, the group name should fall back to the publisher singular group label.' );
+	}
+
+	/*
+	 * --- Meta-box registration (Bug 1: HPOS-only meta box) ---
+	 */
+
+	/**
+	 * Whether the group-subscription meta box is registered for a screen.
+	 *
+	 * @param string $screen The screen / post-type the box would render on.
+	 * @return bool
+	 */
+	private function meta_box_is_registered( $screen = 'shop_subscription' ) {
+		return isset( $GLOBALS['wp_meta_boxes'][ $screen ]['normal']['high']['newspack-group-subscription'] );
+	}
+
+	/**
+	 * On classic order storage, WordPress core fires `add_meta_boxes` with a WP_Post
+	 * (not a WC_Subscription). The box must still register so admins can view and edit
+	 * a subscription's group settings.
+	 */
+	public function test_meta_box_registers_on_classic_order_storage() {
+		$subscription = $this->make_subscription_with_product( [ 'enabled' => 'yes' ] );
+		$post         = new WP_Post(
+			(object) [
+				'ID'        => $subscription->get_id(),
+				'post_type' => 'shop_subscription',
+			]
+		);
+
+		Group_Subscription_Settings::add_group_subscription_meta_box( 'shop_subscription', $post );
+
+		$this->assertTrue( $this->meta_box_is_registered(), 'The group-subscription meta box should register when core passes a WP_Post on classic order storage.' );
+	}
+
+	/**
+	 * Registration is not enough: on classic order storage WordPress also invokes the meta-box
+	 * render callback with a WP_Post, so the callback must resolve it to a subscription and emit
+	 * the markup (including the save sentinel). Otherwise the box renders empty and the save
+	 * handler bails, so group config can never be edited on classic storage.
+	 */
+	public function test_meta_box_renders_sentinel_on_classic_order_storage() {
+		$subscription = $this->make_subscription_with_product( [ 'enabled' => 'yes' ] );
+		$post         = new WP_Post(
+			(object) [
+				'ID'        => $subscription->get_id(),
+				'post_type' => 'shop_subscription',
+			]
+		);
+
+		ob_start();
+		Group_Subscription_Settings::add_group_subscription_options( $post );
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString(
+			Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'meta_box',
+			$output,
+			'The render callback must resolve a WP_Post to its subscription and emit the meta-box sentinel on classic order storage.'
+		);
+	}
+
+	/**
+	 * On HPOS, WooCommerce fires `add_meta_boxes` with the wc-orders page screen id (NOT
+	 * 'shop_subscription') and the WC_Subscription object. The box must register under that
+	 * screen — gating on `$post_type === 'shop_subscription'` would wrongly drop it here.
+	 */
+	public function test_meta_box_registers_on_hpos() {
+		$subscription = $this->make_subscription_with_product( [ 'enabled' => 'yes' ] );
+		$hpos_screen  = 'woocommerce_page_wc-orders--shop_subscription';
+
+		Group_Subscription_Settings::add_group_subscription_meta_box( $hpos_screen, $subscription );
+
+		$this->assertTrue( $this->meta_box_is_registered( $hpos_screen ), 'The group-subscription meta box should register on the HPOS orders screen when WooCommerce passes a WC_Subscription.' );
+	}
+
+	/**
+	 * The box must not register for a non-subscription order, under either storage mode. Because
+	 * registration gates on wcs_is_subscription() (not the screen id), this must hold whether the
+	 * order arrives as a classic WP_Post or an HPOS WC_Order object.
+	 */
+	public function test_meta_box_does_not_register_for_non_subscription_order() {
+		// HPOS shape: a WC_Order object on the orders screen is not a subscription.
+		$order = new WC_Order(
+			[
+				'customer_id' => 1,
+				'status'      => 'completed',
+				'total'       => 10,
+			]
+		);
+		Group_Subscription_Settings::add_group_subscription_meta_box( 'woocommerce_page_wc-orders--shop_order', $order );
+		$this->assertFalse( $this->meta_box_is_registered( 'woocommerce_page_wc-orders--shop_order' ), 'The meta box should not register for an order object (HPOS).' );
+
+		// Classic shape: a WP_Post whose ID does not resolve to a subscription.
+		$post = new WP_Post(
+			(object) [
+				'ID'        => 999999,
+				'post_type' => 'shop_order',
+			]
+		);
+		Group_Subscription_Settings::add_group_subscription_meta_box( 'shop_order', $post );
+		$this->assertFalse( $this->meta_box_is_registered( 'shop_order' ), 'The meta box should not register for a non-subscription WP_Post (classic).' );
+	}
+
+	/*
+	 * --- Save handler (Bug 2: fieldless save wipes group config) ---
+	 */
+
+	/**
+	 * A save that does not originate from the group meta box (bulk status change,
+	 * programmatic save, list-table inline edit) submits no group fields. Such a save
+	 * must leave the existing group config untouched rather than resetting it.
+	 */
+	public function test_fieldless_save_preserves_group_config() {
+		$subscription = $this->make_subscription_with_product(
+			[],
+			[
+				'enabled' => 'yes',
+				'limit'   => '10',
+			]
+		);
+
+		// Simulate a valid subscription save that did not render the group meta box:
+		// a valid nonce is present, but no group fields and no meta-box sentinel.
+		$_POST['woocommerce_meta_nonce'] = wp_create_nonce( 'woocommerce_save_data' );
+
+		Group_Subscription_Settings::save_group_subscription_meta( $subscription->get_id(), $subscription );
+
+		$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
+		$this->assertTrue( $settings['enabled'], 'A save without the group meta box must not disable the group subscription.' );
+		$this->assertSame( 10, $settings['limit'], 'A save without the group meta box must not reset the member limit.' );
+	}
+
+	/**
+	 * A genuine meta-box save with the sentinel present but the "enabled" checkbox
+	 * unchecked must still disable the group subscription (preserves edit-screen semantics).
+	 */
+	public function test_meta_box_save_applies_unchecked_checkbox() {
+		$subscription = $this->make_subscription_with_product(
+			[],
+			[
+				'enabled' => 'yes',
+				'limit'   => '10',
+			]
+		);
+
+		$_POST['woocommerce_meta_nonce'] = wp_create_nonce( 'woocommerce_save_data' );
+		// The meta box rendered (sentinel present) but the enabled checkbox was unchecked
+		// (absent from $_POST) and the limit field submitted as 5.
+		$_POST[ Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'meta_box' ] = '1';
+		$_POST[ Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'limit' ]    = '5';
+
+		Group_Subscription_Settings::save_group_subscription_meta( $subscription->get_id(), $subscription );
+
+		$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
+		$this->assertFalse( $settings['enabled'], 'An unchecked enabled checkbox on a real meta-box save should disable the group subscription.' );
+		$this->assertSame( 5, $settings['limit'], 'The submitted limit value should be applied on a real meta-box save.' );
+
+		unset( $_POST[ Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'limit' ] );
 	}
 }

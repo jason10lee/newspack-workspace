@@ -328,11 +328,20 @@ class Group_Subscription_Settings {
 	/**
 	 * Add Group Subscription meta box to subscription admin pages.
 	 *
-	 * @param string                  $post_type The post type of the current post being edited.
+	 * @param string                  $post_type The screen id ('shop_subscription' on classic order storage, 'woocommerce_page_wc-orders--shop_subscription' on HPOS).
 	 * @param WP_Post|WC_Subscription $post_or_subscription The post or subscription currently being edited.
 	 */
 	public static function add_group_subscription_meta_box( $post_type, $post_or_subscription ) {
-		if ( ! Content_Gate::is_newspack_feature_enabled() || ! function_exists( 'wcs_is_subscription' ) || ! \wcs_is_subscription( $post_or_subscription ) ) {
+		if ( ! Content_Gate::is_newspack_feature_enabled() || ! function_exists( 'wcs_is_subscription' ) ) {
+			return;
+		}
+		// Core fires `add_meta_boxes` with a WP_Post on classic order storage, but with the
+		// WC_Subscription object on HPOS. Resolve a subscription reference from either shape so
+		// `wcs_is_subscription()` returns true in both cases (`wcs_is_subscription( WP_Post )` is
+		// false). Don't gate on $post_type: it is the screen id, which differs between classic
+		// ('shop_subscription') and HPOS ('woocommerce_page_wc-orders--shop_subscription').
+		$subscription_ref = $post_or_subscription instanceof \WP_Post ? $post_or_subscription->ID : $post_or_subscription;
+		if ( ! \wcs_is_subscription( $subscription_ref ) ) {
 			return;
 		}
 		\add_meta_box(
@@ -348,10 +357,19 @@ class Group_Subscription_Settings {
 	/**
 	 * Add Group Subscription options to subscription admin pages.
 	 *
-	 * @param WC_Subscription $subscription The subscription object.
+	 * @param WP_Post|WC_Subscription $subscription The subscription being edited. Core passes a
+	 *                                              WP_Post on classic order storage and a
+	 *                                              WC_Subscription on HPOS; a WP_Post is normalized
+	 *                                              to its subscription below.
 	 */
 	public static function add_group_subscription_options( $subscription ) {
-		if ( ! $subscription || ! Content_Gate::is_newspack_feature_enabled() || ! function_exists( 'wcs_is_subscription' ) || ! wcs_is_subscription( $subscription ) ) {
+		if ( ! $subscription || ! Content_Gate::is_newspack_feature_enabled() || ! function_exists( 'wcs_is_subscription' ) || ! function_exists( 'wcs_get_subscription' ) ) {
+			return;
+		}
+		// Core passes a WP_Post to the meta-box render callback on classic order storage; normalize
+		// to the subscription so the box renders (and the save sentinel emits) under both storage modes.
+		$subscription = $subscription instanceof \WP_Post ? \wcs_get_subscription( $subscription->ID ) : $subscription;
+		if ( ! $subscription || ! wcs_is_subscription( $subscription ) ) {
 			return;
 		}
 		$settings = self::get_subscription_settings( $subscription );
@@ -360,6 +378,8 @@ class Group_Subscription_Settings {
 		$invites = Group_Subscription_Invite::get_invites( $subscription );
 		?>
 		<div class="newspack-group-subscription__container" data-subscription-id="<?php echo \esc_attr( $subscription->get_id() ); ?>">
+			<?php // Sentinel so the save handler can tell a real meta-box submission from any other subscription save (bulk status change, programmatic save, list-table inline edit). ?>
+			<input type="hidden" name="<?php echo \esc_attr( self::GROUP_SUBSCRIPTION_META_PREFIX . 'meta_box' ); ?>" value="1" />
 			<div class="newspack-group-subscription__settings">
 				<h3><?php \esc_html_e( 'Settings', 'newspack-plugin' ); ?></h3>
 				<p>
@@ -488,6 +508,14 @@ class Group_Subscription_Settings {
 
 		// Verify save nonce. See: WCS_Meta_Box_Subscription_Data::save().
 		if ( empty( $_POST['woocommerce_meta_nonce'] ) || ! \wp_verify_nonce( \wc_clean( \wp_unslash( $_POST['woocommerce_meta_nonce'] ) ), 'woocommerce_save_data' ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+			return;
+		}
+
+		// Only act on saves that actually submitted the group meta box. Without this, any other
+		// subscription save (bulk status change, programmatic save, list-table inline edit, or a
+		// classic-storage save where the box failed to render) would submit no group fields and
+		// silently reset the group config. The sentinel is rendered in add_group_subscription_options().
+		if ( empty( $_POST[ self::GROUP_SUBSCRIPTION_META_PREFIX . 'meta_box' ] ) ) {
 			return;
 		}
 

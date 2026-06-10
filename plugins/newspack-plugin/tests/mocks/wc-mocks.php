@@ -555,19 +555,18 @@ function wc_get_checkout_url() {
 }
 function wcs_is_subscription( $order ) {
 	global $subscriptions_database;
+	// Mirror real WooCommerce: only a WC_Subscription instance or a numeric ID
+	// counts. A WP_Post (what core passes to `add_meta_boxes` on classic order
+	// storage) is NOT a subscription, even when its ID maps to one.
 	if ( is_object( $order ) ) {
-		if ( method_exists( $order, 'get_id' ) ) {
-			$id = $order->get_id();
-		} elseif ( isset( $order->ID ) ) {
-			$id = (int) $order->ID;
-		} elseif ( isset( $order->id ) ) {
-			$id = (int) $order->id;
-		} else {
-			// Object has no recognisable ID property — treat as not-a-subscription.
+		if ( ! $order instanceof WC_Subscription ) {
 			return false;
 		}
-	} else {
+		$id = $order->get_id();
+	} elseif ( is_numeric( $order ) ) {
 		$id = (int) $order;
+	} else {
+		return false;
 	}
 	return isset( $subscriptions_database[ $id ] );
 }
@@ -665,6 +664,12 @@ function wc_prices_include_tax() {
 	global $wcs_mock_prices_include_tax;
 	return ! empty( $wcs_mock_prices_include_tax );
 }
+function wc_clean( $var ) {
+	if ( is_array( $var ) ) {
+		return array_map( 'wc_clean', $var );
+	}
+	return is_scalar( $var ) ? sanitize_text_field( trim( (string) $var ) ) : $var;
+}
 function wc_get_orders( $args ) {
 	global $orders_database;
 	// For simplicity, this mock will only return a single page of results.
@@ -729,6 +734,14 @@ function wc_get_order( $order_id ) {
 function wc_get_product( $product_id ) {
 	global $products_database;
 	return $products_database[ $product_id ] ?? false;
+}
+function woocommerce_wp_text_input( $field ) {
+	printf(
+		'<input type="text" id="%1$s" name="%2$s" value="%3$s" />',
+		esc_attr( $field['id'] ?? '' ),
+		esc_attr( $field['name'] ?? ( $field['id'] ?? '' ) ),
+		esc_attr( $field['value'] ?? '' )
+	);
 }
 function wcs_get_subscription_status_name( $status ) {
 	return ucfirst( $status );
