@@ -53,6 +53,14 @@ final class Policy_Edit_UI {
 			'high'
 		);
 		add_meta_box(
+			'newspack_dp_simple',
+			__( 'Simple Pricing', 'newspack-plugin' ),
+			[ __CLASS__, 'render_simple_metabox' ],
+			Dynamic_Pricing::CPT,
+			'normal',
+			'high'
+		);
+		add_meta_box(
 			'newspack_dp_conditions',
 			__( 'Eligibility Conditions', 'newspack-plugin' ),
 			[ __CLASS__, 'render_conditions_metabox' ],
@@ -82,9 +90,10 @@ final class Policy_Edit_UI {
 				<th><label for="newspack_dp_strategy_id"><?php esc_html_e( 'Strategy', 'newspack-plugin' ); ?></label></th>
 				<td>
 					<select name="newspack_dp_strategy_id" id="newspack_dp_strategy_id">
-						<option value="stepped_by_cycle" <?php selected( $strategy_id, 'stepped_by_cycle' ); ?>>stepped_by_cycle</option>
+						<option value="stepped_by_cycle" <?php selected( $strategy_id, 'stepped_by_cycle' ); ?>><?php esc_html_e( 'Stepped by cycle — price changes on a payment schedule', 'newspack-plugin' ); ?></option>
+						<option value="simple_price" <?php selected( $strategy_id, 'simple_price' ); ?>><?php esc_html_e( 'Simple — one adjustment, optionally for the first N payments', 'newspack-plugin' ); ?></option>
 					</select>
-					<p class="description"><?php esc_html_e( 'v1 ships one strategy. Additional strategies register at runtime via Pricing_Engine::register().', 'newspack-plugin' ); ?></p>
+					<p class="description"><?php esc_html_e( 'Additional strategies register at runtime via Pricing_Engine::register().', 'newspack-plugin' ); ?></p>
 				</td>
 			</tr>
 			<tr>
@@ -183,6 +192,49 @@ final class Policy_Edit_UI {
 		return null;
 	}
 
+	public static function render_simple_metabox( \WP_Post $post ): void {
+		$params         = Policy::from_post( $post )->params;
+		$calc_type      = (string) ( $params['calc_type'] ?? Amount_Calculator::FIXED_PRICE );
+		$value          = (float) ( $params['value'] ?? 0 );
+		$label          = (string) ( $params['label'] ?? '' );
+		$payments_limit = max( 0, (int) ( $params['payments_limit'] ?? 0 ) );
+		?>
+		<p class="description"><?php esc_html_e( 'One adjustment applied to every payment — or only the first N. When the limit is reached, the price returns to catalog automatically.', 'newspack-plugin' ); ?></p>
+		<table class="form-table">
+			<tr>
+				<th><label for="newspack_dp_simple_calc_type"><?php esc_html_e( 'Calc type', 'newspack-plugin' ); ?></label></th>
+				<td>
+					<select name="newspack_dp_simple[calc_type]" id="newspack_dp_simple_calc_type">
+						<?php foreach ( Amount_Calculator::supported_types() as $type ) : ?>
+							<option value="<?php echo esc_attr( $type ); ?>" <?php selected( $calc_type, $type ); ?>><?php echo esc_html( $type ); ?></option>
+						<?php endforeach; ?>
+					</select>
+				</td>
+			</tr>
+			<tr>
+				<th><label for="newspack_dp_simple_value"><?php esc_html_e( 'Value', 'newspack-plugin' ); ?></label></th>
+				<td>
+					<input type="number" step="0.01" min="0" name="newspack_dp_simple[value]" id="newspack_dp_simple_value" value="<?php echo esc_attr( (string) $value ); ?>" />
+				</td>
+			</tr>
+			<tr>
+				<th><label for="newspack_dp_simple_payments_limit"><?php esc_html_e( 'Apply for first N payments', 'newspack-plugin' ); ?></label></th>
+				<td>
+					<input type="number" min="0" name="newspack_dp_simple[payments_limit]" id="newspack_dp_simple_payments_limit" value="<?php echo esc_attr( (string) $payments_limit ); ?>" />
+					<p class="description"><?php esc_html_e( '0 = unlimited (applies to every recurring payment).', 'newspack-plugin' ); ?></p>
+				</td>
+			</tr>
+			<tr>
+				<th><label for="newspack_dp_simple_label"><?php esc_html_e( 'Label', 'newspack-plugin' ); ?></label></th>
+				<td>
+					<input type="text" name="newspack_dp_simple[label]" id="newspack_dp_simple_label" value="<?php echo esc_attr( $label ); ?>" class="regular-text" />
+					<p class="description"><?php esc_html_e( 'Shown to the reader when the policy is publicized.', 'newspack-plugin' ); ?></p>
+				</td>
+			</tr>
+		</table>
+		<?php
+	}
+
 	public static function render_steps_metabox( \WP_Post $post ): void {
 		$params = Policy::from_post( $post )->params;
 		$steps  = is_array( $params['steps'] ?? null ) ? $params['steps'] : [];
@@ -274,6 +326,9 @@ final class Policy_Edit_UI {
 		$compose_mode = isset( $_POST['newspack_dp_compose_mode'] ) ? sanitize_text_field( wp_unslash( $_POST['newspack_dp_compose_mode'] ) ) : 'min';
 		$scope_type   = isset( $_POST['newspack_dp_scope_type'] ) ? sanitize_text_field( wp_unslash( $_POST['newspack_dp_scope_type'] ) ) : 'all_subscriptions';
 
+		if ( ! in_array( $strategy_id, [ 'stepped_by_cycle', 'simple_price' ], true ) ) {
+			$strategy_id = 'stepped_by_cycle';
+		}
 		if ( ! in_array( $compose_mode, [ 'min', 'priority_exclusive' ], true ) ) {
 			$compose_mode = 'min';
 		}
@@ -317,27 +372,43 @@ final class Policy_Edit_UI {
 		$publicize = isset( $_POST['newspack_dp_publicize'] ) && '1' === sanitize_text_field( wp_unslash( $_POST['newspack_dp_publicize'] ) );
 		update_post_meta( $post_id, '_publicize', $publicize ? '1' : '' );
 
-		$steps_in  = isset( $_POST['newspack_dp_steps'] ) && is_array( $_POST['newspack_dp_steps'] ) ? wp_unslash( $_POST['newspack_dp_steps'] ) : [];
-		$steps_out = [];
-		foreach ( $steps_in as $row ) {
-			if ( ! is_array( $row ) || empty( $row['at'] ) ) {
-				continue;
-			}
-			$calc = isset( $row['calc_type'] ) ? sanitize_text_field( $row['calc_type'] ) : Amount_Calculator::FIXED_PRICE;
+		// Params shape follows the selected strategy's config_schema.
+		if ( 'simple_price' === $strategy_id ) {
+			$simple_in = isset( $_POST['newspack_dp_simple'] ) && is_array( $_POST['newspack_dp_simple'] ) ? wp_unslash( $_POST['newspack_dp_simple'] ) : [];
+			$calc      = isset( $simple_in['calc_type'] ) ? sanitize_text_field( $simple_in['calc_type'] ) : Amount_Calculator::FIXED_PRICE;
 			if ( ! in_array( $calc, Amount_Calculator::supported_types(), true ) ) {
 				$calc = Amount_Calculator::FIXED_PRICE;
 			}
-			$steps_out[] = [
-				'at'        => (int) $row['at'],
-				'calc_type' => $calc,
-				'value'     => (float) ( $row['value'] ?? 0 ),
-				'label'     => isset( $row['label'] ) ? sanitize_text_field( $row['label'] ) : '',
+			$params_out = [
+				'calc_type'      => $calc,
+				'value'          => max( 0, (float) ( $simple_in['value'] ?? 0 ) ),
+				'payments_limit' => max( 0, (int) ( $simple_in['payments_limit'] ?? 0 ) ),
+				'label'          => isset( $simple_in['label'] ) ? sanitize_text_field( $simple_in['label'] ) : '',
 			];
+		} else {
+			$steps_in  = isset( $_POST['newspack_dp_steps'] ) && is_array( $_POST['newspack_dp_steps'] ) ? wp_unslash( $_POST['newspack_dp_steps'] ) : [];
+			$steps_out = [];
+			foreach ( $steps_in as $row ) {
+				if ( ! is_array( $row ) || empty( $row['at'] ) ) {
+					continue;
+				}
+				$calc = isset( $row['calc_type'] ) ? sanitize_text_field( $row['calc_type'] ) : Amount_Calculator::FIXED_PRICE;
+				if ( ! in_array( $calc, Amount_Calculator::supported_types(), true ) ) {
+					$calc = Amount_Calculator::FIXED_PRICE;
+				}
+				$steps_out[] = [
+					'at'        => (int) $row['at'],
+					'calc_type' => $calc,
+					'value'     => (float) ( $row['value'] ?? 0 ),
+					'label'     => isset( $row['label'] ) ? sanitize_text_field( $row['label'] ) : '',
+				];
+			}
+			usort( $steps_out, fn( array $a, array $b ): int => $a['at'] <=> $b['at'] );
+			$params_out = [ 'steps' => $steps_out ];
 		}
-		usort( $steps_out, fn( array $a, array $b ): int => $a['at'] <=> $b['at'] );
 		// wp_slash: update_metadata() wp_unslash()es its value, which would strip the
 		// backslashes JSON uses to escape quotes inside labels and corrupt the blob.
-		update_post_meta( $post_id, '_params', wp_slash( wp_json_encode( [ 'steps' => $steps_out ] ) ) );
+		update_post_meta( $post_id, '_params', wp_slash( wp_json_encode( $params_out ) ) );
 
 		// Conditions: read the structured array from $_POST, build a normalized list of
 		// {type, value} entries, and persist as JSON for Policy::from_post() to decode.
@@ -372,7 +443,25 @@ final class Policy_Edit_UI {
 	private static function steps_js(): string {
 		return <<<'JS'
 (function() {
+	function initStrategyToggle() {
+		var select   = document.querySelector('#newspack_dp_strategy_id');
+		var steps    = document.querySelector('#newspack_dp_steps');
+		var simple   = document.querySelector('#newspack_dp_simple');
+		if (!select || !steps || !simple) { return; }
+
+		function toggle() {
+			var isSimple = select.value === 'simple_price';
+			steps.style.display  = isSimple ? 'none' : '';
+			simple.style.display = isSimple ? '' : 'none';
+		}
+
+		select.addEventListener('change', toggle);
+		toggle();
+	}
+
 	function init() {
+		initStrategyToggle();
+
 		var tbody  = document.querySelector('#newspack_dp_steps_table tbody');
 		var addBtn = document.querySelector('#newspack_dp_add_step');
 		if (!tbody || !addBtn) { return; }
