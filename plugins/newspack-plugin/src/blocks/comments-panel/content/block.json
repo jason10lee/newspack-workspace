@@ -4,7 +4,7 @@
 	"name": "newspack/comments-panel-content",
 	"title": "Comments Panel Content",
 	"category": "newspack",
-	"description": "The panel that appears when the Comments Button is triggered. Holds the post's comments. Only one panel is output per page.",
+	"description": "The panel containing the post's comments.",
 	"textdomain": "newspack-plugin",
 	"parent": [ "newspack/comments-panel" ],
 	"attributes": {

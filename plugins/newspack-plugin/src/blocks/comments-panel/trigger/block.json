@@ -4,7 +4,7 @@
 	"name": "newspack/comments-panel-trigger",
 	"title": "Comments Button",
 	"category": "newspack",
-	"description": "The button that opens and closes the comments panel. Customize the label, icon, or style to match your design.",
+	"description": "The button that opens and closes the comments panel.",
 	"textdomain": "newspack-plugin",
 	"parent": [ "newspack/comments-panel" ],
 	"attributes": {

@@ -13,7 +13,6 @@ import {
 	useBlockProps,
 	useSettings,
 } from '@wordpress/block-editor';
-import { Notice } from '@wordpress/components';
 
 /**
  * Internal dependencies
@@ -176,7 +175,7 @@ export default function CommentsPanelContentEdit( { attributes, clientId, setAtt
 			) }
 
 			<div { ...blockProps }>
-				{ isFirstInstance ? (
+				{ isFirstInstance && (
 					<>
 						<div className="comments-panel__close-wrapper">
 							<button type="button" className="comments-panel__close" onClick={ () => togglePreview( false ) }>
@@ -190,13 +189,6 @@ export default function CommentsPanelContentEdit( { attributes, clientId, setAtt
 							<InnerBlocks template={ INNER_BLOCKS_TEMPLATE } templateLock={ false } allowedBlocks={ ALLOWED_BLOCKS } />
 						</div>
 					</>
-				) : (
-					<Notice status="info" isDismissible={ false }>
-						{ __(
-							'Only one comments panel is output per page. This button controls the panel from the first Comments Panel block.',
-							'newspack-plugin'
-						) }
-					</Notice>
 				) }
 			</div>
 		</>

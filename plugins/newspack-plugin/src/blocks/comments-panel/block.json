@@ -4,7 +4,7 @@
 	"name": "newspack/comments-panel",
 	"title": "Comments Panel",
 	"category": "newspack",
-	"description": "A button that opens a panel containing the post's comments. Intended for single post templates: only one panel is output per page, and adding the block again places additional buttons that control that same panel.",
+	"description": "A button that opens a panel containing the post's comments. Intended for single post templates.",
 	"keywords": [ "comments", "panel", "overlay", "drawer", "discussion" ],
 	"textdomain": "newspack-plugin",
 	"supports": {

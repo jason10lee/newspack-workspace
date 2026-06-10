@@ -30,7 +30,16 @@ export function subscribeToPanel( parentClientId, setter ) {
 		subscribers.set( parentClientId, new Set() );
 	}
 	subscribers.get( parentClientId ).add( setter );
-	return () => subscribers.get( parentClientId )?.delete( setter );
+	return () => {
+		const set = subscribers.get( parentClientId );
+		if ( ! set ) {
+			return;
+		}
+		set.delete( setter );
+		if ( ! set.size ) {
+			subscribers.delete( parentClientId );
+		}
+	};
 }
 
 /**
