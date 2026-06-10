@@ -187,10 +187,12 @@ class EditorAssetsTest extends WP_UnitTestCase {
 			'Custom Fields',
 			'__return_empty_string',
 			Newspack_Popups::NEWSPACK_POPUPS_CPT,
-			'normal'
+			'normal',
+			'core'
 		);
 
 		self::assertSame( 99, has_action( 'add_meta_boxes_' . Newspack_Popups::NEWSPACK_POPUPS_CPT, [ Newspack_Popups::class, 'remove_custom_fields_meta_box' ] ) );
+		self::assertIsArray( $GLOBALS['wp_meta_boxes'][ Newspack_Popups::NEWSPACK_POPUPS_CPT ]['normal']['core']['postcustom'] );
 
 		do_action( 'add_meta_boxes_' . Newspack_Popups::NEWSPACK_POPUPS_CPT, get_post() );
 
