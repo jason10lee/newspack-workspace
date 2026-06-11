@@ -70,9 +70,16 @@ class Audience_Subscription_Products extends Wizard {
 			NEWSPACK_API_NAMESPACE,
 			'/wizard/' . $this->slug . '/products',
 			[
-				'methods'             => \WP_REST_Server::READABLE,
-				'callback'            => [ $this, 'api_get_products' ],
-				'permission_callback' => [ $this, 'api_permissions_check' ],
+				[
+					'methods'             => \WP_REST_Server::READABLE,
+					'callback'            => [ $this, 'api_get_products' ],
+					'permission_callback' => [ $this, 'api_permissions_check' ],
+				],
+				[
+					'methods'             => \WP_REST_Server::CREATABLE,
+					'callback'            => [ $this, 'api_create_product' ],
+					'permission_callback' => [ $this, 'api_permissions_check' ],
+				],
 			]
 		);
 	}
@@ -103,6 +110,210 @@ class Audience_Subscription_Products extends Wizard {
 
 		$response['products'] = array_map( [ $this, 'prepare_product' ], $products );
 		return rest_ensure_response( $response );
+	}
+
+	/**
+	 * Billing periods accepted when creating a product.
+	 */
+	const VALID_PERIODS = [ 'day', 'week', 'month', 'year' ];
+
+	/**
+	 * POST: create a subscription product from the consolidated form.
+	 *
+	 * Accepts a productized payload (no WooCommerce knowledge required from the caller) and
+	 * builds a well-formed simple or variable subscription, setting the WooCommerce +
+	 * Subscriptions meta so the product behaves correctly at checkout. Returns the created
+	 * row so the UI can insert it without a full refetch.
+	 *
+	 * @param \WP_REST_Request $request The request.
+	 *
+	 * @return \WP_REST_Response|\WP_Error The created row, or an error.
+	 */
+	public function api_create_product( $request ) {
+		if ( ! function_exists( 'wc_get_product' ) || ! class_exists( 'WC_Product_Subscription' ) ) {
+			return new \WP_Error( 'woocommerce_subscriptions_inactive', __( 'WooCommerce Subscriptions is not active.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+
+		$params = $request->get_json_params();
+		if ( empty( $params ) ) {
+			$params = $request->get_params();
+		}
+
+		$name = isset( $params['name'] ) ? sanitize_text_field( $params['name'] ) : '';
+		if ( '' === trim( $name ) ) {
+			return new \WP_Error( 'missing_name', __( 'Product name is required.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+
+		$type = isset( $params['type'] ) ? sanitize_text_field( $params['type'] ) : 'subscription';
+		if ( ! in_array( $type, self::PRODUCT_TYPES, true ) ) {
+			return new \WP_Error( 'invalid_type', __( 'Invalid product type.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+
+		$status       = ( isset( $params['status'] ) && 'draft' === $params['status'] ) ? 'draft' : 'publish';
+		$category_ids = isset( $params['category_ids'] ) && is_array( $params['category_ids'] ) ? array_map( 'absint', $params['category_ids'] ) : [];
+		$is_donation  = ! empty( $params['is_donation'] );
+
+		if ( 'variable-subscription' === $type ) {
+			$result = self::create_variable_subscription( $name, $status, $category_ids, $is_donation, isset( $params['variations'] ) ? $params['variations'] : [] );
+		} else {
+			$result = self::create_simple_subscription( $name, $status, $category_ids, $is_donation, $params );
+		}
+
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		// Bust WC's caches for the new product. NOTE: with an external object cache
+		// (memcached) WC's versioned product cache can't be reliably re-read in the SAME
+		// request, so we return just the id — the client refetches the list to render the
+		// new (correctly persisted) row.
+		clean_post_cache( $result );
+		if ( function_exists( 'wc_delete_product_transients' ) ) {
+			wc_delete_product_transients( $result );
+		}
+
+		return rest_ensure_response(
+			[
+				'id'   => (int) $result,
+				'name' => get_the_title( $result ),
+			]
+		);
+	}
+
+	/**
+	 * Create a simple subscription product.
+	 *
+	 * @param string $name         Product name.
+	 * @param string $status       Post status.
+	 * @param int[]  $category_ids  Category term IDs.
+	 * @param bool   $is_donation  Whether to flag as a donation.
+	 * @param array  $params       The request params (price/period/interval/sign_up_fee/trial_*).
+	 *
+	 * @return int|\WP_Error The new product ID, or an error.
+	 */
+	private static function create_simple_subscription( $name, $status, $category_ids, $is_donation, $params ) {
+		$price = isset( $params['price'] ) ? (float) $params['price'] : -1;
+		if ( $price < 0 ) {
+			return new \WP_Error( 'invalid_price', __( 'A valid price is required.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+		$period = isset( $params['period'] ) ? sanitize_text_field( $params['period'] ) : 'month';
+		if ( ! in_array( $period, self::VALID_PERIODS, true ) ) {
+			return new \WP_Error( 'invalid_period', __( 'Invalid billing period.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+		$interval     = isset( $params['interval'] ) ? max( 1, min( 6, (int) $params['interval'] ) ) : 1;
+		$sign_up_fee  = isset( $params['sign_up_fee'] ) ? max( 0, (float) $params['sign_up_fee'] ) : 0;
+		$trial_length = isset( $params['trial_length'] ) ? max( 0, (int) $params['trial_length'] ) : 0;
+		$trial_period = ( isset( $params['trial_period'] ) && in_array( $params['trial_period'], self::VALID_PERIODS, true ) ) ? $params['trial_period'] : 'month';
+
+		$product = new \WC_Product_Subscription();
+		$product->set_name( $name );
+		$product->set_status( $status );
+		$product->set_virtual( true );
+		$product->set_catalog_visibility( 'visible' );
+		$product->set_regular_price( (string) $price );
+		$product->set_price( (string) $price );
+		if ( $category_ids ) {
+			$product->set_category_ids( $category_ids );
+		}
+		$product->update_meta_data( '_subscription_price', $price );
+		$product->update_meta_data( '_subscription_period', $period );
+		$product->update_meta_data( '_subscription_period_interval', $interval );
+		$product->update_meta_data( '_subscription_length', 0 );
+		$product->update_meta_data( '_subscription_sign_up_fee', $sign_up_fee );
+		$product->update_meta_data( '_subscription_trial_length', $trial_length );
+		$product->update_meta_data( '_subscription_trial_period', $trial_period );
+		if ( $is_donation ) {
+			$product->update_meta_data( WooCommerce_Products::DONATION_FLAG_META_KEY, wc_bool_to_string( true ) );
+		}
+		$product_id = $product->save();
+		if ( ! $product_id ) {
+			return new \WP_Error( 'create_failed', __( 'Failed to create the product.', 'newspack-plugin' ), [ 'status' => 500 ] );
+		}
+
+		// WC's save doesn't reliably set the product_type term to 'subscription' in this
+		// environment — set it explicitly so the product reads back as a subscription.
+		wp_set_object_terms( $product_id, 'subscription', 'product_type' );
+
+		return $product_id;
+	}
+
+	/**
+	 * Create a variable subscription product with one variation per plan.
+	 *
+	 * @param string $name         Product name.
+	 * @param string $status       Post status.
+	 * @param int[]  $category_ids  Category term IDs.
+	 * @param bool   $is_donation  Whether to flag as a donation.
+	 * @param array  $variations   List of { label, price, period, interval }.
+	 *
+	 * @return int|\WP_Error The new parent product ID, or an error.
+	 */
+	private static function create_variable_subscription( $name, $status, $category_ids, $is_donation, $variations ) {
+		if ( empty( $variations ) || ! is_array( $variations ) ) {
+			return new \WP_Error( 'missing_variations', __( 'Add at least one plan.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+
+		$clean = [];
+		foreach ( $variations as $variation ) {
+			$label    = isset( $variation['label'] ) ? sanitize_text_field( $variation['label'] ) : '';
+			$price    = isset( $variation['price'] ) ? (float) $variation['price'] : -1;
+			$period   = isset( $variation['period'] ) ? sanitize_text_field( $variation['period'] ) : 'month';
+			$interval = isset( $variation['interval'] ) ? max( 1, min( 6, (int) $variation['interval'] ) ) : 1;
+			if ( '' === trim( $label ) || $price < 0 || ! in_array( $period, self::VALID_PERIODS, true ) ) {
+				return new \WP_Error( 'invalid_variation', __( 'Each plan needs a label, a valid price, and a billing period.', 'newspack-plugin' ), [ 'status' => 400 ] );
+			}
+			$clean[] = compact( 'label', 'price', 'period', 'interval' );
+		}
+
+		$labels = wp_list_pluck( $clean, 'label' );
+		if ( count( $labels ) !== count( array_unique( $labels ) ) ) {
+			return new \WP_Error( 'duplicate_labels', __( 'Plan labels must be unique.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+
+		$product = new \WC_Product_Variable_Subscription();
+		$product->set_name( $name );
+		$product->set_status( $status );
+		$product->set_virtual( true );
+		$product->set_catalog_visibility( 'visible' );
+		if ( $category_ids ) {
+			$product->set_category_ids( $category_ids );
+		}
+		$attribute = new \WC_Product_Attribute();
+		$attribute->set_name( 'Billing period' );
+		$attribute->set_options( $labels );
+		$attribute->set_visible( true );
+		$attribute->set_variation( true );
+		$product->set_attributes( [ $attribute ] );
+		if ( $is_donation ) {
+			$product->update_meta_data( WooCommerce_Products::DONATION_FLAG_META_KEY, wc_bool_to_string( true ) );
+		}
+		$parent_id = $product->save();
+		if ( ! $parent_id ) {
+			return new \WP_Error( 'create_failed', __( 'Failed to create the product.', 'newspack-plugin' ), [ 'status' => 500 ] );
+		}
+
+		// Set the product_type term explicitly (WC's save doesn't reliably do it here);
+		// without this the parent reads back as 'simple' and has no variations.
+		wp_set_object_terms( $parent_id, 'variable-subscription', 'product_type' );
+
+		foreach ( $clean as $plan ) {
+			$variation = new \WC_Product_Variation();
+			$variation->set_parent_id( $parent_id );
+			$variation->set_attributes( [ 'billing-period' => $plan['label'] ] );
+			$variation->set_status( 'publish' );
+			$variation->set_regular_price( (string) $plan['price'] );
+			$variation->update_meta_data( '_subscription_price', $plan['price'] );
+			$variation->update_meta_data( '_subscription_period', $plan['period'] );
+			$variation->update_meta_data( '_subscription_period_interval', $plan['interval'] );
+			$variation->update_meta_data( '_subscription_length', 0 );
+			$variation->save();
+		}
+
+		if ( method_exists( '\WC_Product_Variable_Subscription', 'sync' ) ) {
+			\WC_Product_Variable_Subscription::sync( $parent_id );
+		}
+
+		return $parent_id;
 	}
 
 	/**

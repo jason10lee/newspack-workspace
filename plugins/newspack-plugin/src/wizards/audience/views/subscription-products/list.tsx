@@ -10,7 +10,7 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useCallback, useMemo } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
@@ -25,6 +25,7 @@ import { DataViews, Badge } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { PolicyChips, EffectivePrice } from './policy-cells';
 import EditProductModal from './edit-modal';
+import AddProductModal from './add-modal';
 
 const API_PATH = '/newspack/v1/wizard/newspack-audience-subscription-products/products';
 
@@ -77,6 +78,7 @@ export default function SubscriptionProductsList() {
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
 	const [ scope, setScope ] = useState< Scope >( 'subscriptions' );
+	const [ showAddModal, setShowAddModal ] = useState( false );
 
 	const globals = window.newspackAudienceSubscriptionProducts;
 
@@ -110,7 +112,7 @@ export default function SubscriptionProductsList() {
 				{
 					type: 'primary',
 					label: __( 'Add product', 'newspack-plugin' ),
-					href: globals?.new_product_url,
+					action: () => setShowAddModal( true ),
 				},
 			],
 		} );
@@ -135,6 +137,21 @@ export default function SubscriptionProductsList() {
 			} )
 			.finally( () => setIsLoading( false ) );
 	}, [ addNotice ] );
+
+	// After a create, refetch the list (WC's object cache can't surface the new product in
+	// the create request, so we re-read rather than optimistically insert).
+	const handleCreated = useCallback(
+		( productName: string ) => {
+			fetchData();
+			addNotice( {
+				/* translators: %s is the new product name. */
+				message: sprintf( __( '“%s” created.', 'newspack-plugin' ), productName ),
+				type: 'success',
+				id: 'subscription-product-created',
+			} );
+		},
+		[ fetchData, addNotice ]
+	);
 
 	useEffect( () => {
 		fetchData();
@@ -341,6 +358,7 @@ export default function SubscriptionProductsList() {
 				getItemId={ ( item: SubscriptionProduct ) => String( item.id ) }
 				search
 			/>
+			{ showAddModal && <AddProductModal onClose={ () => setShowAddModal( false ) } onCreated={ handleCreated } /> }
 		</div>
 	);
 }

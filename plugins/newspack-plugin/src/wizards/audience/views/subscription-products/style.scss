@@ -37,6 +37,16 @@
 		margin: 0 0 16px;
 	}
 
+	// Add-product modal.
+	&__add-modal {
+		min-width: 480px;
+		max-width: 640px;
+	}
+
+	&__add-modal-label {
+		font-weight: 500;
+	}
+
 	// "Unlocks" — content gates this product unlocks (Access control).
 	&__unlocks {
 		display: flex;
