@@ -97,13 +97,13 @@ final class Pricing_Rule_Edit_UI {
 				</td>
 			</tr>
 			<tr>
-				<th><label for="newspack_dp_application"><?php esc_html_e( 'Existing subscribers', 'newspack-plugin' ); ?></label></th>
+				<th><label for="newspack_dp_lock_at_purchase"><?php esc_html_e( 'Lock at purchase', 'newspack-plugin' ); ?></label></th>
 				<td>
-					<select name="newspack_dp_application" id="newspack_dp_application">
-						<option value="<?php echo esc_attr( Pricing_Rule::APPLICATION_LOCKED ); ?>" <?php selected( $application, Pricing_Rule::APPLICATION_LOCKED ); ?>><?php esc_html_e( 'Locked at purchase — subscribers keep the terms they bought under (default)', 'newspack-plugin' ); ?></option>
-						<option value="<?php echo esc_attr( Pricing_Rule::APPLICATION_CURRENT ); ?>" <?php selected( $application, Pricing_Rule::APPLICATION_CURRENT ); ?>><?php esc_html_e( 'Always current — renewals follow this rule\'s latest settings', 'newspack-plugin' ); ?></option>
-					</select>
-					<p class="description"><?php esc_html_e( 'Locked: the configuration is copied onto each subscription at purchase, so editing this rule affects new purchases only. Always current: existing subscriptions follow the latest settings at every renewal — for retention adjustments or fleet-wide changes.', 'newspack-plugin' ); ?></p>
+					<label>
+						<input type="checkbox" name="newspack_dp_lock_at_purchase" id="newspack_dp_lock_at_purchase" value="1" <?php checked( Pricing_Rule::APPLICATION_LOCKED === $application ); ?> />
+						<?php esc_html_e( 'Snapshot this rule onto each subscription at purchase.', 'newspack-plugin' ); ?>
+					</label>
+					<p class="description"><?php esc_html_e( 'When on, editing this rule later affects new purchases only. When off, the rule is always current — every renewal re-evaluates against the live configuration (for retention or fleet-wide adjustments).', 'newspack-plugin' ); ?></p>
 				</td>
 			</tr>
 			<tr>
@@ -362,10 +362,9 @@ final class Pricing_Rule_Edit_UI {
 		if ( ! in_array( $compose_mode, [ 'min', 'priority_exclusive' ], true ) ) {
 			$compose_mode = 'min';
 		}
-		$application = isset( $_POST['newspack_dp_application'] ) ? sanitize_text_field( wp_unslash( $_POST['newspack_dp_application'] ) ) : Pricing_Rule::APPLICATION_LOCKED;
-		if ( ! in_array( $application, [ Pricing_Rule::APPLICATION_LOCKED, Pricing_Rule::APPLICATION_CURRENT ], true ) ) {
-			$application = Pricing_Rule::APPLICATION_LOCKED;
-		}
+		$application = ! empty( $_POST['newspack_dp_lock_at_purchase'] )
+			? Pricing_Rule::APPLICATION_LOCKED
+			: Pricing_Rule::APPLICATION_CURRENT;
 		if ( ! in_array( $scope_type, [ 'all_subscriptions', 'product_ids', 'category' ], true ) ) {
 			$scope_type = 'all_subscriptions';
 		}
