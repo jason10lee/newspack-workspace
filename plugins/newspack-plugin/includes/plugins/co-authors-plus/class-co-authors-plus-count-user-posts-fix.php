@@ -82,10 +82,9 @@ class Co_Authors_Plus_Count_User_Posts_Fix {
 		$ga_post_ids = $wpdb->get_col(
 			$wpdb->prepare(
 				"SELECT DISTINCT p.ID FROM {$wpdb->posts} p
-				INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
+				INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID AND pm.meta_key = 'cap-linked_account'
 				WHERE p.post_type = 'guest-author'
 				AND p.post_status != 'trash'
-				AND pm.meta_key = 'cap-linked_account'
 				AND pm.meta_value = %s",
 				$user_login
 			)
@@ -115,7 +114,7 @@ class Co_Authors_Plus_Count_User_Posts_Fix {
 	 * (attached to any of the GA's author terms), honoring post type and
 	 * public-only filters.
 	 *
-	 * @param int|string      $count                 The upstream count, returned as-is when no post types resolve.
+	 * @param int|string      $count                 The upstream count, returned cast to int when no post types resolve.
 	 * @param int             $user_id               The user ID.
 	 * @param int[]           $ga_term_taxonomy_ids  Author term_taxonomy_ids for all linked GAs.
 	 * @param string|string[] $post_type             The post type(s) to count (WP's count_user_posts accepts either).
