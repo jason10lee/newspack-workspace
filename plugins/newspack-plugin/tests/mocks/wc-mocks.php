@@ -525,6 +525,18 @@ if ( ! class_exists( 'WC_Subscriptions_Product' ) ) {
 			}
 			return (float) $product->get_meta( '_subscription_price' );
 		}
+		public static function is_subscription( $product ) {
+			return is_object( $product ) && method_exists( $product, 'get_type' )
+				&& in_array( $product->get_type(), [ 'subscription', 'variable-subscription', 'subscription_variation' ], true );
+		}
+		public static function get_period( $product ) {
+			$period = is_object( $product ) && method_exists( $product, 'get_meta' ) ? $product->get_meta( '_subscription_period' ) : '';
+			return $period ? $period : 'month';
+		}
+		public static function get_interval( $product ) {
+			$interval = is_object( $product ) && method_exists( $product, 'get_meta' ) ? (int) $product->get_meta( '_subscription_period_interval' ) : 0;
+			return $interval > 0 ? $interval : 1;
+		}
 	}
 }
 

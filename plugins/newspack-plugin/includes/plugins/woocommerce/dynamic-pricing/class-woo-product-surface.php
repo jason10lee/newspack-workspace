@@ -90,12 +90,87 @@ final class WooProduct_Surface implements Price_Surface {
 		add_action( 'woocommerce_checkout_order_processed', [ __CLASS__, 'note_acquisition_on_order' ], 20, 1 );
 		add_action( 'woocommerce_store_api_checkout_order_processed', [ __CLASS__, 'note_acquisition_on_order' ], 20, 1 );
 
-		// Reader-facing surfaces (cart strikethrough, modal summary, WC Blocks
-		// checkout filters, StoreAPI extension) were removed pending a rework
-		// that accounts for stepped pricing and per-cycle limits in the
-		// recurring-total display. The Pricing_Rule::$publicize flag remains in
-		// the entity and the snapshot for forward compatibility; the rule edit
-		// UI shows the option disabled.
+		// Reader-facing price display, Layer 2 cart-totals slice (specs 05 §5):
+		// when the price changes again BEYOND the next renewal (multi-step
+		// schedules), the single WCS "Recurring total" number cannot carry the
+		// story — disclose the full sequence in a row under it. Priority 15:
+		// WCS renders its recurring totals at 10 on these same hooks.
+		// Legacy-only for now: the WC Blocks recurring panel is WCS's own React
+		// component and needs a JS slice. The Newspack modal checkout wraps the
+		// legacy review table, so it gets this row for free.
+		add_action( 'woocommerce_cart_totals_after_order_total', [ __CLASS__, 'render_schedule_rows' ], 15 );
+		add_action( 'woocommerce_review_order_after_order_total', [ __CLASS__, 'render_schedule_rows' ], 15 );
+
+		// The Layer 1 purchase-price annotation (strikethrough + rule name,
+		// gated on Pricing_Rule::$publicize) remains removed pending UX; the
+		// entity field and the disabled rule-edit checkbox are in place for it.
+	}
+
+	/**
+	 * Render a "Price schedule" totals row per cart item whose price changes
+	 * again beyond the next renewal. Single-step rules render nothing — the
+	 * WCS recurring total already tells their whole story.
+	 */
+	public static function render_schedule_rows(): void {
+		if ( ! function_exists( 'WC' ) || ! WC() || ! WC()->cart ) {
+			return;
+		}
+		foreach ( WC()->cart->get_cart() as $cart_item ) {
+			if ( ! self::is_eligible_cart_item( $cart_item ) ) {
+				continue;
+			}
+			if ( ! class_exists( '\WC_Subscriptions_Product' ) || ! \WC_Subscriptions_Product::is_subscription( $cart_item['data'] ) ) {
+				continue;
+			}
+			$segments = Schedule_Projector::project_for_cart_item( $cart_item );
+			if ( ! Schedule_Projector::has_undisclosed_changes( $segments ) ) {
+				continue;
+			}
+			printf(
+				'<tr class="newspack-dp-schedule"><th>%s</th><td data-title="%s"><small>%s</small></td></tr>',
+				esc_html__( 'Price schedule', 'newspack-plugin' ),
+				esc_attr__( 'Price schedule', 'newspack-plugin' ),
+				esc_html( self::schedule_sentence( $segments, $cart_item['data'] ) )
+			);
+		}
+	}
+
+	/**
+	 * Human-readable schedule: "$7.50 for 1 renewal, then $9.00 for 1 renewal,
+	 * then $10.00 / month". Cycle 1 (the purchase) is omitted — the order total
+	 * already states it; this row narrates the renewals.
+	 *
+	 * @internal Public for tests.
+	 *
+	 * @param array       $segments Output of Schedule_Projector::project_for_cart_item().
+	 * @param \WC_Product $product  Subscription product (for the billing period label).
+	 */
+	public static function schedule_sentence( array $segments, \WC_Product $product ): string {
+		$renewal_segments = Schedule_Projector::renewal_segments( $segments );
+
+		$period   = class_exists( '\WC_Subscriptions_Product' ) ? (string) \WC_Subscriptions_Product::get_period( $product ) : '';
+		$interval = class_exists( '\WC_Subscriptions_Product' ) ? max( 1, (int) \WC_Subscriptions_Product::get_interval( $product ) ) : 1;
+		$per      = 1 === $interval
+			? $period
+			/* translators: 1: interval, 2: billing period (e.g. "2 months") */
+			: sprintf( _x( '%1$d %2$ss', 'billing interval, e.g. "2 months"', 'newspack-plugin' ), $interval, $period );
+
+		$phrases = [];
+		$count   = count( $renewal_segments );
+		foreach ( $renewal_segments as $i => $segment ) {
+			$price = wp_strip_all_tags( html_entity_decode( wc_price( $segment['amount'] ), ENT_QUOTES ) );
+			if ( $i === $count - 1 ) {
+				/* translators: 1: price, 2: billing period — the ongoing price, e.g. "$10.00 / month" */
+				$phrases[] = sprintf( __( '%1$s / %2$s', 'newspack-plugin' ), $price, $per );
+				break;
+			}
+			$length    = $renewal_segments[ $i + 1 ]['from_cycle'] - $segment['from_cycle'];
+			/* translators: 1: price, 2: number of renewals at that price */
+			$phrases[] = sprintf( _n( '%1$s for %2$d renewal', '%1$s for %2$d renewals', $length, 'newspack-plugin' ), $price, $length );
+		}
+
+		/* translators: used to join schedule phrases: "$7.50 for 1 renewal, then $9.00 for 1 renewal, then $10.00 / month" */
+		return implode( __( ', then ', 'newspack-plugin' ), $phrases );
 	}
 
 	public static function on_calculate_totals( $cart ): void {
