@@ -10,21 +10,22 @@
 /**
  * WordPress dependencies
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 import { useState, useEffect, useCallback, useMemo } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
-import { Spinner, Notice, Button, Modal } from '@wordpress/components';
+import { Spinner, Notice, Button } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
-import { DataViews, Badge } from '../../../../../packages/components/src';
+import { DataViews, Badge, Router } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { PolicyChips, EffectivePrice } from './policy-cells';
-import ProductForm from './product-form';
+
+const { useHistory } = Router;
 
 const API_PATH = '/newspack/v1/wizard/newspack-audience-subscription-products/products';
 
@@ -33,20 +34,20 @@ const DEFAULT_CURRENCY: SubscriptionProductsCurrency = { code: 'USD', symbol: '$
 type Scope = 'subscriptions' | 'donations' | 'all' | 'groups';
 
 // Top-level scope chips. The first three are *individual* products (by purpose); "Plan
-// groups" is a separate structural lens for grouped containers, so a group never appears
+// bundles" is a separate structural lens for grouped containers, so a bundle never appears
 // inline among the products it bundles. Defaults to non-donation subscriptions.
 const SCOPES: { value: Scope; label: string; separated?: boolean }[] = [
 	{ value: 'subscriptions', label: __( 'Subscriptions', 'newspack-plugin' ) },
 	{ value: 'donations', label: __( 'Donations', 'newspack-plugin' ) },
 	{ value: 'all', label: __( 'All', 'newspack-plugin' ) },
-	{ value: 'groups', label: __( 'Plan groups', 'newspack-plugin' ), separated: true },
+	{ value: 'groups', label: __( 'Plan bundles', 'newspack-plugin' ), separated: true },
 ];
 
 const inScope = ( item: SubscriptionProduct, scope: Scope ): boolean => {
 	if ( scope === 'groups' ) {
 		return item.type === 'grouped';
 	}
-	// Individual products only — plan groups live in their own scope.
+	// Individual products only — plan bundles live in their own scope.
 	if ( item.type === 'grouped' ) {
 		return false;
 	}
@@ -80,19 +81,18 @@ const DEFAULT_VIEW: View = {
 
 export default function SubscriptionProductsList() {
 	const { setHeaderData, addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const history = useHistory();
 	const [ data, setData ] = useState< SubscriptionProduct[] >( [] );
 	const [ currency, setCurrency ] = useState< SubscriptionProductsCurrency >( DEFAULT_CURRENCY );
-	const [ availableCategories, setAvailableCategories ] = useState< { id: number; label: string }[] >( [] );
 	const [ policyIsMock, setPolicyIsMock ] = useState( false );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
 	const [ scope, setScope ] = useState< Scope >( 'subscriptions' );
-	const [ showAddModal, setShowAddModal ] = useState( false );
 
 	const globals = window.newspackAudienceSubscriptionProducts;
 
 	// Row counts per scope, for the chip labels. The purpose scopes count individual
-	// products only; "Plan groups" counts grouped containers.
+	// products only; "Plan bundles" counts grouped containers.
 	const scopeCounts = useMemo( () => {
 		const individual = data.filter( item => item.type !== 'grouped' );
 		return {
@@ -112,12 +112,6 @@ export default function SubscriptionProductsList() {
 	// Rows in the active scope, before the DataViews filters/sort/pagination run.
 	const scopedData = useMemo( () => data.filter( item => inScope( item, scope ) ), [ data, scope ] );
 
-	// Subscription products available to bundle into a new grouped product.
-	const bundleOptions = useMemo(
-		() => data.filter( item => item.type !== 'grouped' ).map( item => ( { id: item.id, label: item.name } ) ),
-		[ data ]
-	);
-
 	useEffect( () => {
 		setHeaderData( {
 			actions: [
@@ -128,8 +122,8 @@ export default function SubscriptionProductsList() {
 				},
 				{
 					type: 'primary',
-					label: __( 'Add product', 'newspack-plugin' ),
-					action: () => setShowAddModal( true ),
+					label: __( 'Add plan', 'newspack-plugin' ),
+					href: '#/new',
 				},
 			],
 		} );
@@ -143,7 +137,6 @@ export default function SubscriptionProductsList() {
 				if ( response.currency ) {
 					setCurrency( response.currency );
 				}
-				setAvailableCategories( ( response.available_categories || [] ).map( cat => ( { id: cat.id, label: cat.name } ) ) );
 				setPolicyIsMock( Boolean( response.policy_source_is_mock ) );
 			} )
 			.catch( () => {
@@ -155,21 +148,6 @@ export default function SubscriptionProductsList() {
 			} )
 			.finally( () => setIsLoading( false ) );
 	}, [ addNotice ] );
-
-	// After a create/edit, refetch the list (WC's object cache can't surface the change in
-	// the same request, so we re-read rather than optimistically patch).
-	const handleSaved = useCallback(
-		( productName: string ) => {
-			fetchData();
-			addNotice( {
-				/* translators: %s is the product name. */
-				message: sprintf( __( '“%s” saved.', 'newspack-plugin' ), productName ),
-				type: 'success',
-				id: 'subscription-product-saved',
-			} );
-		},
-		[ fetchData, addNotice ]
-	);
 
 	useEffect( () => {
 		fetchData();
@@ -196,9 +174,13 @@ export default function SubscriptionProductsList() {
 				enableGlobalSearch: true,
 				getValue: ( { item } ) => item.name,
 				render: ( { item } ) => (
-					<a href={ item.edit_url } target="_blank" rel="noopener noreferrer">
+					<Button
+						variant="link"
+						className="newspack-subscription-products__name-link"
+						onClick={ () => history.push( `/edit/${ item.id }` ) }
+					>
 						<strong>{ item.name }</strong>
-					</a>
+					</Button>
 				),
 			},
 			{
@@ -209,7 +191,7 @@ export default function SubscriptionProductsList() {
 				elements: [
 					{ value: 'subscription', label: __( 'Simple subscription', 'newspack-plugin' ) },
 					{ value: 'variable-subscription', label: __( 'Variable subscription', 'newspack-plugin' ) },
-					{ value: 'grouped', label: __( 'Plan group', 'newspack-plugin' ) },
+					{ value: 'grouped', label: __( 'Plan bundle', 'newspack-plugin' ) },
 					{ value: 'simple', label: __( 'One-time', 'newspack-plugin' ) },
 				],
 				filterBy: { operators: [ 'is' ] },
@@ -349,7 +331,7 @@ export default function SubscriptionProductsList() {
 				render: ( { item } ) => <EffectivePrice policy={ item.policy } currency={ currency } />,
 			},
 		],
-		[ statusElements, categoryElements, currency ]
+		[ statusElements, categoryElements, currency, history ]
 	);
 
 	const actions: Action< SubscriptionProduct >[] = useMemo(
@@ -358,20 +340,10 @@ export default function SubscriptionProductsList() {
 				id: 'edit',
 				label: __( 'Edit', 'newspack-plugin' ),
 				isPrimary: true,
-				RenderModal: ( { items, closeModal }: { items: SubscriptionProduct[]; closeModal: () => void } ) => (
-					<ProductForm
-						mode="edit"
-						initial={ items[ 0 ] }
-						categories={ availableCategories }
-						bundleOptions={ bundleOptions }
-						currency={ currency }
-						onClose={ closeModal }
-						onSaved={ handleSaved }
-					/>
-				),
+				callback: ( items: SubscriptionProduct[] ) => history.push( `/edit/${ items[ 0 ].id }` ),
 			},
 		],
-		[ availableCategories, bundleOptions, currency, handleSaved ]
+		[ history ]
 	);
 
 	const { data: processedData, paginationInfo } = useMemo( () => filterSortAndPaginate( scopedData, view, fields ), [ scopedData, view, fields ] );
@@ -427,22 +399,6 @@ export default function SubscriptionProductsList() {
 				getItemId={ ( item: SubscriptionProduct ) => String( item.id ) }
 				search
 			/>
-			{ showAddModal && (
-				<Modal
-					title={ __( 'Add subscription product', 'newspack-plugin' ) }
-					onRequestClose={ () => setShowAddModal( false ) }
-					className="newspack-subscription-products__add-modal"
-				>
-					<ProductForm
-						mode="create"
-						categories={ availableCategories }
-						bundleOptions={ bundleOptions }
-						currency={ currency }
-						onClose={ () => setShowAddModal( false ) }
-						onSaved={ handleSaved }
-					/>
-				</Modal>
-			) }
 		</div>
 	);
 }

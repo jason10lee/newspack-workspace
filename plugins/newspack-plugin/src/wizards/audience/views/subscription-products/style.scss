@@ -13,6 +13,14 @@
 		color: wp-colors.$gray-700;
 	}
 
+	// Product name acts as an edit trigger, but should read like a title link.
+	&__name-link.components-button {
+		height: auto;
+		padding: 0;
+		text-align: left;
+		text-decoration: none;
+	}
+
 	// Top-level grouping chip-bar (Subscriptions / Donations / All).
 	// Mirrors the transactional-emails chip bar: padded 24px to align with the
 	// DataViews controls below, and margin-bottom 24px to leave an 8px gap after the
@@ -24,7 +32,7 @@
 		padding: 0 24px;
 		align-items: center;
 
-		// "Plan groups" is a separate structural lens — set it apart from the purpose chips.
+		// "Plan bundles" is a separate structural lens — set it apart from the purpose chips.
 		.newspack-subscription-products__scope-chip.is-separated {
 			margin-left: 16px;
 			position: relative;
@@ -54,7 +62,7 @@
 		margin: 0 0 16px;
 	}
 
-	// Bundled-plan chips (grouped "Plan group" products).
+	// Bundled-plan chips (grouped "Plan bundle" products).
 	&__bundled {
 		display: flex;
 		flex-wrap: wrap;
@@ -69,6 +77,13 @@
 
 	&__add-modal-label {
 		font-weight: 500;
+	}
+
+	// A variable plan row (label + remove, then price/every/period) — separated so each
+	// block reads as a single plan in the narrow side panel.
+	&__plan {
+		padding-bottom: 12px;
+		border-bottom: 1px solid wp-colors.$gray-100;
 	}
 
 	&__add-modal-help {
@@ -165,3 +180,4 @@
 		margin: 0;
 	}
 }
+

@@ -66,7 +66,7 @@ class Audience_Subscription_Products extends Wizard {
 	 * @return string The wizard name.
 	 */
 	public function get_name() {
-		return esc_html__( 'Audience Management / Products', 'newspack-plugin' );
+		return esc_html__( 'Audience Management / Plans', 'newspack-plugin' );
 	}
 
 	/**
@@ -1437,7 +1437,7 @@ class Audience_Subscription_Products extends Wizard {
 		$labels = [
 			'subscription'          => __( 'Simple subscription', 'newspack-plugin' ),
 			'variable-subscription' => __( 'Variable subscription', 'newspack-plugin' ),
-			'grouped'               => __( 'Plan group', 'newspack-plugin' ),
+			'grouped'               => __( 'Plan bundle', 'newspack-plugin' ),
 			'simple'                => __( 'One-time', 'newspack-plugin' ),
 		];
 		return isset( $labels[ $type ] ) ? $labels[ $type ] : $type;
@@ -1462,7 +1462,7 @@ class Audience_Subscription_Products extends Wizard {
 		add_submenu_page(
 			$this->parent_slug,
 			$this->get_name(),
-			esc_html__( 'Products', 'newspack-plugin' ),
+			esc_html__( 'Plans', 'newspack-plugin' ),
 			$this->capability,
 			$this->slug,
 			[ $this, 'render_wizard' ]

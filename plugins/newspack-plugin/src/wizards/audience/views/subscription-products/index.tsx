@@ -19,13 +19,14 @@ import { forwardRef } from '@wordpress/element';
  */
 import { Wizard, withWizard } from '../../../../../packages/components/src';
 import SubscriptionProductsList from './list';
+import ProductEdit from './product-edit';
 import './style.scss';
 
 const AudienceSubscriptionProducts = ( props: object, ref: React.Ref< HTMLDivElement > ) => {
 	return (
 		<Wizard
-			title={ __( 'Products', 'newspack-plugin' ) }
-			headerText={ __( 'Audience Management / Products', 'newspack-plugin' ) }
+			title={ __( 'Plans', 'newspack-plugin' ) }
+			headerText={ __( 'Audience Management / Plans', 'newspack-plugin' ) }
 			ref={ ref }
 			fixedHeader
 			sections={ [
@@ -34,6 +35,22 @@ const AudienceSubscriptionProducts = ( props: object, ref: React.Ref< HTMLDivEle
 					render: SubscriptionProductsList,
 					exact: true,
 					fullWidth: true,
+				},
+				{
+					path: '/new',
+					render: ProductEdit,
+					isHidden: true,
+					exact: true,
+					backNav: '#/',
+					title: __( 'Add plan', 'newspack-plugin' ),
+				},
+				{
+					path: '/edit/:id',
+					render: ProductEdit,
+					isHidden: true,
+					exact: true,
+					backNav: '#/',
+					title: __( 'Edit plan', 'newspack-plugin' ),
 				},
 			] }
 		/>

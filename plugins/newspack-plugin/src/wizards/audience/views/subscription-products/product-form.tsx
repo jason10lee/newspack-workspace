@@ -1,15 +1,17 @@
 /**
- * Shared create/edit form for subscription products (content only — the caller wraps it
- * in a Modal). Covers simple, variable (plan repeater), and grouped (bundle picker), plus
- * category + availability + group-subscription. POSTs to create or PUTs to update; the
- * list refetches on success. Type is locked when editing.
+ * Full-page create/edit form for a plan, rendered as a routed wizard section (mirroring the
+ * institutions editor). Save / back live in the wizard header; the body is a 2-column Grid
+ * (SectionHeader left, fields right). Covers simple, variable (plan repeater), grouped
+ * (bundle picker), and one-time, plus category + availability + group subscription. POSTs to
+ * create or PUTs to update, then returns to the list. Type is locked when editing.
  */
 
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
-import { useState } from '@wordpress/element';
+import { __, sprintf } from '@wordpress/i18n';
+import { useState, useEffect, useCallback } from '@wordpress/element';
+import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import {
 	Button,
@@ -28,7 +30,8 @@ import {
 /**
  * Internal dependencies
  */
-import { Badge } from '../../../../../packages/components/src';
+import { Badge, Grid, SectionHeader, Divider } from '../../../../../packages/components/src';
+import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { PolicyChips, EffectivePrice } from './policy-cells';
 
 const BASE_PATH = '/newspack/v1/wizard/newspack-audience-subscription-products/products';
@@ -52,18 +55,17 @@ export default function ProductForm( {
 	categories,
 	bundleOptions,
 	currency,
-	onClose,
-	onSaved,
+	onDone,
 }: {
 	mode: 'create' | 'edit';
 	initial?: SubscriptionProduct;
 	categories: { id: number; label: string }[];
 	bundleOptions: { id: number; label: string }[];
 	currency: SubscriptionProductsCurrency;
-	onClose: () => void;
-	onSaved: ( name: string ) => void;
+	onDone: () => void;
 } ) {
 	const isEdit = mode === 'edit' && !! initial;
+	const { setHeaderData, addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
 
 	const [ name, setName ] = useState( initial?.name ?? '' );
 	const [ type, setType ] = useState< ProductType >( ( initial?.type as ProductType ) ?? 'subscription' );
@@ -115,10 +117,10 @@ export default function ProductForm( {
 	const toggleBundled = ( id: number, checked: boolean ) =>
 		setBundled( current => ( checked ? [ ...current, id ] : current.filter( existing => existing !== id ) ) );
 
-	const submit = () => {
+	const submit = useCallback( () => {
 		setError( '' );
 		if ( ! name.trim() ) {
-			setError( __( 'Product name is required.', 'newspack-plugin' ) );
+			setError( __( 'Name is required.', 'newspack-plugin' ) );
 			return;
 		}
 
@@ -156,7 +158,6 @@ export default function ProductForm( {
 				...groupFields,
 			} ) );
 		} else if ( type === 'simple' ) {
-			// One-time product: price only.
 			if ( price === '' ) {
 				setError( __( 'A price is required.', 'newspack-plugin' ) );
 				return;
@@ -180,191 +181,274 @@ export default function ProductForm( {
 			data: payload,
 		} )
 			.then( response => {
-				onSaved( response.name || name.trim() );
-				onClose();
+				addNotice( {
+					/* translators: %s is the plan name. */
+					message: sprintf( __( '“%s” saved.', 'newspack-plugin' ), response.name || name.trim() ),
+					type: 'success',
+					id: 'subscription-product-saved',
+				} );
+				onDone();
 			} )
 			.catch( ( e: { message?: string } ) => {
-				setError( e.message || __( 'Failed to save the product.', 'newspack-plugin' ) );
+				setError( e.message || __( 'Failed to save changes.', 'newspack-plugin' ) );
 				setIsSaving( false );
 			} );
-	};
+	}, [
+		name,
+		type,
+		status,
+		isDonation,
+		availability,
+		categoryNames,
+		categories,
+		groupEnabled,
+		groupLimit,
+		bundled,
+		plans,
+		price,
+		period,
+		interval,
+		isEdit,
+		initial,
+		onDone,
+		addNotice,
+	] );
+
+	// Drive the wizard header: back-nav to the list, breadcrumb, and the Save action.
+	useEffect( () => {
+		setHeaderData( {
+			backNav: '#/',
+			sectionName: isEdit ? __( 'Edit plan', 'newspack-plugin' ) : __( 'Add plan', 'newspack-plugin' ),
+			actions: [
+				{
+					type: 'primary',
+					label: isEdit ? __( 'Save changes', 'newspack-plugin' ) : __( 'Create plan', 'newspack-plugin' ),
+					icon: null,
+					action: submit,
+					disabled: isSaving,
+				},
+			],
+		} );
+	}, [ isEdit, isSaving, submit, setHeaderData ] );
 
 	return (
-		<VStack spacing={ 4 } className="newspack-subscription-products__form">
+		<div className="newspack-subscription-products__edit">
 			{ error && (
 				<Notice status="error" isDismissible={ false }>
 					{ error }
 				</Notice>
 			) }
 
-			<TextControl label={ __( 'Name', 'newspack-plugin' ) } value={ name } onChange={ setName } __next40pxDefaultSize />
+			<Grid columns={ 2 } gutter={ 32 }>
+				<SectionHeader
+					title={ __( 'Plan details', 'newspack-plugin' ) }
+					description={ __( 'The name, type, and publish status of this plan.', 'newspack-plugin' ) }
+				/>
+				<VStack spacing={ 4 }>
+					<TextControl label={ __( 'Name', 'newspack-plugin' ) } value={ name } onChange={ setName } __next40pxDefaultSize />
+					<HStack alignment="flex-start" spacing={ 4 }>
+						<FlexBlock>
+							<SelectControl
+								label={ __( 'Type', 'newspack-plugin' ) }
+								value={ type }
+								options={
+									type === 'simple'
+										? [ { label: __( 'One-time', 'newspack-plugin' ), value: 'simple' } ]
+										: [
+												{ label: __( 'Simple subscription', 'newspack-plugin' ), value: 'subscription' },
+												{ label: __( 'Variable subscription', 'newspack-plugin' ), value: 'variable-subscription' },
+												{ label: __( 'Plan bundle (switching)', 'newspack-plugin' ), value: 'grouped' },
+										  ]
+								}
+								onChange={ value => setType( value as ProductType ) }
+								disabled={ isEdit }
+								help={ isEdit ? __( 'Type can’t be changed after creation.', 'newspack-plugin' ) : undefined }
+								__next40pxDefaultSize
+							/>
+						</FlexBlock>
+						<FlexBlock>
+							<SelectControl
+								label={ __( 'Status', 'newspack-plugin' ) }
+								value={ status }
+								options={ [
+									{ label: __( 'Published', 'newspack-plugin' ), value: 'publish' },
+									{ label: __( 'Draft', 'newspack-plugin' ), value: 'draft' },
+								] }
+								onChange={ setStatus }
+								__next40pxDefaultSize
+							/>
+						</FlexBlock>
+					</HStack>
+				</VStack>
+			</Grid>
 
-			<HStack alignment="flex-start" spacing={ 4 }>
-				<SelectControl
-					label={ __( 'Type', 'newspack-plugin' ) }
-					value={ type }
-					options={
-						type === 'simple'
-							? [ { label: __( 'One-time', 'newspack-plugin' ), value: 'simple' } ]
-							: [
-									{ label: __( 'Simple subscription', 'newspack-plugin' ), value: 'subscription' },
-									{ label: __( 'Variable subscription', 'newspack-plugin' ), value: 'variable-subscription' },
-									{ label: __( 'Plan group (switching)', 'newspack-plugin' ), value: 'grouped' },
-							  ]
+			<Divider alignment="full-width" variant="tertiary" />
+
+			<Grid columns={ 2 } gutter={ 32 } noMargin>
+				<SectionHeader
+					title={ __( 'Pricing', 'newspack-plugin' ) }
+					description={
+						type === 'grouped'
+							? __( 'The subscriptions readers can switch between in this bundle.', 'newspack-plugin' )
+							: __( 'How much this plan costs and how often it bills.', 'newspack-plugin' )
 					}
-					onChange={ value => setType( value as ProductType ) }
-					disabled={ isEdit }
-					help={ isEdit ? __( 'Type can’t be changed after creation.', 'newspack-plugin' ) : undefined }
-					__next40pxDefaultSize
 				/>
-				<SelectControl
-					label={ __( 'Status', 'newspack-plugin' ) }
-					value={ status }
-					options={ [
-						{ label: __( 'Published', 'newspack-plugin' ), value: 'publish' },
-						{ label: __( 'Draft', 'newspack-plugin' ), value: 'draft' },
-					] }
-					onChange={ setStatus }
-					__next40pxDefaultSize
-				/>
-			</HStack>
-
-			{ type === 'subscription' && (
-				<HStack alignment="flex-start" spacing={ 4 }>
-					<TextControl
-						label={ __( 'Price', 'newspack-plugin' ) }
-						type="number"
-						min="0"
-						value={ price }
-						onChange={ setPrice }
-						__next40pxDefaultSize
-					/>
-					<TextControl
-						label={ __( 'Bill every', 'newspack-plugin' ) }
-						type="number"
-						min="1"
-						max="6"
-						value={ interval }
-						onChange={ setInterval }
-						__next40pxDefaultSize
-					/>
-					<SelectControl
-						label={ __( 'Period', 'newspack-plugin' ) }
-						value={ period }
-						options={ PERIOD_OPTIONS }
-						onChange={ setPeriod }
-						__next40pxDefaultSize
-					/>
-				</HStack>
-			) }
-
-			{ type === 'simple' && (
-				<TextControl
-					label={ __( 'Price (one-time)', 'newspack-plugin' ) }
-					type="number"
-					min="0"
-					value={ price }
-					onChange={ setPrice }
-					__next40pxDefaultSize
-				/>
-			) }
-
-			{ type === 'variable-subscription' && (
-				<VStack spacing={ 3 }>
-					<span className="newspack-subscription-products__add-modal-label">{ __( 'Plans', 'newspack-plugin' ) }</span>
-					{ plans.map( ( plan, index ) => (
-						<Flex key={ plan.id ?? `new-${ index }` } align="flex-end" gap={ 2 }>
+				<VStack spacing={ 4 }>
+					{ type === 'subscription' && (
+						<HStack alignment="flex-start" spacing={ 4 }>
 							<FlexBlock>
-								<TextControl
-									label={ __( 'Plan label', 'newspack-plugin' ) }
-									value={ plan.label }
-									onChange={ value => updatePlan( index, 'label', value ) }
-									disabled={ plan.existing }
-									help={ plan.existing ? __( 'Existing plan', 'newspack-plugin' ) : undefined }
-									__next40pxDefaultSize
-								/>
-							</FlexBlock>
-							<FlexItem>
 								<TextControl
 									label={ __( 'Price', 'newspack-plugin' ) }
 									type="number"
 									min="0"
-									value={ plan.price }
-									onChange={ value => updatePlan( index, 'price', value ) }
+									value={ price }
+									onChange={ setPrice }
 									__next40pxDefaultSize
 								/>
-							</FlexItem>
-							<FlexItem>
+							</FlexBlock>
+							<FlexBlock>
 								<TextControl
-									label={ __( 'Every', 'newspack-plugin' ) }
+									label={ __( 'Bill every', 'newspack-plugin' ) }
 									type="number"
 									min="1"
 									max="6"
-									value={ plan.interval }
-									onChange={ value => updatePlan( index, 'interval', value ) }
+									value={ interval }
+									onChange={ setInterval }
 									__next40pxDefaultSize
 								/>
-							</FlexItem>
-							<FlexItem>
+							</FlexBlock>
+							<FlexBlock>
 								<SelectControl
 									label={ __( 'Period', 'newspack-plugin' ) }
-									value={ plan.period }
+									value={ period }
 									options={ PERIOD_OPTIONS }
-									onChange={ value => updatePlan( index, 'period', value ) }
+									onChange={ setPeriod }
 									__next40pxDefaultSize
 								/>
-							</FlexItem>
-							<FlexItem>
-								<Button variant="tertiary" isDestructive onClick={ () => removePlan( index ) } disabled={ plans.length <= 1 }>
-									{ __( 'Remove', 'newspack-plugin' ) }
+							</FlexBlock>
+						</HStack>
+					) }
+
+					{ type === 'simple' && (
+						<TextControl
+							label={ __( 'Price (one-time)', 'newspack-plugin' ) }
+							type="number"
+							min="0"
+							value={ price }
+							onChange={ setPrice }
+							__next40pxDefaultSize
+						/>
+					) }
+
+					{ type === 'variable-subscription' && (
+						<>
+							{ plans.map( ( plan, index ) => (
+								<VStack key={ plan.id ?? `new-${ index }` } className="newspack-subscription-products__plan" spacing={ 2 }>
+									<Flex align="flex-end" gap={ 2 }>
+										<FlexBlock>
+											<TextControl
+												label={ __( 'Plan label', 'newspack-plugin' ) }
+												value={ plan.label }
+												onChange={ value => updatePlan( index, 'label', value ) }
+												disabled={ plan.existing }
+												help={ plan.existing ? __( 'Existing plan', 'newspack-plugin' ) : undefined }
+												__next40pxDefaultSize
+											/>
+										</FlexBlock>
+										<FlexItem>
+											<Button
+												variant="tertiary"
+												isDestructive
+												onClick={ () => removePlan( index ) }
+												disabled={ plans.length <= 1 }
+											>
+												{ __( 'Remove', 'newspack-plugin' ) }
+											</Button>
+										</FlexItem>
+									</Flex>
+									<HStack alignment="flex-start" spacing={ 2 }>
+										<FlexBlock>
+											<TextControl
+												label={ __( 'Price', 'newspack-plugin' ) }
+												type="number"
+												min="0"
+												value={ plan.price }
+												onChange={ value => updatePlan( index, 'price', value ) }
+												__next40pxDefaultSize
+											/>
+										</FlexBlock>
+										<FlexBlock>
+											<TextControl
+												label={ __( 'Every', 'newspack-plugin' ) }
+												type="number"
+												min="1"
+												max="6"
+												value={ plan.interval }
+												onChange={ value => updatePlan( index, 'interval', value ) }
+												__next40pxDefaultSize
+											/>
+										</FlexBlock>
+										<FlexBlock>
+											<SelectControl
+												label={ __( 'Period', 'newspack-plugin' ) }
+												value={ plan.period }
+												options={ PERIOD_OPTIONS }
+												onChange={ value => updatePlan( index, 'period', value ) }
+												__next40pxDefaultSize
+											/>
+										</FlexBlock>
+									</HStack>
+								</VStack>
+							) ) }
+							<div>
+								<Button variant="secondary" onClick={ addPlan }>
+									{ __( 'Add plan', 'newspack-plugin' ) }
 								</Button>
-							</FlexItem>
-						</Flex>
-					) ) }
-					<div>
-						<Button variant="secondary" onClick={ addPlan }>
-							{ __( 'Add plan', 'newspack-plugin' ) }
-						</Button>
-					</div>
-				</VStack>
-			) }
+							</div>
+						</>
+					) }
 
-			{ type === 'grouped' && (
-				<VStack spacing={ 2 }>
-					<span className="newspack-subscription-products__add-modal-label">{ __( 'Bundled subscriptions', 'newspack-plugin' ) }</span>
-					<div className="newspack-subscription-products__bundle-picker">
-						{ bundleOptions.length ? (
-							bundleOptions.map( option => (
-								<CheckboxControl
-									key={ option.id }
-									label={ option.label }
-									checked={ bundled.includes( option.id ) }
-									onChange={ checked => toggleBundled( option.id, checked ) }
-								/>
-							) )
-						) : (
-							<span className="newspack-subscription-products__muted">
-								{ __( 'No subscription products to bundle yet.', 'newspack-plugin' ) }
-							</span>
-						) }
-					</div>
+					{ type === 'grouped' && (
+						<div className="newspack-subscription-products__bundle-picker">
+							{ bundleOptions.length ? (
+								bundleOptions.map( option => (
+									<CheckboxControl
+										key={ option.id }
+										label={ option.label }
+										checked={ bundled.includes( option.id ) }
+										onChange={ checked => toggleBundled( option.id, checked ) }
+									/>
+								) )
+							) : (
+								<span className="newspack-subscription-products__muted">
+									{ __( 'No subscriptions to bundle yet.', 'newspack-plugin' ) }
+								</span>
+							) }
+						</div>
+					) }
 				</VStack>
-			) }
+			</Grid>
 
-			<HStack alignment="flex-start" spacing={ 4 }>
-				<SelectControl
-					label={ __( 'Availability', 'newspack-plugin' ) }
-					value={ availability }
-					options={ [
-						{ label: __( 'Public', 'newspack-plugin' ), value: 'public' },
-						{ label: __( 'Private', 'newspack-plugin' ), value: 'private' },
-						{ label: __( 'Free', 'newspack-plugin' ), value: 'free' },
-					] }
-					onChange={ value => setAvailability( value as SubscriptionProduct[ 'availability' ] ) }
-					help={ __( 'Private/Free file the product under the matching category.', 'newspack-plugin' ) }
-					__next40pxDefaultSize
+			<Divider alignment="full-width" variant="tertiary" />
+
+			<Grid columns={ 2 } gutter={ 32 } noMargin>
+				<SectionHeader
+					title={ __( 'Availability & categories', 'newspack-plugin' ) }
+					description={ __( 'Where and to whom this plan is offered.', 'newspack-plugin' ) }
 				/>
-				<FlexBlock>
+				<VStack spacing={ 4 }>
+					<SelectControl
+						label={ __( 'Availability', 'newspack-plugin' ) }
+						value={ availability }
+						options={ [
+							{ label: __( 'Public', 'newspack-plugin' ), value: 'public' },
+							{ label: __( 'Private', 'newspack-plugin' ), value: 'private' },
+							{ label: __( 'Free', 'newspack-plugin' ), value: 'free' },
+						] }
+						onChange={ value => setAvailability( value as SubscriptionProduct[ 'availability' ] ) }
+						help={ __( 'Private/Free file the plan under the matching category.', 'newspack-plugin' ) }
+						__next40pxDefaultSize
+					/>
 					<FormTokenField
 						label={ __( 'Categories', 'newspack-plugin' ) }
 						value={ categoryNames }
@@ -373,64 +457,75 @@ export default function ProductForm( {
 						__experimentalExpandOnFocus
 						__next40pxDefaultSize
 					/>
-				</FlexBlock>
-			</HStack>
-
-			{ ( type === 'subscription' || type === 'variable-subscription' ) && (
-				<VStack spacing={ 2 }>
-					<CheckboxControl
-						label={ __( 'Group subscription (multi-seat)', 'newspack-plugin' ) }
-						help={ __( 'Let one purchase grant access to multiple members.', 'newspack-plugin' ) }
-						checked={ groupEnabled }
-						onChange={ setGroupEnabled }
-					/>
-					{ groupEnabled && (
-						<TextControl
-							label={ __( 'Member limit (0 = unlimited)', 'newspack-plugin' ) }
-							type="number"
-							min="0"
-							value={ groupLimit }
-							onChange={ setGroupLimit }
-							__next40pxDefaultSize
-						/>
-					) }
 				</VStack>
-			) }
+			</Grid>
 
-			<CheckboxControl label={ __( 'This is a donation product', 'newspack-plugin' ) } checked={ isDonation } onChange={ setIsDonation } />
+			<Divider alignment="full-width" variant="tertiary" />
+
+			<Grid columns={ 2 } gutter={ 32 } noMargin>
+				<SectionHeader
+					title={ __( 'Options', 'newspack-plugin' ) }
+					description={ __( 'Multi-seat access and donation handling.', 'newspack-plugin' ) }
+				/>
+				<VStack spacing={ 4 }>
+					{ ( type === 'subscription' || type === 'variable-subscription' ) && (
+						<VStack spacing={ 2 }>
+							<CheckboxControl
+								label={ __( 'Group subscription (multi-seat)', 'newspack-plugin' ) }
+								help={ __( 'Let one purchase grant access to multiple members.', 'newspack-plugin' ) }
+								checked={ groupEnabled }
+								onChange={ setGroupEnabled }
+							/>
+							{ groupEnabled && (
+								<TextControl
+									label={ __( 'Member limit (0 = unlimited)', 'newspack-plugin' ) }
+									type="number"
+									min="0"
+									value={ groupLimit }
+									onChange={ setGroupLimit }
+									__next40pxDefaultSize
+								/>
+							) }
+						</VStack>
+					) }
+					<CheckboxControl label={ __( 'This is a donation', 'newspack-plugin' ) } checked={ isDonation } onChange={ setIsDonation } />
+				</VStack>
+			</Grid>
 
 			{ isEdit && initial && ( initial.unlocks.length > 0 || initial.policy.policies.length > 0 ) && (
-				<VStack spacing={ 2 } className="newspack-subscription-products__form-info">
-					<hr className="newspack-subscription-products__modal-divider" />
-					{ initial.policy.policies.length > 0 && (
-						<HStack justify="space-between" alignment="topLeft" spacing={ 4 }>
-							<span className="newspack-subscription-products__modal-label">{ __( 'Applied policies', 'newspack-plugin' ) }</span>
-							<span>
-								<PolicyChips policy={ initial.policy } /> <EffectivePrice policy={ initial.policy } currency={ currency } />
-							</span>
-						</HStack>
-					) }
-					{ initial.unlocks.length > 0 && (
-						<HStack justify="space-between" alignment="topLeft" spacing={ 4 }>
-							<span className="newspack-subscription-products__modal-label">{ __( 'Unlocks', 'newspack-plugin' ) }</span>
-							<span className="newspack-subscription-products__unlocks">
-								{ initial.unlocks.map( gate => (
-									<Badge key={ gate.id } level="default" text={ gate.title } />
-								) ) }
-							</span>
-						</HStack>
-					) }
-				</VStack>
+				<>
+					<Divider alignment="full-width" variant="tertiary" />
+					<Grid columns={ 2 } gutter={ 32 } noMargin>
+						<SectionHeader
+							title={ __( 'Policies & access', 'newspack-plugin' ) }
+							description={ __( 'Read-only: pricing policies applied to this plan and the content it unlocks.', 'newspack-plugin' ) }
+						/>
+						<VStack spacing={ 4 }>
+							{ initial.policy.policies.length > 0 && (
+								<div>
+									<span className="newspack-subscription-products__modal-label">
+										{ __( 'Applied policies', 'newspack-plugin' ) }
+									</span>
+									<HStack alignment="center" spacing={ 3 } justify="flex-start">
+										<PolicyChips policy={ initial.policy } />
+										<EffectivePrice policy={ initial.policy } currency={ currency } />
+									</HStack>
+								</div>
+							) }
+							{ initial.unlocks.length > 0 && (
+								<div>
+									<span className="newspack-subscription-products__modal-label">{ __( 'Unlocks', 'newspack-plugin' ) }</span>
+									<div className="newspack-subscription-products__unlocks">
+										{ initial.unlocks.map( gate => (
+											<Badge key={ gate.id } level="default" text={ gate.title } />
+										) ) }
+									</div>
+								</div>
+							) }
+						</VStack>
+					</Grid>
+				</>
 			) }
-
-			<HStack justify="flex-end" spacing={ 2 }>
-				<Button variant="tertiary" onClick={ onClose } disabled={ isSaving }>
-					{ __( 'Cancel', 'newspack-plugin' ) }
-				</Button>
-				<Button variant="primary" onClick={ submit } isBusy={ isSaving } disabled={ isSaving }>
-					{ isEdit ? __( 'Save changes', 'newspack-plugin' ) : __( 'Create product', 'newspack-plugin' ) }
-				</Button>
-			</HStack>
-		</VStack>
+		</div>
 	);
 }
