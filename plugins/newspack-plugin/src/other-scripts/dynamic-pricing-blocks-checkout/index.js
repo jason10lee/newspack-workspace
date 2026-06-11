@@ -23,7 +23,7 @@
 const NAMESPACE = 'newspack-dynamic-pricing';
 
 const blocksCheckout = window.wc?.blocksCheckout || {};
-const { registerCheckoutFilters, ExperimentalOrderMeta } = blocksCheckout;
+const { registerCheckoutFilters, ExperimentalOrderMeta, TotalsItem } = blocksCheckout;
 const { registerPlugin } = window.wp?.plugins || {};
 const { createElement: el, Fragment } = window.wp?.element || {};
 
@@ -99,35 +99,35 @@ if ( registerCheckoutFilters ) {
 /* --- Layer 2b: schedule row (ExperimentalOrderMeta fill) --- */
 
 /**
- * Render the schedule row. The Slot passes the cart `extensions` object as a
- * prop to its children.
+ * Render the schedule row using WC Blocks' own `TotalsItem` component so it
+ * picks up the same border/padding/label styling as the recurring totals row
+ * WCS renders just above it. The Slot passes the cart `extensions` object as
+ * a prop to its children.
+ *
+ * Schedule sentences are passed as `description` (rendered below the label) so
+ * the long copy wraps naturally instead of cramming into a right-aligned
+ * value column.
  *
  * @param {{extensions: object}} props
  */
 const ScheduleFill = ( { extensions } ) => {
 	const data = extensions?.[ NAMESPACE ];
 	const sentences = data?.schedule_sentences || [];
-	if ( ! sentences.length ) {
+	if ( ! sentences.length || ! TotalsItem ) {
 		return null;
 	}
-	// One row per item; for the typical single-subscription cart this is one
-	// line. Multiple items get one row each, prefixed with the item name to
-	// disambiguate — the legacy template renders the same way (one <tr> each).
 	const label = data.schedule_label || '';
 	return el(
 		Fragment,
 		null,
 		sentences.map( s =>
-			el(
-				'div',
-				{ key: s.key, className: 'wc-block-components-totals-item newspack-dp-schedule' },
-				el( 'span', { className: 'wc-block-components-totals-item__label' }, label ),
-				el(
-					'span',
-					{ className: 'wc-block-components-totals-item__value' },
-					sentences.length > 1 ? `${ s.item_name }: ${ s.sentence }` : s.sentence
-				)
-			)
+			el( TotalsItem, {
+				key: s.key,
+				className: 'newspack-dp-schedule',
+				label: sentences.length > 1 ? `${ label }: ${ s.item_name }` : label,
+				value: ' ',
+				description: s.sentence,
+			} )
 		)
 	);
 };
