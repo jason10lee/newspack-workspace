@@ -31,17 +31,26 @@ const API_PATH = '/newspack/v1/wizard/newspack-audience-subscription-products/pr
 
 const DEFAULT_CURRENCY: SubscriptionProductsCurrency = { code: 'USD', symbol: '$', decimals: 2 };
 
-type Scope = 'subscriptions' | 'donations' | 'all';
+type Scope = 'subscriptions' | 'donations' | 'all' | 'groups';
 
-// Top-level grouping chips. Defaults to non-donation subscriptions (the membership/
-// tier products RSM is about); donations and the combined view are one click away.
-const SCOPES: { value: Scope; label: string }[] = [
+// Top-level scope chips. The first three are *individual* products (by purpose); "Plan
+// groups" is a separate structural lens for grouped containers, so a group never appears
+// inline among the products it bundles. Defaults to non-donation subscriptions.
+const SCOPES: { value: Scope; label: string; separated?: boolean }[] = [
 	{ value: 'subscriptions', label: __( 'Subscriptions', 'newspack-plugin' ) },
 	{ value: 'donations', label: __( 'Donations', 'newspack-plugin' ) },
 	{ value: 'all', label: __( 'All', 'newspack-plugin' ) },
+	{ value: 'groups', label: __( 'Plan groups', 'newspack-plugin' ), separated: true },
 ];
 
 const inScope = ( item: SubscriptionProduct, scope: Scope ): boolean => {
+	if ( scope === 'groups' ) {
+		return item.type === 'grouped';
+	}
+	// Individual products only — plan groups live in their own scope.
+	if ( item.type === 'grouped' ) {
+		return false;
+	}
 	if ( scope === 'all' ) {
 		return true;
 	}
@@ -82,15 +91,17 @@ export default function SubscriptionProductsList() {
 
 	const globals = window.newspackAudienceSubscriptionProducts;
 
-	// Row counts per scope, for the chip labels.
-	const scopeCounts = useMemo(
-		() => ( {
-			subscriptions: data.filter( item => ! item.is_donation ).length,
-			donations: data.filter( item => item.is_donation ).length,
-			all: data.length,
-		} ),
-		[ data ]
-	);
+	// Row counts per scope, for the chip labels. The purpose scopes count individual
+	// products only; "Plan groups" counts grouped containers.
+	const scopeCounts = useMemo( () => {
+		const individual = data.filter( item => item.type !== 'grouped' );
+		return {
+			subscriptions: individual.filter( item => ! item.is_donation ).length,
+			donations: individual.filter( item => item.is_donation ).length,
+			all: individual.length,
+			groups: data.filter( item => item.type === 'grouped' ).length,
+		};
+	}, [ data ] );
 
 	// Switching scope resets pagination so we never land on an out-of-range page.
 	const selectScope = useCallback( ( next: Scope ) => {
@@ -370,7 +381,7 @@ export default function SubscriptionProductsList() {
 				role="group"
 				aria-label={ __( 'Filter products by group', 'newspack-plugin' ) }
 			>
-				{ SCOPES.map( ( { value, label } ) => {
+				{ SCOPES.map( ( { value, label, separated } ) => {
 					const isActive = scope === value;
 					return (
 						<Button
@@ -378,7 +389,7 @@ export default function SubscriptionProductsList() {
 							variant={ isActive ? 'primary' : 'secondary' }
 							aria-pressed={ isActive }
 							onClick={ () => selectScope( value ) }
-							className="newspack-subscription-products__scope-chip"
+							className={ `newspack-subscription-products__scope-chip${ separated ? ' is-separated' : '' }` }
 						>
 							{ label } ({ scopeCounts[ value ] })
 						</Button>

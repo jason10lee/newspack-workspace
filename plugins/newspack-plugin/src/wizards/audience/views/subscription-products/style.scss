@@ -22,6 +22,23 @@
 		gap: 8px;
 		margin-bottom: 24px;
 		padding: 0 24px;
+		align-items: center;
+
+		// "Plan groups" is a separate structural lens — set it apart from the purpose chips.
+		.newspack-subscription-products__scope-chip.is-separated {
+			margin-left: 16px;
+			position: relative;
+
+			&::before {
+				content: "";
+				position: absolute;
+				left: -8px;
+				top: 50%;
+				transform: translateY( -50% );
+				height: 20px;
+				border-left: 1px solid wp-colors.$gray-300;
+			}
+		}
 
 		// Nested under `.components-button` for specificity over WP Button defaults —
 		// otherwise the pill shape and padding lose to WP's default button styling.
