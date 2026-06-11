@@ -67,6 +67,24 @@ export default function EditProductModal( {
 			<Row label={ __( 'Active subscriptions', 'newspack-plugin' ) }>
 				{ hasActiveCount ? item.active_subscriptions : <span className="newspack-subscription-products__muted">&mdash;</span> }
 			</Row>
+			{ item.is_group_subscription && (
+				<Row label={ __( 'Members', 'newspack-plugin' ) }>
+					<Badge level="info" text={ item.group_member_label } />
+				</Row>
+			) }
+			{ item.type === 'grouped' && (
+				<Row label={ __( 'Bundled plans', 'newspack-plugin' ) }>
+					{ item.bundled_products.length ? (
+						<div className="newspack-subscription-products__bundled">
+							{ item.bundled_products.map( bundled => (
+								<Badge key={ bundled.id } level="default" text={ bundled.name } />
+							) ) }
+						</div>
+					) : (
+						<span className="newspack-subscription-products__muted">&mdash;</span>
+					) }
+				</Row>
+			) }
 			<Row label={ __( 'Unlocks', 'newspack-plugin' ) }>
 				{ item.unlocks.length ? (
 					<div className="newspack-subscription-products__unlocks">

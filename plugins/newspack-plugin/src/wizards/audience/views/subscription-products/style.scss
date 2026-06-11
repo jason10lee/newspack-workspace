@@ -37,6 +37,13 @@
 		margin: 0 0 16px;
 	}
 
+	// Bundled-plan chips (grouped "Plan group" products).
+	&__bundled {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+	}
+
 	// Add-product modal.
 	&__add-modal {
 		min-width: 480px;
@@ -45,6 +52,20 @@
 
 	&__add-modal-label {
 		font-weight: 500;
+	}
+
+	&__add-modal-help {
+		margin: 0;
+		color: wp-colors.$gray-700;
+		font-size: 12px;
+	}
+
+	&__bundle-picker {
+		max-height: 220px;
+		overflow-y: auto;
+		border: 1px solid wp-colors.$gray-200;
+		border-radius: 2px;
+		padding: 12px;
 	}
 
 	// "Unlocks" — content gates this product unlocks (Access control).

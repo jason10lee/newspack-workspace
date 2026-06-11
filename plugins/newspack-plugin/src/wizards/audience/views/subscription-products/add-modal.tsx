@@ -1,10 +1,13 @@
 /**
  * "Add product" modal — create a subscription product without leaving the page.
  *
- * Productized create form: the publisher describes the plan (name, simple vs variable,
- * price(s) + billing period) and the POST endpoint builds a well-formed WooCommerce
- * Subscriptions product. The list refetches on success (WC's object cache can't reliably
- * surface the new product in the create request, so we re-read rather than trust a row).
+ * Productized create form covering all three shapes:
+ *   - simple subscription (price + billing period)
+ *   - variable subscription (a plan per billing period)
+ *   - grouped "Plan group" (bundle existing subscriptions for plan switching)
+ * Plus the group-subscription (multi-seat) settings. The POST endpoint builds a
+ * well-formed WooCommerce product; the list refetches on success (WC's object cache
+ * can't reliably surface the new product in the create request).
  */
 
 /**
@@ -36,13 +39,22 @@ const PERIOD_OPTIONS = [
 	{ label: __( 'year', 'newspack-plugin' ), value: 'year' },
 ];
 
+type ProductType = 'subscription' | 'variable-subscription' | 'grouped';
 type PlanDraft = { label: string; price: string; period: string; interval: string };
 
 const newPlan = ( label = '', period = 'month' ): PlanDraft => ( { label, price: '', period, interval: '1' } );
 
-export default function AddProductModal( { onClose, onCreated }: { onClose: () => void; onCreated: ( name: string ) => void } ) {
+export default function AddProductModal( {
+	onClose,
+	onCreated,
+	bundleOptions,
+}: {
+	onClose: () => void;
+	onCreated: ( name: string ) => void;
+	bundleOptions: { id: number; label: string }[];
+} ) {
 	const [ name, setName ] = useState( '' );
-	const [ type, setType ] = useState< 'subscription' | 'variable-subscription' >( 'subscription' );
+	const [ type, setType ] = useState< ProductType >( 'subscription' );
 	const [ status, setStatus ] = useState( 'publish' );
 	const [ isDonation, setIsDonation ] = useState( false );
 
@@ -57,6 +69,13 @@ export default function AddProductModal( { onClose, onCreated }: { onClose: () =
 		newPlan( __( 'Annual', 'newspack-plugin' ), 'year' ),
 	] );
 
+	// Group subscription (multi-seat) — applies to the product / all its plans.
+	const [ groupEnabled, setGroupEnabled ] = useState( false );
+	const [ groupLimit, setGroupLimit ] = useState( '0' );
+
+	// Grouped "Plan group" — which existing subscriptions to bundle.
+	const [ bundled, setBundled ] = useState< number[] >( [] );
+
 	const [ isSaving, setIsSaving ] = useState( false );
 	const [ error, setError ] = useState( '' );
 
@@ -64,6 +83,8 @@ export default function AddProductModal( { onClose, onCreated }: { onClose: () =
 		setPlans( current => current.map( ( plan, i ) => ( i === index ? { ...plan, [ key ]: value } : plan ) ) );
 	const addPlan = () => setPlans( current => [ ...current, newPlan() ] );
 	const removePlan = ( index: number ) => setPlans( current => current.filter( ( _, i ) => i !== index ) );
+	const toggleBundled = ( id: number, checked: boolean ) =>
+		setBundled( current => ( checked ? [ ...current, id ] : current.filter( existing => existing !== id ) ) );
 
 	const submit = () => {
 		setError( '' );
@@ -73,7 +94,15 @@ export default function AddProductModal( { onClose, onCreated }: { onClose: () =
 		}
 
 		const payload: Record< string, unknown > = { name: name.trim(), type, status, is_donation: isDonation };
-		if ( type === 'variable-subscription' ) {
+		const groupFields = { is_group_subscription: groupEnabled, group_member_limit: Number( groupLimit ) || 0 };
+
+		if ( type === 'grouped' ) {
+			if ( ! bundled.length ) {
+				setError( __( 'Select at least one subscription to bundle.', 'newspack-plugin' ) );
+				return;
+			}
+			payload.bundled_product_ids = bundled;
+		} else if ( type === 'variable-subscription' ) {
 			if ( plans.some( plan => ! plan.label.trim() || plan.price === '' ) ) {
 				setError( __( 'Each plan needs a label and a price.', 'newspack-plugin' ) );
 				return;
@@ -83,6 +112,7 @@ export default function AddProductModal( { onClose, onCreated }: { onClose: () =
 				price: Number( plan.price ),
 				period: plan.period,
 				interval: Number( plan.interval ) || 1,
+				...groupFields,
 			} ) );
 		} else {
 			if ( price === '' ) {
@@ -92,6 +122,7 @@ export default function AddProductModal( { onClose, onCreated }: { onClose: () =
 			payload.price = Number( price );
 			payload.period = period;
 			payload.interval = Number( interval ) || 1;
+			Object.assign( payload, groupFields );
 		}
 
 		setIsSaving( true );
@@ -128,8 +159,9 @@ export default function AddProductModal( { onClose, onCreated }: { onClose: () =
 						options={ [
 							{ label: __( 'Simple subscription', 'newspack-plugin' ), value: 'subscription' },
 							{ label: __( 'Variable subscription', 'newspack-plugin' ), value: 'variable-subscription' },
+							{ label: __( 'Plan group (switching)', 'newspack-plugin' ), value: 'grouped' },
 						] }
-						onChange={ value => setType( value as 'subscription' | 'variable-subscription' ) }
+						onChange={ value => setType( value as ProductType ) }
 						__next40pxDefaultSize
 					/>
 					<SelectControl
@@ -144,7 +176,7 @@ export default function AddProductModal( { onClose, onCreated }: { onClose: () =
 					/>
 				</HStack>
 
-				{ type === 'subscription' ? (
+				{ type === 'subscription' && (
 					<HStack alignment="flex-start" spacing={ 4 }>
 						<TextControl
 							label={ __( 'Price', 'newspack-plugin' ) }
@@ -171,7 +203,9 @@ export default function AddProductModal( { onClose, onCreated }: { onClose: () =
 							__next40pxDefaultSize
 						/>
 					</HStack>
-				) : (
+				) }
+
+				{ type === 'variable-subscription' && (
 					<VStack spacing={ 3 }>
 						<span className="newspack-subscription-products__add-modal-label">{ __( 'Plans', 'newspack-plugin' ) }</span>
 						{ plans.map( ( plan, index ) => (
@@ -226,6 +260,52 @@ export default function AddProductModal( { onClose, onCreated }: { onClose: () =
 								{ __( 'Add plan', 'newspack-plugin' ) }
 							</Button>
 						</div>
+					</VStack>
+				) }
+
+				{ type === 'grouped' && (
+					<VStack spacing={ 2 }>
+						<span className="newspack-subscription-products__add-modal-label">{ __( 'Bundled subscriptions', 'newspack-plugin' ) }</span>
+						<p className="newspack-subscription-products__add-modal-help">
+							{ __( 'Choose the subscriptions readers can switch between in this plan group.', 'newspack-plugin' ) }
+						</p>
+						<div className="newspack-subscription-products__bundle-picker">
+							{ bundleOptions.length ? (
+								bundleOptions.map( option => (
+									<CheckboxControl
+										key={ option.id }
+										label={ option.label }
+										checked={ bundled.includes( option.id ) }
+										onChange={ checked => toggleBundled( option.id, checked ) }
+									/>
+								) )
+							) : (
+								<span className="newspack-subscription-products__muted">
+									{ __( 'No subscription products to bundle yet.', 'newspack-plugin' ) }
+								</span>
+							) }
+						</div>
+					</VStack>
+				) }
+
+				{ type !== 'grouped' && (
+					<VStack spacing={ 2 }>
+						<CheckboxControl
+							label={ __( 'Group subscription (multi-seat)', 'newspack-plugin' ) }
+							help={ __( 'Let one purchase grant access to multiple members.', 'newspack-plugin' ) }
+							checked={ groupEnabled }
+							onChange={ setGroupEnabled }
+						/>
+						{ groupEnabled && (
+							<TextControl
+								label={ __( 'Member limit (0 = unlimited)', 'newspack-plugin' ) }
+								type="number"
+								min="0"
+								value={ groupLimit }
+								onChange={ setGroupLimit }
+								__next40pxDefaultSize
+							/>
+						) }
 					</VStack>
 				) }
 

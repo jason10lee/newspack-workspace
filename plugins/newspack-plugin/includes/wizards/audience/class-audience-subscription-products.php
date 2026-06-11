@@ -33,9 +33,16 @@ class Audience_Subscription_Products extends Wizard {
 	protected $parent_slug = 'newspack-audience';
 
 	/**
-	 * Subscription product types we surface.
+	 * Subscription product types we surface. `grouped` products are included only when they
+	 * bundle subscription children (they're the plan-switching "Plan Options" containers).
 	 */
-	const PRODUCT_TYPES = [ 'subscription', 'variable-subscription' ];
+	const PRODUCT_TYPES = [ 'subscription', 'variable-subscription', 'grouped' ];
+
+	/**
+	 * Group-subscription product meta keys (from the content-gate group-subscription feature).
+	 */
+	const GROUP_ENABLED_META = '_newspack_group_subscription_enabled';
+	const GROUP_LIMIT_META   = '_newspack_group_subscription_limit';
 
 	/**
 	 * Subscription statuses counted as "active" subscribers.
@@ -108,8 +115,33 @@ class Audience_Subscription_Products extends Wizard {
 			]
 		);
 
-		$response['products'] = array_map( [ $this, 'prepare_product' ], $products );
+		// Keep only grouped products that actually bundle subscriptions (plan-switching sets).
+		$products = array_filter(
+			$products,
+			function( $product ) {
+				return ! $product->is_type( 'grouped' ) || self::group_has_subscription_children( $product );
+			}
+		);
+
+		$response['products'] = array_map( [ $this, 'prepare_product' ], array_values( $products ) );
 		return rest_ensure_response( $response );
+	}
+
+	/**
+	 * Whether a grouped product bundles at least one subscription child.
+	 *
+	 * @param \WC_Product $product The grouped product.
+	 *
+	 * @return bool
+	 */
+	private static function group_has_subscription_children( $product ) {
+		foreach ( $product->get_children() as $child_id ) {
+			$child = wc_get_product( $child_id );
+			if ( $child && $child->is_type( [ 'subscription', 'variable-subscription' ] ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -153,7 +185,9 @@ class Audience_Subscription_Products extends Wizard {
 		$category_ids = isset( $params['category_ids'] ) && is_array( $params['category_ids'] ) ? array_map( 'absint', $params['category_ids'] ) : [];
 		$is_donation  = ! empty( $params['is_donation'] );
 
-		if ( 'variable-subscription' === $type ) {
+		if ( 'grouped' === $type ) {
+			$result = self::create_grouped_product( $name, $status, $category_ids, $is_donation, isset( $params['bundled_product_ids'] ) ? $params['bundled_product_ids'] : [] );
+		} elseif ( 'variable-subscription' === $type ) {
 			$result = self::create_variable_subscription( $name, $status, $category_ids, $is_donation, isset( $params['variations'] ) ? $params['variations'] : [] );
 		} else {
 			$result = self::create_simple_subscription( $name, $status, $category_ids, $is_donation, $params );
@@ -225,6 +259,10 @@ class Audience_Subscription_Products extends Wizard {
 		if ( $is_donation ) {
 			$product->update_meta_data( WooCommerce_Products::DONATION_FLAG_META_KEY, wc_bool_to_string( true ) );
 		}
+		if ( ! empty( $params['is_group_subscription'] ) ) {
+			$product->update_meta_data( self::GROUP_ENABLED_META, wc_bool_to_string( true ) );
+			$product->update_meta_data( self::GROUP_LIMIT_META, isset( $params['group_member_limit'] ) ? max( 0, (int) $params['group_member_limit'] ) : 0 );
+		}
 		$product_id = $product->save();
 		if ( ! $product_id ) {
 			return new \WP_Error( 'create_failed', __( 'Failed to create the product.', 'newspack-plugin' ), [ 'status' => 500 ] );
@@ -262,7 +300,9 @@ class Audience_Subscription_Products extends Wizard {
 			if ( '' === trim( $label ) || $price < 0 || ! in_array( $period, self::VALID_PERIODS, true ) ) {
 				return new \WP_Error( 'invalid_variation', __( 'Each plan needs a label, a valid price, and a billing period.', 'newspack-plugin' ), [ 'status' => 400 ] );
 			}
-			$clean[] = compact( 'label', 'price', 'period', 'interval' );
+			$group_enabled = ! empty( $variation['is_group_subscription'] );
+			$group_limit   = isset( $variation['group_member_limit'] ) ? max( 0, (int) $variation['group_member_limit'] ) : 0;
+			$clean[]       = compact( 'label', 'price', 'period', 'interval', 'group_enabled', 'group_limit' );
 		}
 
 		$labels = wp_list_pluck( $clean, 'label' );
@@ -306,6 +346,10 @@ class Audience_Subscription_Products extends Wizard {
 			$variation->update_meta_data( '_subscription_period', $plan['period'] );
 			$variation->update_meta_data( '_subscription_period_interval', $plan['interval'] );
 			$variation->update_meta_data( '_subscription_length', 0 );
+			if ( $plan['group_enabled'] ) {
+				$variation->update_meta_data( self::GROUP_ENABLED_META, wc_bool_to_string( true ) );
+				$variation->update_meta_data( self::GROUP_LIMIT_META, $plan['group_limit'] );
+			}
 			$variation->save();
 		}
 
@@ -314,6 +358,52 @@ class Audience_Subscription_Products extends Wizard {
 		}
 
 		return $parent_id;
+	}
+
+	/**
+	 * Create a grouped (plan-switching) product bundling subscription products.
+	 *
+	 * @param string $name         Product name.
+	 * @param string $status       Post status.
+	 * @param int[]  $category_ids  Category term IDs.
+	 * @param bool   $is_donation  Whether to flag as a donation.
+	 * @param array  $bundled_ids  Subscription product IDs to bundle.
+	 *
+	 * @return int|\WP_Error The new product ID, or an error.
+	 */
+	private static function create_grouped_product( $name, $status, $category_ids, $is_donation, $bundled_ids ) {
+		$bundled_ids = is_array( $bundled_ids ) ? array_values( array_filter( array_map( 'absint', $bundled_ids ) ) ) : [];
+
+		$valid = [];
+		foreach ( $bundled_ids as $bundled_id ) {
+			$child = wc_get_product( $bundled_id );
+			if ( $child && $child->is_type( [ 'subscription', 'variable-subscription' ] ) ) {
+				$valid[] = $bundled_id;
+			}
+		}
+		if ( empty( $valid ) ) {
+			return new \WP_Error( 'invalid_bundle', __( 'Select at least one subscription product to bundle.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+
+		$product = new \WC_Product_Grouped();
+		$product->set_name( $name );
+		$product->set_status( $status );
+		$product->set_catalog_visibility( 'visible' );
+		if ( $category_ids ) {
+			$product->set_category_ids( $category_ids );
+		}
+		$product->set_children( $valid );
+		if ( $is_donation ) {
+			$product->update_meta_data( WooCommerce_Products::DONATION_FLAG_META_KEY, wc_bool_to_string( true ) );
+		}
+		$product_id = $product->save();
+		if ( ! $product_id ) {
+			return new \WP_Error( 'create_failed', __( 'Failed to create the product.', 'newspack-plugin' ), [ 'status' => 500 ] );
+		}
+
+		wp_set_object_terms( $product_id, 'grouped', 'product_type' );
+
+		return $product_id;
 	}
 
 	/**
@@ -329,12 +419,15 @@ class Audience_Subscription_Products extends Wizard {
 		$pricing       = self::get_pricing( $product );
 		$currency_code = self::get_currency()['code'];
 
+		$is_grouped = $product->is_type( 'grouped' );
+
 		// Layer 2: resolve the policy stack + effective price through the integration seam.
 		// Variable subscriptions resolve PER VARIATION — each plan (monthly/annual/…) can
-		// carry a different policy and effective price. The row-level policy reflects the
-		// representative (lowest-price) variation; the full per-variation breakdown rides
-		// on each variation and is surfaced in the edit modal.
-		if ( $product->is_type( 'variable-subscription' ) ) {
+		// carry a different policy and effective price. Grouped products aren't priced
+		// themselves, so they get an empty (no-policy) resolution.
+		if ( $is_grouped ) {
+			$policy = self::empty_policy( $currency_code );
+		} elseif ( $product->is_type( 'variable-subscription' ) ) {
 			foreach ( $pricing['variations'] as $index => $variation ) {
 				$pricing['variations'][ $index ]['policy'] = Subscription_Policy_Resolver::resolve(
 					$variation['id'],
@@ -344,6 +437,7 @@ class Audience_Subscription_Products extends Wizard {
 						'currency'   => $currency_code,
 					]
 				);
+				$pricing['variations'][ $index ]['group'] = self::read_group_settings( wc_get_product( $variation['id'] ) );
 			}
 			$policy = self::representative_variation_policy( $pricing['variations'], $pricing['base_price'], $currency_code );
 		} else {
@@ -360,36 +454,167 @@ class Audience_Subscription_Products extends Wizard {
 		$availability = self::derive_availability( $pricing['base_price'], $categories );
 		$gate_map     = self::get_product_gate_map();
 		$unlocks      = isset( $gate_map[ $product->get_id() ] ) ? $gate_map[ $product->get_id() ] : [];
+		$group        = self::get_group_subscription_summary( $product, $pricing['variations'] );
 
 		return [
-			'id'                   => $product->get_id(),
-			'name'                 => $product->get_name(),
-			'type'                 => $type,
-			'type_label'           => self::get_type_label( $type ),
+			'id'                    => $product->get_id(),
+			'name'                  => $product->get_name(),
+			'type'                  => $type,
+			'type_label'            => self::get_type_label( $type ),
 			// Canonical donation flag (the "designate as donation" product checkbox →
 			// _newspack_is_donation meta, plus variation inheritance and legacy products).
-			'is_donation'          => class_exists( 'Newspack\Donations' ) ? Donations::is_donation_product( $product->get_id() ) : false,
+			'is_donation'           => class_exists( 'Newspack\Donations' ) ? Donations::is_donation_product( $product->get_id() ) : false,
 			// How the plan is offered/distributed (NOT content "access control" — see below).
-			'availability'         => $availability,
-			'availability_label'   => self::get_availability_label( $availability ),
+			'availability'          => $availability,
+			'availability_label'    => self::get_availability_label( $availability ),
 			// Reverse lookup: the content-access gates this product unlocks (Access control feature).
-			'unlocks'              => $unlocks,
-			'unlocks_label'        => implode( ', ', wp_list_pluck( $unlocks, 'title' ) ),
-			'status'               => $product->get_status(),
-			'status_label'         => self::get_status_label( $product->get_status() ),
-			'base_price'           => $pricing['base_price'],
-			'price_label'          => $pricing['price_label'],
-			'price_range_label'    => $pricing['price_range_label'],
-			'period'               => $pricing['period'],
-			'interval'             => $pricing['interval'],
-			'variations'           => $pricing['variations'],
-			'categories'           => $categories,
-			'category_ids'         => wp_list_pluck( $categories, 'id' ),
-			'category_label'       => implode( ', ', wp_list_pluck( $categories, 'name' ) ),
-			'active_subscriptions' => self::get_active_subscription_count( $product ),
-			'edit_url'             => html_entity_decode( (string) get_edit_post_link( $product->get_id(), 'raw' ) ),
-			'policy'               => $policy,
+			'unlocks'               => $unlocks,
+			'unlocks_label'         => implode( ', ', wp_list_pluck( $unlocks, 'title' ) ),
+			// Group subscription (multi-seat) settings from the content-gate feature.
+			'is_group_subscription' => $group['enabled'],
+			'group_member_limit'    => $group['limit'],
+			'group_member_label'    => $group['label'],
+			// Plan-switching set: the subscription products bundled by a grouped product.
+			'bundled_products'      => $is_grouped ? self::get_bundled_products( $product ) : [],
+			'status'                => $product->get_status(),
+			'status_label'          => self::get_status_label( $product->get_status() ),
+			'base_price'            => $pricing['base_price'],
+			'price_label'           => $pricing['price_label'],
+			'price_range_label'     => $pricing['price_range_label'],
+			'period'                => $pricing['period'],
+			'interval'              => $pricing['interval'],
+			'variations'            => $pricing['variations'],
+			'categories'            => $categories,
+			'category_ids'          => wp_list_pluck( $categories, 'id' ),
+			'category_label'        => implode( ', ', wp_list_pluck( $categories, 'name' ) ),
+			'active_subscriptions'  => self::get_active_subscription_count( $product ),
+			'edit_url'              => html_entity_decode( (string) get_edit_post_link( $product->get_id(), 'raw' ) ),
+			'policy'                => $policy,
 		];
+	}
+
+	/**
+	 * An empty (no-policy) resolution payload, for products that aren't directly priced.
+	 *
+	 * @param string $currency_code The store currency code.
+	 *
+	 * @return array A resolution payload with no policies and null pricing.
+	 */
+	private static function empty_policy( $currency_code ) {
+		return [
+			'is_mock'         => Subscription_Policy_Resolver::IS_MOCK,
+			'base_price'      => null,
+			'effective_price' => null,
+			'currency'        => $currency_code,
+			'cycle'           => '',
+			'policies'        => [],
+		];
+	}
+
+	/**
+	 * Read a product's (or variation's) group-subscription settings.
+	 *
+	 * @param \WC_Product|false $product The product/variation.
+	 *
+	 * @return array { enabled: bool, limit: int }.
+	 */
+	private static function read_group_settings( $product ) {
+		if ( ! $product ) {
+			return [
+				'enabled' => false,
+				'limit'   => 0,
+			];
+		}
+		return [
+			'enabled' => wc_string_to_bool( $product->get_meta( self::GROUP_ENABLED_META ) ),
+			'limit'   => (int) $product->get_meta( self::GROUP_LIMIT_META ),
+		];
+	}
+
+	/**
+	 * Build a row-level group-subscription summary.
+	 *
+	 * For variable subscriptions the setting lives on each variation, so the row is "enabled"
+	 * if any plan is, and the limit collapses to a shared value or -1 ("varies").
+	 *
+	 * @param \WC_Product $product    The product.
+	 * @param array       $variations Prepared variations (each may carry a 'group' entry).
+	 *
+	 * @return array { enabled: bool, limit: int, label: string }.
+	 */
+	private static function get_group_subscription_summary( $product, $variations ) {
+		if ( $product->is_type( 'variable-subscription' ) ) {
+			$enabled_limits = [];
+			foreach ( $variations as $variation ) {
+				if ( ! empty( $variation['group']['enabled'] ) ) {
+					$enabled_limits[] = (int) $variation['group']['limit'];
+				}
+			}
+			if ( empty( $enabled_limits ) ) {
+				return [
+					'enabled' => false,
+					'limit'   => 0,
+					'label'   => '',
+				];
+			}
+			$unique = array_values( array_unique( $enabled_limits ) );
+			$limit  = count( $unique ) === 1 ? $unique[0] : -1;
+			return [
+				'enabled' => true,
+				'limit'   => $limit,
+				'label'   => -1 === $limit ? __( 'Varies', 'newspack-plugin' ) : self::group_limit_label( $limit ),
+			];
+		}
+
+		$settings = self::read_group_settings( $product );
+		return [
+			'enabled' => $settings['enabled'],
+			'limit'   => $settings['limit'],
+			'label'   => $settings['enabled'] ? self::group_limit_label( $settings['limit'] ) : '',
+		];
+	}
+
+	/**
+	 * Human label for a group member limit.
+	 *
+	 * @param int $limit The limit (0 = unlimited).
+	 *
+	 * @return string The label.
+	 */
+	private static function group_limit_label( $limit ) {
+		if ( $limit <= 0 ) {
+			return __( 'Unlimited', 'newspack-plugin' );
+		}
+		/* translators: %d is the maximum number of group members. */
+		return sprintf( _n( 'Up to %d member', 'Up to %d members', $limit, 'newspack-plugin' ), $limit );
+	}
+
+	/**
+	 * Get the subscription products bundled by a grouped (plan-switching) product.
+	 *
+	 * @param \WC_Product $product The grouped product.
+	 *
+	 * @return array List of { id, name, type, type_label, price_label }.
+	 */
+	private static function get_bundled_products( $product ) {
+		$bundled = [];
+		foreach ( $product->get_children() as $child_id ) {
+			$child = wc_get_product( $child_id );
+			if ( ! $child ) {
+				continue;
+			}
+			$child_pricing = self::get_pricing( $child );
+			$bundled[]     = [
+				'id'          => $child_id,
+				'name'        => $child->get_name(),
+				'type'        => $child->get_type(),
+				'type_label'  => self::get_type_label( $child->get_type() ),
+				'price_label' => $child->is_type( 'variable-subscription' ) && $child_pricing['price_range_label']
+					? $child_pricing['price_range_label']
+					: $child_pricing['price_label'],
+			];
+		}
+		return $bundled;
 	}
 
 	/**
@@ -552,6 +777,18 @@ class Audience_Subscription_Products extends Wizard {
 		$product_ids = [ $product->get_id() ];
 		if ( $product->is_type( 'variable-subscription' ) ) {
 			$product_ids = array_merge( $product_ids, $product->get_children() );
+		} elseif ( $product->is_type( 'grouped' ) ) {
+			// Aggregate across the bundled subscription products (and their variations).
+			foreach ( $product->get_children() as $child_id ) {
+				$child = wc_get_product( $child_id );
+				if ( ! $child ) {
+					continue;
+				}
+				$product_ids[] = $child_id;
+				if ( $child->is_type( 'variable-subscription' ) ) {
+					$product_ids = array_merge( $product_ids, $child->get_children() );
+				}
+			}
 		}
 
 		$subscription_ids = [];
@@ -798,6 +1035,7 @@ class Audience_Subscription_Products extends Wizard {
 		$labels = [
 			'subscription'          => __( 'Simple subscription', 'newspack-plugin' ),
 			'variable-subscription' => __( 'Variable subscription', 'newspack-plugin' ),
+			'grouped'               => __( 'Plan group', 'newspack-plugin' ),
 		];
 		return isset( $labels[ $type ] ) ? $labels[ $type ] : $type;
 	}

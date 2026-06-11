@@ -78,16 +78,37 @@ column set. The default columns are hard facts (price, active subs, status) plus
 differentiators (policies, effective price, unlocks); `type`, `category`, and
 `availability` all live behind the column picker.
 
+## Grouped "Plan groups" and group subscriptions
+
+The page covers the full Newspack subscription model, not just flat products:
+
+- **Grouped products ("Plan group")** — WooCommerce `grouped` products that bundle
+  subscriptions to define a plan-**switching** set (Block Club's "Plan Options"). They're
+  surfaced as a `grouped` row type; the list includes a grouped product only when it
+  bundles ≥1 subscription child (`group_has_subscription_children`). A grouped product
+  isn't priced itself, so its Price cell shows the **bundled plan chips**, its policy is
+  empty, and `active_subscriptions` **aggregates** (deduped) across the bundled children.
+  Create: the Add modal's "Plan group (switching)" type offers a checkbox picker of
+  existing subscriptions → `WC_Product_Grouped::set_children()`.
+- **Group subscriptions (multi-seat)** — the `_newspack_group_subscription_enabled` /
+  `_limit` product meta from the content-gate group-subscription feature. Surfaced as an
+  off-by-default **"Members"** column ("Up to 25 members" / "Unlimited") + an edit-modal
+  row, and creatable via a toggle + limit in the Add modal. The setting lives on
+  `subscription` and `subscription_variation`, so for variable subs it's **per-variation**
+  (the row summary collapses to a shared value or "Varies"); the create form applies one
+  value across all plans for simplicity.
+
 ## Product-type filter (confirmed)
 
 The REST query (`class-audience-subscription-products.php :: api_get_products`)
-targets exactly:
+targets:
 
 ```php
-'type' => [ 'subscription', 'variable-subscription' ]
+'type' => [ 'subscription', 'variable-subscription', 'grouped' ]
 ```
 
-Plain `simple` and `grouped` are **excluded**. `variable-subscription` is the
+Plain `simple` (non-subscription) is excluded; `grouped` is included **only** when it
+bundles subscription children (see Plan groups above). `variable-subscription` is the
 **primary** path — it's how Block Club Chicago (flagship) models membership tiers.
 
 ## Status handling (confirmed)

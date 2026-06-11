@@ -43,6 +43,19 @@ interface SubscriptionProductVariation {
 	price_label: string;
 	// Layer 2: each variation resolves its own policy stack + effective price.
 	policy: SubscriptionPolicyResolution;
+	// Group-subscription (multi-seat) settings for this plan.
+	group: { enabled: boolean; limit: number };
+}
+
+/**
+ * A subscription product bundled into a grouped (plan-switching) product.
+ */
+interface SubscriptionProductBundled {
+	id: number;
+	name: string;
+	type: string;
+	type_label: string;
+	price_label: string;
 }
 
 /**
@@ -60,7 +73,7 @@ interface SubscriptionProductCategory {
 interface SubscriptionProduct {
 	id: number;
 	name: string;
-	type: 'subscription' | 'variable-subscription';
+	type: 'subscription' | 'variable-subscription' | 'grouped';
 	type_label: string;
 	// Whether the product is flagged as a donation (Donations::is_donation_product).
 	is_donation: boolean;
@@ -71,6 +84,12 @@ interface SubscriptionProduct {
 	// Content gates this product unlocks (reverse lookup into the Access control feature).
 	unlocks: { id: number; title: string }[];
 	unlocks_label: string;
+	// Group subscription (multi-seat) summary (content-gate feature).
+	is_group_subscription: boolean;
+	group_member_limit: number;
+	group_member_label: string;
+	// Subscription products bundled by a grouped (plan-switching) product.
+	bundled_products: SubscriptionProductBundled[];
 	status: string;
 	status_label: string;
 	base_price: number | null;

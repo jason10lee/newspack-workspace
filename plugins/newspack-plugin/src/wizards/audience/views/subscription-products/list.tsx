@@ -101,6 +101,12 @@ export default function SubscriptionProductsList() {
 	// Rows in the active scope, before the DataViews filters/sort/pagination run.
 	const scopedData = useMemo( () => data.filter( item => inScope( item, scope ) ), [ data, scope ] );
 
+	// Subscription products available to bundle into a new grouped product.
+	const bundleOptions = useMemo(
+		() => data.filter( item => item.type !== 'grouped' ).map( item => ( { id: item.id, label: item.name } ) ),
+		[ data ]
+	);
+
 	useEffect( () => {
 		setHeaderData( {
 			actions: [
@@ -191,6 +197,7 @@ export default function SubscriptionProductsList() {
 				elements: [
 					{ value: 'subscription', label: __( 'Simple subscription', 'newspack-plugin' ) },
 					{ value: 'variable-subscription', label: __( 'Variable subscription', 'newspack-plugin' ) },
+					{ value: 'grouped', label: __( 'Plan group', 'newspack-plugin' ) },
 				],
 				filterBy: { operators: [ 'is' ] },
 			},
@@ -201,9 +208,50 @@ export default function SubscriptionProductsList() {
 				// Sort by the numeric base price; render the human label.
 				getValue: ( { item } ) => ( item.base_price === null ? -1 : item.base_price ),
 				render: ( { item } ) => {
+					// Grouped products aren't priced themselves — show what they bundle instead.
+					if ( item.type === 'grouped' ) {
+						return item.bundled_products.length ? (
+							<div className="newspack-subscription-products__bundled">
+								{ item.bundled_products.map( bundled => (
+									<Badge key={ bundled.id } level="default" text={ bundled.name } />
+								) ) }
+							</div>
+						) : (
+							<span className="newspack-subscription-products__muted">&mdash;</span>
+						);
+					}
 					const label = item.type === 'variable-subscription' && item.price_range_label ? item.price_range_label : item.price_label;
 					return label ? <span>{ label }</span> : <span className="newspack-subscription-products__muted">&mdash;</span>;
 				},
+			},
+			{
+				id: 'members',
+				label: __( 'Members', 'newspack-plugin' ),
+				// Group-subscription (multi-seat) summary. Off by default; sparse like Availability.
+				getValue: ( { item } ) => ( item.is_group_subscription ? item.group_member_label : '' ),
+				enableSorting: false,
+				render: ( { item } ) =>
+					item.is_group_subscription ? (
+						<Badge level="info" text={ item.group_member_label } />
+					) : (
+						<span className="newspack-subscription-products__muted">&mdash;</span>
+					),
+			},
+			{
+				id: 'bundled',
+				label: __( 'Bundled plans', 'newspack-plugin' ),
+				getValue: ( { item } ) => item.bundled_products.map( bundled => bundled.name ).join( ', ' ),
+				enableSorting: false,
+				render: ( { item } ) =>
+					item.bundled_products.length ? (
+						<div className="newspack-subscription-products__bundled">
+							{ item.bundled_products.map( bundled => (
+								<Badge key={ bundled.id } level="default" text={ bundled.name } />
+							) ) }
+						</div>
+					) : (
+						<span className="newspack-subscription-products__muted">&mdash;</span>
+					),
 			},
 			{
 				id: 'active_subscriptions',
@@ -358,7 +406,9 @@ export default function SubscriptionProductsList() {
 				getItemId={ ( item: SubscriptionProduct ) => String( item.id ) }
 				search
 			/>
-			{ showAddModal && <AddProductModal onClose={ () => setShowAddModal( false ) } onCreated={ handleCreated } /> }
+			{ showAddModal && (
+				<AddProductModal onClose={ () => setShowAddModal( false ) } onCreated={ handleCreated } bundleOptions={ bundleOptions } />
+			) }
 		</div>
 	);
 }
