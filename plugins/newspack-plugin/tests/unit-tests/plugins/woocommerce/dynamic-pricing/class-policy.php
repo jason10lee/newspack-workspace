@@ -64,13 +64,13 @@ class Newspack_Test_Policy extends WP_UnitTestCase {
 	public function test_application_defaults_to_deal_and_reads_live() {
 		$post_id = $this->factory->post->create( [ 'post_type' => 'shop_pricing_policy' ] );
 		update_post_meta( $post_id, '_strategy_id', 'stepped_by_cycle' );
-		$this->assertSame( Policy::APPLICATION_DEAL, Policy::from_post( get_post( $post_id ) )->application, 'Deals are the default — prospective edits, pinned at purchase.' );
+		$this->assertSame( Policy::APPLICATION_LOCKED, Policy::from_post( get_post( $post_id ) )->application, 'Deals are the default — prospective edits, pinned at purchase.' );
 
-		update_post_meta( $post_id, '_application', 'live' );
-		$this->assertSame( Policy::APPLICATION_LIVE, Policy::from_post( get_post( $post_id ) )->application );
+		update_post_meta( $post_id, '_application', 'current' );
+		$this->assertSame( Policy::APPLICATION_CURRENT, Policy::from_post( get_post( $post_id ) )->application );
 
 		update_post_meta( $post_id, '_application', 'bogus' );
-		$this->assertSame( Policy::APPLICATION_DEAL, Policy::from_post( get_post( $post_id ) )->application, 'Unknown values fall back to deal.' );
+		$this->assertSame( Policy::APPLICATION_LOCKED, Policy::from_post( get_post( $post_id ) )->application, 'Unknown values fall back to deal.' );
 	}
 
 	public function test_snapshot_roundtrip_preserves_decision_relevant_config() {

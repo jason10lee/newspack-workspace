@@ -227,7 +227,7 @@ class Newspack_Test_WooProduct_Surface extends WP_UnitTestCase {
 			'item_name' => 'Test Subscription',
 			'quantity'  => 1,
 		] );
-		$this->assertStringContainsString( '[policy 18]', $note );
+		$this->assertStringContainsString( '[rule 18]', $note );
 		$this->assertStringContainsString( 'Test Subscription', $note );
 		$this->assertStringContainsString( '$5.00', $note );
 		$this->assertStringContainsString( '$10.00', $note );
@@ -261,7 +261,7 @@ class Newspack_Test_WooProduct_Surface extends WP_UnitTestCase {
 			->addMethods( [ 'add_order_note', 'update_meta_data' ] )
 			->getMock();
 		$order->method( 'get_meta' )->willReturn( '' );
-		$order->expects( $this->once() )->method( 'add_order_note' )->with( $this->stringContains( '[policy pol_o]' ) );
+		$order->expects( $this->once() )->method( 'add_order_note' )->with( $this->stringContains( '[rule pol_o]' ) );
 		$order->expects( $this->once() )->method( 'update_meta_data' )->with( '_newspack_dp_acquisition_noted', '1' );
 		$order->expects( $this->once() )->method( 'save' );
 

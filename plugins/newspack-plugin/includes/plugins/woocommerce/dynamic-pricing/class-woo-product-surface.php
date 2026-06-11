@@ -340,8 +340,8 @@ final class WooProduct_Surface implements Price_Surface {
 	public static function acquisition_note( array $applied ): string {
 		$descriptor = '' !== (string) $applied['label'] ? (string) $applied['label'] : (string) $applied['reason'];
 		return sprintf(
-			/* translators: 1: policy id, 2: product name, 3: charged price, 4: catalog price, 5: policy label or reason */
-			__( 'Newspack Dynamic Pricing [policy %1$s]: "%2$s" priced at %3$s — catalog price %4$s (%5$s).', 'newspack-plugin' ),
+			/* translators: 1: rule id, 2: product name, 3: charged price, 4: regular price, 5: rule label or reason */
+			__( 'Newspack Dynamic Pricing [rule %1$s]: "%2$s" priced at %3$s — regular price %4$s (%5$s).', 'newspack-plugin' ),
 			$applied['policy_id'],
 			$applied['item_name'],
 			wc_price( (float) $applied['amount'] ),
@@ -461,7 +461,7 @@ final class WooProduct_Surface implements Price_Surface {
 			}
 			$original_plain = wp_strip_all_tags( html_entity_decode( wc_price( (float) $applied['original'] ), ENT_QUOTES ) );
 			return sprintf(
-				/* translators: 1: WCS-formatted summary, 2: policy label, 3: original price (plain text) */
+				/* translators: 1: WCS-formatted summary, 2: rule label, 3: regular price (plain text) */
 				__( '%1$s (%2$s — was %3$s)', 'newspack-plugin' ),
 				$summary,
 				$applied['label'],
@@ -519,25 +519,25 @@ final class WooProduct_Surface implements Price_Surface {
 	public static function store_api_cart_item_schema(): array {
 		return [
 			'publicized'         => [
-				'description' => __( 'Whether a publicized pricing policy is applied to this item.', 'newspack-plugin' ),
+				'description' => __( 'Whether a publicized pricing rule is applied to this item.', 'newspack-plugin' ),
 				'type'        => 'boolean',
 				'context'     => [ 'view', 'edit' ],
 				'readonly'    => true,
 			],
 			'original'           => [
-				'description' => __( 'Pre-policy (catalog) recurring price.', 'newspack-plugin' ),
+				'description' => __( 'Regular recurring price (before the rule applied).', 'newspack-plugin' ),
 				'type'        => 'number',
 				'context'     => [ 'view', 'edit' ],
 				'readonly'    => true,
 			],
 			'discounted'         => [
-				'description' => __( 'Policy-resolved amount.', 'newspack-plugin' ),
+				'description' => __( 'Rule-resolved amount.', 'newspack-plugin' ),
 				'type'        => 'number',
 				'context'     => [ 'view', 'edit' ],
 				'readonly'    => true,
 			],
 			'label'              => [
-				'description' => __( 'Human-readable policy label.', 'newspack-plugin' ),
+				'description' => __( 'Human-readable rule label.', 'newspack-plugin' ),
 				'type'        => 'string',
 				'context'     => [ 'view', 'edit' ],
 				'readonly'    => true,

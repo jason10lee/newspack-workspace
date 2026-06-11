@@ -16,18 +16,22 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Policy {
 	/**
-	 * Deal: participates in acquisition resolution only. When it wins at
+	 * Locked: participates in acquisition resolution only. When it wins at
 	 * checkout, its config is snapshotted onto the subscription and renewals
-	 * resolve from the snapshot — editing or deleting the policy affects new
-	 * acquisitions only. The default. See docs 03-policy-pinning-design.
+	 * resolve from the snapshot — editing or deleting the rule affects new
+	 * purchases only. The default. See docs 03-policy-pinning-design.
+	 *
+	 * Operator-facing label: "Locked at purchase". Stored as `locked`.
 	 */
-	const APPLICATION_DEAL = 'deal';
+	const APPLICATION_LOCKED = 'locked';
 
 	/**
-	 * Live: resolved fresh at every pricing event (acquisition and renewal),
+	 * Current: resolved fresh at every pricing event (acquisition and renewal),
 	 * never snapshots. For retention offers, win-backs, fleet-wide adjustments.
+	 *
+	 * Operator-facing label: "Always current". Stored as `current`.
 	 */
-	const APPLICATION_LIVE = 'live';
+	const APPLICATION_CURRENT = 'current';
 
 	public string $id;
 	public string $title;
@@ -40,7 +44,7 @@ final class Policy {
 	public ?int $active_from     = null;
 	public ?int $active_until    = null;
 	public array $conditions     = [];
-	public string $application   = self::APPLICATION_DEAL;
+	public string $application   = self::APPLICATION_LOCKED;
 	/**
 	 * Whether the engine should communicate this policy to the reader (cart strikethrough,
 	 * label badge, etc.). Default false (silent application).
@@ -75,7 +79,7 @@ final class Policy {
 		$p->publicize = '1' === (string) get_post_meta( $post->ID, '_publicize', true );
 
 		$application    = (string) get_post_meta( $post->ID, '_application', true );
-		$p->application = self::APPLICATION_LIVE === $application ? self::APPLICATION_LIVE : self::APPLICATION_DEAL;
+		$p->application = self::APPLICATION_CURRENT === $application ? self::APPLICATION_CURRENT : self::APPLICATION_LOCKED;
 
 		$params     = get_post_meta( $post->ID, '_params', true );
 		$conditions = get_post_meta( $post->ID, '_conditions', true );
@@ -105,7 +109,7 @@ final class Policy {
 		$p->priority     = isset( $snapshot['priority'] ) ? (int) $snapshot['priority'] : 100;
 		$p->compose_mode = in_array( $snapshot['compose_mode'] ?? '', [ 'min', 'priority_exclusive' ], true ) ? $snapshot['compose_mode'] : 'min';
 		$p->publicize    = ! empty( $snapshot['publicize'] );
-		$p->application  = self::APPLICATION_DEAL;
+		$p->application  = self::APPLICATION_LOCKED;
 		// Scope is irrelevant post-pin: the snapshot is already bound to its
 		// subscription. all_subscriptions makes matches_product() pass for the
 		// pinned product without an id lookup.

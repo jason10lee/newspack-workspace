@@ -48,7 +48,7 @@ final class Subscription_Surface implements Price_Surface {
 		// (both classic and Store API flows route through WCS checkout creation).
 		// The acquisition (cycle 1) price was applied by WooProduct_Surface on the
 		// cart; without a note here the subscription has no record of why its
-		// first cycle differs from catalog.
+		// first cycle differs from the regular price.
 		add_action( 'woocommerce_checkout_subscription_created', [ __CLASS__, 'note_acquisition_on_subscription' ], 20, 3 );
 
 		// Policy pinning (docs 03): when the acquisition price came from a
@@ -84,7 +84,7 @@ final class Subscription_Surface implements Price_Surface {
 				continue;
 			}
 			$policy = Policy::from_post( $post );
-			if ( Policy::APPLICATION_DEAL !== $policy->application ) {
+			if ( Policy::APPLICATION_LOCKED !== $policy->application ) {
 				continue;
 			}
 
@@ -95,8 +95,8 @@ final class Subscription_Surface implements Price_Surface {
 			Subscription_Pin::pin( $line, $policy );
 			$subscription->add_order_note(
 				sprintf(
-					/* translators: 1: policy id */
-					__( 'Newspack Dynamic Pricing [policy %1$s]: deal pinned — renewals follow this policy as configured at purchase; later policy edits affect new purchases only.', 'newspack-plugin' ),
+					/* translators: 1: rule id */
+					__( 'Newspack Dynamic Pricing [rule %1$s]: terms locked at purchase — renewals follow this rule as configured at purchase; later edits affect new purchases only.', 'newspack-plugin' ),
 					$policy->id
 				)
 			);
@@ -254,8 +254,8 @@ final class Subscription_Surface implements Price_Surface {
 		$sub->calculate_totals();
 		$sub->add_order_note(
 			sprintf(
-				/* translators: 1: policy id, 2: formatted price, 3: human label */
-				__( 'Newspack Dynamic Pricing [policy %1$s]: recurring price set to %2$s (%3$s).', 'newspack-plugin' ),
+				/* translators: 1: rule id, 2: formatted price, 3: human label */
+				__( 'Newspack Dynamic Pricing [rule %1$s]: recurring price set to %2$s (%3$s).', 'newspack-plugin' ),
 				$d->policy_id,
 				wc_price( $d->amount ),
 				$d->label

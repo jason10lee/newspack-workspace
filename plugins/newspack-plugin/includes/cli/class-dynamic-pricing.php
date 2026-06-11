@@ -25,20 +25,21 @@ defined( 'ABSPATH' ) || exit;
  */
 class Dynamic_Pricing_CLI {
 	/**
-	 * Migrate existing subscriptions against a policy: re-pin them to the
-	 * policy's current config (default), or detach the policy's pins.
+	 * Migrate existing subscriptions against a pricing rule: lock them to the
+	 * rule's current config (default), or release the rule from existing subs.
 	 *
 	 * ## OPTIONS
 	 *
 	 * --policy=<id>
-	 * : The shop_pricing_policy post id.
+	 * : The pricing-rule post id (CPT slug remains shop_pricing_policy for
+	 * developer-API compatibility).
 	 *
 	 * [--subscription=<id>]
 	 * : Limit to a single subscription.
 	 *
 	 * [--detach]
-	 * : Instead of re-pinning, remove this policy's pins and restore the
-	 * catalog price on the affected line items.
+	 * : Instead of re-locking, release this rule from existing subscriptions
+	 * and restore the regular price on the affected line items.
 	 *
 	 * [--dry-run]
 	 * : Report what would change without writing anything.
@@ -71,12 +72,12 @@ class Dynamic_Pricing_CLI {
 			$policy = Policy::from_post( $post );
 		}
 		if ( ! $detach ) {
-			// Re-pin needs a real, published, deal-class policy to snapshot from.
+			// Re-lock needs a real, published, locked-application rule to snapshot from.
 			if ( ! $policy || 'publish' !== $post->post_status ) {
-				WP_CLI::error( "Policy {$policy_id} not found or not published. (--detach works without the policy row.)" );
+				WP_CLI::error( "Pricing rule {$policy_id} not found or not published. (--detach works without the rule row.)" );
 			}
-			if ( Policy::APPLICATION_DEAL !== $policy->application ) {
-				WP_CLI::error( "Policy {$policy_id} is live-class; live policies apply at every renewal and are never pinned." );
+			if ( Policy::APPLICATION_LOCKED !== $policy->application ) {
+				WP_CLI::error( "Pricing rule {$policy_id} is set to Always current; current-mode rules apply at every renewal and are never locked onto subscribers." );
 			}
 		}
 
@@ -95,7 +96,7 @@ class Dynamic_Pricing_CLI {
 			$counts[ $changed ? 'changed' : 'skipped' ]++;
 		}
 
-		$verb = $detach ? 'detached' : 're-pinned';
+		$verb = $detach ? 'released' : 'locked';
 		WP_CLI::success(
 			sprintf(
 				'%s%d subscriptions examined: %d %s, %d skipped.',
@@ -168,7 +169,7 @@ class Dynamic_Pricing_CLI {
 		$line    = reset( $lines );
 		$product = wc_get_product( $line->get_variation_id() ?: $line->get_product_id() );
 		if ( ! $product || ! $policy->matches_product( $product, $engine ) ) {
-			WP_CLI::log( sprintf( '#%d: skipped (out of policy scope).', $sub->get_id() ) );
+			WP_CLI::log( sprintf( '#%d: skipped (out of rule scope).', $sub->get_id() ) );
 			return false;
 		}
 
@@ -183,7 +184,7 @@ class Dynamic_Pricing_CLI {
 				$preview = $strategy->decide( $ctx, $policy->params );
 			}
 			WP_CLI::log( sprintf(
-				'#%d: would pin policy %s; upcoming cycle %d would resolve to %s (line currently %s).',
+				'#%d: would lock rule %s; upcoming cycle %d would resolve to %s (line currently %s).',
 				$sub->get_id(),
 				$policy->id,
 				(int) $ctx->signals['completed_cycles'],
@@ -196,8 +197,8 @@ class Dynamic_Pricing_CLI {
 		Subscription_Pin::pin( $line, $policy );
 		$sub->add_order_note(
 			sprintf(
-				/* translators: 1: policy id */
-				__( 'Newspack Dynamic Pricing [policy %1$s]: deal pinned via migration — renewals follow this policy as configured at migration time.', 'newspack-plugin' ),
+				/* translators: 1: rule id */
+				__( 'Newspack Dynamic Pricing [rule %1$s]: terms locked via migration — renewals follow this rule as configured at migration time.', 'newspack-plugin' ),
 				$policy->id
 			)
 		);
@@ -208,7 +209,7 @@ class Dynamic_Pricing_CLI {
 		if ( $d ) {
 			$surface->apply( $ctx, $d );
 		}
-		WP_CLI::log( sprintf( '#%d: pinned policy %s.', $sub->get_id(), $policy->id ) );
+		WP_CLI::log( sprintf( '#%d: locked rule %s.', $sub->get_id(), $policy->id ) );
 		return true;
 	}
 
@@ -234,10 +235,10 @@ class Dynamic_Pricing_CLI {
 
 			if ( $dry_run ) {
 				WP_CLI::log( sprintf(
-					'#%d: would detach policy %d%s.',
+					'#%d: would release rule %d%s.',
 					$sub->get_id(),
 					$policy_id,
-					$base > 0 ? sprintf( ' and restore catalog price %s', number_format( $base * $qty, 2 ) ) : ''
+					$base > 0 ? sprintf( ' and restore regular price %s', number_format( $base * $qty, 2 ) ) : ''
 				) );
 				return true;
 			}
@@ -251,14 +252,14 @@ class Dynamic_Pricing_CLI {
 			}
 			$sub->add_order_note(
 				sprintf(
-					/* translators: 1: policy id, 2: formatted price */
-					__( 'Newspack Dynamic Pricing [policy %1$s]: deal detached via migration; recurring price restored to catalog (%2$s).', 'newspack-plugin' ),
+					/* translators: 1: rule id, 2: formatted price */
+					__( 'Newspack Dynamic Pricing [rule %1$s]: rule released via migration; recurring price restored to regular (%2$s).', 'newspack-plugin' ),
 					$policy_id,
 					wc_price( $base * $qty )
 				)
 			);
 			$sub->save();
-			WP_CLI::log( sprintf( '#%d: detached policy %d.', $sub->get_id(), $policy_id ) );
+			WP_CLI::log( sprintf( '#%d: released rule %d.', $sub->get_id(), $policy_id ) );
 			return true;
 		}
 		return false;

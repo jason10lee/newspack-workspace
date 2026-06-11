@@ -183,7 +183,7 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 		$sub  = $this->mock_subscription( completed_payments: 0, line_item: $line );
 		$sub->expects( $this->once() )
 			->method( 'add_order_note' )
-			->with( $this->logicalAnd( $this->stringContains( '[policy 18]' ), $this->stringContains( 'acquisition' ) ) );
+			->with( $this->logicalAnd( $this->stringContains( '[rule 18]' ), $this->stringContains( 'acquisition' ) ) );
 
 		Subscription_Surface::note_acquisition_on_subscription( $sub, null, $recurring_cart );
 	}
@@ -222,7 +222,7 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 		$line->expects( $this->once() )->method( 'save' );
 
 		$sub = $this->mock_subscription( completed_payments: 0, line_item: $line );
-		$sub->expects( $this->once() )->method( 'add_order_note' )->with( $this->stringContains( 'deal pinned' ) );
+		$sub->expects( $this->once() )->method( 'add_order_note' )->with( $this->stringContains( 'terms locked at purchase' ) );
 
 		Subscription_Surface::pin_deal_on_subscription( $sub, null, new \WC_Cart( [ 'pin_key' => [ 'data' => $product ] ] ) );
 
@@ -239,7 +239,7 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 		register_post_type( 'shop_pricing_policy', [ 'public' => false ] );
 		$policy_id = $this->factory->post->create( [ 'post_type' => 'shop_pricing_policy', 'post_status' => 'publish' ] );
 		update_post_meta( $policy_id, '_strategy_id', 'stepped_by_cycle' );
-		update_post_meta( $policy_id, '_application', 'live' );
+		update_post_meta( $policy_id, '_application', 'current' );
 
 		$product = $this->getMockBuilder( \WC_Product::class )->disableOriginalConstructor()->addMethods( [ 'set_price' ] )->getMock();
 		$ctx = new Pricing_Context( 'cart', $product, null, 10.0, [], [ 'data' => $product, 'key' => 'live_key' ] );

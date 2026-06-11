@@ -64,7 +64,7 @@ final class CPT_Policy_Repository implements Policy_Repository {
 		$engine   = Pricing_Engine::instance();
 		$policies = $pinned ? [ $pinned ] : [];
 		foreach ( $this->all_active() as $policy ) {
-			if ( $is_renewal && Policy::APPLICATION_DEAL === $policy->application ) {
+			if ( $is_renewal && Policy::APPLICATION_LOCKED === $policy->application ) {
 				continue;
 			}
 			if ( $policy->matches_product( $ctx->product, $engine ) ) {

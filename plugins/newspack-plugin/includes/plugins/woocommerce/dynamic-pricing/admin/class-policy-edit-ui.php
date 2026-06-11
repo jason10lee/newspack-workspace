@@ -38,7 +38,7 @@ final class Policy_Edit_UI {
 
 		add_meta_box(
 			'newspack_dp_policy_settings',
-			__( 'Policy Settings', 'newspack-plugin' ),
+			__( 'Rule Settings', 'newspack-plugin' ),
 			[ __CLASS__, 'render_settings_metabox' ],
 			Dynamic_Pricing::CPT,
 			'normal',
@@ -46,7 +46,7 @@ final class Policy_Edit_UI {
 		);
 		add_meta_box(
 			'newspack_dp_steps',
-			__( 'Stepped Pricing Steps', 'newspack-plugin' ),
+			__( 'Price Schedule', 'newspack-plugin' ),
 			[ __CLASS__, 'render_steps_metabox' ],
 			Dynamic_Pricing::CPT,
 			'normal',
@@ -54,7 +54,7 @@ final class Policy_Edit_UI {
 		);
 		add_meta_box(
 			'newspack_dp_simple',
-			__( 'Simple Pricing', 'newspack-plugin' ),
+			__( 'Flat Adjustment', 'newspack-plugin' ),
 			[ __CLASS__, 'render_simple_metabox' ],
 			Dynamic_Pricing::CPT,
 			'normal',
@@ -62,7 +62,7 @@ final class Policy_Edit_UI {
 		);
 		add_meta_box(
 			'newspack_dp_conditions',
-			__( 'Eligibility Conditions', 'newspack-plugin' ),
+			__( 'Eligibility', 'newspack-plugin' ),
 			[ __CLASS__, 'render_conditions_metabox' ],
 			Dynamic_Pricing::CPT,
 			'normal',
@@ -88,48 +88,47 @@ final class Policy_Edit_UI {
 		?>
 		<table class="form-table">
 			<tr>
-				<th><label for="newspack_dp_strategy_id"><?php esc_html_e( 'Strategy', 'newspack-plugin' ); ?></label></th>
+				<th><label for="newspack_dp_strategy_id"><?php esc_html_e( 'Pricing model', 'newspack-plugin' ); ?></label></th>
 				<td>
 					<select name="newspack_dp_strategy_id" id="newspack_dp_strategy_id">
-						<option value="stepped_by_cycle" <?php selected( $strategy_id, 'stepped_by_cycle' ); ?>><?php esc_html_e( 'Stepped by cycle — price changes on a payment schedule', 'newspack-plugin' ); ?></option>
-						<option value="simple_price" <?php selected( $strategy_id, 'simple_price' ); ?>><?php esc_html_e( 'Simple — one adjustment, optionally for the first N payments', 'newspack-plugin' ); ?></option>
+						<option value="stepped_by_cycle" <?php selected( $strategy_id, 'stepped_by_cycle' ); ?>><?php esc_html_e( 'Price Schedule — changes by payment number', 'newspack-plugin' ); ?></option>
+						<option value="simple_price" <?php selected( $strategy_id, 'simple_price' ); ?>><?php esc_html_e( 'Flat Adjustment — same every payment, optionally only the first N', 'newspack-plugin' ); ?></option>
 					</select>
-					<p class="description"><?php esc_html_e( 'Additional strategies register at runtime via Pricing_Engine::register().', 'newspack-plugin' ); ?></p>
+				</td>
+			</tr>
+			<tr>
+				<th><label for="newspack_dp_application"><?php esc_html_e( 'Existing subscribers', 'newspack-plugin' ); ?></label></th>
+				<td>
+					<select name="newspack_dp_application" id="newspack_dp_application">
+						<option value="<?php echo esc_attr( Policy::APPLICATION_LOCKED ); ?>" <?php selected( $application, Policy::APPLICATION_LOCKED ); ?>><?php esc_html_e( 'Locked at purchase — subscribers keep the terms they bought under (default)', 'newspack-plugin' ); ?></option>
+						<option value="<?php echo esc_attr( Policy::APPLICATION_CURRENT ); ?>" <?php selected( $application, Policy::APPLICATION_CURRENT ); ?>><?php esc_html_e( 'Always current — renewals follow this rule\'s latest settings', 'newspack-plugin' ); ?></option>
+					</select>
+					<p class="description"><?php esc_html_e( 'Locked: the configuration is copied onto each subscription at purchase, so editing this rule affects new purchases only. Always current: existing subscriptions follow the latest settings at every renewal — for retention adjustments or fleet-wide changes.', 'newspack-plugin' ); ?></p>
+				</td>
+			</tr>
+			<tr>
+				<th><label for="newspack_dp_compose_mode"><?php esc_html_e( 'When multiple rules match', 'newspack-plugin' ); ?></label></th>
+				<td>
+					<select name="newspack_dp_compose_mode" id="newspack_dp_compose_mode">
+						<option value="min" <?php selected( $compose_mode, 'min' ); ?>><?php esc_html_e( 'Best price wins (default)', 'newspack-plugin' ); ?></option>
+						<option value="priority_exclusive" <?php selected( $compose_mode, 'priority_exclusive' ); ?>><?php esc_html_e( 'This rule only (stop checking others)', 'newspack-plugin' ); ?></option>
+					</select>
 				</td>
 			</tr>
 			<tr>
 				<th><label for="newspack_dp_priority"><?php esc_html_e( 'Priority', 'newspack-plugin' ); ?></label></th>
 				<td>
 					<input type="number" name="newspack_dp_priority" id="newspack_dp_priority" value="<?php echo esc_attr( (string) $priority ); ?>" min="0" />
-					<p class="description"><?php esc_html_e( 'Resolution order (lowest priority first). Lower numbers win for priority_exclusive policies.', 'newspack-plugin' ); ?></p>
+					<p class="description"><?php esc_html_e( 'Lower numbers are considered first when multiple rules match.', 'newspack-plugin' ); ?></p>
 				</td>
 			</tr>
 			<tr>
-				<th><label for="newspack_dp_application"><?php esc_html_e( 'How this policy applies', 'newspack-plugin' ); ?></label></th>
-				<td>
-					<select name="newspack_dp_application" id="newspack_dp_application">
-						<option value="<?php echo esc_attr( Policy::APPLICATION_DEAL ); ?>" <?php selected( $application, Policy::APPLICATION_DEAL ); ?>><?php esc_html_e( 'Deal — pinned at purchase (default)', 'newspack-plugin' ); ?></option>
-						<option value="<?php echo esc_attr( Policy::APPLICATION_LIVE ); ?>" <?php selected( $application, Policy::APPLICATION_LIVE ); ?>><?php esc_html_e( 'Live — re-evaluated at every payment event', 'newspack-plugin' ); ?></option>
-					</select>
-					<p class="description"><?php esc_html_e( 'Deal: the configuration is copied onto each subscription at purchase; editing the policy affects new purchases only. Live: existing subscriptions follow the current configuration at every renewal (retention offers, fleet-wide adjustments).', 'newspack-plugin' ); ?></p>
-				</td>
-			</tr>
-			<tr>
-				<th><label for="newspack_dp_compose_mode"><?php esc_html_e( 'Compose mode', 'newspack-plugin' ); ?></label></th>
-				<td>
-					<select name="newspack_dp_compose_mode" id="newspack_dp_compose_mode">
-						<option value="min" <?php selected( $compose_mode, 'min' ); ?>><?php esc_html_e( 'min — lowest amount wins (default)', 'newspack-plugin' ); ?></option>
-						<option value="priority_exclusive" <?php selected( $compose_mode, 'priority_exclusive' ); ?>><?php esc_html_e( 'priority_exclusive — locks the decision, no further policies apply', 'newspack-plugin' ); ?></option>
-					</select>
-				</td>
-			</tr>
-			<tr>
-				<th><label for="newspack_dp_scope_type"><?php esc_html_e( 'Scope', 'newspack-plugin' ); ?></label></th>
+				<th><label for="newspack_dp_scope_type"><?php esc_html_e( 'Applies to', 'newspack-plugin' ); ?></label></th>
 				<td>
 					<select name="newspack_dp_scope_type" id="newspack_dp_scope_type">
 						<option value="all_subscriptions" <?php selected( $scope_type, 'all_subscriptions' ); ?>><?php esc_html_e( 'All subscriptions', 'newspack-plugin' ); ?></option>
-						<option value="product_ids" <?php selected( $scope_type, 'product_ids' ); ?>><?php esc_html_e( 'Specific product IDs', 'newspack-plugin' ); ?></option>
-						<option value="category" <?php selected( $scope_type, 'category' ); ?>><?php esc_html_e( 'Product category term IDs', 'newspack-plugin' ); ?></option>
+						<option value="product_ids" <?php selected( $scope_type, 'product_ids' ); ?>><?php esc_html_e( 'Specific products', 'newspack-plugin' ); ?></option>
+						<option value="category" <?php selected( $scope_type, 'category' ); ?>><?php esc_html_e( 'Product categories', 'newspack-plugin' ); ?></option>
 					</select>
 					<p style="margin-top: 8px">
 						<input
@@ -138,33 +137,33 @@ final class Policy_Edit_UI {
 							id="newspack_dp_scope_value"
 							value="<?php echo esc_attr( $scope_value ); ?>"
 							class="regular-text"
-							placeholder="<?php esc_attr_e( 'Comma-separated IDs (used only for product_ids / category)', 'newspack-plugin' ); ?>"
+							placeholder="<?php esc_attr_e( 'Comma-separated IDs (for Specific products or Product categories)', 'newspack-plugin' ); ?>"
 						/>
 					</p>
 				</td>
 			</tr>
 			<tr>
-				<th><label for="newspack_dp_active_from"><?php esc_html_e( 'Active from', 'newspack-plugin' ); ?></label></th>
+				<th><label for="newspack_dp_active_from"><?php esc_html_e( 'Starts', 'newspack-plugin' ); ?></label></th>
 				<td>
 					<input type="datetime-local" name="newspack_dp_active_from" id="newspack_dp_active_from" value="<?php echo esc_attr( self::ts_to_local( $active_from ) ); ?>" />
 					<p class="description"><?php esc_html_e( 'Optional. Site timezone. Empty = active immediately.', 'newspack-plugin' ); ?></p>
 				</td>
 			</tr>
 			<tr>
-				<th><label for="newspack_dp_active_until"><?php esc_html_e( 'Active until', 'newspack-plugin' ); ?></label></th>
+				<th><label for="newspack_dp_active_until"><?php esc_html_e( 'Ends', 'newspack-plugin' ); ?></label></th>
 				<td>
 					<input type="datetime-local" name="newspack_dp_active_until" id="newspack_dp_active_until" value="<?php echo esc_attr( self::ts_to_local( $active_until ) ); ?>" />
-					<p class="description"><?php esc_html_e( 'Optional. Site timezone. Empty = no expiry.', 'newspack-plugin' ); ?></p>
+					<p class="description"><?php esc_html_e( 'Optional. Site timezone. Empty = no end date.', 'newspack-plugin' ); ?></p>
 				</td>
 			</tr>
 			<tr>
-				<th><label for="newspack_dp_publicize"><?php esc_html_e( 'Communicate to reader', 'newspack-plugin' ); ?></label></th>
+				<th><label for="newspack_dp_publicize"><?php esc_html_e( 'Show pricing details at checkout', 'newspack-plugin' ); ?></label></th>
 				<td>
 					<label>
 						<input type="checkbox" name="newspack_dp_publicize" id="newspack_dp_publicize" value="1" <?php checked( $publicize ); ?> />
-						<?php esc_html_e( 'Show this policy in cart / checkout (strikethrough original price + label badge)', 'newspack-plugin' ); ?>
+						<?php esc_html_e( 'Display this rule\'s name and the regular price comparison in the cart and at checkout.', 'newspack-plugin' ); ?>
 					</label>
-					<p class="description"><?php esc_html_e( 'When off, the policy applies silently — the reader sees only the resolved price, no indication a discount or change occurred.', 'newspack-plugin' ); ?></p>
+					<p class="description"><?php esc_html_e( 'When off, the resolved price appears with no explanation.', 'newspack-plugin' ); ?></p>
 				</td>
 			</tr>
 		</table>
@@ -177,18 +176,18 @@ final class Policy_Edit_UI {
 		$started_after   = (int) self::condition_value( $conditions, 'subscription_started_after' );
 		?>
 		<p class="description">
-			<?php esc_html_e( 'Conditions gate whether this policy applies to a given purchase. All checked conditions must pass; an unchecked policy has no eligibility restrictions.', 'newspack-plugin' ); ?>
+			<?php esc_html_e( 'Eligibility gates whether this rule applies to a given purchase or subscription. All set conditions must pass; leaving all fields empty means no restrictions.', 'newspack-plugin' ); ?>
 		</p>
 		<table class="form-table">
 			<tr>
-				<th scope="row"><?php esc_html_e( 'First-time only', 'newspack-plugin' ); ?></th>
+				<th scope="row"><?php esc_html_e( 'New subscribers only', 'newspack-plugin' ); ?></th>
 				<td>
 					<label>
 						<input type="checkbox" name="newspack_dp_conditions[first_time_only]" value="1" <?php checked( (bool) $first_time_only ); ?> />
-						<?php esc_html_e( 'Only apply if the customer has never had a subscription to the scoped product (any status).', 'newspack-plugin' ); ?>
+						<?php esc_html_e( 'Only apply when the customer has never had a subscription to the scoped product.', 'newspack-plugin' ); ?>
 					</label>
 					<p class="description">
-						<?php esc_html_e( 'Prevents a cancelled subscriber from re-triggering an intro step by purchasing again. Acquisition (cart) only — renewal cycles always pass so stepped policies keep applying after the first cycle. For "intro only, no stepping" promos, pair with a single-step policy. Guests are treated as first-time.', 'newspack-plugin' ); ?>
+						<?php esc_html_e( 'Prevents a cancelled subscriber from re-triggering an intro price by purchasing again. Only gates the checkout — existing subscribers keep their renewal terms unaffected. For "intro only, no further changes" rules, pair with a single-payment schedule. Guests are treated as new subscribers.', 'newspack-plugin' ); ?>
 					</p>
 				</td>
 			</tr>
@@ -202,12 +201,26 @@ final class Policy_Edit_UI {
 						value="<?php echo esc_attr( self::ts_to_local( $started_after > 0 ? $started_after : null ) ); ?>"
 					/>
 					<p class="description">
-						<?php esc_html_e( 'Cohort gate (site timezone, empty = no restriction). Renewals: only subscriptions started on/after this moment match — a Live policy created today won\'t reach back into older subscriptions. Checkout: the policy applies only once this moment has passed.', 'newspack-plugin' ); ?>
+						<?php esc_html_e( 'Cohort gate (site timezone, empty = no restriction). At renewal, only subscriptions started on or after this moment qualify — an Always-current rule created today won\'t reach back into older subscriptions. At checkout, the rule applies only once this moment has passed.', 'newspack-plugin' ); ?>
 					</p>
 				</td>
 			</tr>
 		</table>
 		<?php
+	}
+
+	/**
+	 * Operator-facing label for an Amount_Calculator calc type. Keeps the raw
+	 * enum strings on the storage side while the UI uses Woo-native phrasing.
+	 */
+	private static function calc_type_label( string $type ): string {
+		return match ( $type ) {
+			Amount_Calculator::FIXED_PRICE      => __( 'Set price to', 'newspack-plugin' ),
+			Amount_Calculator::PERCENT_OF_BASE  => __( 'Percentage of regular price', 'newspack-plugin' ),
+			Amount_Calculator::DISCOUNT_FIXED   => __( 'Amount off regular price', 'newspack-plugin' ),
+			Amount_Calculator::DISCOUNT_PERCENT => __( 'Percentage off regular price', 'newspack-plugin' ),
+			default                             => $type,
+		};
 	}
 
 	private static function condition_value( array $conditions, string $type ): mixed {
@@ -226,14 +239,14 @@ final class Policy_Edit_UI {
 		$label          = (string) ( $params['label'] ?? '' );
 		$payments_limit = max( 0, (int) ( $params['payments_limit'] ?? 0 ) );
 		?>
-		<p class="description"><?php esc_html_e( 'One adjustment applied to every payment — or only the first N. When the limit is reached, the price returns to catalog automatically.', 'newspack-plugin' ); ?></p>
+		<p class="description"><?php esc_html_e( 'One adjustment applied to every payment — or only the first N. When the limit is reached, the price returns to the regular price automatically.', 'newspack-plugin' ); ?></p>
 		<table class="form-table">
 			<tr>
-				<th><label for="newspack_dp_simple_calc_type"><?php esc_html_e( 'Calc type', 'newspack-plugin' ); ?></label></th>
+				<th><label for="newspack_dp_simple_calc_type"><?php esc_html_e( 'Pricing', 'newspack-plugin' ); ?></label></th>
 				<td>
 					<select name="newspack_dp_simple[calc_type]" id="newspack_dp_simple_calc_type">
 						<?php foreach ( Amount_Calculator::supported_types() as $type ) : ?>
-							<option value="<?php echo esc_attr( $type ); ?>" <?php selected( $calc_type, $type ); ?>><?php echo esc_html( $type ); ?></option>
+							<option value="<?php echo esc_attr( $type ); ?>" <?php selected( $calc_type, $type ); ?>><?php echo esc_html( self::calc_type_label( $type ) ); ?></option>
 						<?php endforeach; ?>
 					</select>
 				</td>
@@ -252,10 +265,10 @@ final class Policy_Edit_UI {
 				</td>
 			</tr>
 			<tr>
-				<th><label for="newspack_dp_simple_label"><?php esc_html_e( 'Label', 'newspack-plugin' ); ?></label></th>
+				<th><label for="newspack_dp_simple_label"><?php esc_html_e( 'Name shown to reader', 'newspack-plugin' ); ?></label></th>
 				<td>
 					<input type="text" name="newspack_dp_simple[label]" id="newspack_dp_simple_label" value="<?php echo esc_attr( $label ); ?>" class="regular-text" />
-					<p class="description"><?php esc_html_e( 'Shown to the reader when the policy is publicized.', 'newspack-plugin' ); ?></p>
+					<p class="description"><?php esc_html_e( 'Used when "Show pricing details at checkout" is on.', 'newspack-plugin' ); ?></p>
 				</td>
 			</tr>
 		</table>
@@ -266,14 +279,14 @@ final class Policy_Edit_UI {
 		$params = Policy::from_post( $post )->params;
 		$steps  = is_array( $params['steps'] ?? null ) ? $params['steps'] : [];
 		?>
-		<p class="description"><?php esc_html_e( 'Each step has: cycle threshold (at), calculation type, value, and a human label. The strategy picks the highest "at" ≤ completed_cycles+1.', 'newspack-plugin' ); ?></p>
+		<p class="description"><?php esc_html_e( 'Each row defines the price from a given payment onward, until a later row takes over. "From payment #1" sets the purchase price.', 'newspack-plugin' ); ?></p>
 		<table id="newspack_dp_steps_table" class="widefat striped" style="margin-top: 10px">
 			<thead>
 				<tr>
-					<th style="width: 90px"><?php esc_html_e( 'At cycle', 'newspack-plugin' ); ?></th>
-					<th><?php esc_html_e( 'Calc type', 'newspack-plugin' ); ?></th>
+					<th style="width: 110px"><?php esc_html_e( 'From payment #', 'newspack-plugin' ); ?></th>
+					<th><?php esc_html_e( 'Pricing', 'newspack-plugin' ); ?></th>
 					<th style="width: 110px"><?php esc_html_e( 'Value', 'newspack-plugin' ); ?></th>
-					<th><?php esc_html_e( 'Label', 'newspack-plugin' ); ?></th>
+					<th><?php esc_html_e( 'Name shown to reader', 'newspack-plugin' ); ?></th>
 					<th style="width: 50px"></th>
 				</tr>
 			</thead>
@@ -290,16 +303,7 @@ final class Policy_Edit_UI {
 			</tbody>
 		</table>
 		<p style="margin-top: 10px">
-			<button type="button" class="button" id="newspack_dp_add_step"><?php esc_html_e( '+ Add step', 'newspack-plugin' ); ?></button>
-		</p>
-		<p class="description">
-			<?php
-			printf(
-				/* translators: %s: link to Amount_Calculator source */
-				esc_html__( 'Calc types: fixed_price (set exact amount), percent_of_base (base × value/100), discount_fixed (base − value), discount_percent (base × (1 − value/100)).', 'newspack-plugin' ),
-				''
-			);
-			?>
+			<button type="button" class="button" id="newspack_dp_add_step"><?php esc_html_e( '+ Add row', 'newspack-plugin' ); ?></button>
 		</p>
 		<?php
 	}
@@ -317,7 +321,7 @@ final class Policy_Edit_UI {
 			<td>
 				<select name="newspack_dp_steps[<?php echo esc_attr( (string) $index ); ?>][calc_type]">
 					<?php foreach ( Amount_Calculator::supported_types() as $type ) : ?>
-						<option value="<?php echo esc_attr( $type ); ?>" <?php selected( $calc_type, $type ); ?>><?php echo esc_html( $type ); ?></option>
+						<option value="<?php echo esc_attr( $type ); ?>" <?php selected( $calc_type, $type ); ?>><?php echo esc_html( self::calc_type_label( $type ) ); ?></option>
 					<?php endforeach; ?>
 				</select>
 			</td>
@@ -328,7 +332,7 @@ final class Policy_Edit_UI {
 				<input type="text" name="newspack_dp_steps[<?php echo esc_attr( (string) $index ); ?>][label]" value="<?php echo esc_attr( $label ); ?>" class="regular-text" />
 			</td>
 			<td>
-				<button type="button" class="button newspack-dp-remove-step" title="<?php esc_attr_e( 'Remove step', 'newspack-plugin' ); ?>">&times;</button>
+				<button type="button" class="button newspack-dp-remove-step" title="<?php esc_attr_e( 'Remove row', 'newspack-plugin' ); ?>">&times;</button>
 			</td>
 		</tr>
 		<?php
@@ -359,9 +363,9 @@ final class Policy_Edit_UI {
 		if ( ! in_array( $compose_mode, [ 'min', 'priority_exclusive' ], true ) ) {
 			$compose_mode = 'min';
 		}
-		$application = isset( $_POST['newspack_dp_application'] ) ? sanitize_text_field( wp_unslash( $_POST['newspack_dp_application'] ) ) : Policy::APPLICATION_DEAL;
-		if ( ! in_array( $application, [ Policy::APPLICATION_DEAL, Policy::APPLICATION_LIVE ], true ) ) {
-			$application = Policy::APPLICATION_DEAL;
+		$application = isset( $_POST['newspack_dp_application'] ) ? sanitize_text_field( wp_unslash( $_POST['newspack_dp_application'] ) ) : Policy::APPLICATION_LOCKED;
+		if ( ! in_array( $application, [ Policy::APPLICATION_LOCKED, Policy::APPLICATION_CURRENT ], true ) ) {
+			$application = Policy::APPLICATION_LOCKED;
 		}
 		if ( ! in_array( $scope_type, [ 'all_subscriptions', 'product_ids', 'category' ], true ) ) {
 			$scope_type = 'all_subscriptions';
@@ -552,8 +556,8 @@ JS;
 		foreach ( $columns as $key => $label ) {
 			$reordered[ $key ] = $label;
 			if ( 'title' === $key ) {
-				$reordered['newspack_dp_strategy'] = __( 'Strategy', 'newspack-plugin' );
-				$reordered['newspack_dp_scope']    = __( 'Scope', 'newspack-plugin' );
+				$reordered['newspack_dp_strategy'] = __( 'Pricing model', 'newspack-plugin' );
+				$reordered['newspack_dp_scope']    = __( 'Applies to', 'newspack-plugin' );
 				$reordered['newspack_dp_priority'] = __( 'Priority', 'newspack-plugin' );
 			}
 		}

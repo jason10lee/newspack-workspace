@@ -145,19 +145,19 @@ class Newspack_Test_CPT_Policy_Repository extends WP_UnitTestCase {
 		$this->seed_policy( 'publish', [
 			'_strategy_id' => 'stepped_by_cycle',
 			'_scope_type'  => 'product_ids',
-			'_application' => 'live',
+			'_application' => 'current',
 		], [ 42 ] );
 
 		$result = $this->repo->for_context( $this->renewal_context( $this->mock_product( 42 ) ) );
 		$this->assertCount( 1, $result );
-		$this->assertSame( Policy::APPLICATION_LIVE, $result[0]->application );
+		$this->assertSame( Policy::APPLICATION_CURRENT, $result[0]->application );
 	}
 
 	public function test_renewal_intent_returns_pinned_deal_plus_live_policies() {
 		$this->seed_policy( 'publish', [
 			'_strategy_id' => 'stepped_by_cycle',
 			'_scope_type'  => 'product_ids',
-			'_application' => 'live',
+			'_application' => 'current',
 		], [ 42 ] );
 
 		$ctx    = $this->renewal_context( $this->mock_product( 42 ), $this->mock_pinned_subscription( $this->snapshot_fixture() ) );
@@ -166,7 +166,7 @@ class Newspack_Test_CPT_Policy_Repository extends WP_UnitTestCase {
 		$this->assertCount( 2, $result );
 		$this->assertSame( '777', $result[0]->id, 'Pinned deal is sourced first.' );
 		$this->assertSame( [ 'steps' => [ [ 'at' => 1, 'calc_type' => 'fixed_price', 'value' => 5, 'label' => 'Intro' ] ] ], $result[0]->params );
-		$this->assertSame( Policy::APPLICATION_LIVE, $result[1]->application );
+		$this->assertSame( Policy::APPLICATION_CURRENT, $result[1]->application );
 	}
 
 	public function test_pinned_deal_resolves_even_with_zero_policies() {
