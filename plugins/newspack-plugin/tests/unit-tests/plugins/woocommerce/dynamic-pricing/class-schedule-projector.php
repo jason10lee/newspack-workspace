@@ -160,8 +160,9 @@ class Newspack_Test_Schedule_Projector extends WP_UnitTestCase {
 
 		$subtotal = WooProduct_Surface::filter_cart_item_subtotal( '$5.00 / month', $cart_item, 'ann1' );
 		$this->assertStringContainsString( '$10.00', $subtotal, 'Regular price shown for comparison.' );
-		$this->assertStringContainsString( '$5.00 / month', $subtotal, 'Charged subtotal preserved.' );
-		$this->assertStringContainsString( 'first month', $subtotal, 'Purchase price does not recur (cycle 2 differs): qualify the "/ month" suffix.' );
+		$this->assertStringNotContainsString( '/ month', $subtotal, 'The period suffix lies when the purchase price does not recur — it must be stripped.' );
+		$this->assertStringContainsString( '$5.00', $subtotal, 'Charged amount preserved.' );
+		$this->assertStringContainsString( 'first month', $subtotal, 'Qualifier replaces the stripped period suffix.' );
 
 		$name = WooProduct_Surface::filter_cart_item_name( 'Test Sub', $cart_item, 'ann1' );
 		$this->assertStringContainsString( 'newspack-dp-badge', $name );
@@ -170,7 +171,8 @@ class Newspack_Test_Schedule_Projector extends WP_UnitTestCase {
 		$payload = WooProduct_Surface::store_api_cart_item_data( $cart_item );
 		$this->assertTrue( $payload['publicized'] );
 		$this->assertSame( ' — Intro', $payload['name_suffix'] );
-		$this->assertSame( ' (regularly $10.00)', $payload['price_suffix'] );
+		$this->assertSame( ' (regularly $10.00 — first month)', $payload['price_suffix'] );
+		$this->assertNotEmpty( $payload['period_suffix'], 'JS must receive the WCS period suffix to strip from the price.' );
 	}
 
 	public function test_no_first_cycle_qualifier_when_purchase_price_recurs() {
@@ -186,6 +188,10 @@ class Newspack_Test_Schedule_Projector extends WP_UnitTestCase {
 		$subtotal = WooProduct_Surface::filter_cart_item_subtotal( '$8.00 / month', $cart_item, 'flat1' );
 		$this->assertStringContainsString( '$10.00', $subtotal );
 		$this->assertStringNotContainsString( 'first month', $subtotal, 'Flat unlimited: the charged price IS the recurring price; no qualifier.' );
+		$this->assertStringContainsString( '/ month', $subtotal, 'Flat unlimited: the charged price recurs, so the period suffix must STAY.' );
+
+		$payload = WooProduct_Surface::store_api_cart_item_data( $cart_item );
+		$this->assertSame( '', $payload['period_suffix'], 'Flat unlimited: blocks must keep the period suffix on the line.' );
 	}
 
 	public function test_store_api_cart_data_emits_sentence_for_multi_step_items_only() {

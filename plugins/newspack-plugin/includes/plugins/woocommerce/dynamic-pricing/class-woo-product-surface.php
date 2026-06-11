@@ -480,13 +480,21 @@ final class WooProduct_Surface implements Price_Surface {
 		$qty           = isset( $cart_item['quantity'] ) ? max( 1, (int) $cart_item['quantity'] ) : 1;
 		$original_line = (float) $a['original'] * $qty;
 
+		// "first month" replaces the period suffix when the charged price is
+		// purchase-only; without that swap, the line reads "$5.00 / month" and
+		// claims the intro price recurs. The recurring totals + schedule rows
+		// below carry the renewal story unambiguously.
+		$qualifier = self::first_cycle_qualifier( $cart_item );
+		if ( '' !== $qualifier && $cart_item['data'] instanceof \WC_Product ) {
+			$subtotal = self::strip_period_suffix( $subtotal, $cart_item['data'] );
+		}
+
 		// wc_format_sale_price produces WC's standard <del>/<ins> sale markup
 		// (with screen-reader text) that all WC themes style.
 		$html = function_exists( 'wc_format_sale_price' )
 			? wc_format_sale_price( wc_price( $original_line ), $subtotal )
 			: $subtotal;
 
-		$qualifier = self::first_cycle_qualifier( $cart_item );
 		if ( '' !== $qualifier ) {
 			$html .= ' <small class="newspack-dp-first-cycle" style="display:block;color:#666;font-weight:normal">' . esc_html( $qualifier ) . '</small>';
 		}
@@ -528,26 +536,35 @@ final class WooProduct_Surface implements Price_Surface {
 			if ( ! $a || abs( $a['original'] - $a['amount'] ) < 0.01 ) {
 				return $summary;
 			}
+			$qualifier = self::first_cycle_qualifier( $cart_item );
+			if ( '' !== $qualifier && $cart_item['data'] instanceof \WC_Product ) {
+				$summary = self::strip_period_suffix( $summary, $cart_item['data'] );
+			}
 			$original_plain = wp_strip_all_tags( html_entity_decode( wc_price( (float) $a['original'] ), ENT_QUOTES ) );
-			$descriptor     = '' !== (string) $a['label']
-				/* translators: 1: rule label, 2: regular price */
-				? sprintf( __( '%1$s — regularly %2$s', 'newspack-plugin' ), $a['label'], $original_plain )
-				/* translators: %s: regular price */
-				: sprintf( __( 'regularly %s', 'newspack-plugin' ), $original_plain );
-			return sprintf( '%1$s (%2$s)', $summary, $descriptor );
+			$parts          = [];
+			if ( '' !== (string) $a['label'] ) {
+				$parts[] = $a['label'];
+			}
+			/* translators: %s: regular price */
+			$parts[] = sprintf( __( 'regularly %s', 'newspack-plugin' ), $original_plain );
+			if ( '' !== $qualifier ) {
+				$parts[] = $qualifier;
+			}
+			return sprintf( '%1$s (%2$s)', $summary, implode( ' — ', $parts ) );
 		}
 		return $summary;
 	}
 
 	/**
 	 * "first month" / "first 2 months" when the purchase price does not carry
-	 * into the first renewal — the qualifier for WCS's native "/ month" suffix,
-	 * which otherwise implies the charged price recurs. Empty when it does.
+	 * into the first renewal — the qualifier that REPLACES WCS's native "/ month"
+	 * suffix on the purchase line (which otherwise implies the charged price
+	 * recurs). Empty when it does carry; the suffix stays in that case.
 	 *
 	 * Display-path code: never allowed to take checkout down, so projection
 	 * failures degrade to no qualifier.
 	 */
-	private static function first_cycle_qualifier( array $cart_item ): string {
+	public static function first_cycle_qualifier( array $cart_item ): string {
 		try {
 			$segments = Schedule_Projector::project_for_cart_item( $cart_item );
 		} catch ( \Throwable $e ) {
@@ -562,6 +579,69 @@ final class WooProduct_Surface implements Price_Surface {
 		}
 		/* translators: %s: billing period, e.g. "month" or "2 months" — qualifies the charged price as purchase-only */
 		return sprintf( __( 'first %s', 'newspack-plugin' ), self::billing_period_label( $cart_item['data'] ) );
+	}
+
+	/**
+	 * The exact period suffix WCS appends after the price in `get_price_string`
+	 * — RAW, which may include WCS's `<span class="subscription-details">`
+	 * wrapper. Examples in English:
+	 *   - cart subtotal (HTML):       ` <span class="subscription-details"> / month</span>`
+	 *   - plain-text contexts:        ` / month`
+	 *   - blocks line price:          ` every month`
+	 * The plain version is `trim( wp_strip_all_tags( ... ) )` of the raw.
+	 * Used by `strip_period_suffix` (both legacy + modal) and by the StoreAPI
+	 * payload (sent plain so the blocks JS can match what it actually receives).
+	 *
+	 * @return string Raw suffix (possibly HTML-wrapped), or empty.
+	 */
+	private static function wcs_period_suffix( \WC_Product $product ): string {
+		if ( ! class_exists( '\WC_Subscriptions_Product' ) || ! method_exists( '\WC_Subscriptions_Product', 'get_price_string' ) ) {
+			return '';
+		}
+		try {
+			$placeholder = '##NEWSPACK_DP_PRICE##';
+			$with_period = (string) \WC_Subscriptions_Product::get_price_string(
+				$product,
+				[
+					'price'               => $placeholder,
+					'sign_up_fee'         => false,
+					'trial_length'        => false,
+					'subscription_period' => true,
+					'subscription_length' => false,
+				]
+			);
+		} catch ( \Throwable $e ) {
+			return '';
+		}
+		$idx = strpos( $with_period, $placeholder );
+		if ( false === $idx ) {
+			return '';
+		}
+		return substr( $with_period, $idx + strlen( $placeholder ) );
+	}
+
+	/**
+	 * Strip the WCS period suffix from a formatted price string. Used on the
+	 * purchase line whenever the charged amount doesn't carry into renewal —
+	 * the "/ month" / "every month" implies it does. Tries the raw suffix
+	 * first (matches HTML-formatted cart subtotals), then the tag-stripped
+	 * plain-text version (matches plain-text inputs like the modal summary).
+	 * Recurring totals (Layer 0) still carry the period; this is purchase-line
+	 * only.
+	 */
+	private static function strip_period_suffix( string $formatted, \WC_Product $product ): string {
+		$raw = self::wcs_period_suffix( $product );
+		if ( '' === $raw ) {
+			return $formatted;
+		}
+		$plain = trim( wp_strip_all_tags( $raw ) );
+		foreach ( array_unique( array_filter( [ $raw, $plain === '' ? '' : ' ' . $plain, $plain ] ) ) as $candidate ) {
+			$stripped = str_replace( $candidate, '', $formatted );
+			if ( $stripped !== $formatted ) {
+				return $stripped;
+			}
+		}
+		return $formatted;
 	}
 
 	/**
@@ -620,11 +700,21 @@ final class WooProduct_Surface implements Price_Surface {
 			return [ 'publicized' => false ];
 		}
 		$original_plain = wp_strip_all_tags( html_entity_decode( wc_price( (float) $a['original'] ), ENT_QUOTES ) );
+		$qualifier      = $cart_item['data'] instanceof \WC_Product ? self::first_cycle_qualifier( $cart_item ) : '';
+		// When the charged price is purchase-only, the JS strips WCS's period
+		// suffix (" every month" / " / month") from the price string and
+		// substitutes our qualifier. The recurring totals + schedule rows still
+		// own the renewal story; the line stays focused on what's charged today.
+		// Send the plain-text suffix to JS — blocks usually renders plain text
+		// for the cart-item price, so the raw HTML form would not match.
+		$period_suffix  = ( '' !== $qualifier && $cart_item['data'] instanceof \WC_Product ) ? trim( wp_strip_all_tags( self::wcs_period_suffix( $cart_item['data'] ) ) ) : '';
+		$descriptor     = sprintf( __( 'regularly %s', 'newspack-plugin' ), $original_plain );
+		$inline         = '' !== $qualifier ? $descriptor . ' — ' . $qualifier : $descriptor;
 		return [
-			'publicized'   => true,
-			'name_suffix'  => '' === (string) $a['label'] ? '' : sprintf( ' — %s', $a['label'] ),
-			/* translators: %s: regular price */
-			'price_suffix' => ' ' . sprintf( __( '(regularly %s)', 'newspack-plugin' ), $original_plain ),
+			'publicized'    => true,
+			'name_suffix'   => '' === (string) $a['label'] ? '' : sprintf( ' — %s', $a['label'] ),
+			'price_suffix'  => ' ' . sprintf( '(%s)', $inline ),
+			'period_suffix' => $period_suffix,
 		];
 	}
 
@@ -714,6 +804,12 @@ final class WooProduct_Surface implements Price_Surface {
 			],
 			'price_suffix' => [
 				'description' => __( 'Display-ready, translated suffix appended to the item price.', 'newspack-plugin' ),
+				'type'        => 'string',
+				'context'     => [ 'view', 'edit' ],
+				'readonly'    => true,
+			],
+			'period_suffix' => [
+				'description' => __( 'WCS-rendered period suffix (e.g., " / month") to strip from the item price before appending price_suffix; empty when the charged price recurs.', 'newspack-plugin' ),
 				'type'        => 'string',
 				'context'     => [ 'view', 'edit' ],
 				'readonly'    => true,

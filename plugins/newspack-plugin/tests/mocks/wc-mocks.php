@@ -551,6 +551,22 @@ if ( ! class_exists( 'WC_Subscriptions_Product' ) ) {
 			$interval = is_object( $product ) && method_exists( $product, 'get_meta' ) ? (int) $product->get_meta( '_subscription_period_interval' ) : 0;
 			return $interval > 0 ? $interval : 1;
 		}
+		/**
+		 * Minimal mirror of WCS's price-string builder — enough to derive a
+		 * locale-stable suffix in tests. Real WCS returns localized text via
+		 * `wcs_price_string`; we just need a placeholder-substitutable format.
+		 */
+		public static function get_price_string( $product, $include = [] ) {
+			$price    = isset( $include['price'] ) ? (string) $include['price'] : '';
+			$include_period = ! array_key_exists( 'subscription_period', $include ) || $include['subscription_period'];
+			$suffix = '';
+			if ( $include_period ) {
+				$interval = self::get_interval( $product );
+				$period   = self::get_period( $product );
+				$suffix   = 1 === $interval ? sprintf( ' / %s', $period ) : sprintf( ' every %d %ss', $interval, $period );
+			}
+			return $price . $suffix;
+		}
 	}
 }
 

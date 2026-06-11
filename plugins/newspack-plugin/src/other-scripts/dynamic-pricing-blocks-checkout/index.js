@@ -42,7 +42,25 @@ if ( registerCheckoutFilters ) {
 		},
 		cartItemPrice: ( value, extensions ) => {
 			const annotation = getAnnotation( extensions );
-			return annotation?.price_suffix ? value + annotation.price_suffix : value;
+			if ( ! annotation ) {
+				return value;
+			}
+			// Strip WCS's period suffix (" every month" / " / month") when the
+			// charged price is purchase-only — it otherwise implies the intro
+			// recurs. PHP-derived so it matches the active locale and interval;
+			// we try the suffix with and without a leading space because
+			// `value` may arrive with either pattern.
+			let result = value;
+			const suffix = annotation.period_suffix;
+			if ( suffix ) {
+				for ( const candidate of [ ' ' + suffix, suffix ] ) {
+					if ( result.includes( candidate ) ) {
+						result = result.split( candidate ).join( '' );
+						break;
+					}
+				}
+			}
+			return annotation.price_suffix ? result + annotation.price_suffix : result;
 		},
 	} );
 }
