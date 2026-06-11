@@ -35,15 +35,28 @@ const getAnnotation = extensions => {
 };
 
 if ( registerCheckoutFilters ) {
+	// Strip the WCS-injected period suffix from `value`. Used by every filter
+	// below that may receive a WCS-wrapped format string. Candidates cover the
+	// two formats WCS emits via its u() helper (subtotalPriceFormat uses
+	// "every <period>", saleBadgePriceFormat uses "/ <period>") plus the
+	// already-rendered single-token form ("/ month"). The annotation must
+	// carry a non-empty `period_suffix` — that doubles as the "purchase price
+	// does not recur" gate; flat-unlimited rules skip the strip.
 	const stripPeriod = ( value, annotation ) => {
+		if ( ! annotation || ! annotation.period_suffix ) {
+			return value;
+		}
+		const word = annotation.period_word;
+		const candidates = [];
+		if ( word ) {
+			candidates.push( ` every ${ word }`, ` / ${ word }`, `/ ${ word }` );
+		}
+		candidates.push( ' ' + annotation.period_suffix, annotation.period_suffix );
 		let result = value;
-		const suffix = annotation?.period_suffix;
-		if ( suffix ) {
-			for ( const candidate of [ ' ' + suffix, suffix ] ) {
-				if ( result.includes( candidate ) ) {
-					result = result.split( candidate ).join( '' );
-					break;
-				}
+		for ( const candidate of candidates ) {
+			if ( candidate && result.includes( candidate ) ) {
+				result = result.split( candidate ).join( '' );
+				break;
 			}
 		}
 		return result;
@@ -54,8 +67,10 @@ if ( registerCheckoutFilters ) {
 			const annotation = getAnnotation( extensions );
 			return annotation?.name_suffix ? value + annotation.name_suffix : value;
 		},
-		// cartItemPrice = the row's per-unit/subtotal price block (the one we
-		// append our "(regularly $X — first month)" to).
+		// The row's main price column (top-right of the cart line). WCS only
+		// modifies this when sign-up fees exist; for the typical case the
+		// strip is a no-op. We append our suffix unconditionally for the
+		// annotated row.
 		cartItemPrice: ( value, extensions ) => {
 			const annotation = getAnnotation( extensions );
 			if ( ! annotation ) {
@@ -64,22 +79,15 @@ if ( registerCheckoutFilters ) {
 			const result = stripPeriod( value, annotation );
 			return annotation.price_suffix ? result + annotation.price_suffix : result;
 		},
-		// subtotalPriceFormat = the format string for the row's smaller "$10.00
-		// $5.00 every month" price line. The default value contains a "<price/>"
-		// placeholder plus the WCS-injected period; strip the period from the
-		// format itself so the rendered string drops it.
-		subtotalPriceFormat: ( value, extensions ) => {
-			const annotation = getAnnotation( extensions );
-			return annotation && annotation.period_suffix ? stripPeriod( value, annotation ) : value;
-		},
-		// saleBadgePriceFormat = "Save <price/> / month". The "Save" framing is
-		// misleading when the recurring price isn't actually saved (the intro
-		// runs out and the renewal jumps up). Suppress the badge entirely when
-		// our annotation is active.
-		saleBadgePriceFormat: ( value, extensions ) => {
-			const annotation = getAnnotation( extensions );
-			return annotation ? '' : value;
-		},
+		// The smaller "$10.00 $5.00 every month" price line under the item
+		// name. WCS injects "every <period>" here via its filter; ours runs
+		// AFTER WCS's (via the wc-blocks-integration script dep) and strips it.
+		subtotalPriceFormat: ( value, extensions ) => stripPeriod( value, getAnnotation( extensions ) ),
+		// "Save <price/> / month" badge. WCS injects "/ <period>"; ours runs
+		// after and strips it. The "Save $X" label itself remains — accurate
+		// for the purchase (the discount IS applied at checkout) and any
+		// stronger suppression would lose useful framing.
+		saleBadgePriceFormat: ( value, extensions ) => stripPeriod( value, getAnnotation( extensions ) ),
 	} );
 }
 

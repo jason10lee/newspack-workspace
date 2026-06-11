@@ -738,6 +738,16 @@ final class WooProduct_Surface implements Price_Surface {
 		// Send the plain-text suffix to JS — blocks usually renders plain text
 		// for the cart-item price, so the raw HTML form would not match.
 		$period_suffix  = ( '' !== $qualifier && $cart_item['data'] instanceof \WC_Product ) ? trim( wp_strip_all_tags( self::wcs_period_suffix( $cart_item['data'] ) ) ) : '';
+		// The localized period word — "month", "Monat", etc. — that WCS
+		// substitutes into its subtotalPriceFormat (`<price/> every month`) and
+		// saleBadgePriceFormat (`<price/> / month`) filters. The JS uses this
+		// to build strip candidates for both formats.
+		$period_word    = '';
+		if ( '' !== $qualifier && $cart_item['data'] instanceof \WC_Product && function_exists( 'wcs_get_subscription_period_strings' ) ) {
+			$interval    = class_exists( '\WC_Subscriptions_Product' ) ? max( 1, (int) \WC_Subscriptions_Product::get_interval( $cart_item['data'] ) ) : 1;
+			$period      = class_exists( '\WC_Subscriptions_Product' ) ? (string) \WC_Subscriptions_Product::get_period( $cart_item['data'] ) : '';
+			$period_word = '' !== $period ? (string) \wcs_get_subscription_period_strings( $interval, $period ) : '';
+		}
 		$descriptor     = sprintf( __( 'regularly %s', 'newspack-plugin' ), $original_plain );
 		$inline         = '' !== $qualifier ? $descriptor . ' — ' . $qualifier : $descriptor;
 		return [
@@ -745,6 +755,7 @@ final class WooProduct_Surface implements Price_Surface {
 			'name_suffix'   => '' === (string) $a['label'] ? '' : sprintf( ' — %s', $a['label'] ),
 			'price_suffix'  => ' ' . sprintf( '(%s)', $inline ),
 			'period_suffix' => $period_suffix,
+			'period_word'   => $period_word,
 		];
 	}
 
@@ -844,6 +855,12 @@ final class WooProduct_Surface implements Price_Surface {
 				'context'     => [ 'view', 'edit' ],
 				'readonly'    => true,
 			],
+			'period_word'   => [
+				'description' => __( 'WCS localized billing-period word (e.g., "month") used to construct strip candidates for the subtotalPriceFormat/saleBadgePriceFormat blocks filters. Empty when the charged price recurs.', 'newspack-plugin' ),
+				'type'        => 'string',
+				'context'     => [ 'view', 'edit' ],
+				'readonly'    => true,
+			],
 		];
 	}
 
@@ -875,9 +892,13 @@ final class WooProduct_Surface implements Price_Surface {
 		// consumes: `wc-blocks-checkout` (window.wc.blocksCheckout, for
 		// registerCheckoutFilters + ExperimentalOrderMeta), `wp-plugins`
 		// (window.wp.plugins.registerPlugin for the slot fill), and `wp-element`
-		// (window.wp.element.createElement for the fill component). Merged with
-		// anything webpack inferred via the assets manifest.
-		$deps = array_unique( array_merge( [ 'wc-blocks-checkout', 'wp-plugins', 'wp-element' ], $asset['dependencies'] ?? [] ) );
+		// (window.wp.element.createElement). PLUS `wc-blocks-integration` —
+		// WCS's blocks bundle — so it loads BEFORE ours and registers its
+		// `subtotalPriceFormat` / `saleBadgePriceFormat` filters first. WC
+		// Blocks runs filter handlers in registration order, so our handlers
+		// then run last and can strip the period suffix WCS just injected.
+		// Merged with anything webpack inferred via the assets manifest.
+		$deps = array_unique( array_merge( [ 'wc-blocks-checkout', 'wp-plugins', 'wp-element', 'wc-blocks-integration' ], $asset['dependencies'] ?? [] ) );
 		wp_enqueue_script(
 			'newspack-dynamic-pricing-blocks-checkout',
 			\Newspack\Newspack::plugin_url() . '/dist/other-scripts/dynamic-pricing-blocks-checkout.js',
