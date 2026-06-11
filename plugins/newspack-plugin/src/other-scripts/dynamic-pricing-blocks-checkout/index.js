@@ -35,32 +35,50 @@ const getAnnotation = extensions => {
 };
 
 if ( registerCheckoutFilters ) {
+	const stripPeriod = ( value, annotation ) => {
+		let result = value;
+		const suffix = annotation?.period_suffix;
+		if ( suffix ) {
+			for ( const candidate of [ ' ' + suffix, suffix ] ) {
+				if ( result.includes( candidate ) ) {
+					result = result.split( candidate ).join( '' );
+					break;
+				}
+			}
+		}
+		return result;
+	};
+
 	registerCheckoutFilters( NAMESPACE, {
 		itemName: ( value, extensions ) => {
 			const annotation = getAnnotation( extensions );
 			return annotation?.name_suffix ? value + annotation.name_suffix : value;
 		},
+		// cartItemPrice = the row's per-unit/subtotal price block (the one we
+		// append our "(regularly $X — first month)" to).
 		cartItemPrice: ( value, extensions ) => {
 			const annotation = getAnnotation( extensions );
 			if ( ! annotation ) {
 				return value;
 			}
-			// Strip WCS's period suffix (" every month" / " / month") when the
-			// charged price is purchase-only — it otherwise implies the intro
-			// recurs. PHP-derived so it matches the active locale and interval;
-			// we try the suffix with and without a leading space because
-			// `value` may arrive with either pattern.
-			let result = value;
-			const suffix = annotation.period_suffix;
-			if ( suffix ) {
-				for ( const candidate of [ ' ' + suffix, suffix ] ) {
-					if ( result.includes( candidate ) ) {
-						result = result.split( candidate ).join( '' );
-						break;
-					}
-				}
-			}
+			const result = stripPeriod( value, annotation );
 			return annotation.price_suffix ? result + annotation.price_suffix : result;
+		},
+		// subtotalPriceFormat = the format string for the row's smaller "$10.00
+		// $5.00 every month" price line. The default value contains a "<price/>"
+		// placeholder plus the WCS-injected period; strip the period from the
+		// format itself so the rendered string drops it.
+		subtotalPriceFormat: ( value, extensions ) => {
+			const annotation = getAnnotation( extensions );
+			return annotation && annotation.period_suffix ? stripPeriod( value, annotation ) : value;
+		},
+		// saleBadgePriceFormat = "Save <price/> / month". The "Save" framing is
+		// misleading when the recurring price isn't actually saved (the intro
+		// runs out and the renewal jumps up). Suppress the badge entirely when
+		// our annotation is active.
+		saleBadgePriceFormat: ( value, extensions ) => {
+			const annotation = getAnnotation( extensions );
+			return annotation ? '' : value;
 		},
 	} );
 }

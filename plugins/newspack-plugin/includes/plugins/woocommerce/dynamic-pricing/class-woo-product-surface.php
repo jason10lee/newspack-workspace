@@ -118,6 +118,10 @@ final class WooProduct_Surface implements Price_Surface {
 		// (Layer 0) and the schedule row (Layer 2a) own the renewal story.
 		add_filter( 'woocommerce_cart_item_subtotal', [ __CLASS__, 'filter_cart_item_subtotal' ], 20, 3 );
 		add_filter( 'woocommerce_cart_item_name', [ __CLASS__, 'filter_cart_item_name' ], 20, 3 );
+		// The legacy cart's per-unit price column carries the SAME misleading
+		// "every month" suffix as the subtotal does. Strip it (no qualifier
+		// here — the subtotal column owns that copy in the same row).
+		add_filter( 'woocommerce_cart_item_price', [ __CLASS__, 'filter_cart_item_price' ], 20, 3 );
 
 		// Newspack Blocks Modal Checkout — its JS does textContent = price_summary
 		// so HTML from the filters above is stripped from the <strong> wrapper.
@@ -500,6 +504,32 @@ final class WooProduct_Surface implements Price_Surface {
 		}
 
 		return $html;
+	}
+
+	/**
+	 * Filter: strip WCS's "/ month" / "every month" period suffix from the
+	 * legacy cart's PER-UNIT price column (PRODUCT column). The subtotal
+	 * column (the row's TOTAL) already carries the strikethrough + qualifier;
+	 * here we just clean the suffix so the row doesn't double-claim "every
+	 * month" on a price that doesn't recur.
+	 *
+	 * @param string $price          Per-unit price HTML (may already include WCS's <span class="subscription-details">).
+	 * @param array  $cart_item      Cart item array.
+	 * @param string $cart_item_key  Cart item key.
+	 */
+	public static function filter_cart_item_price( string $price, array $cart_item, string $cart_item_key ): string {
+		$a = self::get_annotation_for( $cart_item_key );
+		if ( ! $a || abs( $a['original'] - $a['amount'] ) < 0.01 ) {
+			return $price;
+		}
+		if ( ! ( $cart_item['data'] instanceof \WC_Product ) ) {
+			return $price;
+		}
+		$qualifier = self::first_cycle_qualifier( $cart_item );
+		if ( '' === $qualifier ) {
+			return $price; // Charged price recurs; keep WCS's period suffix here.
+		}
+		return self::strip_period_suffix( $price, $cart_item['data'] );
 	}
 
 	/**
