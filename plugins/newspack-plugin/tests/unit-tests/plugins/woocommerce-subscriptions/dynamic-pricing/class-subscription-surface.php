@@ -159,7 +159,7 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 
 	public function test_note_acquisition_on_subscription_notes_policy_priced_lines() {
 		// Seed the cart surface's applied registry the way checkout would: via apply().
-		\Newspack\Dynamic_Pricing\WooProduct_Surface::reset_publicized_registry( new \WC_Cart() );
+		\Newspack\Dynamic_Pricing\WooProduct_Surface::reset_applied_registry( new \WC_Cart() );
 		$product = $this->getMockBuilder( \WC_Product::class )
 			->disableOriginalConstructor()
 			->addMethods( [ 'set_price' ] )
@@ -174,7 +174,7 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 		);
 		$d = new Price_Decision( 5.0, Price_Decision::DURABLE, 'step_at_1_fixed_price', 'Intro', 'stepped_by_cycle', 1 );
 		$d->rule_id = '18';
-		$d->publicize = false; // Silent policies must still be noted.
+
 		( new \Newspack\Dynamic_Pricing\WooProduct_Surface() )->apply( $ctx, $d );
 
 		$recurring_cart = new \WC_Cart( [ 'sub_note_key' => [ 'data' => $product ] ] );
@@ -189,7 +189,7 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 	}
 
 	public function test_pin_deal_on_subscription_snapshots_winning_deal_policy() {
-		\Newspack\Dynamic_Pricing\WooProduct_Surface::reset_publicized_registry( new \WC_Cart() );
+		\Newspack\Dynamic_Pricing\WooProduct_Surface::reset_applied_registry( new \WC_Cart() );
 
 		// A real locked-class rule post (no _application meta = locked default).
 		register_post_type( 'shop_pricing_rule', [ 'public' => false ] );
@@ -234,7 +234,7 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 	}
 
 	public function test_pin_deal_on_subscription_skips_live_policies() {
-		\Newspack\Dynamic_Pricing\WooProduct_Surface::reset_publicized_registry( new \WC_Cart() );
+		\Newspack\Dynamic_Pricing\WooProduct_Surface::reset_applied_registry( new \WC_Cart() );
 
 		register_post_type( 'shop_pricing_rule', [ 'public' => false ] );
 		$rule_id = $this->factory->post->create( [ 'post_type' => 'shop_pricing_rule', 'post_status' => 'publish' ] );

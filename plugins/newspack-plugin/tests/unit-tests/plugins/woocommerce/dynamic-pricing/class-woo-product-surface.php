@@ -23,8 +23,8 @@ if ( ! function_exists( 'wc_price' ) ) {
 class Newspack_Test_WooProduct_Surface extends WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
-		// Clear the request-scoped registries between tests.
-		WooProduct_Surface::reset_publicized_registry( new \WC_Cart() );
+		// Clear the request-scoped applied-decisions registry between tests.
+		WooProduct_Surface::reset_applied_registry( new \WC_Cart() );
 	}
 	public function test_id_is_stable() {
 		$this->assertSame( 'woo_product', ( new WooProduct_Surface() )->id() );
@@ -136,52 +136,7 @@ class Newspack_Test_WooProduct_Surface extends WP_UnitTestCase {
 		$this->assertTrue( true );
 	}
 
-	public function test_apply_does_not_record_publicized_state_when_flag_is_off() {
-		$cart_item_key = 'silent_key';
-		$product = $this->mock_product_with_set_price();
-		$ctx = new Pricing_Context(
-			WooProduct_Surface::TRIGGER_CART,
-			$product,
-			null,
-			10.0,
-			[ 'completed_cycles' => 1 ],
-			[ 'data' => $product, 'key' => $cart_item_key ]
-		);
-		$d = new Price_Decision( 8.0, Price_Decision::DURABLE, 'r', 'Intro', 'stepped_by_cycle', 1 );
-		$d->rule_id = 'pol_silent';
-		$d->publicize = false;
-
-		( new WooProduct_Surface() )->apply( $ctx, $d );
-
-		$this->assertNull( WooProduct_Surface::get_publicized_apply_for( $cart_item_key ) );
-	}
-
-	public function test_apply_records_publicized_state_when_flag_is_on() {
-		$cart_item_key = 'loud_key';
-		$product = $this->mock_product_with_set_price();
-		$ctx = new Pricing_Context(
-			WooProduct_Surface::TRIGGER_CART,
-			$product,
-			null,
-			10.0,
-			[ 'completed_cycles' => 1 ],
-			[ 'data' => $product, 'key' => $cart_item_key ]
-		);
-		$d = new Price_Decision( 2.0, Price_Decision::DURABLE, 'step_at_1_fixed_price', 'Intro', 'stepped_by_cycle', 1 );
-		$d->rule_id = 'pol_loud';
-		$d->publicize = true;
-
-		( new WooProduct_Surface() )->apply( $ctx, $d );
-
-		$applied = WooProduct_Surface::get_publicized_apply_for( $cart_item_key );
-		$this->assertIsArray( $applied );
-		$this->assertSame( 10.0, $applied['original'] );
-		$this->assertSame( 2.0, $applied['discounted'] );
-		$this->assertSame( 'Intro', $applied['label'] );
-		$this->assertSame( 'pol_loud', $applied['rule_id'] );
-	}
-
-	public function test_apply_records_applied_decision_even_when_silent() {
+	public function test_apply_records_applied_decision_for_audit_trail() {
 		$product = $this->mock_product_with_set_price();
 		$ctx = new Pricing_Context(
 			WooProduct_Surface::TRIGGER_CART,
@@ -193,13 +148,11 @@ class Newspack_Test_WooProduct_Surface extends WP_UnitTestCase {
 		);
 		$d = new Price_Decision( 5.0, Price_Decision::DURABLE, 'simple_fixed_price', 'Promo', 'simple_price', 1 );
 		$d->rule_id = 'pol_audit';
-		$d->publicize = false;
 
 		( new WooProduct_Surface() )->apply( $ctx, $d );
 
-		$this->assertNull( WooProduct_Surface::get_publicized_apply_for( 'audit_key' ), 'Silent policies must not publicize.' );
 		$applied = WooProduct_Surface::get_applied_for( 'audit_key' );
-		$this->assertIsArray( $applied, 'Silent policies MUST still be recorded for the audit trail.' );
+		$this->assertIsArray( $applied, 'Every apply MUST be recorded for the audit trail.' );
 		$this->assertSame( 'pol_audit', $applied['rule_id'] );
 		$this->assertSame( 5.0, $applied['amount'] );
 		$this->assertSame( 10.0, $applied['original'] );
@@ -213,7 +166,7 @@ class Newspack_Test_WooProduct_Surface extends WP_UnitTestCase {
 		( new WooProduct_Surface() )->apply( $ctx, $d );
 		$this->assertNotNull( WooProduct_Surface::get_applied_for( 'reset_key' ) );
 
-		WooProduct_Surface::reset_publicized_registry( new \WC_Cart() );
+		WooProduct_Surface::reset_applied_registry( new \WC_Cart() );
 		$this->assertNull( WooProduct_Surface::get_applied_for( 'reset_key' ) );
 	}
 
