@@ -52,31 +52,31 @@ class Newspack_Test_Simple_Price_Strategy extends WP_UnitTestCase {
 		$this->assertSame( 5.0, $d->amount );
 	}
 
-	public function test_within_payments_limit_applies() {
+	public function test_within_cycles_limit_applies() {
 		$s      = new Simple_Price_Strategy();
-		$params = [ 'calc_type' => Amount_Calculator::FIXED_PRICE, 'value' => 5, 'payments_limit' => 3 ];
+		$params = [ 'calc_type' => Amount_Calculator::FIXED_PRICE, 'value' => 5, 'cycles_limit' => 3 ];
 		$this->assertSame( 5.0, $s->decide( $this->ctx( [ 'completed_cycles' => 1 ] ), $params )->amount );
-		$this->assertSame( 5.0, $s->decide( $this->ctx( [ 'completed_cycles' => 3 ] ), $params )->amount, 'Limit is inclusive: payment 3 of 3 still applies.' );
+		$this->assertSame( 5.0, $s->decide( $this->ctx( [ 'completed_cycles' => 3 ] ), $params )->amount, 'Limit is inclusive: cycle 3 of 3 still applies.' );
 	}
 
 	public function test_beyond_limit_emits_restore_on_price_persisting_surface() {
 		$s      = new Simple_Price_Strategy();
-		$params = [ 'calc_type' => Amount_Calculator::FIXED_PRICE, 'value' => 5, 'payments_limit' => 3, 'label' => 'Promo' ];
+		$params = [ 'calc_type' => Amount_Calculator::FIXED_PRICE, 'value' => 5, 'cycles_limit' => 3, 'label' => 'Promo' ];
 		$d      = $s->decide( $this->ctx( [ 'completed_cycles' => 4 ], 10.0, true ), $params );
 		$this->assertNotNull( $d, 'Abstaining beyond the limit would freeze the adjusted price forever.' );
 		$this->assertSame( 10.0, $d->amount, 'Restore decision carries the catalog base price.' );
-		$this->assertSame( 'restore_base_after_3_payments', $d->reason );
+		$this->assertSame( 'restore_base_after_3_cycles', $d->reason );
 	}
 
 	public function test_beyond_limit_abstains_on_stateless_surface() {
 		$s      = new Simple_Price_Strategy();
-		$params = [ 'calc_type' => Amount_Calculator::FIXED_PRICE, 'value' => 5, 'payments_limit' => 3 ];
+		$params = [ 'calc_type' => Amount_Calculator::FIXED_PRICE, 'value' => 5, 'cycles_limit' => 3 ];
 		$this->assertNull( $s->decide( $this->ctx( [ 'completed_cycles' => 4 ], 10.0, false ), $params ), 'Stateless surfaces get catalog pricing by abstention.' );
 	}
 
 	public function test_beyond_limit_restore_abstains_when_base_unknown() {
 		$s      = new Simple_Price_Strategy();
-		$params = [ 'calc_type' => Amount_Calculator::FIXED_PRICE, 'value' => 5, 'payments_limit' => 3 ];
+		$params = [ 'calc_type' => Amount_Calculator::FIXED_PRICE, 'value' => 5, 'cycles_limit' => 3 ];
 		$this->assertNull( $s->decide( $this->ctx( [ 'completed_cycles' => 4 ], 0.0, true ), $params ), 'Never restore to a $0 recurring price.' );
 	}
 

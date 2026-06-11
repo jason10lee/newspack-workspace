@@ -144,7 +144,7 @@ final class Subscription_Surface implements Price_Surface {
 			$subscription->add_order_note(
 				sprintf(
 					/* translators: 1: acquisition audit line (rule, product, prices) */
-					__( '%1$s Applied at acquisition (cycle 1); renewals are repriced after each payment.', 'newspack-plugin' ),
+					__( '%1$s Applied at the initial purchase (cycle 1); renewals are repriced after each one.', 'newspack-plugin' ),
 					WooProduct_Surface::acquisition_note( $applied )
 				)
 			);

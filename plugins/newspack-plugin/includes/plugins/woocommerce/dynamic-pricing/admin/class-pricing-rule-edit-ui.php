@@ -91,8 +91,8 @@ final class Pricing_Rule_Edit_UI {
 				<th><label for="newspack_dp_strategy_id"><?php esc_html_e( 'Pricing model', 'newspack-plugin' ); ?></label></th>
 				<td>
 					<select name="newspack_dp_strategy_id" id="newspack_dp_strategy_id">
-						<option value="stepped_by_cycle" <?php selected( $strategy_id, 'stepped_by_cycle' ); ?>><?php esc_html_e( 'Price Schedule — changes by payment number', 'newspack-plugin' ); ?></option>
-						<option value="simple_price" <?php selected( $strategy_id, 'simple_price' ); ?>><?php esc_html_e( 'Flat Adjustment — same every payment, optionally only the first N', 'newspack-plugin' ); ?></option>
+						<option value="stepped_by_cycle" <?php selected( $strategy_id, 'stepped_by_cycle' ); ?>><?php esc_html_e( 'Price Schedule — different prices for the purchase and renewals', 'newspack-plugin' ); ?></option>
+						<option value="simple_price" <?php selected( $strategy_id, 'simple_price' ); ?>><?php esc_html_e( 'Flat Adjustment — one price for the purchase and renewals, optionally only the first N', 'newspack-plugin' ); ?></option>
 					</select>
 				</td>
 			</tr>
@@ -187,7 +187,7 @@ final class Pricing_Rule_Edit_UI {
 						<?php esc_html_e( 'Only apply when the customer has never had a subscription to the scoped product.', 'newspack-plugin' ); ?>
 					</label>
 					<p class="description">
-						<?php esc_html_e( 'Prevents a cancelled subscriber from re-triggering an intro price by purchasing again. Only gates the checkout — existing subscribers keep their renewal terms unaffected. For "intro only, no further changes" rules, pair with a single-payment schedule. Guests are treated as new subscribers.', 'newspack-plugin' ); ?>
+						<?php esc_html_e( 'Prevents a cancelled subscriber from re-triggering an intro price by purchasing again. Only gates the checkout — existing subscribers keep their renewal terms unaffected. For "intro only, no further changes" rules, pair with a single-cycle schedule. Guests are treated as new subscribers.', 'newspack-plugin' ); ?>
 					</p>
 				</td>
 			</tr>
@@ -236,9 +236,9 @@ final class Pricing_Rule_Edit_UI {
 		$calc_type      = (string) ( $params['calc_type'] ?? Amount_Calculator::FIXED_PRICE );
 		$value          = (float) ( $params['value'] ?? 0 );
 		$label          = (string) ( $params['label'] ?? '' );
-		$payments_limit = max( 0, (int) ( $params['payments_limit'] ?? 0 ) );
+		$cycles_limit = max( 0, (int) ( $params['cycles_limit'] ?? 0 ) );
 		?>
-		<p class="description"><?php esc_html_e( 'One adjustment applied to every payment — or only the first N. When the limit is reached, the price returns to the regular price automatically.', 'newspack-plugin' ); ?></p>
+		<p class="description"><?php esc_html_e( 'One adjustment applied to the purchase and every renewal — or only the first N cycles. When the limit is reached, the price returns to the regular price automatically. Cycle 1 is the initial purchase; cycle 2 is the first renewal.', 'newspack-plugin' ); ?></p>
 		<table class="form-table">
 			<tr>
 				<th><label for="newspack_dp_simple_calc_type"><?php esc_html_e( 'Pricing', 'newspack-plugin' ); ?></label></th>
@@ -257,10 +257,10 @@ final class Pricing_Rule_Edit_UI {
 				</td>
 			</tr>
 			<tr>
-				<th><label for="newspack_dp_simple_payments_limit"><?php esc_html_e( 'Apply for first N payments', 'newspack-plugin' ); ?></label></th>
+				<th><label for="newspack_dp_simple_cycles_limit"><?php esc_html_e( 'Apply for first N cycles', 'newspack-plugin' ); ?></label></th>
 				<td>
-					<input type="number" min="0" name="newspack_dp_simple[payments_limit]" id="newspack_dp_simple_payments_limit" value="<?php echo esc_attr( (string) $payments_limit ); ?>" />
-					<p class="description"><?php esc_html_e( '0 = unlimited (applies to every recurring payment).', 'newspack-plugin' ); ?></p>
+					<input type="number" min="0" name="newspack_dp_simple[cycles_limit]" id="newspack_dp_simple_cycles_limit" value="<?php echo esc_attr( (string) $cycles_limit ); ?>" />
+					<p class="description"><?php esc_html_e( '0 = unlimited (applies to the purchase and every renewal). Otherwise, the rule covers the purchase plus the next N−1 renewals.', 'newspack-plugin' ); ?></p>
 				</td>
 			</tr>
 			<tr>
@@ -278,11 +278,11 @@ final class Pricing_Rule_Edit_UI {
 		$params = Pricing_Rule::from_post( $post )->params;
 		$steps  = is_array( $params['steps'] ?? null ) ? $params['steps'] : [];
 		?>
-		<p class="description"><?php esc_html_e( 'Each row defines the price from a given payment onward, until a later row takes over. "From payment #1" sets the purchase price.', 'newspack-plugin' ); ?></p>
+		<p class="description"><?php esc_html_e( 'Each row sets the price from a given cycle onward, until a later row takes over. Cycle 1 is the initial purchase; cycle 2 is the first renewal.', 'newspack-plugin' ); ?></p>
 		<table id="newspack_dp_steps_table" class="widefat striped" style="margin-top: 10px">
 			<thead>
 				<tr>
-					<th style="width: 110px"><?php esc_html_e( 'From payment #', 'newspack-plugin' ); ?></th>
+					<th style="width: 110px"><?php esc_html_e( 'From cycle #', 'newspack-plugin' ); ?></th>
 					<th><?php esc_html_e( 'Pricing', 'newspack-plugin' ); ?></th>
 					<th style="width: 110px"><?php esc_html_e( 'Value', 'newspack-plugin' ); ?></th>
 					<th><?php esc_html_e( 'Name shown to reader', 'newspack-plugin' ); ?></th>
@@ -417,7 +417,7 @@ final class Pricing_Rule_Edit_UI {
 			$params_out = [
 				'calc_type'      => $calc,
 				'value'          => max( 0, (float) ( $simple_in['value'] ?? 0 ) ),
-				'payments_limit' => max( 0, (int) ( $simple_in['payments_limit'] ?? 0 ) ),
+				'cycles_limit'   => max( 0, (int) ( $simple_in['cycles_limit'] ?? 0 ) ),
 				'label'          => isset( $simple_in['label'] ) ? sanitize_text_field( $simple_in['label'] ) : '',
 			];
 		} else {

@@ -1,12 +1,13 @@
 <?php
 /**
  * Simple price strategy — one calc applied uniformly, optionally limited to the
- * first N payments.
+ * first N cycles (the purchase + N−1 renewals).
  *
  * The basic counterpart to Stepped_By_Cycle_Strategy: instead of a schedule of
  * steps, a single `calc_type` + `value` pair prices every cycle. The optional
- * `payments_limit` bounds the adjustment to the first N payments (0 = unlimited,
- * the default) — e.g. "20% off for the first 3 payments".
+ * `cycles_limit` bounds the adjustment to the first N cycles (0 = unlimited,
+ * the default) — e.g. "set to 80% of regular for the first 3 cycles" =
+ * 20% off the purchase and the next two renewals.
  *
  * Lives in the foundation layer: its only signal dependency is
  * `completed_cycles`, which every current surface provides; nothing here
@@ -40,9 +41,9 @@ final class Simple_Price_Strategy implements Pricing_Strategy {
 				'options'  => Amount_Calculator::supported_types(),
 				'required' => true,
 			],
-			'value'          => [ 'type' => 'number', 'min' => 0, 'required' => true ],
-			'label'          => [ 'type' => 'string', 'required' => false ],
-			'payments_limit' => [
+			'value'        => [ 'type' => 'number', 'min' => 0, 'required' => true ],
+			'label'        => [ 'type' => 'string', 'required' => false ],
+			'cycles_limit' => [
 				'type'     => 'int',
 				'min'      => 0,
 				'required' => false,
@@ -65,7 +66,7 @@ final class Simple_Price_Strategy implements Pricing_Strategy {
 		}
 
 		$label = (string) ( $params['label'] ?? '' );
-		$limit = max( 0, (int) ( $params['payments_limit'] ?? 0 ) );
+		$limit = max( 0, (int) ( $params['cycles_limit'] ?? 0 ) );
 		$cycle = (int) ( $ctx->signals['completed_cycles'] ?? 0 );
 
 		// Beyond the limited window the adjustment ends. A price-persisting
@@ -79,7 +80,7 @@ final class Simple_Price_Strategy implements Pricing_Strategy {
 			return new Price_Decision(
 				round( $ctx->base_price, Amount_Calculator::price_decimals() ),
 				Price_Decision::DURABLE,
-				sprintf( 'restore_base_after_%d_payments', $limit ),
+				sprintf( 'restore_base_after_%d_cycles', $limit ),
 				$label,
 				$this->id(),
 				$cycle

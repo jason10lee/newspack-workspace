@@ -183,7 +183,7 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 		$sub  = $this->mock_subscription( completed_payments: 0, line_item: $line );
 		$sub->expects( $this->once() )
 			->method( 'add_order_note' )
-			->with( $this->logicalAnd( $this->stringContains( '[rule 18]' ), $this->stringContains( 'acquisition' ) ) );
+			->with( $this->logicalAnd( $this->stringContains( '[rule 18]' ), $this->stringContains( 'initial purchase' ) ) );
 
 		Subscription_Surface::note_acquisition_on_subscription( $sub, null, $recurring_cart );
 	}
