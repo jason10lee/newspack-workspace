@@ -34,8 +34,8 @@ class Newspack_Test_Simple_Price_Strategy extends WP_UnitTestCase {
 		$this->assertSame( 'simple_fixed_price', $fixed->reason );
 		$this->assertSame( 'Promo', $fixed->label );
 
-		$percent = $s->decide( $this->ctx( [ 'completed_cycles' => 1 ] ), [ 'calc_type' => Amount_Calculator::DISCOUNT_PERCENT, 'value' => 20 ] );
-		$this->assertSame( 8.0, $percent->amount, '20% off $10 base = $8.' );
+		$percent = $s->decide( $this->ctx( [ 'completed_cycles' => 1 ] ), [ 'calc_type' => Amount_Calculator::PERCENT_OF_BASE, 'value' => 80 ] );
+		$this->assertSame( 8.0, $percent->amount, '80% of $10 base = $8 (i.e. a 20% reduction).' );
 	}
 
 	public function test_decide_returns_null_for_malformed_params() {

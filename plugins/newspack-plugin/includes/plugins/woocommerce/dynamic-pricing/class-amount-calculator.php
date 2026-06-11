@@ -10,24 +10,22 @@ namespace Newspack\Dynamic_Pricing;
 defined( 'ABSPATH' ) || exit;
 
 final class Amount_Calculator {
-	const FIXED_PRICE      = 'fixed_price';
-	const PERCENT_OF_BASE  = 'percent_of_base';
-	const DISCOUNT_FIXED   = 'discount_fixed';
-	const DISCOUNT_PERCENT = 'discount_percent';
+	const FIXED_PRICE     = 'fixed_price';
+	const PERCENT_OF_BASE = 'percent_of_base';
+	const DISCOUNT_FIXED  = 'discount_fixed';
 
 	public static function calculate( string $calc_type, float $value, float $base ): float {
 		$decimals = self::price_decimals();
 		return match ( $calc_type ) {
-			self::FIXED_PRICE      => round( $value, $decimals ),
-			self::PERCENT_OF_BASE  => round( $base * ( $value / 100 ), $decimals ),
-			self::DISCOUNT_FIXED   => round( max( 0, $base - $value ), $decimals ),
-			self::DISCOUNT_PERCENT => round( $base * ( 1 - $value / 100 ), $decimals ),
-			default                => 0.00,
+			self::FIXED_PRICE     => round( $value, $decimals ),
+			self::PERCENT_OF_BASE => round( $base * ( $value / 100 ), $decimals ),
+			self::DISCOUNT_FIXED  => round( max( 0, $base - $value ), $decimals ),
+			default               => 0.00,
 		};
 	}
 
 	public static function supported_types(): array {
-		return [ self::FIXED_PRICE, self::PERCENT_OF_BASE, self::DISCOUNT_FIXED, self::DISCOUNT_PERCENT ];
+		return [ self::FIXED_PRICE, self::PERCENT_OF_BASE, self::DISCOUNT_FIXED ];
 	}
 
 	/**

@@ -221,7 +221,7 @@ class Newspack_Test_WooProduct_Surface extends WP_UnitTestCase {
 		$note = WooProduct_Surface::acquisition_note( [
 			'rule_id' => '18',
 			'label'     => 'Intro',
-			'reason'    => 'step_at_1_discount_percent',
+			'reason'    => 'step_at_1_percent_of_base',
 			'amount'    => 5.0,
 			'original'  => 10.0,
 			'item_name' => 'Test Subscription',
@@ -238,13 +238,13 @@ class Newspack_Test_WooProduct_Surface extends WP_UnitTestCase {
 		$note = WooProduct_Surface::acquisition_note( [
 			'rule_id' => '18',
 			'label'     => '',
-			'reason'    => 'simple_discount_percent',
+			'reason'    => 'simple_percent_of_base',
 			'amount'    => 8.0,
 			'original'  => 10.0,
 			'item_name' => 'Test Subscription',
 			'quantity'  => 1,
 		] );
-		$this->assertStringContainsString( 'simple_discount_percent', $note );
+		$this->assertStringContainsString( 'simple_percent_of_base', $note );
 	}
 
 	public function test_note_acquisition_on_order_notes_each_priced_line_once() {

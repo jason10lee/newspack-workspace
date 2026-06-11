@@ -215,11 +215,10 @@ final class Pricing_Rule_Edit_UI {
 	 */
 	private static function calc_type_label( string $type ): string {
 		return match ( $type ) {
-			Amount_Calculator::FIXED_PRICE      => __( 'Set price to', 'newspack-plugin' ),
-			Amount_Calculator::PERCENT_OF_BASE  => __( 'Percentage of regular price', 'newspack-plugin' ),
-			Amount_Calculator::DISCOUNT_FIXED   => __( 'Amount off regular price', 'newspack-plugin' ),
-			Amount_Calculator::DISCOUNT_PERCENT => __( 'Percentage off regular price', 'newspack-plugin' ),
-			default                             => $type,
+			Amount_Calculator::FIXED_PRICE     => __( 'Set price to', 'newspack-plugin' ),
+			Amount_Calculator::PERCENT_OF_BASE => __( 'Percentage of regular price', 'newspack-plugin' ),
+			Amount_Calculator::DISCOUNT_FIXED  => __( 'Amount off regular price', 'newspack-plugin' ),
+			default                            => $type,
 		};
 	}
 
