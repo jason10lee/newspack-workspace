@@ -1,6 +1,6 @@
 <?php
 /**
- * Pricing Policy entity.
+ * Pricing Pricing_Rule entity.
  *
  * @package Newspack
  */
@@ -10,16 +10,16 @@ namespace Newspack\Dynamic_Pricing;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Value object representing a single pricing policy CPT row.
+ * Value object representing a single pricing rule CPT row.
  *
  * `post_status='publish'` is the active/draft signal; there is no `_status` meta key.
  */
-final class Policy {
+final class Pricing_Rule {
 	/**
 	 * Locked: participates in acquisition resolution only. When it wins at
 	 * checkout, its config is snapshotted onto the subscription and renewals
 	 * resolve from the snapshot — editing or deleting the rule affects new
-	 * purchases only. The default. See docs 03-policy-pinning-design.
+	 * purchases only. The default. See docs 03-rule-pinning-design.
 	 *
 	 * Operator-facing label: "Locked at purchase". Stored as `locked`.
 	 */
@@ -46,13 +46,13 @@ final class Policy {
 	public array $conditions     = [];
 	public string $application   = self::APPLICATION_LOCKED;
 	/**
-	 * Whether the engine should communicate this policy to the reader (cart strikethrough,
+	 * Whether the engine should communicate this rule to the reader (cart strikethrough,
 	 * label badge, etc.). Default false (silent application).
 	 */
 	public bool $publicize       = false;
 
 	/**
-	 * Hydrate a Policy from a `shop_pricing_policy` post.
+	 * Hydrate a Pricing_Rule from a `shop_pricing_rule` post.
 	 */
 	public static function from_post( \WP_Post $post ): self {
 		$p = new self();
@@ -61,13 +61,13 @@ final class Policy {
 		$p->strategy_id  = (string) get_post_meta( $post->ID, '_strategy_id', true );
 
 		// Preserve class default (100) when meta is absent — `(int) ''` returns 0,
-		// which would sort this policy first instead of in the middle.
+		// which would sort this rule first instead of in the middle.
 		$priority_meta = get_post_meta( $post->ID, '_priority', true );
 		$p->priority   = '' === $priority_meta ? 100 : (int) $priority_meta;
 
 		$p->compose_mode = (string) get_post_meta( $post->ID, '_compose_mode', true ) ?: 'min';
 		// Preserve the class default when meta is absent — '' would resolve no
-		// scope matcher and silently kill the policy.
+		// scope matcher and silently kill the rule.
 		$p->scope_type   = (string) get_post_meta( $post->ID, '_scope_type', true ) ?: $p->scope_type;
 		$p->scope_ids    = self::resolve_scope_ids( $post->ID, $p->scope_type );
 
@@ -90,19 +90,19 @@ final class Policy {
 	}
 
 	/**
-	 * Hydrate a Policy from a deal snapshot pinned on a subscription line item.
+	 * Hydrate a Pricing_Rule from a locked-rule snapshot pinned on a subscription line item.
 	 *
-	 * Snapshots are self-contained: they survive policy deletion and carry the
+	 * Snapshots are self-contained: they survive rule deletion and carry the
 	 * config as authored at pin time (the FORMULA, not resolved amounts — a
-	 * pinned percent deal floats with catalog price; see docs 03 §7).
-	 * Deliberately unconditional (the deal, once made, has no eligibility gates)
-	 * and windowless (deal lifetime = subscription lifetime).
+	 * pinned percent rule floats with catalog price; see docs 03 §7).
+	 * Deliberately unconditional (the rule, once locked, has no eligibility gates)
+	 * and windowless (locked-rule lifetime = subscription lifetime).
 	 *
-	 * @param array $snapshot Decoded `_newspack_dp_deal` line item meta.
+	 * @param array $snapshot Decoded `_newspack_dp_locked_rule` line item meta.
 	 */
 	public static function from_snapshot( array $snapshot ): self {
 		$p = new self();
-		$p->id           = (string) ( $snapshot['policy_id'] ?? '' );
+		$p->id           = (string) ( $snapshot['rule_id'] ?? '' );
 		$p->title        = (string) ( $snapshot['title'] ?? '' );
 		$p->strategy_id  = (string) ( $snapshot['strategy_id'] ?? '' );
 		$p->params       = is_array( $snapshot['params'] ?? null ) ? $snapshot['params'] : [];
@@ -118,13 +118,13 @@ final class Policy {
 	}
 
 	/**
-	 * Build the snapshot payload that pins this policy onto a subscription.
+	 * Build the snapshot payload that pins this rule onto a subscription.
 	 * The inverse of from_snapshot(); the single source of the snapshot shape.
 	 */
 	public function to_snapshot(): array {
 		return [
 			'schema_version' => 1,
-			'policy_id'      => $this->id,
+			'rule_id'      => $this->id,
 			'pinned_at'      => current_time( 'mysql', true ),
 			'title'          => $this->title,
 			'strategy_id'    => $this->strategy_id,
@@ -136,7 +136,7 @@ final class Policy {
 	}
 
 	/**
-	 * Whether the policy's active window includes the current moment.
+	 * Whether the rule's active window includes the current moment.
 	 */
 	public function is_active_now(): bool {
 		$now = time();

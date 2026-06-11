@@ -1,6 +1,6 @@
 <?php
 /**
- * CPT-backed Policy Repository.
+ * CPT-backed Pricing_Rule Repository.
  *
  * @package Newspack
  */
@@ -9,14 +9,14 @@ namespace Newspack\Dynamic_Pricing;
 
 defined( 'ABSPATH' ) || exit;
 
-final class CPT_Policy_Repository implements Policy_Repository {
+final class CPT_Pricing_Rule_Repository implements Pricing_Rule_Repository {
 	const CACHE_GROUP          = 'newspack_dynamic_pricing';
 	const CACHE_TTL            = MINUTE_IN_SECONDS;
 	const CACHE_VERSION_OPTION = 'newspack_dynamic_pricing_cache_version';
 	const HAS_POLICIES_OPTION  = 'newspack_dynamic_pricing_has_policies';
 
 	/**
-	 * Cache version is keyed into the cache key. Bumping it on policy save invalidates
+	 * Cache version is keyed into the cache key. Bumping it on rule save invalidates
 	 * all previous entries without relying on `wp_cache_flush_group` (which is a no-op
 	 * on the default `WP_Object_Cache` and on some persistent backends). Old entries
 	 * orphan and TTL out naturally; new requests miss the cache and refresh.
@@ -27,10 +27,10 @@ final class CPT_Policy_Repository implements Policy_Repository {
 	}
 
 	/**
-	 * Cheap zero-policy short-circuit: WC recalculates cart totals on essentially
+	 * Cheap zero-rules short-circuit: WC recalculates cart totals on essentially
 	 * every front-end page view for visitors with a cart, and most sites have no
 	 * pricing policies at all. Backed by an autoloaded option maintained by
-	 * flush_cache() (hooked to every policy save/delete), self-healing on first read.
+	 * flush_cache() (hooked to every rule save/delete), self-healing on first read.
 	 */
 	public static function has_policies(): bool {
 		$flag = get_option( self::HAS_POLICIES_OPTION, '' );
@@ -42,52 +42,52 @@ final class CPT_Policy_Repository implements Policy_Repository {
 	}
 
 	/**
-	 * The policy set for a pricing context. Intent-aware (docs 03):
+	 * The rule set for a pricing context. Intent-aware (docs 03):
 	 *
-	 * - Acquisition: every matching repository policy, deal- and live-class —
-	 *   v1 semantics. A winning deal-class policy gets pinned downstream.
-	 * - Renewal: the target subscription's pinned deal snapshot (if any) plus
+	 * - Acquisition: every matching repository rule, locked- and current-class —
+	 *   v1 semantics. A winning locked-class rule gets pinned downstream.
+	 * - Renewal: the target subscription's pinned-rule snapshot (if any) plus
 	 *   matching LIVE-class policies. Deal-class repository policies are
 	 *   excluded entirely — their renewal effect flows only through snapshots,
-	 *   so no policy edit can leak into an existing deal.
+	 *   so no rule edit can leak into an existing locked rule.
 	 */
 	public function for_context( Pricing_Context $ctx ): array {
 		$is_renewal = Pricing_Context::INTENT_RENEWAL === $ctx->intent;
-		$pinned     = $is_renewal ? self::pinned_deal_for( $ctx->target ) : null;
+		$pinned     = $is_renewal ? self::pinned_rule_for( $ctx->target ) : null;
 
-		// The zero-policy short-circuit must not block pinned deals: a snapshot
-		// outlives its policy row by design (it may be the only policy left).
+		// The zero-rules short-circuit must not block pinned rules: a snapshot
+		// outlives its rule row by design (it may be the only rule left).
 		if ( ! self::has_policies() ) {
 			return $pinned ? [ $pinned ] : [];
 		}
 
 		$engine   = Pricing_Engine::instance();
 		$policies = $pinned ? [ $pinned ] : [];
-		foreach ( $this->all_active() as $policy ) {
-			if ( $is_renewal && Policy::APPLICATION_LOCKED === $policy->application ) {
+		foreach ( $this->all_active() as $rule ) {
+			if ( $is_renewal && Pricing_Rule::APPLICATION_LOCKED === $rule->application ) {
 				continue;
 			}
-			if ( $policy->matches_product( $ctx->product, $engine ) ) {
-				$policies[] = $policy;
+			if ( $rule->matches_product( $ctx->product, $engine ) ) {
+				$policies[] = $rule;
 			}
 		}
 		return $policies;
 	}
 
 	/**
-	 * Read the pinned deal snapshot off a renewal target's recurring line item
+	 * Read the pinned-rule snapshot off a renewal target's recurring line item
 	 * and hydrate it. Multi-line subscriptions are excluded upstream, so the
 	 * first line item is the recurring line.
 	 *
 	 * @param mixed $target Surface-native target; only WC_Subscription carries pins.
 	 */
-	public static function pinned_deal_for( mixed $target ): ?Policy {
+	public static function pinned_rule_for( mixed $target ): ?Pricing_Rule {
 		if ( ! $target instanceof \WC_Subscription ) {
 			return null;
 		}
 		foreach ( $target->get_items( 'line_item' ) as $line ) {
 			$snapshot = Subscription_Pin::snapshot( $line );
-			return $snapshot ? Policy::from_snapshot( $snapshot ) : null;
+			return $snapshot ? Pricing_Rule::from_snapshot( $snapshot ) : null;
 		}
 		return null;
 	}
@@ -97,7 +97,7 @@ final class CPT_Policy_Repository implements Policy_Repository {
 	 * The per-product filter happens in memory — N products in a cart share a
 	 * single query instead of issuing N identical unbounded ones.
 	 *
-	 * @return Policy[]
+	 * @return Pricing_Rule[]
 	 */
 	private function all_active(): array {
 		$cache_key = 'active_policies_v' . self::get_cache_version();
@@ -108,19 +108,19 @@ final class CPT_Policy_Repository implements Policy_Repository {
 		}
 
 		$posts = get_posts( [
-			'post_type'      => 'shop_pricing_policy',
+			'post_type'      => 'shop_pricing_rule',
 			'post_status'    => 'publish',
 			'posts_per_page' => -1,
 		] );
 
-		// Active-window filtering happens here (Policy::is_active_now) rather than
+		// Active-window filtering happens here (Pricing_Rule::is_active_now) rather than
 		// in a meta_query — one source of truth for the window logic. The 60s TTL
 		// bounds how stale a window-boundary crossing can be.
 		$policies = [];
 		foreach ( $posts as $post ) {
-			$policy = Policy::from_post( $post );
-			if ( $policy->is_active_now() ) {
-				$policies[] = $policy;
+			$rule = Pricing_Rule::from_post( $post );
+			if ( $rule->is_active_now() ) {
+				$policies[] = $rule;
 			}
 		}
 
@@ -128,13 +128,13 @@ final class CPT_Policy_Repository implements Policy_Repository {
 		return $policies;
 	}
 
-	public function save( Policy $p ): void {
-		throw new \BadMethodCallException( 'Policy::save not implemented in v1; create policies via WP-CLI per spec §5.5.' );
+	public function save( Pricing_Rule $p ): void {
+		throw new \BadMethodCallException( 'Pricing_Rule::save not implemented in v1; create policies via WP-CLI per spec §5.5.' );
 	}
 
 	public function all(): array {
-		$posts = get_posts( [ 'post_type' => 'shop_pricing_policy', 'posts_per_page' => -1, 'post_status' => 'any' ] );
-		return array_map( [ Policy::class, 'from_post' ], $posts );
+		$posts = get_posts( [ 'post_type' => 'shop_pricing_rule', 'posts_per_page' => -1, 'post_status' => 'any' ] );
+		return array_map( [ Pricing_Rule::class, 'from_post' ], $posts );
 	}
 
 	/**
@@ -149,7 +149,7 @@ final class CPT_Policy_Repository implements Policy_Repository {
 	}
 
 	private static function count_published_policies(): int {
-		$counts = wp_count_posts( 'shop_pricing_policy' );
+		$counts = wp_count_posts( 'shop_pricing_rule' );
 		return (int) ( $counts->publish ?? 0 );
 	}
 }

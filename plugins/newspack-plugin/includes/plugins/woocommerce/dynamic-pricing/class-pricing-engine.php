@@ -25,7 +25,7 @@ final class Pricing_Engine {
 	 * Public constructor — tests inject mocks directly; production wires via instance().
 	 */
 	public function __construct(
-		private ?Policy_Repository $policies = null,
+		private ?Pricing_Rule_Repository $policies = null,
 		private ?Pricing_Guardrails $guardrails = null
 	) {}
 
@@ -48,7 +48,7 @@ final class Pricing_Engine {
 	public function register_condition( Condition_Matcher $m ): void       { $this->condition_matchers[ $m->id() ] = $m; }
 	public function condition_matcher( string $id ): ?Condition_Matcher    { return $this->condition_matchers[ $id ] ?? null; }
 
-	public function set_repository( Policy_Repository $r ): void           { $this->policies = $r; }
+	public function set_repository( Pricing_Rule_Repository $r ): void           { $this->policies = $r; }
 	public function set_guardrails( Pricing_Guardrails $g ): void          { $this->guardrails = $g; }
 
 	public function resolve( Pricing_Context $ctx ): ?Price_Decision {
@@ -60,28 +60,28 @@ final class Pricing_Engine {
 		}
 
 		$applicable = $this->policies->for_context( $ctx );
-		usort( $applicable, fn( Policy $a, Policy $b ) => $a->priority <=> $b->priority );
+		usort( $applicable, fn( Pricing_Rule $a, Pricing_Rule $b ) => $a->priority <=> $b->priority );
 
 		$decision = null;
-		foreach ( $applicable as $policy ) {
+		foreach ( $applicable as $rule ) {
 			if ( $decision && $decision->is_locked ) {
 				break;
 			}
 
-			$strategy = $this->strategies[ $policy->strategy_id ] ?? null;
-			if ( ! $strategy || ! $strategy->applies_to( $ctx, $policy->params ) ) {
+			$strategy = $this->strategies[ $rule->strategy_id ] ?? null;
+			if ( ! $strategy || ! $strategy->applies_to( $ctx, $rule->params ) ) {
 				continue;
 			}
-			if ( ! $policy->passes_conditions( $ctx, $this ) ) {
+			if ( ! $rule->passes_conditions( $ctx, $this ) ) {
 				continue;
 			}
-			$d = $strategy->decide( $ctx, $policy->params );
+			$d = $strategy->decide( $ctx, $rule->params );
 			if ( ! $d ) {
 				continue;
 			}
-			$d->policy_id = $policy->id;
-			$d->publicize = $policy->publicize;
-			$decision     = $this->guardrails->compose( $decision, $d, $policy, $ctx );
+			$d->rule_id = $rule->id;
+			$d->publicize = $rule->publicize;
+			$decision     = $this->guardrails->compose( $decision, $d, $rule, $ctx );
 		}
 		return $decision ? $this->guardrails->guard( $decision, $ctx ) : null;
 	}

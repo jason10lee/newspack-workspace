@@ -1,8 +1,8 @@
 <?php
 use Newspack\Dynamic_Pricing\Pricing_Engine;
 use Newspack\Dynamic_Pricing\Pricing_Strategy;
-use Newspack\Dynamic_Pricing\Policy;
-use Newspack\Dynamic_Pricing\Policy_Repository;
+use Newspack\Dynamic_Pricing\Pricing_Rule;
+use Newspack\Dynamic_Pricing\Pricing_Rule_Repository;
 use Newspack\Dynamic_Pricing\Pricing_Context;
 use Newspack\Dynamic_Pricing\Price_Decision;
 use Newspack\Dynamic_Pricing\Pricing_Guardrails;
@@ -53,7 +53,7 @@ class Newspack_Test_Pricing_Engine extends WP_UnitTestCase {
 
 		$this->assertNotNull( $d );
 		$this->assertSame( 8.0, $d->amount );
-		$this->assertSame( 'p1', $d->policy_id );
+		$this->assertSame( 'p1', $d->rule_id );
 	}
 
 	public function test_resolve_break_on_locked_decision() {
@@ -68,8 +68,8 @@ class Newspack_Test_Pricing_Engine extends WP_UnitTestCase {
 		$ctx = new Pricing_Context( 'scheduled_step', $this->mock_subscription_product( 1 ), null, 100, [], null );
 		$d = $engine->resolve( $ctx );
 
-		$this->assertSame( 12.0, $d->amount, 'Locked decision must persist; min() policy must not override.' );
-		$this->assertSame( 'p_exclusive', $d->policy_id );
+		$this->assertSame( 12.0, $d->amount, 'Locked decision must persist; min() rule must not override.' );
+		$this->assertSame( 'p_exclusive', $d->rule_id );
 	}
 
 	public function test_resolve_honors_excluded_filter_from_a_bridge() {
@@ -106,11 +106,11 @@ class Newspack_Test_Pricing_Engine extends WP_UnitTestCase {
 		return $engine;
 	}
 
-	private function mock_repo( array $policies ): Policy_Repository {
-		return new class( $policies ) implements Policy_Repository {
+	private function mock_repo( array $policies ): Pricing_Rule_Repository {
+		return new class( $policies ) implements Pricing_Rule_Repository {
 			public function __construct( private array $policies ) {}
 			public function for_context( Pricing_Context $ctx ): array { return $this->policies; }
-			public function save( Policy $p ): void {}
+			public function save( Pricing_Rule $p ): void {}
 			public function all(): array { return $this->policies; }
 		};
 	}
@@ -135,8 +135,8 @@ class Newspack_Test_Pricing_Engine extends WP_UnitTestCase {
 		};
 	}
 
-	private function stub_policy( string $id, string $strategy_id, int $priority, string $compose_mode ): Policy {
-		$p = new Policy();
+	private function stub_policy( string $id, string $strategy_id, int $priority, string $compose_mode ): Pricing_Rule {
+		$p = new Pricing_Rule();
 		$p->id           = $id;
 		$p->title        = $id;
 		$p->strategy_id  = $strategy_id;

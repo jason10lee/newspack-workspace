@@ -7,7 +7,7 @@
 
 use Newspack\Dynamic_Pricing\Pricing_Guardrails;
 use Newspack\Dynamic_Pricing\Bounds_Resolver;
-use Newspack\Dynamic_Pricing\Policy;
+use Newspack\Dynamic_Pricing\Pricing_Rule;
 use Newspack\Dynamic_Pricing\Price_Decision;
 use Newspack\Dynamic_Pricing\Pricing_Context;
 
@@ -28,21 +28,21 @@ class Newspack_Test_Pricing_Guardrails extends WP_UnitTestCase {
 		$ctx = $this->ctx();
 		$current = $this->decision( 8.0, 'pol_a' );
 		$incoming = $this->decision( 5.0, 'pol_b' );
-		$this->assertSame( 5.0, $this->gr->compose( $current, $incoming, $this->policy( 'min' ), $ctx )->amount );
+		$this->assertSame( 5.0, $this->gr->compose( $current, $incoming, $this->rule( 'min' ), $ctx )->amount );
 	}
 
 	public function test_compose_min_keeps_current_when_incoming_is_higher() {
 		$ctx = $this->ctx();
 		$current = $this->decision( 5.0, 'pol_a' );
 		$incoming = $this->decision( 8.0, 'pol_b' );
-		$this->assertSame( 5.0, $this->gr->compose( $current, $incoming, $this->policy( 'min' ), $ctx )->amount );
+		$this->assertSame( 5.0, $this->gr->compose( $current, $incoming, $this->rule( 'min' ), $ctx )->amount );
 	}
 
 	public function test_compose_priority_exclusive_replaces_and_locks() {
 		$ctx = $this->ctx();
 		$current = $this->decision( 5.0, 'pol_a' );
 		$incoming = $this->decision( 12.0, 'pol_b' );
-		$result = $this->gr->compose( $current, $incoming, $this->policy( 'priority_exclusive' ), $ctx );
+		$result = $this->gr->compose( $current, $incoming, $this->rule( 'priority_exclusive' ), $ctx );
 		$this->assertSame( 12.0, $result->amount, 'priority_exclusive replaces current even when higher.' );
 		$this->assertTrue( $result->is_locked, 'priority_exclusive sets is_locked.' );
 	}
@@ -52,14 +52,14 @@ class Newspack_Test_Pricing_Guardrails extends WP_UnitTestCase {
 		$locked = $this->decision( 12.0, 'pol_a' );
 		$locked->is_locked = true;
 		$incoming = $this->decision( 5.0, 'pol_b' );
-		$result = $this->gr->compose( $locked, $incoming, $this->policy( 'min' ), $ctx );
+		$result = $this->gr->compose( $locked, $incoming, $this->rule( 'min' ), $ctx );
 		$this->assertTrue( $result->is_locked, 'Lock persists on subsequent min() decisions.' );
 	}
 
 	public function test_compose_returns_incoming_when_current_null() {
 		$ctx = $this->ctx();
 		$incoming = $this->decision( 7.0, 'pol_x' );
-		$this->assertSame( 7.0, $this->gr->compose( null, $incoming, $this->policy( 'min' ), $ctx )->amount );
+		$this->assertSame( 7.0, $this->gr->compose( null, $incoming, $this->rule( 'min' ), $ctx )->amount );
 	}
 
 	public function test_guard_clamps_below_floor() {
@@ -82,14 +82,14 @@ class Newspack_Test_Pricing_Guardrails extends WP_UnitTestCase {
 		return new Pricing_Context( 'scheduled_step', $p, null, 10.0, [], null );
 	}
 
-	private function decision( float $amount, string $policy_id ): Price_Decision {
+	private function decision( float $amount, string $rule_id ): Price_Decision {
 		$d = new Price_Decision( $amount, Price_Decision::DURABLE, 'test', 'Test', 'stepped_by_cycle', 1 );
-		$d->policy_id = $policy_id;
+		$d->rule_id = $rule_id;
 		return $d;
 	}
 
-	private function policy( string $compose_mode ): Policy {
-		$p               = new Policy();
+	private function rule( string $compose_mode ): Pricing_Rule {
+		$p               = new Pricing_Rule();
 		$p->id           = 'pol_x';
 		$p->title        = 'Test';
 		$p->strategy_id  = 'stepped_by_cycle';

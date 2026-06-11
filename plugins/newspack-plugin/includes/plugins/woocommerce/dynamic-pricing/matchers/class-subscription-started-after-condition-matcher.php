@@ -2,9 +2,9 @@
 /**
  * Subscription-started-after condition matcher (cohort gating).
  *
- * Restricts a policy to subscriptions acquired on/after a given moment, so a
- * LIVE-class policy created today doesn't reach back into renewals of
- * subscriptions purchased before it existed (deal-class policies never reach
+ * Restricts a rule to subscriptions acquired on/after a given moment, so a
+ * LIVE-class rule created today doesn't reach back into renewals of
+ * subscriptions purchased before it existed (locked-class rules never reach
  * back; this closes the same gap for live ones). A future-dated value doubles
  * as "not open yet" at acquisition.
  *
@@ -40,7 +40,7 @@ final class Subscription_Started_After_Condition_Matcher implements Condition_Ma
 		// Renewal: gate on the target subscription's start. Fail open when the
 		// start can't be determined (exotic surface/target) — consistent with
 		// the other condition matchers' posture of never silently killing a
-		// policy on contexts they don't understand.
+		// rule on contexts they don't understand.
 		if ( ! $ctx->target instanceof \WC_Subscription ) {
 			return true;
 		}

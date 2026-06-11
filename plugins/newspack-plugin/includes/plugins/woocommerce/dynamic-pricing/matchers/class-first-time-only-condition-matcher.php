@@ -2,17 +2,17 @@
 /**
  * First-time-only condition matcher.
  *
- * Restricts a policy to customers who have never held a subscription to the
+ * Restricts a rule to customers who have never held a subscription to the
  * scoped product (any status). Addresses the v1 known limitation in spec §10.4:
  * a cancelled subscriber who re-purchases would otherwise re-trigger the intro
  * step at cycle 1.
  *
  * Renewal-intent contexts ALWAYS pass — the matcher only gates acquisition.
- * Without this, a stepped policy with `first_time_only` on would fail at every
+ * Without this, a stepped rule with `first_time_only` on would fail at every
  * renewal and the engine would abstain, leaving the line item frozen at
  * cycle-1 forever. Operators who want a strict "no stepping after returners"
- * policy should split into two: an intro-only policy with `first_time_only`
- * on, plus an unconditioned stepped policy.
+ * rule should split into two: an intro-only rule with `first_time_only`
+ * on, plus an unconditioned stepped rule.
  *
  * @package Newspack
  */

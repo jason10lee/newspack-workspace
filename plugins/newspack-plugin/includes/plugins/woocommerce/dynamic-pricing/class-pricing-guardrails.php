@@ -20,16 +20,16 @@ final class Pricing_Guardrails {
 
 	/**
 	 * compose() semantics:
-	 *  - priority_exclusive policy: replace current, set is_locked.
+	 *  - priority_exclusive rule: replace current, set is_locked.
 	 *  - min(): pick lower amount; if either side is already is_locked, propagate the lock.
 	 *
 	 * @param Price_Decision|null $current  Decision already chosen by previous policies.
-	 * @param Price_Decision      $incoming Decision produced by the policy being composed.
-	 * @param Policy              $policy   Policy that produced $incoming (drives compose_mode).
+	 * @param Price_Decision      $incoming Decision produced by the rule being composed.
+	 * @param Pricing_Rule                 Pricing_Rule that produced $incoming (drives compose_mode).
 	 * @param Pricing_Context     $ctx      Pricing context (unused today; reserved for future modes).
 	 */
-	public function compose( ?Price_Decision $current, Price_Decision $incoming, Policy $policy, Pricing_Context $ctx ): Price_Decision {
-		if ( 'priority_exclusive' === $policy->compose_mode ) {
+	public function compose( ?Price_Decision $current, Price_Decision $incoming, Pricing_Rule $rule, Pricing_Context $ctx ): Price_Decision {
+		if ( 'priority_exclusive' === $rule->compose_mode ) {
 			$incoming->is_locked = true;
 			return $incoming;
 		}

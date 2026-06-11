@@ -5,12 +5,12 @@
  * Stateless: recomputes on every cart calculation, persists nothing. Hooks
  * `woocommerce_before_calculate_totals` and rewrites cart item prices in place
  * via `$cart_item['data']->set_price()` so WC totals are computed against the
- * policy-resolved amount.
+ * rule-resolved amount.
  *
  * Acquisition contract: this surface prices ACQUISITIONS ONLY — cart items
  * that create a new subscription. Contexts carry
  * `Pricing_Context::INTENT_ACQUISITION` and resolve with
- * `signals['completed_cycles'] = 1` so a `Stepped_By_Cycle_Strategy` policy
+ * `signals['completed_cycles'] = 1` so a `Stepped_By_Cycle_Strategy` rule
  * grants its `step_at_1` price at checkout (cycle 1 = first invoice). After
  * `payment_complete` fires, the stateful `Subscription_Surface` owns all
  * subsequent repricing (cycles 2+).
@@ -47,7 +47,7 @@ final class WooProduct_Surface implements Price_Surface {
 	 * (negative memo so display filters don't re-run the engine per callback).
 	 * The cart filter callbacks read from this to render strikethrough + label.
 	 *
-	 * @var array<string, array{original: float, discounted: float, label: string, policy_id: string}|false>
+	 * @var array<string, array{original: float, discounted: float, label: string, rule_id: string}|false>
 	 */
 	private static array $publicized_applies = [];
 
@@ -55,9 +55,9 @@ final class WooProduct_Surface implements Price_Surface {
 	 * Request-scoped registry of EVERY applied decision, keyed by cart item key —
 	 * including silent (non-publicized) policies. Publicize is reader-facing;
 	 * this registry feeds the operator-facing audit trail (order/subscription
-	 * notes at checkout), which must record all policy interactions.
+	 * notes at checkout), which must record all rule interactions.
 	 *
-	 * @var array<string, array{policy_id: string, label: string, reason: string, amount: float, original: float, item_name: string, quantity: int}>
+	 * @var array<string, array{rule_id: string, label: string, reason: string, amount: float, original: float, item_name: string, quantity: int}>
 	 */
 	private static array $applied_decisions = [];
 
@@ -78,7 +78,7 @@ final class WooProduct_Surface implements Price_Surface {
 
 		// Newspack Blocks Modal Checkout — its JS does textContent = price_summary so our
 		// PHP-filtered HTML in the <strong> wrapper gets overwritten. Hook the modal's own
-		// summary filter and inject plain-text policy info.
+		// summary filter and inject plain-text rule info.
 		add_filter( 'newspack_modal_checkout_price_summary', [ __CLASS__, 'filter_modal_price_summary' ], 20, 2 );
 
 		// WC Blocks Checkout / StoreAPI extension — register publicize data on the
@@ -130,11 +130,11 @@ final class WooProduct_Surface implements Price_Surface {
 	 * lazy display resolver, so the price applied and the price communicated come
 	 * from the same logic.
 	 *
-	 * No-harm clamp: at acquisition, a policy may only ever lower the price the
+	 * No-harm clamp: at acquisition, a rule may only ever lower the price the
 	 * customer would otherwise pay. The decision computes off the catalog base
 	 * (regular/WCS price), so on a product with an active sale price the result
 	 * could exceed the effective price the customer was shown — in that case the
-	 * policy abstains and WC's native pricing stands. Strictly-greater comparison:
+	 * rule abstains and WC's native pricing stands. Strictly-greater comparison:
 	 * a decision equal to the current price still applies (re-application on
 	 * subsequent calc passes must keep populating the publicize memo).
 	 *
@@ -257,7 +257,7 @@ final class WooProduct_Surface implements Price_Surface {
 
 			// Record EVERY apply (silent ones included) for the audit trail.
 			self::$applied_decisions[ $key ] = [
-				'policy_id' => (string) ( $d->policy_id ?? '' ),
+				'rule_id' => (string) ( $d->rule_id ?? '' ),
 				'label'     => $d->label,
 				'reason'    => $d->reason,
 				'amount'    => $d->amount,
@@ -287,7 +287,7 @@ final class WooProduct_Surface implements Price_Surface {
 			'original'   => $ctx->base_price,
 			'discounted' => $d->amount,
 			'label'      => $d->label,
-			'policy_id'  => (string) ( $d->policy_id ?? '' ),
+			'rule_id'  => (string) ( $d->rule_id ?? '' ),
 		];
 	}
 
@@ -300,8 +300,8 @@ final class WooProduct_Surface implements Price_Surface {
 	}
 
 	/**
-	 * Audit trail: when the order created at checkout contains policy-priced
-	 * lines, record one order note per line stating which policy set which price
+	 * Audit trail: when the order created at checkout contains rule-priced
+	 * lines, record one order note per line stating which rule set which price
 	 * — silent policies included. Without this, an operator looking at a $5
 	 * parent order of a $10 product has no way to tell why.
 	 *
@@ -342,7 +342,7 @@ final class WooProduct_Surface implements Price_Surface {
 		return sprintf(
 			/* translators: 1: rule id, 2: product name, 3: charged price, 4: regular price, 5: rule label or reason */
 			__( 'Newspack Dynamic Pricing [rule %1$s]: "%2$s" priced at %3$s — regular price %4$s (%5$s).', 'newspack-plugin' ),
-			$applied['policy_id'],
+			$applied['rule_id'],
 			$applied['item_name'],
 			wc_price( (float) $applied['amount'] ),
 			wc_price( (float) $applied['original'] ),
@@ -358,7 +358,7 @@ final class WooProduct_Surface implements Price_Surface {
 	 * `render_before_checkout_form`), the cart item filters fire BEFORE
 	 * `WC_Cart::calculate_totals()` runs in the same request. The eager population
 	 * in `apply()` only happens under `woocommerce_before_calculate_totals`, so
-	 * the registry is empty when the filter callback runs. We re-resolve the policy
+	 * the registry is empty when the filter callback runs. We re-resolve the rule
 	 * from the cart item directly, memoize in the registry, and the second filter
 	 * call (`woocommerce_cart_item_name` after `woocommerce_cart_item_subtotal`)
 	 * hits the cache.
@@ -393,7 +393,7 @@ final class WooProduct_Surface implements Price_Surface {
 	}
 
 	/**
-	 * Filter: when a publicized policy applies, prepend the original price
+	 * Filter: when a publicized rule applies, prepend the original price
 	 * (strikethrough) and append a disclaimer noting the price is for THIS payment.
 	 *
 	 * The disclaimer is deliberately vague about future cycles — stepped pricing,
@@ -427,7 +427,7 @@ final class WooProduct_Surface implements Price_Surface {
 	}
 
 	/**
-	 * Filter: append a small label badge to the cart item name announcing the active policy.
+	 * Filter: append a small label badge to the cart item name announcing the active rule.
 	 */
 	public static function filter_cart_item_name( string $name, array $cart_item, string $cart_item_key ): string {
 		$applied = self::get_publicized_apply_for( $cart_item_key );
@@ -575,7 +575,7 @@ final class WooProduct_Surface implements Price_Surface {
 			return;
 		}
 		// No policies on the site → the filters would never have data to render.
-		if ( ! CPT_Policy_Repository::has_policies() ) {
+		if ( ! CPT_Pricing_Rule_Repository::has_policies() ) {
 			return;
 		}
 		if ( ! class_exists( '\Newspack\Newspack' ) || ! defined( 'NEWSPACK_ABSPATH' ) ) {

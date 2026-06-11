@@ -23,12 +23,12 @@ final class Price_Decision {
 	 * @param string      $label           Human-readable label (audit note).
 	 * @param string      $strategy_id     Strategy that produced this decision.
 	 * @param mixed       $dimension_value Idempotency anchor (e.g., cycle number).
-	 * @param string|null $policy_id       Set by the engine after decide() returns.
+	 * @param string|null $rule_id       Set by the engine after decide() returns.
 	 * @param bool        $is_locked       Set by Pricing_Guardrails::compose() when a priority_exclusive
-	 *                                     policy wins; runtime-only, never persisted.
-	 * @param bool        $publicize       Set by the engine from Policy::$publicize. Runtime-only,
+	 *                                     rule wins; runtime-only, never persisted.
+	 * @param bool        $publicize       Set by the engine from Pricing_Rule::$publicize. Runtime-only,
 	 *                                     never persisted. Surfaces use it to decide whether to
-	 *                                     communicate the policy to the reader (cart strikethrough,
+	 *                                     communicate the rule to the reader (cart strikethrough,
 	 *                                     label badge, etc.).
 	 */
 	public function __construct(
@@ -38,7 +38,7 @@ final class Price_Decision {
 		public string $label,
 		public string $strategy_id,
 		public mixed $dimension_value,
-		public ?string $policy_id = null,
+		public ?string $rule_id = null,
 		public bool $is_locked = false,
 		public bool $publicize = false
 	) {}

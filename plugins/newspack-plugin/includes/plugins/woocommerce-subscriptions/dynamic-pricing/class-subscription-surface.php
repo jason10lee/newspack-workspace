@@ -8,7 +8,7 @@
 namespace Newspack\Dynamic_Pricing\Subscriptions;
 
 use Newspack\Dynamic_Pricing\Amount_Calculator;
-use Newspack\Dynamic_Pricing\Policy;
+use Newspack\Dynamic_Pricing\Pricing_Rule;
 use Newspack\Dynamic_Pricing\Price_Decision;
 use Newspack\Dynamic_Pricing\Price_Surface;
 use Newspack\Dynamic_Pricing\Pricing_Context;
@@ -26,9 +26,9 @@ defined( 'ABSPATH' ) || exit;
  * single recurring line item. Multi-line subscriptions are excluded upstream
  * by the engine, so this surface always operates on the first line item.
  *
- * Idempotency: an amount-equality short-circuit and a per-policy state map
+ * Idempotency: an amount-equality short-circuit and a per-rule state map
  * stored on `_newspack_dynamic_pricing_state` ensure repeated invocations are
- * no-ops once a policy has applied at a given dimension value.
+ * no-ops once a rule has applied at a given dimension value.
  */
 final class Subscription_Surface implements Price_Surface {
 	const STATE_META_KEY         = '_newspack_dynamic_pricing_state';
@@ -51,18 +51,18 @@ final class Subscription_Surface implements Price_Surface {
 		// first cycle differs from the regular price.
 		add_action( 'woocommerce_checkout_subscription_created', [ __CLASS__, 'note_acquisition_on_subscription' ], 20, 3 );
 
-		// Policy pinning (docs 03): when the acquisition price came from a
-		// deal-class policy, snapshot that policy's config onto the subscription —
-		// renewals resolve from the snapshot, so later policy edits affect new
+		// Pricing_Rule pinning (docs 03): when the acquisition price came from a
+		// locked-class rule, snapshot that rule's config onto the subscription —
+		// renewals resolve from the snapshot, so later rule edits affect new
 		// acquisitions only. Priority 25: the acquisition note above lands first.
-		add_action( 'woocommerce_checkout_subscription_created', [ __CLASS__, 'pin_deal_on_subscription' ], 25, 3 );
+		add_action( 'woocommerce_checkout_subscription_created', [ __CLASS__, 'pin_rule_on_subscription' ], 25, 3 );
 	}
 
 	/**
-	 * Pin the winning deal-class policy onto a newly created subscription.
+	 * Pin the winning locked-class rule onto a newly created subscription.
 	 *
-	 * The applied registry holds the winning decision's policy id per cart item
-	 * key; the policy row is read fresh (same request as resolution) and its
+	 * The applied registry holds the winning decision's rule id per cart item
+	 * key; the rule row is read fresh (same request as resolution) and its
 	 * config snapshotted onto the matching recurring line item. Live-class
 	 * policies never pin.
 	 *
@@ -70,21 +70,21 @@ final class Subscription_Surface implements Price_Surface {
 	 * @param \WC_Order        $order          Parent order.
 	 * @param \WC_Cart         $recurring_cart Recurring cart this subscription was created from.
 	 */
-	public static function pin_deal_on_subscription( $subscription, $order, $recurring_cart ): void {
+	public static function pin_rule_on_subscription( $subscription, $order, $recurring_cart ): void {
 		if ( ! $subscription instanceof \WC_Subscription || ! $recurring_cart instanceof \WC_Cart ) {
 			return;
 		}
 		foreach ( $recurring_cart->get_cart() as $cart_item_key => $cart_item ) {
 			$applied = WooProduct_Surface::get_applied_for( (string) $cart_item_key );
-			if ( ! $applied || '' === (string) $applied['policy_id'] ) {
+			if ( ! $applied || '' === (string) $applied['rule_id'] ) {
 				continue;
 			}
-			$post = get_post( (int) $applied['policy_id'] );
+			$post = get_post( (int) $applied['rule_id'] );
 			if ( ! $post ) {
 				continue;
 			}
-			$policy = Policy::from_post( $post );
-			if ( Policy::APPLICATION_LOCKED !== $policy->application ) {
+			$rule = Pricing_Rule::from_post( $post );
+			if ( Pricing_Rule::APPLICATION_LOCKED !== $rule->application ) {
 				continue;
 			}
 
@@ -92,12 +92,12 @@ final class Subscription_Surface implements Price_Surface {
 			if ( ! $line ) {
 				continue;
 			}
-			Subscription_Pin::pin( $line, $policy );
+			Subscription_Pin::pin( $line, $rule );
 			$subscription->add_order_note(
 				sprintf(
 					/* translators: 1: rule id */
 					__( 'Newspack Dynamic Pricing [rule %1$s]: terms locked at purchase — renewals follow this rule as configured at purchase; later edits affect new purchases only.', 'newspack-plugin' ),
-					$policy->id
+					$rule->id
 				)
 			);
 		}
@@ -143,7 +143,7 @@ final class Subscription_Surface implements Price_Surface {
 			}
 			$subscription->add_order_note(
 				sprintf(
-					/* translators: 1: acquisition audit line (policy, product, prices) */
+					/* translators: 1: acquisition audit line (rule, product, prices) */
 					__( '%1$s Applied at acquisition (cycle 1); renewals are repriced after each payment.', 'newspack-plugin' ),
 					WooProduct_Surface::acquisition_note( $applied )
 				)
@@ -218,7 +218,7 @@ final class Subscription_Surface implements Price_Surface {
 	 * subscription surface's concern — they are handled at checkout. Decisions
 	 * whose amount already matches the current line subtotal short-circuit
 	 * before any writes (no audit note, no state). Decisions whose
-	 * `(policy_id, dimension_value, amount)` triple already appears in the
+	 * `(rule_id, dimension_value, amount)` triple already appears in the
 	 * state map also short-circuit (idempotency).
 	 *
 	 * @param Pricing_Context $ctx Context (target is the \WC_Subscription).
@@ -256,7 +256,7 @@ final class Subscription_Surface implements Price_Surface {
 			sprintf(
 				/* translators: 1: rule id, 2: formatted price, 3: human label */
 				__( 'Newspack Dynamic Pricing [rule %1$s]: recurring price set to %2$s (%3$s).', 'newspack-plugin' ),
-				$d->policy_id,
+				$d->rule_id,
 				wc_price( $d->amount ),
 				$d->label
 			)
@@ -266,14 +266,14 @@ final class Subscription_Surface implements Price_Surface {
 	}
 
 	/**
-	 * Has this `(policy, dimension_value, amount)` triple already been applied?
+	 * Has this `(rule, dimension_value, amount)` triple already been applied?
 	 */
 	private function already_applied( \WC_Subscription $sub, Price_Decision $d ): bool {
 		$state = $sub->get_meta( self::STATE_META_KEY );
 		if ( ! is_array( $state ) ) {
 			return false;
 		}
-		$prior = $state[ $d->policy_id ] ?? null;
+		$prior = $state[ $d->rule_id ] ?? null;
 		return $prior
 			&& ( $prior['dimension_value'] ?? null ) === $d->dimension_value
 			&& abs( (float) ( $prior['amount'] ?? 0 ) - $d->amount ) < 0.01;
@@ -287,7 +287,7 @@ final class Subscription_Surface implements Price_Surface {
 		if ( ! is_array( $state ) ) {
 			$state = [];
 		}
-		$state[ $d->policy_id ] = [
+		$state[ $d->rule_id ] = [
 			'strategy_id'     => $d->strategy_id,
 			'amount'          => $d->amount,
 			'dimension_value' => $d->dimension_value,

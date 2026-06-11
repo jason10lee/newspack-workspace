@@ -33,7 +33,7 @@ class Newspack_Test_Subscription_Started_After_Condition_Matcher extends WP_Unit
 	public function test_acquisition_passes_once_window_open() {
 		$ctx = $this->acquisition_context();
 		$this->assertTrue( $this->matcher->matches( $ctx, time() - DAY_IN_SECONDS ), 'Past threshold: cohort window is open for new purchases.' );
-		$this->assertFalse( $this->matcher->matches( $ctx, time() + DAY_IN_SECONDS ), 'Future threshold: policy not open yet at checkout.' );
+		$this->assertFalse( $this->matcher->matches( $ctx, time() + DAY_IN_SECONDS ), 'Future threshold: rule not open yet at checkout.' );
 	}
 
 	public function test_renewal_gates_on_subscription_start_date() {
@@ -43,7 +43,7 @@ class Newspack_Test_Subscription_Started_After_Condition_Matcher extends WP_Unit
 		$this->assertTrue( $this->matcher->matches( $newer, $threshold ), 'Subscription started after the threshold matches.' );
 
 		$older = $this->renewal_context( $this->subscription_started_at( time() - YEAR_IN_SECONDS ) );
-		$this->assertFalse( $this->matcher->matches( $older, $threshold ), 'A live policy must not reach back into older cohorts.' );
+		$this->assertFalse( $this->matcher->matches( $older, $threshold ), 'A live rule must not reach back into older cohorts.' );
 	}
 
 	public function test_renewal_fails_open_when_start_unknown() {

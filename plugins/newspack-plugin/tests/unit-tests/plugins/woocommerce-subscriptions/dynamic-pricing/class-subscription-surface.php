@@ -77,7 +77,7 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 
 		$ctx = $this->ctx( $sub, base_price: 10.0 );
 		$d   = new Price_Decision( 8.0, Price_Decision::DURABLE, 'step_at_4_fixed_price', 'Standard', 'stepped_by_cycle', 4 );
-		$d->policy_id = 'pol_1';
+		$d->rule_id = 'pol_1';
 
 		( new Subscription_Surface() )->apply( $ctx, $d );
 
@@ -100,7 +100,7 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 
 		$ctx = $this->ctx( $sub, base_price: 10.0 );
 		$d   = new Price_Decision( 8.0, Price_Decision::DURABLE, 'step_at_4_fixed_price', 'Standard', 'stepped_by_cycle', 4 );
-		$d->policy_id = 'pol_1';
+		$d->rule_id = 'pol_1';
 
 		( new Subscription_Surface() )->apply( $ctx, $d );
 	}
@@ -117,7 +117,7 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 
 		$ctx = $this->ctx( $sub, base_price: 10.0 );
 		$d   = new Price_Decision( 8.0, Price_Decision::DURABLE, 'step_at_4_fixed_price', 'Standard', 'stepped_by_cycle', 5 );
-		$d->policy_id = 'pol_1';
+		$d->rule_id = 'pol_1';
 
 		( new Subscription_Surface() )->apply( $ctx, $d );
 	}
@@ -135,7 +135,7 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 
 		$ctx = $this->ctx( $sub, base_price: 10.0 );
 		$d   = new Price_Decision( 8.0, Price_Decision::DURABLE, 'step_at_4_fixed_price', 'Standard', 'stepped_by_cycle', 5 );
-		$d->policy_id = 'pol_1';
+		$d->rule_id = 'pol_1';
 
 		( new Subscription_Surface() )->apply( $ctx, $d );
 	}
@@ -152,7 +152,7 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 
 		$ctx = $this->ctx( $sub, base_price: 10.0 );
 		$d   = new Price_Decision( 8.0, Price_Decision::ONE_TIME, 'test', 'Test', 'stepped_by_cycle', 4 );
-		$d->policy_id = 'pol_1';
+		$d->rule_id = 'pol_1';
 
 		( new Subscription_Surface() )->apply( $ctx, $d );
 	}
@@ -173,7 +173,7 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 			[ 'data' => $product, 'key' => 'sub_note_key' ]
 		);
 		$d = new Price_Decision( 5.0, Price_Decision::DURABLE, 'step_at_1_fixed_price', 'Intro', 'stepped_by_cycle', 1 );
-		$d->policy_id = '18';
+		$d->rule_id = '18';
 		$d->publicize = false; // Silent policies must still be noted.
 		( new \Newspack\Dynamic_Pricing\WooProduct_Surface() )->apply( $ctx, $d );
 
@@ -191,17 +191,17 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 	public function test_pin_deal_on_subscription_snapshots_winning_deal_policy() {
 		\Newspack\Dynamic_Pricing\WooProduct_Surface::reset_publicized_registry( new \WC_Cart() );
 
-		// A real deal-class policy post (no _application meta = deal default).
-		register_post_type( 'shop_pricing_policy', [ 'public' => false ] );
-		$policy_id = $this->factory->post->create( [ 'post_type' => 'shop_pricing_policy', 'post_status' => 'publish', 'post_title' => 'Intro ramp' ] );
-		update_post_meta( $policy_id, '_strategy_id', 'stepped_by_cycle' );
-		update_post_meta( $policy_id, '_params', wp_json_encode( [ 'steps' => [ [ 'at' => 1, 'calc_type' => 'fixed_price', 'value' => 5, 'label' => 'Intro' ] ] ] ) );
+		// A real locked-class rule post (no _application meta = locked default).
+		register_post_type( 'shop_pricing_rule', [ 'public' => false ] );
+		$rule_id = $this->factory->post->create( [ 'post_type' => 'shop_pricing_rule', 'post_status' => 'publish', 'post_title' => 'Intro ramp' ] );
+		update_post_meta( $rule_id, '_strategy_id', 'stepped_by_cycle' );
+		update_post_meta( $rule_id, '_params', wp_json_encode( [ 'steps' => [ [ 'at' => 1, 'calc_type' => 'fixed_price', 'value' => 5, 'label' => 'Intro' ] ] ] ) );
 
 		// Seed the applied registry as checkout would.
 		$product = $this->getMockBuilder( \WC_Product::class )->disableOriginalConstructor()->addMethods( [ 'set_price' ] )->getMock();
 		$ctx = new Pricing_Context( 'cart', $product, null, 10.0, [ 'completed_cycles' => 1 ], [ 'data' => $product, 'key' => 'pin_key' ] );
 		$d   = new Price_Decision( 5.0, Price_Decision::DURABLE, 'step_at_1_fixed_price', 'Intro', 'stepped_by_cycle', 1 );
-		$d->policy_id = (string) $policy_id;
+		$d->rule_id = (string) $rule_id;
 		( new \Newspack\Dynamic_Pricing\WooProduct_Surface() )->apply( $ctx, $d );
 
 		$line = $this->getMockBuilder( \WC_Order_Item_Product::class )
@@ -214,7 +214,7 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 		$captured_snapshot = null;
 		$line->expects( $this->once() )->method( 'update_meta_data' )->willReturnCallback(
 			function ( $key, $value ) use ( &$captured_snapshot ) {
-				if ( \Newspack\Dynamic_Pricing\Subscription_Pin::DEAL_META_KEY === $key ) {
+				if ( \Newspack\Dynamic_Pricing\Subscription_Pin::LOCKED_RULE_META_KEY === $key ) {
 					$captured_snapshot = $value;
 				}
 			}
@@ -224,11 +224,11 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 		$sub = $this->mock_subscription( completed_payments: 0, line_item: $line );
 		$sub->expects( $this->once() )->method( 'add_order_note' )->with( $this->stringContains( 'terms locked at purchase' ) );
 
-		Subscription_Surface::pin_deal_on_subscription( $sub, null, new \WC_Cart( [ 'pin_key' => [ 'data' => $product ] ] ) );
+		Subscription_Surface::pin_rule_on_subscription( $sub, null, new \WC_Cart( [ 'pin_key' => [ 'data' => $product ] ] ) );
 
 		$this->assertIsArray( $captured_snapshot );
 		$this->assertSame( 1, $captured_snapshot['schema_version'] );
-		$this->assertSame( (string) $policy_id, $captured_snapshot['policy_id'] );
+		$this->assertSame( (string) $rule_id, $captured_snapshot['rule_id'] );
 		$this->assertSame( 'stepped_by_cycle', $captured_snapshot['strategy_id'] );
 		$this->assertNotEmpty( $captured_snapshot['params']['steps'] );
 	}
@@ -236,15 +236,15 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 	public function test_pin_deal_on_subscription_skips_live_policies() {
 		\Newspack\Dynamic_Pricing\WooProduct_Surface::reset_publicized_registry( new \WC_Cart() );
 
-		register_post_type( 'shop_pricing_policy', [ 'public' => false ] );
-		$policy_id = $this->factory->post->create( [ 'post_type' => 'shop_pricing_policy', 'post_status' => 'publish' ] );
-		update_post_meta( $policy_id, '_strategy_id', 'stepped_by_cycle' );
-		update_post_meta( $policy_id, '_application', 'current' );
+		register_post_type( 'shop_pricing_rule', [ 'public' => false ] );
+		$rule_id = $this->factory->post->create( [ 'post_type' => 'shop_pricing_rule', 'post_status' => 'publish' ] );
+		update_post_meta( $rule_id, '_strategy_id', 'stepped_by_cycle' );
+		update_post_meta( $rule_id, '_application', 'current' );
 
 		$product = $this->getMockBuilder( \WC_Product::class )->disableOriginalConstructor()->addMethods( [ 'set_price' ] )->getMock();
 		$ctx = new Pricing_Context( 'cart', $product, null, 10.0, [], [ 'data' => $product, 'key' => 'live_key' ] );
 		$d   = new Price_Decision( 5.0, Price_Decision::DURABLE, 'r', 'l', 'stepped_by_cycle', 1 );
-		$d->policy_id = (string) $policy_id;
+		$d->rule_id = (string) $rule_id;
 		( new \Newspack\Dynamic_Pricing\WooProduct_Surface() )->apply( $ctx, $d );
 
 		$line = $this->getMockBuilder( \WC_Order_Item_Product::class )
@@ -256,7 +256,7 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 
 		$sub = $this->mock_subscription( completed_payments: 0, line_item: $line );
 
-		Subscription_Surface::pin_deal_on_subscription( $sub, null, new \WC_Cart( [ 'live_key' => [ 'data' => $product ] ] ) );
+		Subscription_Surface::pin_rule_on_subscription( $sub, null, new \WC_Cart( [ 'live_key' => [ 'data' => $product ] ] ) );
 	}
 
 	public function test_on_payment_complete_bails_when_product_is_deleted() {

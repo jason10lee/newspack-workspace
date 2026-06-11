@@ -2,8 +2,8 @@
 /**
  * End-to-end smoke test for the dynamic pricing foundation.
  *
- * Walks a real `$1 → $8 → $10` policy through the engine at cycles 1, 3, 4, 12.
- * Wires real engine + CPT_Policy_Repository + Pricing_Guardrails + scope matchers
+ * Walks a real `$1 → $8 → $10` rule through the engine at cycles 1, 3, 4, 12.
+ * Wires real engine + CPT_Pricing_Rule_Repository + Pricing_Guardrails + scope matchers
  * + Stepped_By_Cycle_Strategy + Subscription_Surface; only the subscription
  * target and its line item are PHPUnit mocks, because the wc-mocks
  * `WC_Subscription` shim does not implement `get_payment_count`,
@@ -15,7 +15,7 @@
  */
 
 use Newspack\Dynamic_Pricing\Pricing_Engine;
-use Newspack\Dynamic_Pricing\CPT_Policy_Repository;
+use Newspack\Dynamic_Pricing\CPT_Pricing_Rule_Repository;
 use Newspack\Dynamic_Pricing\Pricing_Guardrails;
 use Newspack\Dynamic_Pricing\Bounds_Resolver;
 use Newspack\Dynamic_Pricing\Matchers\All_Subscriptions_Scope_Matcher;
@@ -47,14 +47,14 @@ if ( ! function_exists( 'wc_price' ) ) {
  * @group Dynamic_Pricing
  */
 class Newspack_Test_Dynamic_Pricing_End_To_End extends WP_UnitTestCase {
-	/** @var int CPT product id used by the policy scope and `wc_get_product()` lookup. */
+	/** @var int CPT product id used by the rule scope and `wc_get_product()` lookup. */
 	private const PRODUCT_ID = 4242;
 
 	/** @var float Catalog base price the line item starts at and the strategy compares to. */
 	private const BASE_PRICE = 1.0;
 
-	/** @var int Policy id created via WP factory. */
-	private int $policy_id;
+	/** @var int Pricing_Rule id created via WP factory. */
+	private int $rule_id;
 
 	/** @var \WC_Order_Item_Product&\PHPUnit\Framework\MockObject\MockObject */
 	private $line;
@@ -73,11 +73,11 @@ class Newspack_Test_Dynamic_Pricing_End_To_End extends WP_UnitTestCase {
 
 	public function set_up() {
 		parent::set_up();
-		register_post_type( 'shop_pricing_policy', [ 'public' => false, 'show_ui' => false ] );
+		register_post_type( 'shop_pricing_rule', [ 'public' => false, 'show_ui' => false ] );
 		wp_cache_flush();
 
 		// Seed wc-mocks product database so Subscription_Surface::context()'s
-		// wc_get_product( $product_id ) returns the same instance the policy scopes to.
+		// wc_get_product( $product_id ) returns the same instance the rule scopes to.
 		// `_subscription_price` is what WC_Subscriptions_Product::get_price() reads to
 		// drive Pricing_Context::base_price (the amount the cycle-1 step resolves equal
 		// to, exercising the apply()-side no-op guard on the first walk step).
@@ -89,14 +89,14 @@ class Newspack_Test_Dynamic_Pricing_End_To_End extends WP_UnitTestCase {
 
 		$engine = Pricing_Engine::instance();
 		$engine->reset_for_tests();
-		$engine->set_repository( new CPT_Policy_Repository() );
+		$engine->set_repository( new CPT_Pricing_Rule_Repository() );
 		$engine->set_guardrails( new Pricing_Guardrails( new Bounds_Resolver() ) );
 		$engine->register_scope( new All_Subscriptions_Scope_Matcher() );
 		$engine->register_scope( new Product_Ids_Scope_Matcher() );
 		$engine->add_surface( new Subscription_Surface() );
 		$engine->register( new Stepped_By_Cycle_Strategy() );
 
-		$this->policy_id          = $this->seed_policy( self::PRODUCT_ID );
+		$this->rule_id          = $this->seed_policy( self::PRODUCT_ID );
 		$this->line               = $this->mock_line_item();
 		$this->sub                = $this->mock_subscription( $this->line );
 		$this->completed_payments = 0;
@@ -105,7 +105,7 @@ class Newspack_Test_Dynamic_Pricing_End_To_End extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Walk the policy through cycles 1 → 3 → 4 → 12 and assert the engine + surface
+	 * Walk the rule through cycles 1 → 3 → 4 → 12 and assert the engine + surface
 	 * produce the expected sequence of (decision, persistence, short-circuit, decision).
 	 */
 	public function test_full_lifecycle() {
@@ -136,15 +136,15 @@ class Newspack_Test_Dynamic_Pricing_End_To_End extends WP_UnitTestCase {
 		$d = Pricing_Engine::instance()->resolve( $ctx );
 		$this->assertNotNull( $d, 'A decision is expected at cycle 4 (step_at_4 triggers).' );
 		$this->assertSame( 8.0, $d->amount );
-		$this->assertSame( (string) $this->policy_id, $d->policy_id );
+		$this->assertSame( (string) $this->rule_id, $d->rule_id );
 		$this->assertSame( 'stepped_by_cycle', $d->strategy_id );
 		$this->assertSame( 4, $d->dimension_value );
 
 		$surface->apply( $ctx, $d );
 		$this->assertSame( 8.0, $this->line_subtotal, 'Line subtotal must persist as $8 after apply.' );
-		$this->assertArrayHasKey( (string) $this->policy_id, $this->state_meta );
-		$this->assertSame( 4, $this->state_meta[ (string) $this->policy_id ]['dimension_value'] );
-		$this->assertSame( 8.0, $this->state_meta[ (string) $this->policy_id ]['amount'] );
+		$this->assertArrayHasKey( (string) $this->rule_id, $this->state_meta );
+		$this->assertSame( 4, $this->state_meta[ (string) $this->rule_id ]['dimension_value'] );
+		$this->assertSame( 8.0, $this->state_meta[ (string) $this->rule_id ]['amount'] );
 
 		// --- Cycle 4 paid: upcoming=5; line is already $8; amount-equality short-circuit. ---
 		// step_at_4 fires again at cycle 5 with the same amount, so apply() must bail at
@@ -171,29 +171,29 @@ class Newspack_Test_Dynamic_Pricing_End_To_End extends WP_UnitTestCase {
 
 		$surface->apply( $ctx, $d );
 		$this->assertSame( 10.0, $this->line_subtotal, 'Line subtotal must persist as $10 after final step.' );
-		$this->assertSame( 13, $this->state_meta[ (string) $this->policy_id ]['dimension_value'] );
-		$this->assertSame( 10.0, $this->state_meta[ (string) $this->policy_id ]['amount'] );
+		$this->assertSame( 13, $this->state_meta[ (string) $this->rule_id ]['dimension_value'] );
+		$this->assertSame( 10.0, $this->state_meta[ (string) $this->rule_id ]['amount'] );
 	}
 
 	/**
-	 * Seed a stepped_by_cycle policy at the canonical $1 → $8 → $10 ramp.
+	 * Seed a stepped_by_cycle rule at the canonical $1 → $8 → $10 ramp.
 	 */
 	private function seed_policy( int $product_id ): int {
-		$policy_id = $this->factory->post->create( [
-			'post_type'   => 'shop_pricing_policy',
+		$rule_id = $this->factory->post->create( [
+			'post_type'   => 'shop_pricing_rule',
 			'post_status' => 'publish',
 			'post_title'  => 'Intro ramp',
 		] );
-		update_post_meta( $policy_id, '_strategy_id', 'stepped_by_cycle' );
-		update_post_meta( $policy_id, '_priority', 100 );
-		update_post_meta( $policy_id, '_compose_mode', 'min' );
+		update_post_meta( $rule_id, '_strategy_id', 'stepped_by_cycle' );
+		update_post_meta( $rule_id, '_priority', 100 );
+		update_post_meta( $rule_id, '_compose_mode', 'min' );
 		// Live-class: this walk exercises repository-resolved renewals. Deal-class
 		// policies reach renewals only through pinned snapshots (docs 03).
-		update_post_meta( $policy_id, '_application', 'current' );
-		update_post_meta( $policy_id, '_scope_type', 'product_ids' );
-		add_post_meta( $policy_id, '_scope_product_id', $product_id );
+		update_post_meta( $rule_id, '_application', 'current' );
+		update_post_meta( $rule_id, '_scope_type', 'product_ids' );
+		add_post_meta( $rule_id, '_scope_product_id', $product_id );
 		update_post_meta(
-			$policy_id,
+			$rule_id,
 			'_params',
 			wp_json_encode( [
 				'steps' => [
@@ -204,7 +204,7 @@ class Newspack_Test_Dynamic_Pricing_End_To_End extends WP_UnitTestCase {
 			] )
 		);
 		wp_cache_flush();
-		return $policy_id;
+		return $rule_id;
 	}
 
 	/**

@@ -1,10 +1,10 @@
 <?php
 /**
- * MVP admin UI for shop_pricing_policy CPT.
+ * MVP admin UI for shop_pricing_rule CPT.
  *
- * Replaces the raw Custom Fields metabox with structured fields for the policy
+ * Replaces the raw Custom Fields metabox with structured fields for the rule
  * settings + a repeatable rows interface for the stepped pricing steps. Save
- * handler writes the same flat post_meta + JSON _params shape the Policy entity
+ * handler writes the same flat post_meta + JSON _params shape the Pricing_Rule entity
  * factory expects, so the engine works with policies authored either way.
  *
  * Not part of the v1 spec — added for manual testing. See spec §14 future work
@@ -17,11 +17,11 @@ namespace Newspack\Dynamic_Pricing\Admin;
 
 use Newspack\Dynamic_Pricing\Amount_Calculator;
 use Newspack\Dynamic_Pricing\Dynamic_Pricing;
-use Newspack\Dynamic_Pricing\Policy;
+use Newspack\Dynamic_Pricing\Pricing_Rule;
 
 defined( 'ABSPATH' ) || exit;
 
-final class Policy_Edit_UI {
+final class Pricing_Rule_Edit_UI {
 	const NONCE_ACTION = 'newspack_dp_save_policy';
 	const NONCE_FIELD  = 'newspack_dp_nonce';
 
@@ -71,18 +71,18 @@ final class Policy_Edit_UI {
 	}
 
 	public static function render_settings_metabox( \WP_Post $post ): void {
-		// Hydrate through the entity — Policy::from_post() is the one canonical
-		// decoder of policy meta; the UI must not re-implement it.
-		$policy       = Policy::from_post( $post );
-		$strategy_id  = $policy->strategy_id ?: 'stepped_by_cycle';
-		$priority     = $policy->priority;
-		$compose_mode = $policy->compose_mode;
-		$scope_type   = $policy->scope_type;
-		$scope_value  = implode( ', ', $policy->scope_ids );
-		$active_from  = $policy->active_from;
-		$active_until = $policy->active_until;
-		$publicize    = $policy->publicize;
-		$application  = $policy->application;
+		// Hydrate through the entity — Pricing_Rule::from_post() is the one canonical
+		// decoder of rule meta; the UI must not re-implement it.
+		      $rule = Pricing_Rule::from_post( $post );
+		$strategy_id  = $rule->strategy_id ?: 'stepped_by_cycle';
+		$priority     = $rule->priority;
+		$compose_mode = $rule->compose_mode;
+		$scope_type   = $rule->scope_type;
+		$scope_value  = implode( ', ', $rule->scope_ids );
+		$active_from  = $rule->active_from;
+		$active_until = $rule->active_until;
+		$publicize    = $rule->publicize;
+		$application  = $rule->application;
 
 		wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD );
 		?>
@@ -100,8 +100,8 @@ final class Policy_Edit_UI {
 				<th><label for="newspack_dp_application"><?php esc_html_e( 'Existing subscribers', 'newspack-plugin' ); ?></label></th>
 				<td>
 					<select name="newspack_dp_application" id="newspack_dp_application">
-						<option value="<?php echo esc_attr( Policy::APPLICATION_LOCKED ); ?>" <?php selected( $application, Policy::APPLICATION_LOCKED ); ?>><?php esc_html_e( 'Locked at purchase — subscribers keep the terms they bought under (default)', 'newspack-plugin' ); ?></option>
-						<option value="<?php echo esc_attr( Policy::APPLICATION_CURRENT ); ?>" <?php selected( $application, Policy::APPLICATION_CURRENT ); ?>><?php esc_html_e( 'Always current — renewals follow this rule\'s latest settings', 'newspack-plugin' ); ?></option>
+						<option value="<?php echo esc_attr( Pricing_Rule::APPLICATION_LOCKED ); ?>" <?php selected( $application, Pricing_Rule::APPLICATION_LOCKED ); ?>><?php esc_html_e( 'Locked at purchase — subscribers keep the terms they bought under (default)', 'newspack-plugin' ); ?></option>
+						<option value="<?php echo esc_attr( Pricing_Rule::APPLICATION_CURRENT ); ?>" <?php selected( $application, Pricing_Rule::APPLICATION_CURRENT ); ?>><?php esc_html_e( 'Always current — renewals follow this rule\'s latest settings', 'newspack-plugin' ); ?></option>
 					</select>
 					<p class="description"><?php esc_html_e( 'Locked: the configuration is copied onto each subscription at purchase, so editing this rule affects new purchases only. Always current: existing subscriptions follow the latest settings at every renewal — for retention adjustments or fleet-wide changes.', 'newspack-plugin' ); ?></p>
 				</td>
@@ -171,7 +171,7 @@ final class Policy_Edit_UI {
 	}
 
 	public static function render_conditions_metabox( \WP_Post $post ): void {
-		$conditions      = Policy::from_post( $post )->conditions;
+		$conditions      = Pricing_Rule::from_post( $post )->conditions;
 		$first_time_only = self::condition_value( $conditions, 'first_time_only' );
 		$started_after   = (int) self::condition_value( $conditions, 'subscription_started_after' );
 		?>
@@ -233,7 +233,7 @@ final class Policy_Edit_UI {
 	}
 
 	public static function render_simple_metabox( \WP_Post $post ): void {
-		$params         = Policy::from_post( $post )->params;
+		$params         = Pricing_Rule::from_post( $post )->params;
 		$calc_type      = (string) ( $params['calc_type'] ?? Amount_Calculator::FIXED_PRICE );
 		$value          = (float) ( $params['value'] ?? 0 );
 		$label          = (string) ( $params['label'] ?? '' );
@@ -276,7 +276,7 @@ final class Policy_Edit_UI {
 	}
 
 	public static function render_steps_metabox( \WP_Post $post ): void {
-		$params = Policy::from_post( $post )->params;
+		$params = Pricing_Rule::from_post( $post )->params;
 		$steps  = is_array( $params['steps'] ?? null ) ? $params['steps'] : [];
 		?>
 		<p class="description"><?php esc_html_e( 'Each row defines the price from a given payment onward, until a later row takes over. "From payment #1" sets the purchase price.', 'newspack-plugin' ); ?></p>
@@ -363,9 +363,9 @@ final class Policy_Edit_UI {
 		if ( ! in_array( $compose_mode, [ 'min', 'priority_exclusive' ], true ) ) {
 			$compose_mode = 'min';
 		}
-		$application = isset( $_POST['newspack_dp_application'] ) ? sanitize_text_field( wp_unslash( $_POST['newspack_dp_application'] ) ) : Policy::APPLICATION_LOCKED;
-		if ( ! in_array( $application, [ Policy::APPLICATION_LOCKED, Policy::APPLICATION_CURRENT ], true ) ) {
-			$application = Policy::APPLICATION_LOCKED;
+		$application = isset( $_POST['newspack_dp_application'] ) ? sanitize_text_field( wp_unslash( $_POST['newspack_dp_application'] ) ) : Pricing_Rule::APPLICATION_LOCKED;
+		if ( ! in_array( $application, [ Pricing_Rule::APPLICATION_LOCKED, Pricing_Rule::APPLICATION_CURRENT ], true ) ) {
+			$application = Pricing_Rule::APPLICATION_LOCKED;
 		}
 		if ( ! in_array( $scope_type, [ 'all_subscriptions', 'product_ids', 'category' ], true ) ) {
 			$scope_type = 'all_subscriptions';
@@ -447,7 +447,7 @@ final class Policy_Edit_UI {
 		update_post_meta( $post_id, '_params', wp_slash( wp_json_encode( $params_out ) ) );
 
 		// Conditions: read the structured array from $_POST, build a normalized list of
-		// {type, value} entries, and persist as JSON for Policy::from_post() to decode.
+		// {type, value} entries, and persist as JSON for Pricing_Rule::from_post() to decode.
 		$conditions_in  = isset( $_POST['newspack_dp_conditions'] ) && is_array( $_POST['newspack_dp_conditions'] ) ? wp_unslash( $_POST['newspack_dp_conditions'] ) : [];
 		$conditions_out = [];
 		if ( ! empty( $conditions_in['first_time_only'] ) ) {
@@ -569,17 +569,17 @@ JS;
 		if ( ! $post ) {
 			return;
 		}
-		$policy = Policy::from_post( $post );
+		$rule = Pricing_Rule::from_post( $post );
 		switch ( $column ) {
 			case 'newspack_dp_strategy':
-				echo esc_html( $policy->strategy_id );
+				echo esc_html( $rule->strategy_id );
 				break;
 			case 'newspack_dp_scope':
-				$value = implode( ', ', $policy->scope_ids );
-				echo esc_html( '' !== $value ? "{$policy->scope_type}: {$value}" : $policy->scope_type );
+				$value = implode( ', ', $rule->scope_ids );
+				echo esc_html( '' !== $value ? "{$rule->scope_type}: {$value}" : $rule->scope_type );
 				break;
 			case 'newspack_dp_priority':
-				echo esc_html( (string) $policy->priority );
+				echo esc_html( (string) $rule->priority );
 				break;
 		}
 	}
