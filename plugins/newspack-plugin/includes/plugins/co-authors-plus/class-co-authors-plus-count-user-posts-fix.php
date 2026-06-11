@@ -53,7 +53,7 @@ class Co_Authors_Plus_Count_User_Posts_Fix {
 			return $count;
 		}
 
-		return self::count_distinct_attributed_posts( $user_id, $ga_term_taxonomy_ids, $post_type, (bool) $public_only );
+		return self::count_distinct_attributed_posts( $count, $user_id, $ga_term_taxonomy_ids, $post_type, (bool) $public_only );
 	}
 
 	/**
@@ -113,17 +113,26 @@ class Co_Authors_Plus_Count_User_Posts_Fix {
 	 * (attached to any of the GA's author terms), honoring post type and
 	 * public-only filters.
 	 *
+	 * @param int|string      $count                 The upstream count, returned as-is when no post types resolve.
 	 * @param int             $user_id               The user ID.
 	 * @param int[]           $ga_term_taxonomy_ids  Author term_taxonomy_ids for all linked GAs.
 	 * @param string|string[] $post_type             The post type(s) to count (WP's count_user_posts accepts either).
 	 * @param bool            $public_only           Restrict to public-status posts.
 	 * @return int The deduplicated count.
 	 */
-	private static function count_distinct_attributed_posts( $user_id, $ga_term_taxonomy_ids, $post_type, $public_only ) {
+	private static function count_distinct_attributed_posts( $count, $user_id, $ga_term_taxonomy_ids, $post_type, $public_only ) {
 		global $wpdb;
 
-		$types               = self::resolve_post_types( $post_type );
-		$statuses            = self::resolve_post_statuses( $public_only );
+		$types = self::resolve_post_types( $post_type );
+		// Guard: an empty post-type set (e.g. a publisher filtering
+		// `coauthors_count_published_post_types` down to []) would build a
+		// malformed `post_type IN ()`. Fall back to the upstream count rather
+		// than running a broken query and silently returning 0.
+		if ( empty( $types ) ) {
+			return (int) $count;
+		}
+
+		$statuses            = self::resolve_post_statuses( $public_only, $types );
 		$tt_placeholders     = implode( ',', array_fill( 0, count( $ga_term_taxonomy_ids ), '%d' ) );
 		$type_placeholders   = implode( ',', array_fill( 0, count( $types ), '%s' ) );
 		$status_placeholders = implode( ',', array_fill( 0, count( $statuses ), '%s' ) );
@@ -149,14 +158,46 @@ class Co_Authors_Plus_Count_User_Posts_Fix {
 	/**
 	 * Resolve the post statuses to count over, matching CAP's `get_post_count_for_author_term`
 	 * and WP core's `count_user_posts` behavior: `publish` only when restricted to public,
-	 * `publish` + `private` otherwise. Notably excludes drafts, pending, trash, auto-draft,
-	 * and other transient/internal statuses that would inflate the count over time.
+	 * `publish` + `private` otherwise — but `private` is only included when the current viewer
+	 * may actually read private posts, mirroring WP core's `get_posts_by_author_sql()` gate.
+	 * Notably excludes drafts, pending, trash, auto-draft, and other transient/internal statuses
+	 * that would inflate the count over time.
 	 *
-	 * @param bool $public_only Restrict to public statuses when true.
+	 * @param bool     $public_only Restrict to public statuses when true.
+	 * @param string[] $types       Resolved post types, used to gate the private-status capability.
 	 * @return string[] Post status names.
 	 */
-	private static function resolve_post_statuses( $public_only ) {
-		return $public_only ? [ 'publish' ] : [ 'publish', 'private' ];
+	private static function resolve_post_statuses( $public_only, $types ) {
+		if ( $public_only ) {
+			return [ 'publish' ];
+		}
+		return self::viewer_can_read_private_posts( $types )
+			? [ 'publish', 'private' ]
+			: [ 'publish' ];
+	}
+
+	/**
+	 * Whether the current viewer may read private posts for every resolved post type.
+	 *
+	 * Mirrors WP core's `get_posts_by_author_sql()` capability gate so a low-cap or
+	 * unauthenticated viewer (e.g. the public REST `users` endpoint) never sees a
+	 * private-inflated count. Conservative by design: `private` is counted only when
+	 * the viewer can read private posts for ALL resolved types — for the common
+	 * single-`post` case this is identical to core. Core's narrower "own private posts
+	 * when logged in" branch is intentionally not replicated; this filter only runs for
+	 * linked-guest-author users, where that edge does not meaningfully apply.
+	 *
+	 * @param string[] $types Resolved post type names.
+	 * @return bool True if the viewer can read private posts for every type.
+	 */
+	private static function viewer_can_read_private_posts( $types ) {
+		foreach ( $types as $type ) {
+			$post_type_object = get_post_type_object( $type );
+			if ( ! $post_type_object || ! current_user_can( $post_type_object->cap->read_private_posts ) ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**

@@ -261,11 +261,14 @@ class Newspack_Test_CAP_Count_User_Posts_Fix extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Private posts must be included when $public_only=false (matches WP core and CAP behavior).
+	 * Private posts must be included when $public_only=false AND the viewer can
+	 * read private posts — matching WP core's get_posts_by_author_sql() capability
+	 * gate. Here the viewer is an administrator, so private posts count.
 	 */
-	public function test_includes_private_posts_when_public_only_false() {
-		$user_id = self::factory()->user->create( [ 'user_login' => 'privposts' ] );
-		$ga      = $this->create_linked_ga( 'privposts' );
+	public function test_includes_private_posts_when_viewer_can_read_private() {
+		$user_id  = self::factory()->user->create( [ 'user_login' => 'privposts' ] );
+		$admin_id = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		$ga       = $this->create_linked_ga( 'privposts' );
 
 		// 2 published, 1 private, all by the user and all tagged with the GA term.
 		for ( $i = 0; $i < 2; $i++ ) {
@@ -280,8 +283,112 @@ class Newspack_Test_CAP_Count_User_Posts_Fix extends WP_UnitTestCase {
 		);
 		wp_set_object_terms( $private, [ $ga['term_id'] ], 'author' );
 
-		// Default $public_only=false → publish + private = 3.
+		// Viewer can read private posts → publish + private = 3.
+		wp_set_current_user( $admin_id );
 		$this->assertEquals( 3, count_user_posts( $user_id ) ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.count_user_posts_count_user_posts
+	}
+
+	/**
+	 * Private posts must be EXCLUDED when the viewer cannot read private posts,
+	 * even with $public_only=false. WP core's get_posts_by_author_sql() only adds
+	 * `post_status = 'private'` when the viewer has read_private_posts; an
+	 * anonymous viewer (e.g. the public REST `users` endpoint) would otherwise see
+	 * a private-inflated count where core returns the published-only figure.
+	 */
+	public function test_excludes_private_posts_when_viewer_cannot_read_private() {
+		$user_id = self::factory()->user->create( [ 'user_login' => 'privhidden' ] );
+		$ga      = $this->create_linked_ga( 'privhidden' );
+
+		// 2 published, 1 private, all by the user and all tagged with the GA term.
+		for ( $i = 0; $i < 2; $i++ ) {
+			$this->create_authored_post( $user_id, $ga['term_id'] );
+		}
+		$private = self::factory()->post->create(
+			[
+				'post_author' => $user_id,
+				'post_status' => 'private',
+				'post_type'   => 'post',
+			]
+		);
+		wp_set_object_terms( $private, [ $ga['term_id'] ], 'author' );
+
+		// Anonymous viewer (no read_private_posts) → private excluded, publish only = 2.
+		wp_set_current_user( 0 );
+		$this->assertEquals( 2, count_user_posts( $user_id ) ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.count_user_posts_count_user_posts
+	}
+
+	/**
+	 * The capability gate is a conjunction: private posts are counted only when the
+	 * viewer can read private posts for EVERY resolved type. Here an editor (who CAN
+	 * read private `post`) counts across `['post', <cpt>]` where the CPT's
+	 * read-private cap they lack — so private must be excluded for ALL types, not just
+	 * the one that fails. Guards against a regression that loosens the gate to "any type".
+	 */
+	public function test_private_gate_requires_capability_for_all_resolved_types() {
+		$user_id   = self::factory()->user->create( [ 'user_login' => 'multitype' ] );
+		$editor_id = self::factory()->user->create( [ 'role' => 'editor' ] );
+		$ga        = $this->create_linked_ga( 'multitype' );
+
+		// A CPT whose read-private capability the editor does NOT hold.
+		register_post_type(
+			'gated_thing',
+			[
+				'public'          => false,
+				'capability_type' => 'gated_thing',
+				'map_meta_cap'    => true,
+			]
+		);
+
+		// 2 published + 1 private `post`, all by the user and tagged with the GA term.
+		for ( $i = 0; $i < 2; $i++ ) {
+			$this->create_authored_post( $user_id, $ga['term_id'] );
+		}
+		$private = self::factory()->post->create(
+			[
+				'post_author' => $user_id,
+				'post_status' => 'private',
+				'post_type'   => 'post',
+			]
+		);
+		wp_set_object_terms( $private, [ $ga['term_id'] ], 'author' );
+
+		// Editor can read private `post` but NOT `gated_thing`; the conjunction fails,
+		// so private is excluded across the union → 2 published only.
+		wp_set_current_user( $editor_id );
+		try {
+			$this->assertEquals( 2, count_user_posts( $user_id, [ 'post', 'gated_thing' ] ) ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.count_user_posts_count_user_posts
+		} finally {
+			unregister_post_type( 'gated_thing' );
+		}
+	}
+
+	/**
+	 * Defensive guard: if the resolved post-type set comes up empty (e.g. a
+	 * publisher filters `coauthors_count_published_post_types` down to []), the
+	 * dedup query would build a malformed `post_type IN ()`. The filter must
+	 * instead no-op and return the upstream count rather than silently yielding 0.
+	 */
+	public function test_returns_upstream_count_when_post_types_resolve_empty() {
+		$user_id = self::factory()->user->create( [ 'user_login' => 'emptytypes' ] );
+		$ga      = $this->create_linked_ga( 'emptytypes' );
+
+		// 3 published posts authored by the user, all tagged with the GA term.
+		for ( $i = 0; $i < 3; $i++ ) {
+			$this->create_authored_post( $user_id, $ga['term_id'] );
+		}
+
+		// Collapse the countable post types to an empty set.
+		$filter = function () {
+			return [];
+		};
+		add_filter( 'coauthors_count_published_post_types', $filter );
+
+		try {
+			// Guard returns the upstream count (3) instead of a malformed IN () → 0.
+			$this->assertEquals( 3, count_user_posts( $user_id ) ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.count_user_posts_count_user_posts
+		} finally {
+			remove_filter( 'coauthors_count_published_post_types', $filter );
+		}
 	}
 
 	/**
