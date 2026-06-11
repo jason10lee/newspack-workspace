@@ -35,13 +35,14 @@ const getAnnotation = extensions => {
 };
 
 if ( registerCheckoutFilters ) {
-	// Strip the WCS-injected period suffix from `value`. Used by every filter
-	// below that may receive a WCS-wrapped format string. Candidates cover the
-	// two formats WCS emits via its u() helper (subtotalPriceFormat uses
-	// "every <period>", saleBadgePriceFormat uses "/ <period>") plus the
-	// already-rendered single-token form ("/ month"). The annotation must
-	// carry a non-empty `period_suffix` — that doubles as the "purchase price
-	// does not recur" gate; flat-unlimited rules skip the strip.
+	// Strip the WCS-injected period suffix from `value`. WCS's u() helper uses
+	// a NON-BREAKING space (U+00A0,  ) between `<price/>` and the
+	// separator (deliberate — keeps the price and period together visually);
+	// the space between the separator and the period word is a regular space.
+	// We have to match nbsp-leading candidates as well as regular-space ones.
+	// The annotation must carry a non-empty `period_suffix` — that doubles as
+	// the "purchase price does not recur" gate; flat-unlimited rules skip.
+	const NBSP = ' ';
 	const stripPeriod = ( value, annotation ) => {
 		if ( ! annotation || ! annotation.period_suffix ) {
 			return value;
@@ -49,9 +50,13 @@ if ( registerCheckoutFilters ) {
 		const word = annotation.period_word;
 		const candidates = [];
 		if ( word ) {
-			candidates.push( ` every ${ word }`, ` / ${ word }`, `/ ${ word }` );
+			// WCS subtotalPriceFormat: `<price/> every month`
+			candidates.push( `${ NBSP }every ${ word }`, ` every ${ word }` );
+			// WCS saleBadgePriceFormat: `<price/> / month`
+			candidates.push( `${ NBSP }/ ${ word }`, ` / ${ word }`, `/ ${ word }` );
 		}
-		candidates.push( ' ' + annotation.period_suffix, annotation.period_suffix );
+		// Already-rendered single-token form (legacy paths and our PHP-side suffix).
+		candidates.push( NBSP + annotation.period_suffix, ' ' + annotation.period_suffix, annotation.period_suffix );
 		let result = value;
 		for ( const candidate of candidates ) {
 			if ( candidate && result.includes( candidate ) ) {
