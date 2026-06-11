@@ -198,6 +198,9 @@ class WC_Product {
 	public function get_price() {
 		return $this->data['price'] ?? ( $this->meta['_price'] ?? $this->get_regular_price() );
 	}
+	public function set_price( $price ) {
+		$this->data['price'] = $price;
+	}
 	public function get_meta( $key, $single = true ) {
 		return $this->meta[ $key ] ?? '';
 	}

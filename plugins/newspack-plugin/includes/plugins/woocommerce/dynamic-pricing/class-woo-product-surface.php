@@ -136,9 +136,10 @@ final class WooProduct_Surface implements Price_Surface {
 	}
 
 	/**
-	 * Human-readable schedule: "$7.50 for 1 renewal, then $9.00 for 1 renewal,
-	 * then $10.00 / month". Cycle 1 (the purchase) is omitted — the order total
-	 * already states it; this row narrates the renewals.
+	 * Human-readable schedule: "$5.00 today, then $7.50 for 1 renewal, then
+	 * $10.00 / month". Anchored at today's charge so the sequence reads as one
+	 * narrative that agrees with the order total above it, then walks every
+	 * renewal price through the stabilized ongoing amount.
 	 *
 	 * @internal Public for tests.
 	 *
@@ -146,6 +147,9 @@ final class WooProduct_Surface implements Price_Surface {
 	 * @param \WC_Product $product  Subscription product (for the billing period label).
 	 */
 	public static function schedule_sentence( array $segments, \WC_Product $product ): string {
+		if ( empty( $segments ) ) {
+			return '';
+		}
 		$renewal_segments = Schedule_Projector::renewal_segments( $segments );
 
 		$period   = class_exists( '\WC_Subscriptions_Product' ) ? (string) \WC_Subscriptions_Product::get_period( $product ) : '';
@@ -155,8 +159,13 @@ final class WooProduct_Surface implements Price_Surface {
 			/* translators: 1: interval, 2: billing period (e.g. "2 months") */
 			: sprintf( _x( '%1$d %2$ss', 'billing interval, e.g. "2 months"', 'newspack-plugin' ), $interval, $period );
 
-		$phrases = [];
-		$count   = count( $renewal_segments );
+		$today   = wp_strip_all_tags( html_entity_decode( wc_price( $segments[0]['amount'] ), ENT_QUOTES ) );
+		$phrases = [
+			/* translators: %s: the price charged at checkout, e.g. "$5.00 today" */
+			sprintf( __( '%s today', 'newspack-plugin' ), $today ),
+		];
+
+		$count = count( $renewal_segments );
 		foreach ( $renewal_segments as $i => $segment ) {
 			$price = wp_strip_all_tags( html_entity_decode( wc_price( $segment['amount'] ), ENT_QUOTES ) );
 			if ( $i === $count - 1 ) {
@@ -169,7 +178,7 @@ final class WooProduct_Surface implements Price_Surface {
 			$phrases[] = sprintf( _n( '%1$s for %2$d renewal', '%1$s for %2$d renewals', $length, 'newspack-plugin' ), $price, $length );
 		}
 
-		/* translators: used to join schedule phrases: "$7.50 for 1 renewal, then $9.00 for 1 renewal, then $10.00 / month" */
+		/* translators: used to join schedule phrases: "$5.00 today, then $7.50 for 1 renewal, then $10.00 / month" */
 		return implode( __( ', then ', 'newspack-plugin' ), $phrases );
 	}
 
@@ -182,10 +191,23 @@ final class WooProduct_Surface implements Price_Surface {
 			return;
 		}
 
-		foreach ( $cart->get_cart() as $cart_item ) {
+		foreach ( $cart->get_cart() as $key => $cart_item ) {
 			if ( ! self::is_eligible_cart_item( $cart_item ) ) {
 				continue;
 			}
+
+			// Recurring carts are shallow clones sharing the main cart's product
+			// OBJECTS. Writing the projection price (cycle 2) to the shared
+			// instance would leak into the main cart's line-item display: stored
+			// totals keep the charged amount, but the item column re-reads the
+			// product object. Price a private copy instead.
+			if ( self::is_recurring_totals_pass() ) {
+				$cart_item['data'] = clone $cart_item['data'];
+				if ( isset( $cart->cart_contents[ $key ] ) ) {
+					$cart->cart_contents[ $key ]['data'] = $cart_item['data'];
+				}
+			}
+
 			$resolved = self::resolve_for_cart_item( $cart_item );
 			if ( $resolved ) {
 				$surface->apply( $resolved[0], $resolved[1] );

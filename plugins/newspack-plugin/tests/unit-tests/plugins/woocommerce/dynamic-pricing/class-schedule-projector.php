@@ -102,7 +102,7 @@ class Newspack_Test_Schedule_Projector extends WP_UnitTestCase {
 
 		// The cycle-1 segment spans renewals 1–2; the sentence must say so.
 		$this->assertSame(
-			'$6.00 for 2 renewals, then $10.00 / month',
+			'$6.00 today, then $6.00 for 2 renewals, then $10.00 / month',
 			WooProduct_Surface::schedule_sentence( $segments, $this->mock_subscription_product() )
 		);
 	}
@@ -113,7 +113,7 @@ class Newspack_Test_Schedule_Projector extends WP_UnitTestCase {
 		$this->assertFalse( Schedule_Projector::has_undisclosed_changes( $segments ) );
 	}
 
-	public function test_schedule_sentence_narrates_renewal_segments() {
+	public function test_schedule_sentence_narrates_today_and_every_renewal_segment() {
 		$segments = [
 			[ 'from_cycle' => 1, 'amount' => 5.0 ],
 			[ 'from_cycle' => 2, 'amount' => 7.5 ],
@@ -121,7 +121,34 @@ class Newspack_Test_Schedule_Projector extends WP_UnitTestCase {
 			[ 'from_cycle' => 4, 'amount' => 10.0 ],
 		];
 		$sentence = WooProduct_Surface::schedule_sentence( $segments, $this->mock_subscription_product() );
-		$this->assertSame( '$7.50 for 1 renewal, then $9.00 for 1 renewal, then $10.00 / month', $sentence );
+		$this->assertSame( '$5.00 today, then $7.50 for 1 renewal, then $9.00 for 1 renewal, then $10.00 / month', $sentence );
+	}
+
+	public function test_recurring_pass_prices_a_clone_not_the_shared_product_instance() {
+		// 50% at purchase, 75% from the first renewal.
+		$this->seed_rule( [
+			'steps' => [
+				[ 'at' => 1, 'calc_type' => Amount_Calculator::PERCENT_OF_BASE, 'value' => 50, 'label' => 'Intro' ],
+				[ 'at' => 2, 'calc_type' => Amount_Calculator::PERCENT_OF_BASE, 'value' => 75, 'label' => 'Second' ],
+			],
+		], 'stepped_by_cycle' );
+		Pricing_Engine::instance()->add_surface( new WooProduct_Surface() );
+
+		$product = new \WC_Product( [ 'id' => 17, 'type' => 'subscription', 'regular_price' => 10 ] );
+		$cart    = new \WC_Cart( [ 'k1' => [ 'data' => $product, 'key' => 'k1', 'quantity' => 1 ] ] );
+
+		// Main pass: the shared instance is priced at cycle 1.
+		WooProduct_Surface::on_calculate_totals( $cart );
+		$this->assertSame( 5.0, (float) $product->get_price() );
+
+		// Recurring projection pass — WCS shares product objects into the clone.
+		\WC_Subscriptions_Cart::set_calculation_type( 'recurring_total' );
+		WooProduct_Surface::on_calculate_totals( $cart );
+		\WC_Subscriptions_Cart::set_calculation_type( 'none' );
+
+		$this->assertSame( 5.0, (float) $product->get_price(), 'The main cart line-item display re-reads this instance: the projection must not leak into it.' );
+		$this->assertNotSame( $product, $cart->cart_contents['k1']['data'], 'The recurring cart must hold a private copy.' );
+		$this->assertSame( 7.5, (float) $cart->cart_contents['k1']['data']->get_price(), 'The private copy carries the cycle-2 projection.' );
 	}
 
 	private function seed_rule( array $params, string $strategy_id ): int {

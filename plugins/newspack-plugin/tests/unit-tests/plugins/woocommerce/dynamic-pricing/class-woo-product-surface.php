@@ -120,7 +120,7 @@ class Newspack_Test_WooProduct_Surface extends WP_UnitTestCase {
 	public function test_apply_sets_price_on_cart_item_product() {
 		$product = $this->getMockBuilder( \WC_Product::class )
 			->disableOriginalConstructor()
-			->addMethods( [ 'set_price' ] )
+			->onlyMethods( [ 'set_price' ] )
 			->getMock();
 		$product->expects( $this->once() )->method( 'set_price' )->with( 8.0 );
 
@@ -294,7 +294,7 @@ class Newspack_Test_WooProduct_Surface extends WP_UnitTestCase {
 	private function mock_product_with_set_price(): \WC_Product {
 		return $this->getMockBuilder( \WC_Product::class )
 			->disableOriginalConstructor()
-			->addMethods( [ 'set_price' ] )
+			->onlyMethods( [ 'set_price' ] )
 			->getMock();
 	}
 }

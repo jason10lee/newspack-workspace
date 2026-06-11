@@ -162,7 +162,7 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 		\Newspack\Dynamic_Pricing\WooProduct_Surface::reset_applied_registry( new \WC_Cart() );
 		$product = $this->getMockBuilder( \WC_Product::class )
 			->disableOriginalConstructor()
-			->addMethods( [ 'set_price' ] )
+			->onlyMethods( [ 'set_price' ] )
 			->getMock();
 		$ctx = new Pricing_Context(
 			'cart',
@@ -198,7 +198,7 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 		update_post_meta( $rule_id, '_params', wp_json_encode( [ 'steps' => [ [ 'at' => 1, 'calc_type' => 'fixed_price', 'value' => 5, 'label' => 'Intro' ] ] ] ) );
 
 		// Seed the applied registry as checkout would.
-		$product = $this->getMockBuilder( \WC_Product::class )->disableOriginalConstructor()->addMethods( [ 'set_price' ] )->getMock();
+		$product = $this->getMockBuilder( \WC_Product::class )->disableOriginalConstructor()->onlyMethods( [ 'set_price' ] )->getMock();
 		$ctx = new Pricing_Context( 'cart', $product, null, 10.0, [ 'completed_cycles' => 1 ], [ 'data' => $product, 'key' => 'pin_key' ] );
 		$d   = new Price_Decision( 5.0, Price_Decision::DURABLE, 'step_at_1_fixed_price', 'Intro', 'stepped_by_cycle', 1 );
 		$d->rule_id = (string) $rule_id;
@@ -241,7 +241,7 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 		update_post_meta( $rule_id, '_strategy_id', 'stepped_by_cycle' );
 		update_post_meta( $rule_id, '_application', 'current' );
 
-		$product = $this->getMockBuilder( \WC_Product::class )->disableOriginalConstructor()->addMethods( [ 'set_price' ] )->getMock();
+		$product = $this->getMockBuilder( \WC_Product::class )->disableOriginalConstructor()->onlyMethods( [ 'set_price' ] )->getMock();
 		$ctx = new Pricing_Context( 'cart', $product, null, 10.0, [], [ 'data' => $product, 'key' => 'live_key' ] );
 		$d   = new Price_Decision( 5.0, Price_Decision::DURABLE, 'r', 'l', 'stepped_by_cycle', 1 );
 		$d->rule_id = (string) $rule_id;
