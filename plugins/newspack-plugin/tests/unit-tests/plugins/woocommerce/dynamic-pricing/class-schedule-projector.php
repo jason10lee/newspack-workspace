@@ -30,6 +30,11 @@ if ( ! function_exists( 'get_woocommerce_currency' ) ) {
 		return get_option( 'woocommerce_currency', 'USD' );
 	}
 }
+if ( ! function_exists( 'wc_format_sale_price' ) ) {
+	function wc_format_sale_price( $regular, $sale ) {
+		return '<del>' . $regular . '</del> <ins>' . $sale . '</ins>';
+	}
+}
 
 /**
  * @group Dynamic_Pricing
@@ -122,6 +127,65 @@ class Newspack_Test_Schedule_Projector extends WP_UnitTestCase {
 		];
 		$sentence = WooProduct_Surface::schedule_sentence( $segments, $this->mock_subscription_product() );
 		$this->assertSame( '$5.00 today, then $7.50 for 1 renewal, then $9.00 for 1 renewal, then $10.00 / month', $sentence );
+	}
+
+	public function test_annotation_gated_on_publicize_and_filters_render() {
+		$rule_id = $this->seed_rule( [
+			'steps' => [
+				[ 'at' => 1, 'calc_type' => Amount_Calculator::PERCENT_OF_BASE, 'value' => 50, 'label' => 'Intro' ],
+				[ 'at' => 2, 'calc_type' => Amount_Calculator::PERCENT_OF_BASE, 'value' => 75, 'label' => 'Second' ],
+			],
+		], 'stepped_by_cycle' );
+		Pricing_Engine::instance()->add_surface( new WooProduct_Surface() );
+
+		$product   = new \WC_Product( [ 'id' => 17, 'type' => 'subscription', 'regular_price' => 10, 'name' => 'Test Sub' ] );
+		$cart_item = [ 'data' => $product, 'key' => 'ann1', 'quantity' => 1 ];
+		$cart      = new \WC_Cart( [ 'ann1' => $cart_item ] );
+
+		// Silent rule: applied, audited, but NOT annotated.
+		WooProduct_Surface::on_calculate_totals( $cart );
+		$this->assertNotNull( WooProduct_Surface::get_applied_for( 'ann1' ), 'Silent rules are still audited.' );
+		$this->assertNull( WooProduct_Surface::get_annotation_for( 'ann1' ), 'Silent rules must not annotate.' );
+		$this->assertSame( '$5.00 / month', WooProduct_Surface::filter_cart_item_subtotal( '$5.00 / month', $cart_item, 'ann1' ), 'Subtotal untouched for silent rules.' );
+
+		// Publicized rule: annotated with strikethrough + badge + qualifier.
+		update_post_meta( $rule_id, '_publicize', '1' );
+		CPT_Pricing_Rule_Repository::flush_cache();
+		WooProduct_Surface::reset_applied_registry( new \WC_Cart() );
+		WooProduct_Surface::on_calculate_totals( $cart );
+
+		$annotation = WooProduct_Surface::get_annotation_for( 'ann1' );
+		$this->assertIsArray( $annotation );
+		$this->assertSame( 'Intro', $annotation['label'] );
+
+		$subtotal = WooProduct_Surface::filter_cart_item_subtotal( '$5.00 / month', $cart_item, 'ann1' );
+		$this->assertStringContainsString( '$10.00', $subtotal, 'Regular price shown for comparison.' );
+		$this->assertStringContainsString( '$5.00 / month', $subtotal, 'Charged subtotal preserved.' );
+		$this->assertStringContainsString( 'first month', $subtotal, 'Purchase price does not recur (cycle 2 differs): qualify the "/ month" suffix.' );
+
+		$name = WooProduct_Surface::filter_cart_item_name( 'Test Sub', $cart_item, 'ann1' );
+		$this->assertStringContainsString( 'newspack-dp-badge', $name );
+		$this->assertStringContainsString( 'Intro', $name );
+
+		$payload = WooProduct_Surface::store_api_cart_item_data( $cart_item );
+		$this->assertTrue( $payload['publicized'] );
+		$this->assertSame( ' — Intro', $payload['name_suffix'] );
+		$this->assertSame( ' (regularly $10.00)', $payload['price_suffix'] );
+	}
+
+	public function test_no_first_cycle_qualifier_when_purchase_price_recurs() {
+		$rule_id = $this->seed_rule( [ 'calc_type' => Amount_Calculator::PERCENT_OF_BASE, 'value' => 80, 'cycles_limit' => 0, 'label' => 'Member' ], 'simple_price' );
+		update_post_meta( $rule_id, '_publicize', '1' );
+		CPT_Pricing_Rule_Repository::flush_cache();
+		Pricing_Engine::instance()->add_surface( new WooProduct_Surface() );
+
+		$product   = new \WC_Product( [ 'id' => 17, 'type' => 'subscription', 'regular_price' => 10, 'name' => 'Test Sub' ] );
+		$cart_item = [ 'data' => $product, 'key' => 'flat1', 'quantity' => 1 ];
+		WooProduct_Surface::on_calculate_totals( new \WC_Cart( [ 'flat1' => $cart_item ] ) );
+
+		$subtotal = WooProduct_Surface::filter_cart_item_subtotal( '$8.00 / month', $cart_item, 'flat1' );
+		$this->assertStringContainsString( '$10.00', $subtotal );
+		$this->assertStringNotContainsString( 'first month', $subtotal, 'Flat unlimited: the charged price IS the recurring price; no qualifier.' );
 	}
 
 	public function test_recurring_pass_prices_a_clone_not_the_shared_product_instance() {

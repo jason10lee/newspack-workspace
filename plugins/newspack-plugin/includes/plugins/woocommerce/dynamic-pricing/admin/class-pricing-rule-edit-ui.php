@@ -159,11 +159,11 @@ final class Pricing_Rule_Edit_UI {
 			<tr>
 				<th><label for="newspack_dp_publicize"><?php esc_html_e( 'Show pricing details at checkout', 'newspack-plugin' ); ?></label></th>
 				<td>
-					<label style="opacity: 0.6">
-						<input type="checkbox" name="newspack_dp_publicize" id="newspack_dp_publicize" value="1" disabled />
-						<?php esc_html_e( 'Display this rule\'s name and the regular price comparison in the cart and at checkout.', 'newspack-plugin' ); ?>
+					<label>
+						<input type="checkbox" name="newspack_dp_publicize" id="newspack_dp_publicize" value="1" <?php checked( $publicize ); ?> />
+						<?php esc_html_e( 'Display this rule\'s name and the regular price comparison on the cart line at checkout.', 'newspack-plugin' ); ?>
 					</label>
-					<p class="description"><strong><?php esc_html_e( 'Coming soon.', 'newspack-plugin' ); ?></strong> <?php esc_html_e( 'The recurring totals shown to readers don\'t yet account for stepped pricing or per-cycle limits; the previous implementation could present incorrect numbers, so it has been removed pending a rework.', 'newspack-plugin' ); ?></p>
+					<p class="description"><?php esc_html_e( 'When off, the adjusted price appears on the line with no explanation. Recurring totals and the price schedule are always shown accurately either way.', 'newspack-plugin' ); ?></p>
 				</td>
 			</tr>
 		</table>
@@ -403,10 +403,8 @@ final class Pricing_Rule_Edit_UI {
 			update_post_meta( $post_id, '_active_until', $until_ts );
 		}
 
-		// The publicize checkbox is currently disabled in the UI (see the rule edit
-		// screen) so the form never submits a value. Force-clear the meta so any
-		// previously-checked rule is wiped to a clean state for the rework.
-		update_post_meta( $post_id, '_publicize', '' );
+		$publicize = isset( $_POST['newspack_dp_publicize'] ) && '1' === sanitize_text_field( wp_unslash( $_POST['newspack_dp_publicize'] ) );
+		update_post_meta( $post_id, '_publicize', $publicize ? '1' : '' );
 
 		// Params shape follows the selected strategy's config_schema.
 		if ( 'simple_price' === $strategy_id ) {

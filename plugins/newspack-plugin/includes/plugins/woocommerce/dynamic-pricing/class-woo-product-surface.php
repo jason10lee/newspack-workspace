@@ -56,11 +56,22 @@ final class WooProduct_Surface implements Price_Surface {
 	/**
 	 * Request-scoped registry of every applied decision, keyed by cart item key.
 	 * Feeds the operator-facing audit trail (order/subscription notes at
-	 * checkout) — which records every rule interaction unconditionally.
+	 * checkout) — which records every rule interaction unconditionally — and,
+	 * for entries with `publicize`, the reader-facing line annotations.
 	 *
-	 * @var array<string, array{rule_id: string, label: string, reason: string, amount: float, original: float, item_name: string, quantity: int}>
+	 * @var array<string, array{rule_id: string, label: string, reason: string, amount: float, original: float, item_name: string, quantity: int, publicize: bool}>
 	 */
 	private static array $applied_decisions = [];
+
+	/**
+	 * Display-only memo for lazy annotation resolution, keyed by cart item key.
+	 * `array` = resolved entry; `false` = resolved to "no decision" (negative
+	 * memo so display filters don't re-run the engine per callback). Separate
+	 * from $applied_decisions, which records actual applies for the audit trail.
+	 *
+	 * @var array<string, array|false>
+	 */
+	private static array $display_memo = [];
 
 	public function id(): string        { return 'woo_product'; }
 	public function is_stateful(): bool { return false; }
@@ -101,9 +112,29 @@ final class WooProduct_Surface implements Price_Surface {
 		add_action( 'woocommerce_cart_totals_after_order_total', [ __CLASS__, 'render_schedule_rows' ], 15 );
 		add_action( 'woocommerce_review_order_after_order_total', [ __CLASS__, 'render_schedule_rows' ], 15 );
 
-		// The Layer 1 purchase-price annotation (strikethrough + rule name,
-		// gated on Pricing_Rule::$publicize) remains removed pending UX; the
-		// entity field and the disabled rule-edit checkbox are in place for it.
+		// Reader-facing price display, Layer 1 (specs 05 §4): annotate the
+		// PURCHASE line of publicize-flagged rules with the regular-price
+		// comparison and the rule's name. Annotation only — the totals section
+		// (Layer 0) and the schedule row (Layer 2a) own the renewal story.
+		add_filter( 'woocommerce_cart_item_subtotal', [ __CLASS__, 'filter_cart_item_subtotal' ], 20, 3 );
+		add_filter( 'woocommerce_cart_item_name', [ __CLASS__, 'filter_cart_item_name' ], 20, 3 );
+
+		// Newspack Blocks Modal Checkout — its JS does textContent = price_summary
+		// so HTML from the filters above is stripped from the <strong> wrapper.
+		// Hook the modal's own summary filter and append plain-text rule info.
+		add_filter( 'newspack_modal_checkout_price_summary', [ __CLASS__, 'filter_modal_price_summary' ], 20, 2 );
+
+		// WC Blocks Cart & Checkout — StoreAPI cart-item extension + JS filters
+		// (see src/other-scripts/dynamic-pricing-blocks-checkout/). Strings are
+		// composed and translated server-side; the JS only appends them.
+		// `woocommerce_blocks_loaded` fires before our plugins_loaded priority,
+		// so call directly when the registrar exists; defer otherwise.
+		if ( function_exists( 'woocommerce_store_api_register_endpoint_data' ) ) {
+			self::register_store_api_extension();
+		} else {
+			add_action( 'woocommerce_blocks_loaded', [ __CLASS__, 'register_store_api_extension' ] );
+		}
+		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_blocks_checkout_script' ] );
 	}
 
 	/**
@@ -151,13 +182,7 @@ final class WooProduct_Surface implements Price_Surface {
 			return '';
 		}
 		$renewal_segments = Schedule_Projector::renewal_segments( $segments );
-
-		$period   = class_exists( '\WC_Subscriptions_Product' ) ? (string) \WC_Subscriptions_Product::get_period( $product ) : '';
-		$interval = class_exists( '\WC_Subscriptions_Product' ) ? max( 1, (int) \WC_Subscriptions_Product::get_interval( $product ) ) : 1;
-		$per      = 1 === $interval
-			? $period
-			/* translators: 1: interval, 2: billing period (e.g. "2 months") */
-			: sprintf( _x( '%1$d %2$ss', 'billing interval, e.g. "2 months"', 'newspack-plugin' ), $interval, $period );
+		$per              = self::billing_period_label( $product );
 
 		$today   = wp_strip_all_tags( html_entity_decode( wc_price( $segments[0]['amount'] ), ENT_QUOTES ) );
 		$phrases = [
@@ -357,16 +382,25 @@ final class WooProduct_Surface implements Price_Surface {
 		}
 
 		if ( isset( $ctx->target['key'] ) && is_string( $ctx->target['key'] ) ) {
-			self::$applied_decisions[ $ctx->target['key'] ] = [
-				'rule_id'   => (string) ( $d->rule_id ?? '' ),
-				'label'     => $d->label,
-				'reason'    => $d->reason,
-				'amount'    => $d->amount,
-				'original'  => $ctx->base_price,
-				'item_name' => (string) $ctx->product->get_name(),
-				'quantity'  => isset( $ctx->target['quantity'] ) ? max( 1, (int) $ctx->target['quantity'] ) : 1,
-			];
+			self::$applied_decisions[ $ctx->target['key'] ] = self::decision_entry( $ctx, $d );
 		}
+	}
+
+	/**
+	 * The one construction site for a decision-registry entry — used by apply()
+	 * and the lazy annotation resolver so audit and display can never disagree.
+	 */
+	private static function decision_entry( Pricing_Context $ctx, Price_Decision $d ): array {
+		return [
+			'rule_id'   => (string) ( $d->rule_id ?? '' ),
+			'label'     => $d->label,
+			'reason'    => $d->reason,
+			'amount'    => $d->amount,
+			'original'  => $ctx->base_price,
+			'item_name' => (string) $ctx->product->get_name(),
+			'quantity'  => isset( $ctx->target['quantity'] ) ? max( 1, (int) $ctx->target['quantity'] ) : 1,
+			'publicize' => (bool) $d->publicize,
+		];
 	}
 
 	/**
@@ -386,7 +420,262 @@ final class WooProduct_Surface implements Price_Surface {
 		// the charged amounts the checkout note writers are about to read.
 		if ( $cart instanceof \WC_Cart && ! self::is_recurring_totals_pass() ) {
 			self::$applied_decisions = [];
+			self::$display_memo      = [];
 		}
+	}
+
+	/**
+	 * The reader-facing annotation for a cart item: the applied (or lazily
+	 * resolved) decision entry of a publicize-flagged rule, or null.
+	 *
+	 * Why lazy: on some render paths (notably the Newspack modal checkout's
+	 * `render_before_checkout_form`), cart item filters fire BEFORE this
+	 * request's `calculate_totals()` populates the applied registry. Re-resolve
+	 * from the cart item directly and memoize; later callbacks hit the memo.
+	 *
+	 * @internal Public for tests.
+	 */
+	public static function get_annotation_for( string $cart_item_key ): ?array {
+		$entry = self::$applied_decisions[ $cart_item_key ] ?? null;
+
+		if ( null === $entry && array_key_exists( $cart_item_key, self::$display_memo ) ) {
+			$memo  = self::$display_memo[ $cart_item_key ];
+			$entry = is_array( $memo ) ? $memo : null;
+		} elseif ( null === $entry ) {
+			// Cart not booted yet — don't memoize, a later callback may succeed.
+			if ( ! function_exists( 'WC' ) || ! WC() || ! WC()->cart ) {
+				return null;
+			}
+			$cart_item = WC()->cart->get_cart_item( $cart_item_key );
+			$resolved  = is_array( $cart_item ) && self::is_eligible_cart_item( $cart_item )
+				? self::resolve_for_cart_item( $cart_item )
+				: null;
+			if ( ! $resolved ) {
+				self::$display_memo[ $cart_item_key ] = false;
+				return null;
+			}
+			$entry = self::decision_entry( $resolved[0], $resolved[1] );
+
+			self::$display_memo[ $cart_item_key ] = $entry;
+		}
+
+		return $entry && ! empty( $entry['publicize'] ) ? $entry : null;
+	}
+
+	/**
+	 * Filter: when a publicized rule prices a line, show the regular price
+	 * struck through next to the charged subtotal, plus a "first month"
+	 * qualifier when the purchase price does not recur. No renewal forecasting
+	 * here — the recurring totals and the schedule row own that story.
+	 *
+	 * @param string $subtotal      Already-formatted subtotal (includes WCS "/ month").
+	 * @param array  $cart_item     Cart item array.
+	 * @param string $cart_item_key Cart item key.
+	 */
+	public static function filter_cart_item_subtotal( string $subtotal, array $cart_item, string $cart_item_key ): string {
+		$a = self::get_annotation_for( $cart_item_key );
+		if ( ! $a || abs( $a['original'] - $a['amount'] ) < 0.01 ) {
+			return $subtotal;
+		}
+		$qty           = isset( $cart_item['quantity'] ) ? max( 1, (int) $cart_item['quantity'] ) : 1;
+		$original_line = (float) $a['original'] * $qty;
+
+		// wc_format_sale_price produces WC's standard <del>/<ins> sale markup
+		// (with screen-reader text) that all WC themes style.
+		$html = function_exists( 'wc_format_sale_price' )
+			? wc_format_sale_price( wc_price( $original_line ), $subtotal )
+			: $subtotal;
+
+		$qualifier = self::first_cycle_qualifier( $cart_item );
+		if ( '' !== $qualifier ) {
+			$html .= ' <small class="newspack-dp-first-cycle" style="display:block;color:#666;font-weight:normal">' . esc_html( $qualifier ) . '</small>';
+		}
+
+		return $html;
+	}
+
+	/**
+	 * Filter: append a small badge with the rule's reader-facing name to the
+	 * cart item name. Label-less publicized rules get the price annotation only.
+	 */
+	public static function filter_cart_item_name( string $name, array $cart_item, string $cart_item_key ): string {
+		$a = self::get_annotation_for( $cart_item_key );
+		if ( ! $a || '' === (string) $a['label'] ) {
+			return $name;
+		}
+		return $name . ' <span class="newspack-dp-badge" style="display:inline-block;padding:2px 8px;margin-left:6px;border-radius:10px;background:#e7f5ff;color:#1c7ed6;font-size:11px;font-weight:600;vertical-align:middle">' . esc_html( $a['label'] ) . '</span>';
+	}
+
+	/**
+	 * Filter: Newspack Blocks Modal Checkout price summary. Output is plain text
+	 * (the modal's JS does textContent = price_summary), so no HTML — append
+	 * "(Label — regularly $10.00)" inline.
+	 *
+	 * @param string $summary    Pre-formatted summary like "Test Subscription: $5.00 / month".
+	 * @param int    $product_id Product (or variation) id displayed in the modal.
+	 */
+	public static function filter_modal_price_summary( string $summary, $product_id ): string {
+		if ( ! function_exists( 'WC' ) || ! WC() || ! WC()->cart ) {
+			return $summary;
+		}
+		$pid = (int) $product_id;
+		foreach ( WC()->cart->get_cart() as $cart_item_key => $cart_item ) {
+			$item_pid = (int) ( ! empty( $cart_item['variation_id'] ) ? $cart_item['variation_id'] : ( $cart_item['product_id'] ?? 0 ) );
+			if ( $item_pid !== $pid ) {
+				continue;
+			}
+			$a = self::get_annotation_for( (string) $cart_item_key );
+			if ( ! $a || abs( $a['original'] - $a['amount'] ) < 0.01 ) {
+				return $summary;
+			}
+			$original_plain = wp_strip_all_tags( html_entity_decode( wc_price( (float) $a['original'] ), ENT_QUOTES ) );
+			$descriptor     = '' !== (string) $a['label']
+				/* translators: 1: rule label, 2: regular price */
+				? sprintf( __( '%1$s — regularly %2$s', 'newspack-plugin' ), $a['label'], $original_plain )
+				/* translators: %s: regular price */
+				: sprintf( __( 'regularly %s', 'newspack-plugin' ), $original_plain );
+			return sprintf( '%1$s (%2$s)', $summary, $descriptor );
+		}
+		return $summary;
+	}
+
+	/**
+	 * "first month" / "first 2 months" when the purchase price does not carry
+	 * into the first renewal — the qualifier for WCS's native "/ month" suffix,
+	 * which otherwise implies the charged price recurs. Empty when it does.
+	 *
+	 * Display-path code: never allowed to take checkout down, so projection
+	 * failures degrade to no qualifier.
+	 */
+	private static function first_cycle_qualifier( array $cart_item ): string {
+		try {
+			$segments = Schedule_Projector::project_for_cart_item( $cart_item );
+		} catch ( \Throwable $e ) {
+			return '';
+		}
+		if ( empty( $segments ) ) {
+			return '';
+		}
+		$renewals = Schedule_Projector::renewal_segments( $segments );
+		if ( empty( $renewals ) || abs( $segments[0]['amount'] - $renewals[0]['amount'] ) < 0.01 ) {
+			return '';
+		}
+		/* translators: %s: billing period, e.g. "month" or "2 months" — qualifies the charged price as purchase-only */
+		return sprintf( __( 'first %s', 'newspack-plugin' ), self::billing_period_label( $cart_item['data'] ) );
+	}
+
+	/**
+	 * "month" or, for interval > 1, "2 months" — shared by the schedule
+	 * sentence and the first-cycle qualifier.
+	 */
+	private static function billing_period_label( \WC_Product $product ): string {
+		$period   = class_exists( '\WC_Subscriptions_Product' ) ? (string) \WC_Subscriptions_Product::get_period( $product ) : '';
+		$interval = class_exists( '\WC_Subscriptions_Product' ) ? max( 1, (int) \WC_Subscriptions_Product::get_interval( $product ) ) : 1;
+		return 1 === $interval
+			? $period
+			/* translators: 1: interval, 2: billing period (e.g. "2 months") */
+			: sprintf( _x( '%1$d %2$ss', 'billing interval, e.g. "2 months"', 'newspack-plugin' ), $interval, $period );
+	}
+
+	/**
+	 * StoreAPI extension: attach annotation data to each cart item so WC Blocks
+	 * Cart/Checkout can read it via `extensions['newspack-dynamic-pricing']`.
+	 * The JS side appends the server-composed strings — see
+	 * `src/other-scripts/dynamic-pricing-blocks-checkout/`.
+	 */
+	public static function register_store_api_extension(): void {
+		if ( ! function_exists( 'woocommerce_store_api_register_endpoint_data' ) ) {
+			return;
+		}
+		\woocommerce_store_api_register_endpoint_data(
+			[
+				'endpoint'        => 'cart-item',
+				'namespace'       => 'newspack-dynamic-pricing',
+				'data_callback'   => [ __CLASS__, 'store_api_cart_item_data' ],
+				'schema_callback' => [ __CLASS__, 'store_api_cart_item_schema' ],
+			]
+		);
+	}
+
+	/**
+	 * StoreAPI cart-item extension payload. Strings are display-ready and
+	 * server-translated; the JS filters append them verbatim.
+	 */
+	public static function store_api_cart_item_data( array $cart_item ): array {
+		$key = isset( $cart_item['key'] ) && is_string( $cart_item['key'] ) ? $cart_item['key'] : '';
+		$a   = '' === $key ? null : self::get_annotation_for( $key );
+		if ( ! $a || abs( $a['original'] - $a['amount'] ) < 0.01 ) {
+			return [ 'publicized' => false ];
+		}
+		$original_plain = wp_strip_all_tags( html_entity_decode( wc_price( (float) $a['original'] ), ENT_QUOTES ) );
+		return [
+			'publicized'   => true,
+			'name_suffix'  => '' === (string) $a['label'] ? '' : sprintf( ' — %s', $a['label'] ),
+			/* translators: %s: regular price */
+			'price_suffix' => ' ' . sprintf( __( '(regularly %s)', 'newspack-plugin' ), $original_plain ),
+		];
+	}
+
+	/**
+	 * StoreAPI cart-item extension schema.
+	 */
+	public static function store_api_cart_item_schema(): array {
+		return [
+			'publicized'   => [
+				'description' => __( 'Whether a publicized pricing rule is applied to this item.', 'newspack-plugin' ),
+				'type'        => 'boolean',
+				'context'     => [ 'view', 'edit' ],
+				'readonly'    => true,
+			],
+			'name_suffix'  => [
+				'description' => __( 'Display-ready, translated suffix appended to the cart item name.', 'newspack-plugin' ),
+				'type'        => 'string',
+				'context'     => [ 'view', 'edit' ],
+				'readonly'    => true,
+			],
+			'price_suffix' => [
+				'description' => __( 'Display-ready, translated suffix appended to the item price.', 'newspack-plugin' ),
+				'type'        => 'string',
+				'context'     => [ 'view', 'edit' ],
+				'readonly'    => true,
+			],
+		];
+	}
+
+	/**
+	 * Enqueue the WC Blocks Cart/Checkout filter JS. The bundle is built by
+	 * newspack-plugin's webpack as `dist/other-scripts/dynamic-pricing-blocks-checkout.js`;
+	 * absent build output no-ops gracefully.
+	 */
+	public static function enqueue_blocks_checkout_script(): void {
+		if ( ! function_exists( 'is_cart' ) || ! function_exists( 'is_checkout' ) ) {
+			return;
+		}
+		if ( ! is_cart() && ! is_checkout() ) {
+			return;
+		}
+		// No rules on the site → the filters would never have data to render.
+		if ( ! CPT_Pricing_Rule_Repository::has_policies() ) {
+			return;
+		}
+		if ( ! class_exists( '\Newspack\Newspack' ) || ! defined( 'NEWSPACK_ABSPATH' ) ) {
+			return;
+		}
+		$asset_file = NEWSPACK_ABSPATH . 'dist/other-scripts/dynamic-pricing-blocks-checkout.asset.php';
+		if ( ! file_exists( $asset_file ) ) {
+			return;
+		}
+		$asset = include $asset_file;
+		// Explicitly declare wc-blocks-checkout so WC's dependency detection
+		// doesn't warn; merge with whatever webpack inferred.
+		$deps = array_unique( array_merge( [ 'wc-blocks-checkout' ], $asset['dependencies'] ?? [] ) );
+		wp_enqueue_script(
+			'newspack-dynamic-pricing-blocks-checkout',
+			\Newspack\Newspack::plugin_url() . '/dist/other-scripts/dynamic-pricing-blocks-checkout.js',
+			$deps,
+			$asset['version'] ?? '1.0',
+			true
+		);
 	}
 
 	/**
