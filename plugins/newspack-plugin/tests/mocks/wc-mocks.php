@@ -216,6 +216,25 @@ class WC_Cart {
 	}
 }
 
+if ( ! class_exists( 'WC_Subscriptions_Cart' ) ) {
+	/**
+	 * Minimal WCS cart shim: only the calculation-type flag the dynamic-pricing
+	 * surface reads to distinguish the main cart pass from the recurring-totals
+	 * projection pass. Deliberately omits get_recurring_cart_key — code paths
+	 * guard on method_exists and skip when absent.
+	 */
+	class WC_Subscriptions_Cart {
+		public static $calculation_type = 'none';
+		public static function get_calculation_type() {
+			return self::$calculation_type;
+		}
+		public static function set_calculation_type( $type ) {
+			self::$calculation_type = $type;
+			return $type;
+		}
+	}
+}
+
 /**
  * Register a mock product in the global products database.
  *

@@ -23,8 +23,14 @@ if ( ! function_exists( 'wc_price' ) ) {
 class Newspack_Test_WooProduct_Surface extends WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
+		\WC_Subscriptions_Cart::set_calculation_type( 'none' );
 		// Clear the request-scoped applied-decisions registry between tests.
 		WooProduct_Surface::reset_applied_registry( new \WC_Cart() );
+	}
+
+	public function tear_down() {
+		\WC_Subscriptions_Cart::set_calculation_type( 'none' );
+		parent::tear_down();
 	}
 	public function test_id_is_stable() {
 		$this->assertSame( 'woo_product', ( new WooProduct_Surface() )->id() );
@@ -157,6 +163,52 @@ class Newspack_Test_WooProduct_Surface extends WP_UnitTestCase {
 		$this->assertSame( 5.0, $applied['amount'] );
 		$this->assertSame( 10.0, $applied['original'] );
 		$this->assertSame( 2, $applied['quantity'] );
+	}
+
+	public function test_recurring_projection_pass_prices_cycle_two() {
+		$product = $this->getMockBuilder( \WC_Product::class )
+			->disableOriginalConstructor()
+			->onlyMethods( [ 'get_type', 'get_regular_price' ] )
+			->getMock();
+		$product->method( 'get_type' )->willReturn( 'subscription' );
+		$product->method( 'get_regular_price' )->willReturn( '10' );
+
+		$surface = new WooProduct_Surface();
+
+		$main = $surface->context( [ 'data' => $product ], WooProduct_Surface::TRIGGER_CART );
+		$this->assertSame( 1, $main->signals['completed_cycles'], 'Main pass prices the purchase (cycle 1).' );
+
+		\WC_Subscriptions_Cart::set_calculation_type( 'recurring_total' );
+		$projection = $surface->context( [ 'data' => $product ], WooProduct_Surface::TRIGGER_CART );
+		$this->assertSame( 2, $projection->signals['completed_cycles'], 'Recurring projection prices the upcoming renewal (cycle 2).' );
+		$this->assertSame( Pricing_Context::INTENT_ACQUISITION, $projection->intent, 'Projection keeps acquisition intent — rule sourcing must mirror what will be locked at checkout.' );
+	}
+
+	public function test_recurring_projection_pass_does_not_record_audit() {
+		\WC_Subscriptions_Cart::set_calculation_type( 'recurring_total' );
+
+		$product = $this->mock_product_with_set_price();
+		$ctx = new Pricing_Context( WooProduct_Surface::TRIGGER_CART, $product, null, 10.0, [ 'completed_cycles' => 2 ], [ 'data' => $product, 'key' => 'projection_key' ] );
+		$d   = new Price_Decision( 7.5, Price_Decision::DURABLE, 'step_at_2_percent_of_base', 'Second', 'stepped_by_cycle', 2 );
+		$d->rule_id = '18';
+
+		( new WooProduct_Surface() )->apply( $ctx, $d );
+
+		$this->assertNull( WooProduct_Surface::get_applied_for( 'projection_key' ), 'Projection forecasts must not overwrite the charged amounts in the audit registry.' );
+	}
+
+	public function test_reset_skipped_during_recurring_projection() {
+		// Populate on the main pass...
+		$product = $this->mock_product_with_set_price();
+		$ctx = new Pricing_Context( WooProduct_Surface::TRIGGER_CART, $product, null, 10.0, [], [ 'data' => $product, 'key' => 'survives_key' ] );
+		$d   = new Price_Decision( 5.0, Price_Decision::DURABLE, 'r', 'l', 'simple_price', 1 );
+		( new WooProduct_Surface() )->apply( $ctx, $d );
+
+		// ...then the recurring clone's calculate_totals fires the reset hook.
+		\WC_Subscriptions_Cart::set_calculation_type( 'recurring_total' );
+		WooProduct_Surface::reset_applied_registry( new \WC_Cart() );
+
+		$this->assertNotNull( WooProduct_Surface::get_applied_for( 'survives_key' ), 'The charged amounts must survive the projection pass for the checkout note writers.' );
 	}
 
 	public function test_reset_clears_applied_registry() {

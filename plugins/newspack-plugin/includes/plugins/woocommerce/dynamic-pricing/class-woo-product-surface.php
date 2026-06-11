@@ -15,6 +15,18 @@
  * `payment_complete` fires, the stateful `Subscription_Surface` owns all
  * subsequent repricing (cycles 2+).
  *
+ * Recurring-totals projection: WCS clones the cart per billing group and
+ * recalculates the clone with `WC_Subscriptions_Cart::get_calculation_type()
+ * === 'recurring_total'`. Those recurring carts feed every "Recurring totals"
+ * display (legacy cart/checkout, the WC Blocks recurring panel) AND the
+ * subscription's initial line items at checkout. During that pass this surface
+ * resolves `completed_cycles = 2` — the upcoming renewal — so the recurring
+ * total shown to the reader and the subscription's created recurring price are
+ * the cycle-2 amount, matching exactly what Subscription_Surface will charge
+ * (it already reprices to cycle 2 when the parent payment completes). The
+ * projection pass never touches the audit registry and skips the no-harm clamp
+ * (it is a forecast, not a charge).
+ *
  * Two classes of cart item are therefore ineligible (see is_eligible_cart_item):
  *
  * 1. WCS renewal-family items (`subscription_renewal`, `subscription_resubscribe`,
@@ -53,6 +65,17 @@ final class WooProduct_Surface implements Price_Surface {
 	public function id(): string        { return 'woo_product'; }
 	public function is_stateful(): bool { return false; }
 	public function triggers(): array   { return [ self::TRIGGER_CART ]; }
+
+	/**
+	 * Whether the current cart calculation is WCS's recurring-totals projection
+	 * pass (a cloned cart representing future renewals) rather than the main
+	 * cart (the purchase being charged now). See the file header.
+	 */
+	private static function is_recurring_totals_pass(): bool {
+		return class_exists( '\WC_Subscriptions_Cart' )
+			&& method_exists( '\WC_Subscriptions_Cart', 'get_calculation_type' )
+			&& 'recurring_total' === \WC_Subscriptions_Cart::get_calculation_type();
+	}
 
 	public static function init(): void {
 		add_action( 'woocommerce_before_calculate_totals', [ __CLASS__, 'on_calculate_totals' ], 20, 1 );
@@ -98,11 +121,16 @@ final class WooProduct_Surface implements Price_Surface {
 	/**
 	 * Single resolution path for a cart item — used by the totals pass.
 	 *
-	 * No-harm clamp: at acquisition, a rule may only ever lower the price the
-	 * customer would otherwise pay. The decision computes off the catalog base
-	 * (regular/WCS price), so on a product with an active sale price the result
-	 * could exceed the effective price the customer was shown — in that case the
-	 * rule abstains and WC's native pricing stands.
+	 * No-harm clamp (main pass only): at acquisition, a rule may only ever lower
+	 * the price the customer would otherwise pay. The decision computes off the
+	 * catalog base (regular/WCS price), so on a product with an active sale price
+	 * the result could exceed the effective price the customer was shown — in
+	 * that case the rule abstains and WC's native pricing stands. The recurring
+	 * projection pass is exempt: it forecasts what renewals will charge (which
+	 * can legitimately exceed the discounted purchase price — a stepped rule
+	 * stepping up IS the product), and the clone's product objects already carry
+	 * the main pass's written price, so clamping against them would freeze the
+	 * projection at cycle 1.
 	 *
 	 * @param array $cart_item Cart item array (must already be eligible).
 	 * @return array{0: Pricing_Context, 1: Price_Decision}|null
@@ -118,9 +146,11 @@ final class WooProduct_Surface implements Price_Surface {
 			return null;
 		}
 
-		$effective = (float) $cart_item['data']->get_price();
-		if ( $effective > 0 && $d->amount > $effective + 0.005 ) {
-			return null;
+		if ( ! self::is_recurring_totals_pass() ) {
+			$effective = (float) $cart_item['data']->get_price();
+			if ( $effective > 0 && $d->amount > $effective + 0.005 ) {
+				return null;
+			}
 		}
 
 		return [ $ctx, $d ];
@@ -192,12 +222,21 @@ final class WooProduct_Surface implements Price_Surface {
 			$customer = WC()->customer;
 		}
 
+		// Main pass prices the purchase (cycle 1). The recurring projection pass
+		// prices the upcoming renewal (cycle 2) — the same cycle the renewal
+		// surface resolves when the parent payment completes, so the displayed
+		// recurring total and the created subscription match the first renewal
+		// charge. Intent stays ACQUISITION on both: the projection forecasts the
+		// future of the purchase being made now, and rule sourcing must mirror
+		// what will actually be locked at checkout.
+		$upcoming_cycle = self::is_recurring_totals_pass() ? 2 : 1;
+
 		return new Pricing_Context(
 			$trigger,
 			$product,
 			$customer,
 			$base_price,
-			[ 'completed_cycles' => 1 ],
+			[ 'completed_cycles' => $upcoming_cycle ],
 			$target,
 			Pricing_Context::INTENT_ACQUISITION,
 			$this->is_stateful()
@@ -211,6 +250,14 @@ final class WooProduct_Surface implements Price_Surface {
 			return;
 		}
 		$ctx->target['data']->set_price( $d->amount );
+
+		// The recurring projection pass shares the main cart's item keys (the
+		// clone copies them) and runs AFTER the main pass within the same
+		// calculate_totals() call — recording it would overwrite the charged
+		// cycle-1 amounts in the audit registry with cycle-2 forecasts.
+		if ( self::is_recurring_totals_pass() ) {
+			return;
+		}
 
 		if ( isset( $ctx->target['key'] ) && is_string( $ctx->target['key'] ) ) {
 			self::$applied_decisions[ $ctx->target['key'] ] = [
@@ -237,7 +284,10 @@ final class WooProduct_Surface implements Price_Surface {
 
 	/** @internal — reset the request-scoped registry at the start of each cart calc pass. */
 	public static function reset_applied_registry( $cart ): void {
-		if ( $cart instanceof \WC_Cart ) {
+		// The recurring projection pass fires this hook for its cloned carts
+		// INSIDE the main calculate_totals() call — resetting there would wipe
+		// the charged amounts the checkout note writers are about to read.
+		if ( $cart instanceof \WC_Cart && ! self::is_recurring_totals_pass() ) {
 			self::$applied_decisions = [];
 		}
 	}
