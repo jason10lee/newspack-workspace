@@ -76,10 +76,12 @@ class Co_Authors_Plus_Count_User_Posts_Fix {
 		global $wpdb;
 
 		// Find every GA CPT post whose cap-linked_account meta matches the user's login.
+		// SELECT DISTINCT guards against duplicate cap-linked_account meta rows on a single
+		// GA post returning the same ID twice, which would cause redundant term lookups below.
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery -- WP_Query + meta_query would be markedly slower; this fires per count_user_posts call.
 		$ga_post_ids = $wpdb->get_col(
 			$wpdb->prepare(
-				"SELECT p.ID FROM {$wpdb->posts} p
+				"SELECT DISTINCT p.ID FROM {$wpdb->posts} p
 				INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
 				WHERE p.post_type = 'guest-author'
 				AND p.post_status != 'trash'

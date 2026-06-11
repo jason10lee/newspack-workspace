@@ -37,6 +37,9 @@ class Newspack_Test_CAP_Count_User_Posts_Fix extends WP_UnitTestCase {
 	 * Tear down the CAP-owned post type and taxonomy after each test.
 	 */
 	public function tear_down() {
+		// Several tests set the current user to exercise the read_private_posts
+		// gate; reset to 0 so viewer state can't leak into later tests.
+		wp_set_current_user( 0 );
 		unregister_taxonomy( 'author' );
 		unregister_post_type( 'guest-author' );
 		parent::tear_down();
