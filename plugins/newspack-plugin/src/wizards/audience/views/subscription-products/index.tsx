@@ -24,8 +24,8 @@ import './style.scss';
 const AudienceSubscriptionProducts = ( props: object, ref: React.Ref< HTMLDivElement > ) => {
 	return (
 		<Wizard
-			title={ __( 'Subscription products', 'newspack-plugin' ) }
-			headerText={ __( 'Audience Management / Subscription products', 'newspack-plugin' ) }
+			title={ __( 'Products', 'newspack-plugin' ) }
+			headerText={ __( 'Audience Management / Products', 'newspack-plugin' ) }
 			ref={ ref }
 			fixedHeader
 			sections={ [

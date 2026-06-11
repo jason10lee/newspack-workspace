@@ -1,6 +1,10 @@
-# Subscription Products (RSM prototype)
+# Products (RSM prototype)
 
-Exploratory DataViews admin page under **Audience → Subscription products**
+Exploratory DataViews admin page under **Audience → Products** (the page slug stays
+`newspack-audience-subscription-products`; the directory keeps its `subscription-products`
+name). The list is subscription-centric but also pulls in **one-time donation** products.
+
+Originally **Audience → Subscription products**
 (`admin.php?page=newspack-audience-subscription-products`). Pressure-tests the
 data-views direction for Reader Subscription Management (RSM) and feeds the PRD.
 Branch: `feat/rsm-subscription-products-dataviews`. Not for PR to `main`.
@@ -78,6 +82,27 @@ column set. The default columns are hard facts (price, active subs, status) plus
 differentiators (policies, effective price, unlocks); `type`, `category`, and
 `availability` all live behind the column picker.
 
+## Creating & editing (no WooCommerce needed)
+
+`product-form.tsx` is a shared create/edit form (content only; the caller wraps it in a
+Modal). **Add product** opens it in create mode (`POST …/products`); the row **Edit**
+action opens it in edit mode (`PUT …/products/{id}`). It covers all three types, plus a
+category picker (`FormTokenField` over `available_categories`), an **Availability** select
+(public/private/free → maps to the convention category, since availability is derived not
+stored), group subscription, and donation. On edit it also shows the read-only policy /
+Unlocks context.
+
+Constraints (deliberate):
+- **Type is locked on edit** — changing a live product's WC type is unsafe.
+- **Variable plans**: edit price/period/interval, add plans, remove plans. Existing plan
+  **labels are read-only** (renaming a WC variation attribute mid-flight is finicky); new
+  plans get a label. `sync_variable_variations()` diffs by variation id (update / create /
+  delete).
+- Group subscription is one product-level value applied to all plans (the model supports
+  per-variation; the form simplifies).
+- Same WC cache caveats as create: explicit `product_type` term after save; the endpoint
+  returns `{id,name}` and the list refetches (memcached can't surface the change same-request).
+
 ## Grouped "Plan groups" and group subscriptions
 
 The page covers the full Newspack subscription model, not just flat products:
@@ -107,9 +132,14 @@ targets:
 'type' => [ 'subscription', 'variable-subscription', 'grouped' ]
 ```
 
-Plain `simple` (non-subscription) is excluded; `grouped` is included **only** when it
-bundles subscription children (see Plan groups above). `variable-subscription` is the
-**primary** path — it's how Block Club Chicago (flagship) models membership tiers.
+`grouped` is included **only** when it bundles subscription children (see Plan groups
+above). Plain `simple` products are excluded **except** one-time donations, which are
+pulled in separately via the Donations API (`get_simple_donation_products()` — unions the
+`_newspack_is_donation` meta with the legacy parent/child donation IDs, since one-time
+donations like "Donate: One-Time" are legacy-detected, not meta-flagged). One-time rows
+show type "One-time", a one-time price (no period), and `—` active subs; they're editable
+(price only). `variable-subscription` is the **primary** path — it's how Block Club
+Chicago (flagship) models membership tiers.
 
 ## Status handling (confirmed)
 

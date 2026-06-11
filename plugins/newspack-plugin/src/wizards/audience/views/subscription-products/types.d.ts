@@ -73,7 +73,7 @@ interface SubscriptionProductCategory {
 interface SubscriptionProduct {
 	id: number;
 	name: string;
-	type: 'subscription' | 'variable-subscription' | 'grouped';
+	type: 'subscription' | 'variable-subscription' | 'grouped' | 'simple';
 	type_label: string;
 	// Whether the product is flagged as a donation (Donations::is_donation_product).
 	is_donation: boolean;
@@ -122,6 +122,7 @@ interface SubscriptionProductsResponse {
 	products: SubscriptionProduct[];
 	currency: SubscriptionProductsCurrency;
 	policy_source_is_mock: boolean;
+	available_categories: { id: number; name: string }[];
 }
 
 interface Window {

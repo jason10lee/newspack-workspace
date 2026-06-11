@@ -66,7 +66,7 @@ class Audience_Subscription_Products extends Wizard {
 	 * @return string The wizard name.
 	 */
 	public function get_name() {
-		return esc_html__( 'Audience Management / Subscription Products', 'newspack-plugin' );
+		return esc_html__( 'Audience Management / Products', 'newspack-plugin' );
 	}
 
 	/**
@@ -89,6 +89,50 @@ class Audience_Subscription_Products extends Wizard {
 				],
 			]
 		);
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/products/(?P<id>\d+)',
+			[
+				'methods'             => \WP_REST_Server::EDITABLE,
+				'callback'            => [ $this, 'api_update_product' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'id' => [
+						'sanitize_callback' => 'absint',
+					],
+				],
+			]
+		);
+	}
+
+	/**
+	 * Get all product categories for the create/edit pickers, excluding the
+	 * private/free convention categories (those are managed by the availability picker).
+	 *
+	 * @return array List of { id, name }.
+	 */
+	private static function get_all_product_categories() {
+		$terms = get_terms(
+			[
+				'taxonomy'   => 'product_cat',
+				'hide_empty' => false,
+			]
+		);
+		if ( is_wp_error( $terms ) ) {
+			return [];
+		}
+		$excluded = [ 'private-subscriptions', 'free-subscriptions' ];
+		$result   = [];
+		foreach ( $terms as $term ) {
+			if ( in_array( $term->slug, $excluded, true ) ) {
+				continue;
+			}
+			$result[] = [
+				'id'   => $term->term_id,
+				'name' => $term->name,
+			];
+		}
+		return $result;
 	}
 
 	/**
@@ -101,6 +145,7 @@ class Audience_Subscription_Products extends Wizard {
 			'products'              => [],
 			'currency'              => self::get_currency(),
 			'policy_source_is_mock' => Subscription_Policy_Resolver::IS_MOCK,
+			'available_categories'  => self::get_all_product_categories(),
 		];
 
 		if ( ! function_exists( 'wc_get_products' ) ) {
@@ -123,8 +168,65 @@ class Audience_Subscription_Products extends Wizard {
 			}
 		);
 
+		// Pull in one-time (simple) donation products, even though they aren't subscriptions.
+		$products = array_merge( array_values( $products ), self::get_simple_donation_products() );
+
+		// Dedupe by product ID.
+		$seen     = [];
+		$products = array_filter(
+			$products,
+			function( $product ) use ( &$seen ) {
+				if ( isset( $seen[ $product->get_id() ] ) ) {
+					return false;
+				}
+				$seen[ $product->get_id() ] = true;
+				return true;
+			}
+		);
+
 		$response['products'] = array_map( [ $this, 'prepare_product' ], array_values( $products ) );
 		return rest_ensure_response( $response );
+	}
+
+	/**
+	 * Get one-time (simple) donation products.
+	 *
+	 * Donation simples may be flagged via the _newspack_is_donation meta or detected through
+	 * the legacy parent/child donation structure, so we union both sources.
+	 *
+	 * @return \WC_Product[] Simple donation products.
+	 */
+	private static function get_simple_donation_products() {
+		if ( ! class_exists( 'Newspack\Donations' ) ) {
+			return [];
+		}
+		$ids = Donations::get_flagged_donation_product_ids();
+		if ( method_exists( 'Newspack\Donations', 'get_donation_product_child_products_ids' ) ) {
+			$ids = array_merge( $ids, array_values( Donations::get_donation_product_child_products_ids() ) );
+		}
+
+		$products = [];
+		foreach ( array_unique( array_map( 'intval', $ids ) ) as $id ) {
+			$product = wc_get_product( $id );
+			if ( $product && $product->is_type( 'simple' ) ) {
+				$products[] = $product;
+			}
+		}
+		return $products;
+	}
+
+	/**
+	 * Whether a product should be surfaced/editable on this page.
+	 *
+	 * @param \WC_Product $product The product.
+	 *
+	 * @return bool
+	 */
+	private static function is_surfaced_product( $product ) {
+		if ( in_array( $product->get_type(), self::PRODUCT_TYPES, true ) ) {
+			return true;
+		}
+		return $product->is_type( 'simple' ) && class_exists( 'Newspack\Donations' ) && Donations::is_donation_product( $product->get_id() );
 	}
 
 	/**
@@ -183,6 +285,8 @@ class Audience_Subscription_Products extends Wizard {
 
 		$status       = ( isset( $params['status'] ) && 'draft' === $params['status'] ) ? 'draft' : 'publish';
 		$category_ids = isset( $params['category_ids'] ) && is_array( $params['category_ids'] ) ? array_map( 'absint', $params['category_ids'] ) : [];
+		$availability = ( isset( $params['availability'] ) && in_array( $params['availability'], [ 'public', 'private', 'free' ], true ) ) ? $params['availability'] : 'public';
+		$category_ids = self::apply_availability_to_categories( $category_ids, $availability );
 		$is_donation  = ! empty( $params['is_donation'] );
 
 		if ( 'grouped' === $type ) {
@@ -407,6 +511,215 @@ class Audience_Subscription_Products extends Wizard {
 	}
 
 	/**
+	 * PUT: update a subscription product in place.
+	 *
+	 * The product type is locked (changing a live product's type in WooCommerce is unsafe).
+	 * Common fields (name, status, category, availability→category, donation, group
+	 * subscription) update for every type; pricing/plans/bundle update per type.
+	 *
+	 * @param \WP_REST_Request $request The request.
+	 *
+	 * @return \WP_REST_Response|\WP_Error The updated id, or an error.
+	 */
+	public function api_update_product( $request ) {
+		if ( ! function_exists( 'wc_get_product' ) || ! class_exists( 'WC_Product_Subscription' ) ) {
+			return new \WP_Error( 'woocommerce_subscriptions_inactive', __( 'WooCommerce Subscriptions is not active.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+
+		$product_id = (int) $request['id'];
+		$product    = wc_get_product( $product_id );
+		if ( ! $product || ! self::is_surfaced_product( $product ) ) {
+			return new \WP_Error( 'product_not_found', __( 'Product not found.', 'newspack-plugin' ), [ 'status' => 404 ] );
+		}
+
+		$params = $request->get_json_params();
+		if ( empty( $params ) ) {
+			$params = $request->get_params();
+		}
+
+		$name = isset( $params['name'] ) ? sanitize_text_field( $params['name'] ) : '';
+		if ( '' === trim( $name ) ) {
+			return new \WP_Error( 'missing_name', __( 'Product name is required.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+
+		$status       = ( isset( $params['status'] ) && 'draft' === $params['status'] ) ? 'draft' : 'publish';
+		$category_ids = isset( $params['category_ids'] ) && is_array( $params['category_ids'] ) ? array_map( 'absint', $params['category_ids'] ) : [];
+		$availability = ( isset( $params['availability'] ) && in_array( $params['availability'], [ 'public', 'private', 'free' ], true ) ) ? $params['availability'] : 'public';
+		$category_ids = self::apply_availability_to_categories( $category_ids, $availability );
+		$is_donation  = ! empty( $params['is_donation'] );
+		$type         = $product->get_type();
+
+		// Common fields.
+		$product->set_name( $name );
+		$product->set_status( $status );
+		$product->set_category_ids( $category_ids );
+		self::set_donation_flag( $product, $is_donation );
+
+		if ( 'grouped' === $type ) {
+			$bundled_ids = isset( $params['bundled_product_ids'] ) && is_array( $params['bundled_product_ids'] ) ? array_values( array_filter( array_map( 'absint', $params['bundled_product_ids'] ) ) ) : [];
+			$valid       = [];
+			foreach ( $bundled_ids as $bundled_id ) {
+				$child = wc_get_product( $bundled_id );
+				if ( $child && $child->is_type( [ 'subscription', 'variable-subscription' ] ) ) {
+					$valid[] = $bundled_id;
+				}
+			}
+			if ( empty( $valid ) ) {
+				return new \WP_Error( 'invalid_bundle', __( 'Select at least one subscription product to bundle.', 'newspack-plugin' ), [ 'status' => 400 ] );
+			}
+			$product->set_children( $valid );
+			$product->save();
+		} elseif ( 'variable-subscription' === $type ) {
+			$product->save();
+			$result = self::sync_variable_variations( $product, isset( $params['variations'] ) ? $params['variations'] : [] );
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
+		} elseif ( 'simple' === $type ) {
+			// One-time product: price only, no subscription meta.
+			$price = isset( $params['price'] ) ? (float) $params['price'] : -1;
+			if ( $price < 0 ) {
+				return new \WP_Error( 'invalid_price', __( 'A valid price is required.', 'newspack-plugin' ), [ 'status' => 400 ] );
+			}
+			$product->set_regular_price( (string) $price );
+			$product->set_price( (string) $price );
+			$product->save();
+		} else {
+			$price = isset( $params['price'] ) ? (float) $params['price'] : -1;
+			if ( $price < 0 ) {
+				return new \WP_Error( 'invalid_price', __( 'A valid price is required.', 'newspack-plugin' ), [ 'status' => 400 ] );
+			}
+			$period = isset( $params['period'] ) ? sanitize_text_field( $params['period'] ) : 'month';
+			if ( ! in_array( $period, self::VALID_PERIODS, true ) ) {
+				return new \WP_Error( 'invalid_period', __( 'Invalid billing period.', 'newspack-plugin' ), [ 'status' => 400 ] );
+			}
+			$interval = isset( $params['interval'] ) ? max( 1, min( 6, (int) $params['interval'] ) ) : 1;
+			$product->set_regular_price( (string) $price );
+			$product->set_price( (string) $price );
+			$product->update_meta_data( '_subscription_price', $price );
+			$product->update_meta_data( '_subscription_period', $period );
+			$product->update_meta_data( '_subscription_period_interval', $interval );
+			$product->update_meta_data( self::GROUP_ENABLED_META, wc_bool_to_string( ! empty( $params['is_group_subscription'] ) ) );
+			if ( ! empty( $params['is_group_subscription'] ) ) {
+				$product->update_meta_data( self::GROUP_LIMIT_META, isset( $params['group_member_limit'] ) ? max( 0, (int) $params['group_member_limit'] ) : 0 );
+			}
+			$product->save();
+		}
+
+		// Keep the product_type term pinned (see create note) and bust caches.
+		wp_set_object_terms( $product_id, $type, 'product_type' );
+		clean_post_cache( $product_id );
+		if ( function_exists( 'wc_delete_product_transients' ) ) {
+			wc_delete_product_transients( $product_id );
+		}
+
+		return rest_ensure_response(
+			[
+				'id'   => $product_id,
+				'name' => get_the_title( $product_id ),
+			]
+		);
+	}
+
+	/**
+	 * Reconcile a variable subscription's variations with the desired plan list.
+	 *
+	 * Updates existing plans (matched by id), creates new plans, and deletes removed ones.
+	 * Existing plan labels are read from the variation (renaming is not supported here).
+	 *
+	 * @param \WC_Product $product    The variable subscription product.
+	 * @param array       $variations Desired plans: each { id?, label?, price, period, interval, is_group_subscription?, group_member_limit? }.
+	 *
+	 * @return true|\WP_Error
+	 */
+	private static function sync_variable_variations( $product, $variations ) {
+		if ( empty( $variations ) || ! is_array( $variations ) ) {
+			return new \WP_Error( 'missing_variations', __( 'Add at least one plan.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+
+		$parent_id    = $product->get_id();
+		$existing_ids = array_map( 'intval', $product->get_children() );
+		$plans        = [];
+
+		foreach ( $variations as $variation ) {
+			$variation_id = isset( $variation['id'] ) ? (int) $variation['id'] : 0;
+			$price        = isset( $variation['price'] ) ? (float) $variation['price'] : -1;
+			$period       = isset( $variation['period'] ) ? sanitize_text_field( $variation['period'] ) : 'month';
+			$interval     = isset( $variation['interval'] ) ? max( 1, min( 6, (int) $variation['interval'] ) ) : 1;
+			if ( $price < 0 || ! in_array( $period, self::VALID_PERIODS, true ) ) {
+				return new \WP_Error( 'invalid_variation', __( 'Each plan needs a valid price and billing period.', 'newspack-plugin' ), [ 'status' => 400 ] );
+			}
+
+			if ( $variation_id && in_array( $variation_id, $existing_ids, true ) ) {
+				$existing = wc_get_product( $variation_id );
+				$label    = $existing ? $existing->get_attribute( 'billing-period' ) : '';
+			} else {
+				$variation_id = 0;
+				$label        = isset( $variation['label'] ) ? sanitize_text_field( $variation['label'] ) : '';
+			}
+			if ( '' === trim( $label ) ) {
+				return new \WP_Error( 'invalid_variation', __( 'Each plan needs a label.', 'newspack-plugin' ), [ 'status' => 400 ] );
+			}
+
+			$plans[] = [
+				'id'            => $variation_id,
+				'label'         => $label,
+				'price'         => $price,
+				'period'        => $period,
+				'interval'      => $interval,
+				'group_enabled' => ! empty( $variation['is_group_subscription'] ),
+				'group_limit'   => isset( $variation['group_member_limit'] ) ? max( 0, (int) $variation['group_member_limit'] ) : 0,
+			];
+		}
+
+		$labels = wp_list_pluck( $plans, 'label' );
+		if ( count( $labels ) !== count( array_unique( $labels ) ) ) {
+			return new \WP_Error( 'duplicate_labels', __( 'Plan labels must be unique.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+
+		// Rebuild the parent's billing-period attribute to the desired set of plan labels.
+		$attribute = new \WC_Product_Attribute();
+		$attribute->set_name( 'Billing period' );
+		$attribute->set_options( $labels );
+		$attribute->set_visible( true );
+		$attribute->set_variation( true );
+		$product->set_attributes( [ $attribute ] );
+		$product->save();
+
+		// Upsert variations.
+		$keep_ids = [];
+		foreach ( $plans as $plan ) {
+			$variation = $plan['id'] ? new \WC_Product_Variation( $plan['id'] ) : new \WC_Product_Variation();
+			if ( ! $plan['id'] ) {
+				$variation->set_parent_id( $parent_id );
+			}
+			$variation->set_attributes( [ 'billing-period' => $plan['label'] ] );
+			$variation->set_status( 'publish' );
+			$variation->set_regular_price( (string) $plan['price'] );
+			$variation->update_meta_data( '_subscription_price', $plan['price'] );
+			$variation->update_meta_data( '_subscription_period', $plan['period'] );
+			$variation->update_meta_data( '_subscription_period_interval', $plan['interval'] );
+			$variation->update_meta_data( '_subscription_length', 0 );
+			$variation->update_meta_data( self::GROUP_ENABLED_META, wc_bool_to_string( $plan['group_enabled'] ) );
+			if ( $plan['group_enabled'] ) {
+				$variation->update_meta_data( self::GROUP_LIMIT_META, $plan['group_limit'] );
+			}
+			$keep_ids[] = (int) $variation->save();
+		}
+
+		// Delete variations that were removed.
+		foreach ( array_diff( $existing_ids, $keep_ids ) as $removed_id ) {
+			wp_delete_post( $removed_id, true );
+		}
+
+		if ( method_exists( '\WC_Product_Variable_Subscription', 'sync' ) ) {
+			\WC_Product_Variable_Subscription::sync( $parent_id );
+		}
+
+		return true;
+	}
+
+	/**
 	 * Build the consolidated, productized row for a single subscription product.
 	 *
 	 * @param \WC_Product $product The product.
@@ -423,9 +736,9 @@ class Audience_Subscription_Products extends Wizard {
 
 		// Layer 2: resolve the policy stack + effective price through the integration seam.
 		// Variable subscriptions resolve PER VARIATION — each plan (monthly/annual/…) can
-		// carry a different policy and effective price. Grouped products aren't priced
-		// themselves, so they get an empty (no-policy) resolution.
-		if ( $is_grouped ) {
+		// carry a different policy and effective price. Grouped products and one-time (simple)
+		// products aren't recurring, so they get an empty (no-policy) resolution.
+		if ( $is_grouped || $product->is_type( 'simple' ) ) {
 			$policy = self::empty_policy( $currency_code );
 		} elseif ( $product->is_type( 'variable-subscription' ) ) {
 			foreach ( $pricing['variations'] as $index => $variation ) {
@@ -650,6 +963,7 @@ class Audience_Subscription_Products extends Wizard {
 				$pricing['variations'][] = [
 					'id'          => $variation_id,
 					'name'        => $variation->get_name(),
+					'plan_label'  => $variation->get_attribute( 'billing-period' ),
 					'base_price'  => $v_price,
 					'period'      => $v_period,
 					'interval'    => $v_interval,
@@ -698,6 +1012,14 @@ class Audience_Subscription_Products extends Wizard {
 		$price    = self::read_subscription_price( $product );
 		$period   = $product->get_meta( '_subscription_period' );
 		$interval = (int) $product->get_meta( '_subscription_period_interval' );
+
+		// Non-subscription (one-time) simple product: use the product price, no billing period.
+		if ( null === $price && ! $product->is_type( 'subscription' ) ) {
+			$raw      = $product->get_price();
+			$price    = ( '' === $raw || null === $raw ) ? null : (float) $raw;
+			$period   = '';
+			$interval = 1;
+		}
 
 		$pricing['base_price']  = $price;
 		$pricing['period']      = $period;
@@ -771,6 +1093,10 @@ class Audience_Subscription_Products extends Wizard {
 	 */
 	private static function get_active_subscription_count( $product ) {
 		if ( ! function_exists( 'wcs_get_subscriptions' ) ) {
+			return null;
+		}
+		// One-time (simple) products have no subscriptions — distinguish from a genuine zero.
+		if ( $product->is_type( 'simple' ) ) {
 			return null;
 		}
 
@@ -1025,6 +1351,82 @@ class Audience_Subscription_Products extends Wizard {
 	}
 
 	/**
+	 * Find a product_cat term ID by slug.
+	 *
+	 * @param string $slug The category slug.
+	 *
+	 * @return int The term ID, or 0.
+	 */
+	private static function find_product_cat_id( $slug ) {
+		$term = get_term_by( 'slug', $slug, 'product_cat' );
+		return $term ? (int) $term->term_id : 0;
+	}
+
+	/**
+	 * Ensure the convention category for an availability tier exists, returning its ID.
+	 *
+	 * @param string $availability 'private' or 'free'.
+	 *
+	 * @return int The term ID, or 0.
+	 */
+	private static function ensure_availability_category( $availability ) {
+		$map = [
+			'private' => [ 'private-subscriptions', __( 'Private Subscriptions', 'newspack-plugin' ) ],
+			'free'    => [ 'free-subscriptions', __( 'Free Subscriptions', 'newspack-plugin' ) ],
+		];
+		if ( ! isset( $map[ $availability ] ) ) {
+			return 0;
+		}
+		list( $slug, $name ) = $map[ $availability ];
+		$existing            = self::find_product_cat_id( $slug );
+		if ( $existing ) {
+			return $existing;
+		}
+		$result = wp_insert_term( $name, 'product_cat', [ 'slug' => $slug ] );
+		return is_wp_error( $result ) ? 0 : (int) $result['term_id'];
+	}
+
+	/**
+	 * Apply an availability choice to a category list (availability maps to a category).
+	 *
+	 * Strips the private/free convention categories, then re-adds the chosen one. "Public"
+	 * leaves the product in neither.
+	 *
+	 * @param int[]  $category_ids The picked category IDs.
+	 * @param string $availability 'public', 'private', or 'free'.
+	 *
+	 * @return int[] The resolved category IDs.
+	 */
+	private static function apply_availability_to_categories( $category_ids, $availability ) {
+		$convention = array_filter(
+			[
+				self::find_product_cat_id( 'private-subscriptions' ),
+				self::find_product_cat_id( 'free-subscriptions' ),
+			]
+		);
+		$category_ids = array_values( array_diff( array_map( 'absint', $category_ids ), $convention ) );
+		if ( in_array( $availability, [ 'private', 'free' ], true ) ) {
+			$category_id = self::ensure_availability_category( $availability );
+			if ( $category_id ) {
+				$category_ids[] = $category_id;
+			}
+		}
+		return array_values( array_unique( $category_ids ) );
+	}
+
+	/**
+	 * Set or clear a product's donation flag.
+	 *
+	 * @param \WC_Product $product     The product.
+	 * @param bool        $is_donation Whether the product is a donation.
+	 *
+	 * @return void
+	 */
+	private static function set_donation_flag( $product, $is_donation ) {
+		$product->update_meta_data( WooCommerce_Products::DONATION_FLAG_META_KEY, wc_bool_to_string( (bool) $is_donation ) );
+	}
+
+	/**
 	 * Human label for a subscription product type.
 	 *
 	 * @param string $type The product type.
@@ -1036,6 +1438,7 @@ class Audience_Subscription_Products extends Wizard {
 			'subscription'          => __( 'Simple subscription', 'newspack-plugin' ),
 			'variable-subscription' => __( 'Variable subscription', 'newspack-plugin' ),
 			'grouped'               => __( 'Plan group', 'newspack-plugin' ),
+			'simple'                => __( 'One-time', 'newspack-plugin' ),
 		];
 		return isset( $labels[ $type ] ) ? $labels[ $type ] : $type;
 	}
@@ -1059,7 +1462,7 @@ class Audience_Subscription_Products extends Wizard {
 		add_submenu_page(
 			$this->parent_slug,
 			$this->get_name(),
-			esc_html__( 'Subscription products', 'newspack-plugin' ),
+			esc_html__( 'Products', 'newspack-plugin' ),
 			$this->capability,
 			$this->slug,
 			[ $this, 'render_wizard' ]

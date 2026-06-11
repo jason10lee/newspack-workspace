@@ -16,7 +16,7 @@ import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
-import { Spinner, Notice, Button } from '@wordpress/components';
+import { Spinner, Notice, Button, Modal } from '@wordpress/components';
 
 /**
  * Internal dependencies
@@ -24,8 +24,7 @@ import { Spinner, Notice, Button } from '@wordpress/components';
 import { DataViews, Badge } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { PolicyChips, EffectivePrice } from './policy-cells';
-import EditProductModal from './edit-modal';
-import AddProductModal from './add-modal';
+import ProductForm from './product-form';
 
 const API_PATH = '/newspack/v1/wizard/newspack-audience-subscription-products/products';
 
@@ -83,6 +82,7 @@ export default function SubscriptionProductsList() {
 	const { setHeaderData, addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ data, setData ] = useState< SubscriptionProduct[] >( [] );
 	const [ currency, setCurrency ] = useState< SubscriptionProductsCurrency >( DEFAULT_CURRENCY );
+	const [ availableCategories, setAvailableCategories ] = useState< { id: number; label: string }[] >( [] );
 	const [ policyIsMock, setPolicyIsMock ] = useState( false );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
@@ -143,6 +143,7 @@ export default function SubscriptionProductsList() {
 				if ( response.currency ) {
 					setCurrency( response.currency );
 				}
+				setAvailableCategories( ( response.available_categories || [] ).map( cat => ( { id: cat.id, label: cat.name } ) ) );
 				setPolicyIsMock( Boolean( response.policy_source_is_mock ) );
 			} )
 			.catch( () => {
@@ -155,16 +156,16 @@ export default function SubscriptionProductsList() {
 			.finally( () => setIsLoading( false ) );
 	}, [ addNotice ] );
 
-	// After a create, refetch the list (WC's object cache can't surface the new product in
-	// the create request, so we re-read rather than optimistically insert).
-	const handleCreated = useCallback(
+	// After a create/edit, refetch the list (WC's object cache can't surface the change in
+	// the same request, so we re-read rather than optimistically patch).
+	const handleSaved = useCallback(
 		( productName: string ) => {
 			fetchData();
 			addNotice( {
-				/* translators: %s is the new product name. */
-				message: sprintf( __( '“%s” created.', 'newspack-plugin' ), productName ),
+				/* translators: %s is the product name. */
+				message: sprintf( __( '“%s” saved.', 'newspack-plugin' ), productName ),
 				type: 'success',
-				id: 'subscription-product-created',
+				id: 'subscription-product-saved',
 			} );
 		},
 		[ fetchData, addNotice ]
@@ -209,6 +210,7 @@ export default function SubscriptionProductsList() {
 					{ value: 'subscription', label: __( 'Simple subscription', 'newspack-plugin' ) },
 					{ value: 'variable-subscription', label: __( 'Variable subscription', 'newspack-plugin' ) },
 					{ value: 'grouped', label: __( 'Plan group', 'newspack-plugin' ) },
+					{ value: 'simple', label: __( 'One-time', 'newspack-plugin' ) },
 				],
 				filterBy: { operators: [ 'is' ] },
 			},
@@ -357,11 +359,19 @@ export default function SubscriptionProductsList() {
 				label: __( 'Edit', 'newspack-plugin' ),
 				isPrimary: true,
 				RenderModal: ( { items, closeModal }: { items: SubscriptionProduct[]; closeModal: () => void } ) => (
-					<EditProductModal item={ items[ 0 ] } currency={ currency } closeModal={ closeModal } />
+					<ProductForm
+						mode="edit"
+						initial={ items[ 0 ] }
+						categories={ availableCategories }
+						bundleOptions={ bundleOptions }
+						currency={ currency }
+						onClose={ closeModal }
+						onSaved={ handleSaved }
+					/>
 				),
 			},
 		],
-		[ currency ]
+		[ availableCategories, bundleOptions, currency, handleSaved ]
 	);
 
 	const { data: processedData, paginationInfo } = useMemo( () => filterSortAndPaginate( scopedData, view, fields ), [ scopedData, view, fields ] );
@@ -418,7 +428,20 @@ export default function SubscriptionProductsList() {
 				search
 			/>
 			{ showAddModal && (
-				<AddProductModal onClose={ () => setShowAddModal( false ) } onCreated={ handleCreated } bundleOptions={ bundleOptions } />
+				<Modal
+					title={ __( 'Add subscription product', 'newspack-plugin' ) }
+					onRequestClose={ () => setShowAddModal( false ) }
+					className="newspack-subscription-products__add-modal"
+				>
+					<ProductForm
+						mode="create"
+						categories={ availableCategories }
+						bundleOptions={ bundleOptions }
+						currency={ currency }
+						onClose={ () => setShowAddModal( false ) }
+						onSaved={ handleSaved }
+					/>
+				</Modal>
 			) }
 		</div>
 	);
