@@ -188,6 +188,50 @@ class Newspack_Test_Schedule_Projector extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( 'first month', $subtotal, 'Flat unlimited: the charged price IS the recurring price; no qualifier.' );
 	}
 
+	public function test_store_api_cart_data_emits_sentence_for_multi_step_items_only() {
+		$this->seed_rule( [
+			'steps' => [
+				[ 'at' => 1, 'calc_type' => Amount_Calculator::PERCENT_OF_BASE, 'value' => 50, 'label' => 'Intro' ],
+				[ 'at' => 2, 'calc_type' => Amount_Calculator::PERCENT_OF_BASE, 'value' => 75, 'label' => 'Second' ],
+				[ 'at' => 3, 'calc_type' => Amount_Calculator::PERCENT_OF_BASE, 'value' => 100, 'label' => 'Standard' ],
+			],
+		], 'stepped_by_cycle' );
+
+		$product = new \WC_Product( [ 'id' => 17, 'type' => 'subscription', 'regular_price' => 10, 'name' => 'Test Sub' ] );
+
+		// Inject a cart instance for store_api_cart_data() to walk via WC()->cart.
+		$cart                   = new \WC_Cart( [ 'k1' => [ 'data' => $product, 'key' => 'k1', 'quantity' => 1 ] ] );
+		$wc_singleton           = new \stdClass();
+		$wc_singleton->cart     = $cart;
+		$wc_singleton->customer = null;
+		$GLOBALS['woocommerce'] = $wc_singleton;
+
+		$payload = WooProduct_Surface::store_api_cart_data();
+
+		$this->assertCount( 1, $payload['schedule_sentences'] );
+		$this->assertSame( 'k1', $payload['schedule_sentences'][0]['key'] );
+		$this->assertSame( 'Test Sub', $payload['schedule_sentences'][0]['item_name'] );
+		$this->assertStringStartsWith( '$5.00 today', $payload['schedule_sentences'][0]['sentence'] );
+		$this->assertSame( 'Price schedule', $payload['schedule_label'] );
+
+		unset( $GLOBALS['woocommerce'] );
+	}
+
+	public function test_store_api_cart_data_omits_items_without_a_multi_segment_schedule() {
+		$this->seed_rule( [ 'calc_type' => Amount_Calculator::PERCENT_OF_BASE, 'value' => 80, 'cycles_limit' => 0, 'label' => '' ], 'simple_price' );
+
+		$product               = new \WC_Product( [ 'id' => 17, 'type' => 'subscription', 'regular_price' => 10 ] );
+		$cart                  = new \WC_Cart( [ 'k1' => [ 'data' => $product, 'key' => 'k1', 'quantity' => 1 ] ] );
+		$wc_singleton          = new \stdClass();
+		$wc_singleton->cart    = $cart;
+		$GLOBALS['woocommerce'] = $wc_singleton;
+
+		$payload = WooProduct_Surface::store_api_cart_data();
+		$this->assertSame( [], $payload['schedule_sentences'], 'Flat unlimited rules: the recurring total tells the whole story.' );
+
+		unset( $GLOBALS['woocommerce'] );
+	}
+
 	public function test_recurring_pass_prices_a_clone_not_the_shared_product_instance() {
 		// 50% at purchase, 75% from the first renewal.
 		$this->seed_rule( [

@@ -1,20 +1,33 @@
 /**
- * WC Blocks Cart & Checkout filters for dynamic pricing annotations.
+ * WC Blocks Cart & Checkout integrations for dynamic pricing.
  *
- * Appends the server-composed, server-translated suffixes from the
- * `newspack-dynamic-pricing` StoreAPI cart-item extension (see
- * WooProduct_Surface::store_api_cart_item_data) to the item name and price.
- * All copy lives in PHP; this file only concatenates.
+ * Two slices, both server-composed (all copy and translation in PHP):
  *
- * `@woocommerce/blocks-checkout` is not an npm dependency — it is provided at
- * runtime by the `wc-blocks-checkout` script handle (declared as a dependency
- * in WooProduct_Surface::enqueue_blocks_checkout_script), exposed on
- * `window.wc.blocksCheckout`.
+ * - Layer 1 — purchase-line annotation: appends `name_suffix` and `price_suffix`
+ *   from the `newspack-dynamic-pricing` cart-item extension via
+ *   registerCheckoutFilters. See WooProduct_Surface::store_api_cart_item_data.
+ *
+ * - Layer 2b — schedule row: reads `schedule_sentences` from the same
+ *   namespace's cart-level extension and renders an ExperimentalOrderMeta fill
+ *   so it appears in both Cart and Checkout blocks. See
+ *   WooProduct_Surface::store_api_cart_data.
+ *
+ * None of these packages are npm dependencies in this repo — they are runtime
+ * globals provided by the script handles declared in
+ * WooProduct_Surface::enqueue_blocks_checkout_script:
+ *   - wc-blocks-checkout → window.wc.blocksCheckout
+ *   - wp-plugins         → window.wp.plugins
+ *   - wp-element         → window.wp.element
  */
 
 const NAMESPACE = 'newspack-dynamic-pricing';
 
-const { registerCheckoutFilters } = window.wc?.blocksCheckout || {};
+const blocksCheckout = window.wc?.blocksCheckout || {};
+const { registerCheckoutFilters, ExperimentalOrderMeta } = blocksCheckout;
+const { registerPlugin } = window.wp?.plugins || {};
+const { createElement: el, Fragment } = window.wp?.element || {};
+
+/* --- Layer 1: purchase-line annotation --- */
 
 const getAnnotation = extensions => {
 	const data = extensions?.[ NAMESPACE ];
@@ -31,5 +44,49 @@ if ( registerCheckoutFilters ) {
 			const annotation = getAnnotation( extensions );
 			return annotation?.price_suffix ? value + annotation.price_suffix : value;
 		},
+	} );
+}
+
+/* --- Layer 2b: schedule row (ExperimentalOrderMeta fill) --- */
+
+/**
+ * Render the schedule row. The Slot passes the cart `extensions` object as a
+ * prop to its children.
+ *
+ * @param {{extensions: object}} props
+ */
+const ScheduleFill = ( { extensions } ) => {
+	const data = extensions?.[ NAMESPACE ];
+	const sentences = data?.schedule_sentences || [];
+	if ( ! sentences.length ) {
+		return null;
+	}
+	// One row per item; for the typical single-subscription cart this is one
+	// line. Multiple items get one row each, prefixed with the item name to
+	// disambiguate — the legacy template renders the same way (one <tr> each).
+	const label = data.schedule_label || '';
+	return el(
+		Fragment,
+		null,
+		sentences.map( s =>
+			el(
+				'div',
+				{ key: s.key, className: 'wc-block-components-totals-item newspack-dp-schedule' },
+				el( 'span', { className: 'wc-block-components-totals-item__label' }, label ),
+				el(
+					'span',
+					{ className: 'wc-block-components-totals-item__value' },
+					sentences.length > 1 ? `${ s.item_name }: ${ s.sentence }` : s.sentence
+				)
+			)
+		)
+	);
+};
+
+if ( registerPlugin && ExperimentalOrderMeta && el ) {
+	const Render = () => el( ExperimentalOrderMeta, null, el( ScheduleFill ) );
+	registerPlugin( 'newspack-dp-schedule', {
+		render: Render,
+		scope: 'woocommerce-checkout',
 	} );
 }

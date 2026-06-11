@@ -219,6 +219,17 @@ class WC_Cart {
 	}
 }
 
+if ( ! function_exists( 'WC' ) ) {
+	/**
+	 * Mock WC() global: returns whatever the test set on $GLOBALS['woocommerce'],
+	 * usually a stdClass carrying `->cart` (and optionally `->customer`). Lets
+	 * surface code that reads WC()->cart resolve under unit tests.
+	 */
+	function WC() {
+		return $GLOBALS['woocommerce'] ?? null;
+	}
+}
+
 if ( ! class_exists( 'WC_Subscriptions_Cart' ) ) {
 	/**
 	 * Minimal WCS cart shim: only the calculation-type flag the dynamic-pricing

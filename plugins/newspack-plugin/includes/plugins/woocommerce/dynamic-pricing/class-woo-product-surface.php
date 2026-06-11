@@ -595,6 +595,18 @@ final class WooProduct_Surface implements Price_Surface {
 				'schema_callback' => [ __CLASS__, 'store_api_cart_item_schema' ],
 			]
 		);
+		// Cart-level extension for the schedule row (Layer 2b). The legacy
+		// cart/checkout templates render the schedule as a totals row from
+		// `render_schedule_rows`; the blocks slot reads this payload from the
+		// cart-level extension and renders an ExperimentalOrderMeta fill.
+		\woocommerce_store_api_register_endpoint_data(
+			[
+				'endpoint'        => 'cart',
+				'namespace'       => 'newspack-dynamic-pricing',
+				'data_callback'   => [ __CLASS__, 'store_api_cart_data' ],
+				'schema_callback' => [ __CLASS__, 'store_api_cart_schema' ],
+			]
+		);
 	}
 
 	/**
@@ -613,6 +625,73 @@ final class WooProduct_Surface implements Price_Surface {
 			'name_suffix'  => '' === (string) $a['label'] ? '' : sprintf( ' — %s', $a['label'] ),
 			/* translators: %s: regular price */
 			'price_suffix' => ' ' . sprintf( __( '(regularly %s)', 'newspack-plugin' ), $original_plain ),
+		];
+	}
+
+	/**
+	 * StoreAPI cart extension payload — schedule sentences for every cart item
+	 * whose price changes again beyond the next renewal. Single-step rules and
+	 * flat-unlimited rules contribute nothing (same gate as the legacy totals
+	 * row in render_schedule_rows). Display-only — never throws.
+	 *
+	 * @return array{schedule_sentences: array<int, array{key: string, item_name: string, sentence: string}>, schedule_label: string}
+	 */
+	public static function store_api_cart_data(): array {
+		$sentences = [];
+		if ( function_exists( 'WC' ) && WC() && WC()->cart ) {
+			foreach ( WC()->cart->get_cart() as $key => $cart_item ) {
+				if ( ! self::is_eligible_cart_item( $cart_item ) ) {
+					continue;
+				}
+				if ( ! class_exists( '\WC_Subscriptions_Product' ) || ! \WC_Subscriptions_Product::is_subscription( $cart_item['data'] ) ) {
+					continue;
+				}
+				try {
+					$segments = Schedule_Projector::project_for_cart_item( $cart_item );
+				} catch ( \Throwable $e ) {
+					continue;
+				}
+				if ( ! Schedule_Projector::has_undisclosed_changes( $segments ) ) {
+					continue;
+				}
+				$sentences[] = [
+					'key'       => (string) $key,
+					'item_name' => (string) $cart_item['data']->get_name(),
+					'sentence'  => self::schedule_sentence( $segments, $cart_item['data'] ),
+				];
+			}
+		}
+		return [
+			'schedule_sentences' => $sentences,
+			'schedule_label'     => __( 'Price schedule', 'newspack-plugin' ),
+		];
+	}
+
+	/**
+	 * StoreAPI cart extension schema.
+	 */
+	public static function store_api_cart_schema(): array {
+		return [
+			'schedule_sentences' => [
+				'description' => __( 'Per-item schedule sentences for items whose price changes again beyond the next renewal.', 'newspack-plugin' ),
+				'type'        => 'array',
+				'context'     => [ 'view', 'edit' ],
+				'readonly'    => true,
+				'items'       => [
+					'type'       => 'object',
+					'properties' => [
+						'key'       => [ 'type' => 'string' ],
+						'item_name' => [ 'type' => 'string' ],
+						'sentence'  => [ 'type' => 'string' ],
+					],
+				],
+			],
+			'schedule_label'     => [
+				'description' => __( 'Translated label for the schedule row.', 'newspack-plugin' ),
+				'type'        => 'string',
+				'context'     => [ 'view', 'edit' ],
+				'readonly'    => true,
+			],
 		];
 	}
 
@@ -666,9 +745,13 @@ final class WooProduct_Surface implements Price_Surface {
 			return;
 		}
 		$asset = include $asset_file;
-		// Explicitly declare wc-blocks-checkout so WC's dependency detection
-		// doesn't warn; merge with whatever webpack inferred.
-		$deps = array_unique( array_merge( [ 'wc-blocks-checkout' ], $asset['dependencies'] ?? [] ) );
+		// Explicitly declare runtime script handles for the globals the bundle
+		// consumes: `wc-blocks-checkout` (window.wc.blocksCheckout, for
+		// registerCheckoutFilters + ExperimentalOrderMeta), `wp-plugins`
+		// (window.wp.plugins.registerPlugin for the slot fill), and `wp-element`
+		// (window.wp.element.createElement for the fill component). Merged with
+		// anything webpack inferred via the assets manifest.
+		$deps = array_unique( array_merge( [ 'wc-blocks-checkout', 'wp-plugins', 'wp-element' ], $asset['dependencies'] ?? [] ) );
 		wp_enqueue_script(
 			'newspack-dynamic-pricing-blocks-checkout',
 			\Newspack\Newspack::plugin_url() . '/dist/other-scripts/dynamic-pricing-blocks-checkout.js',
