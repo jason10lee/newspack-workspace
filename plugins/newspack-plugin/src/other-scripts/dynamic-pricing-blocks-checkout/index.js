@@ -23,7 +23,7 @@
 const NAMESPACE = 'newspack-dynamic-pricing';
 
 const blocksCheckout = window.wc?.blocksCheckout || {};
-const { registerCheckoutFilters, ExperimentalOrderMeta, TotalsItem } = blocksCheckout;
+const { registerCheckoutFilters, ExperimentalOrderMeta, TotalsItem, TotalsWrapper } = blocksCheckout;
 const { registerPlugin } = window.wp?.plugins || {};
 const { createElement: el, Fragment } = window.wp?.element || {};
 
@@ -99,10 +99,11 @@ if ( registerCheckoutFilters ) {
 /* --- Layer 2b: schedule row (ExperimentalOrderMeta fill) --- */
 
 /**
- * Render the schedule row using WC Blocks' own `TotalsItem` component so it
- * picks up the same border/padding/label styling as the recurring totals row
- * WCS renders just above it. The Slot passes the cart `extensions` object as
- * a prop to its children.
+ * Render the schedule row using WC Blocks' own `TotalsItem` inside a
+ * `TotalsWrapper` — the same pattern WCS uses for "Monthly recurring total"
+ * just above. The wrapper provides the section border/padding so the schedule
+ * reads as a sibling totals block, not as orphaned text below the box. The
+ * Slot passes the cart `extensions` object as a prop to its children.
  *
  * Schedule sentences are passed as `description` (rendered below the label) so
  * the long copy wraps naturally instead of cramming into a right-aligned
@@ -113,17 +114,16 @@ if ( registerCheckoutFilters ) {
 const ScheduleFill = ( { extensions } ) => {
 	const data = extensions?.[ NAMESPACE ];
 	const sentences = data?.schedule_sentences || [];
-	if ( ! sentences.length || ! TotalsItem ) {
+	if ( ! sentences.length || ! TotalsItem || ! TotalsWrapper ) {
 		return null;
 	}
 	const label = data.schedule_label || '';
 	return el(
-		Fragment,
-		null,
+		TotalsWrapper,
+		{ className: 'newspack-dp-schedule' },
 		sentences.map( s =>
 			el( TotalsItem, {
 				key: s.key,
-				className: 'newspack-dp-schedule',
 				label: sentences.length > 1 ? `${ label }: ${ s.item_name }` : label,
 				value: ' ',
 				description: s.sentence,
