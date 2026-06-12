@@ -70,11 +70,6 @@
 			"@commitlint/config-conventional"
 		]
 	},
-	"lint-staged": {
-		"*.{js,jsx,ts,tsx}": "eslint",
-		"*.scss": "stylelint --customSyntax postcss-scss",
-		"*.php": "composer phpcs --"
-	},
 	"pnpm": {
 		"overrides": {
 			"basic-ftp": "5.3.1",
