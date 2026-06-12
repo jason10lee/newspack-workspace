@@ -18,3 +18,18 @@
 		margin-top: 0;
 	}
 }
+
+/**
+ * Header ad spacing
+ */
+header.wp-block-template-part {
+	.wp-block-newspack-responsive-container:has( ~ .global_below_header ) {
+		// When there's a below header ad, remove the bottom most margin from the header:
+		.header-desktop,
+		.header-mobile {
+			> *:last-child {
+				margin-bottom: 0 !important;
+			}
+		}
+	}
+}
