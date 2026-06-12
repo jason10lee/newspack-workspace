@@ -194,7 +194,9 @@ class Dynamic_Pricing_CLI {
 			return true;
 		}
 
-		Subscription_Pin::pin( $line, $rule );
+		// Upsert: replace this rule's entry within the pinned SET (other rules'
+		// pins are untouched — a composed deal keeps composing, docs 08).
+		Subscription_Pin::upsert( $line, $rule );
 		$sub->add_order_note(
 			sprintf(
 				/* translators: 1: rule id */
@@ -224,8 +226,14 @@ class Dynamic_Pricing_CLI {
 	 */
 	private function detach_one( \WC_Subscription $sub, int $rule_id, bool $dry_run ): bool {
 		foreach ( $sub->get_items( 'line_item' ) as $line ) {
-			$snapshot = Subscription_Pin::snapshot( $line );
-			if ( ! $snapshot || (string) $rule_id !== (string) ( $snapshot['rule_id'] ?? '' ) ) {
+			$has_rule = false;
+			foreach ( Subscription_Pin::snapshots( $line ) as $entry ) {
+				if ( (string) $rule_id === (string) ( $entry['rule_id'] ?? '' ) ) {
+					$has_rule = true;
+					break;
+				}
+			}
+			if ( ! $has_rule ) {
 				continue;
 			}
 
@@ -238,26 +246,51 @@ class Dynamic_Pricing_CLI {
 					'#%d: would release rule %d%s.',
 					$sub->get_id(),
 					$rule_id,
-					$base > 0 ? sprintf( ' and restore regular price %s', number_format( $base * $qty, 2 ) ) : ''
+					$base > 0 ? sprintf( ' and reprice (regular price %s when no other pins remain)', number_format( $base * $qty, 2 ) ) : ''
 				) );
 				return true;
 			}
 
-			Subscription_Pin::unpin( $line );
-			if ( $base > 0 ) {
-				$line->set_subtotal( round( $base * $qty, 2 ) );
-				$line->set_total( round( $base * $qty, 2 ) );
-				$line->save();
-				$sub->calculate_totals();
+			$remaining = Subscription_Pin::remove( $line, (string) $rule_id );
+
+			if ( empty( $remaining ) ) {
+				// Last pin released: restore the regular price outright (any
+				// Always-current rules will reprice at the next event).
+				if ( $base > 0 ) {
+					$line->set_subtotal( round( $base * $qty, 2 ) );
+					$line->set_total( round( $base * $qty, 2 ) );
+					$line->save();
+					$sub->calculate_totals();
+				}
+				$sub->add_order_note(
+					sprintf(
+						/* translators: 1: rule id, 2: formatted price */
+						__( 'Newspack Dynamic Pricing [rule %1$s]: rule released via migration; recurring price restored to regular (%2$s).', 'newspack-plugin' ),
+						$rule_id,
+						wc_price( $base * $qty )
+					)
+				);
+			} else {
+				// Other pins still govern this subscription: reprice the
+				// upcoming cycle through the engine (idempotent apply).
+				$sub->add_order_note(
+					sprintf(
+						/* translators: 1: rule id, 2: number of remaining pinned rules */
+						__( 'Newspack Dynamic Pricing [rule %1$s]: rule released via migration; %2$d pinned rule(s) remain in effect.', 'newspack-plugin' ),
+						$rule_id,
+						count( $remaining )
+					)
+				);
+				$engine  = Pricing_Engine::instance();
+				$surface = $engine->surface( 'subscription' );
+				if ( $surface instanceof Subscription_Surface ) {
+					$ctx = $surface->context( $sub, Subscription_Surface::TRIGGER_SCHEDULED_STEP );
+					$d   = $engine->resolve( $ctx );
+					if ( $d ) {
+						$surface->apply( $ctx, $d );
+					}
+				}
 			}
-			$sub->add_order_note(
-				sprintf(
-					/* translators: 1: rule id, 2: formatted price */
-					__( 'Newspack Dynamic Pricing [rule %1$s]: rule released via migration; recurring price restored to regular (%2$s).', 'newspack-plugin' ),
-					$rule_id,
-					wc_price( $base * $qty )
-				)
-			);
 			$sub->save();
 			WP_CLI::log( sprintf( '#%d: released rule %d.', $sub->get_id(), $rule_id ) );
 			return true;

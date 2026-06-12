@@ -226,20 +226,57 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 		Subscription_Surface::note_acquisition_on_subscription( $sub, null, $recurring_cart );
 	}
 
-	public function test_pin_deal_on_subscription_snapshots_winning_deal_policy() {
-		\Newspack\Dynamic_Pricing\WooProduct_Surface::reset_applied_registry( new \WC_Cart() );
-
-		// A real locked-class rule post (no _application meta = locked default).
+	/**
+	 * Wire a real engine so apply() captures `locked_snapshots` through the
+	 * matching pipeline, mirroring checkout. Returns a subscription-typed
+	 * product mock the scope matcher accepts.
+	 */
+	private function wire_engine_for_pinning(): \WC_Product {
 		register_post_type( 'shop_pricing_rule', [ 'public' => false ] );
-		$rule_id = $this->factory->post->create( [ 'post_type' => 'shop_pricing_rule', 'post_status' => 'publish', 'post_title' => 'Intro ramp' ] );
-		update_post_meta( $rule_id, '_strategy_id', 'stepped_by_cycle' );
-		update_post_meta( $rule_id, '_params', wp_json_encode( [ 'steps' => [ [ 'at' => 1, 'calc_type' => 'fixed_price', 'value' => 5, 'label' => 'Intro' ] ] ] ) );
+		\Newspack\Dynamic_Pricing\CPT_Pricing_Rule_Repository::flush_cache();
+		$engine = \Newspack\Dynamic_Pricing\Pricing_Engine::instance();
+		$engine->reset_for_tests();
+		$engine->set_repository( new \Newspack\Dynamic_Pricing\CPT_Pricing_Rule_Repository() );
+		$engine->set_guardrails( new \Newspack\Dynamic_Pricing\Pricing_Guardrails( new \Newspack\Dynamic_Pricing\Bounds_Resolver() ) );
+		$engine->register_scope( new \Newspack\Dynamic_Pricing\Matchers\All_Subscriptions_Scope_Matcher() );
+		$engine->register( new \Newspack\Dynamic_Pricing\Subscriptions\Stepped_By_Cycle_Strategy() );
+		$engine->register( new \Newspack\Dynamic_Pricing\Strategies\Simple_Price_Strategy() );
+
+		$product = $this->getMockBuilder( \WC_Product::class )
+			->disableOriginalConstructor()
+			->onlyMethods( [ 'get_id', 'get_type', 'get_regular_price', 'get_meta', 'get_name', 'set_price' ] )
+			->getMock();
+		$product->method( 'get_id' )->willReturn( 99001 );
+		$product->method( 'get_type' )->willReturn( 'subscription' );
+		$product->method( 'get_regular_price' )->willReturn( '10' );
+		$product->method( 'get_meta' )->willReturn( '' );
+		$product->method( 'get_name' )->willReturn( 'Pin product' );
+		return $product;
+	}
+
+	private function seed_locked_rule( string $title, array $params, string $strategy = 'stepped_by_cycle' ): int {
+		$rule_id = $this->factory->post->create( [ 'post_type' => 'shop_pricing_rule', 'post_status' => 'publish', 'post_title' => $title ] );
+		update_post_meta( $rule_id, '_strategy_id', $strategy );
+		update_post_meta( $rule_id, '_scope_type', 'all_subscriptions' );
+		update_post_meta( $rule_id, '_params', wp_slash( wp_json_encode( $params ) ) );
+		\Newspack\Dynamic_Pricing\CPT_Pricing_Rule_Repository::flush_cache();
+		return $rule_id;
+	}
+
+	public function test_pin_deal_on_subscription_snapshots_every_matching_locked_rule() {
+		\Newspack\Dynamic_Pricing\WooProduct_Surface::reset_applied_registry( new \WC_Cart() );
+		$product = $this->wire_engine_for_pinning();
+
+		// TWO locked rules match: the cycle-1 winner AND a flat rule that only
+		// governs later cycles. Both belong in the pin (docs 08) — the
+		// checkout schedule composed both.
+		$stepped_id = $this->seed_locked_rule( 'Intro ramp', [ 'steps' => [ [ 'at' => 1, 'calc_type' => 'fixed_price', 'value' => 5, 'label' => 'Intro' ] ] ] );
+		$flat_id    = $this->seed_locked_rule( 'Season promo', [ 'calc_type' => 'percent_of_base', 'value' => 80, 'cycles_limit' => 5, 'label' => '' ], 'simple_price' );
 
 		// Seed the applied registry as checkout would.
-		$product = $this->getMockBuilder( \WC_Product::class )->disableOriginalConstructor()->onlyMethods( [ 'set_price' ] )->getMock();
 		$ctx = new Pricing_Context( 'cart', $product, null, 10.0, [ 'completed_cycles' => 1 ], [ 'data' => $product, 'key' => 'pin_key' ] );
 		$d   = new Price_Decision( 5.0, Price_Decision::DURABLE, 'step_at_1_fixed_price', 'Intro', 'stepped_by_cycle', 1 );
-		$d->rule_id = (string) $rule_id;
+		$d->rule_id = (string) $stepped_id;
 		( new \Newspack\Dynamic_Pricing\WooProduct_Surface() )->apply( $ctx, $d );
 
 		$line = $this->getMockBuilder( \WC_Order_Item_Product::class )
@@ -249,11 +286,11 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 			->getMock();
 		$line->method( 'get_variation_id' )->willReturn( 0 );
 		$line->method( 'get_product_id' )->willReturn( 0 );
-		$captured_snapshot = null;
+		$captured = null;
 		$line->expects( $this->once() )->method( 'update_meta_data' )->willReturnCallback(
-			function ( $key, $value ) use ( &$captured_snapshot ) {
+			function ( $key, $value ) use ( &$captured ) {
 				if ( \Newspack\Dynamic_Pricing\Subscription_Pin::LOCKED_RULE_META_KEY === $key ) {
-					$captured_snapshot = $value;
+					$captured = $value;
 				}
 			}
 		);
@@ -264,24 +301,27 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 
 		Subscription_Surface::pin_rule_on_subscription( $sub, null, new \WC_Cart( [ 'pin_key' => [ 'data' => $product ] ] ) );
 
-		$this->assertIsArray( $captured_snapshot );
-		$this->assertSame( 1, $captured_snapshot['schema_version'] );
-		$this->assertSame( (string) $rule_id, $captured_snapshot['rule_id'] );
-		$this->assertSame( 'stepped_by_cycle', $captured_snapshot['strategy_id'] );
-		$this->assertNotEmpty( $captured_snapshot['params']['steps'] );
+		$this->assertIsArray( $captured );
+		$this->assertCount( 2, $captured, 'BOTH matching locked rules are pinned — the composed deal, not just the cycle-1 winner.' );
+		$pinned_ids = array_map( fn( array $s ): string => $s['rule_id'], $captured );
+		$this->assertContains( (string) $stepped_id, $pinned_ids );
+		$this->assertContains( (string) $flat_id, $pinned_ids );
+		$this->assertSame( 1, $captured[0]['schema_version'] );
+
+		\Newspack\Dynamic_Pricing\Pricing_Engine::instance()->reset_for_tests();
 	}
 
 	public function test_pin_deal_on_subscription_skips_live_policies() {
 		\Newspack\Dynamic_Pricing\WooProduct_Surface::reset_applied_registry( new \WC_Cart() );
+		$product = $this->wire_engine_for_pinning();
 
-		register_post_type( 'shop_pricing_rule', [ 'public' => false ] );
-		$rule_id = $this->factory->post->create( [ 'post_type' => 'shop_pricing_rule', 'post_status' => 'publish' ] );
-		update_post_meta( $rule_id, '_strategy_id', 'stepped_by_cycle' );
+		// A current-application rule matches — it must NOT be pinned.
+		$rule_id = $this->seed_locked_rule( 'Live promo', [ 'calc_type' => 'percent_of_base', 'value' => 80, 'cycles_limit' => 0, 'label' => '' ], 'simple_price' );
 		update_post_meta( $rule_id, '_application', 'current' );
+		\Newspack\Dynamic_Pricing\CPT_Pricing_Rule_Repository::flush_cache();
 
-		$product = $this->getMockBuilder( \WC_Product::class )->disableOriginalConstructor()->onlyMethods( [ 'set_price' ] )->getMock();
-		$ctx = new Pricing_Context( 'cart', $product, null, 10.0, [], [ 'data' => $product, 'key' => 'live_key' ] );
-		$d   = new Price_Decision( 5.0, Price_Decision::DURABLE, 'r', 'l', 'stepped_by_cycle', 1 );
+		$ctx = new Pricing_Context( 'cart', $product, null, 10.0, [ 'completed_cycles' => 1 ], [ 'data' => $product, 'key' => 'live_key' ] );
+		$d   = new Price_Decision( 8.0, Price_Decision::DURABLE, 'r', 'l', 'simple_price', 1 );
 		$d->rule_id = (string) $rule_id;
 		( new \Newspack\Dynamic_Pricing\WooProduct_Surface() )->apply( $ctx, $d );
 
@@ -295,6 +335,8 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 		$sub = $this->mock_subscription( completed_payments: 0, line_item: $line );
 
 		Subscription_Surface::pin_rule_on_subscription( $sub, null, new \WC_Cart( [ 'live_key' => [ 'data' => $product ] ] ) );
+
+		\Newspack\Dynamic_Pricing\Pricing_Engine::instance()->reset_for_tests();
 	}
 
 	public function test_on_payment_complete_bails_when_product_is_deleted() {

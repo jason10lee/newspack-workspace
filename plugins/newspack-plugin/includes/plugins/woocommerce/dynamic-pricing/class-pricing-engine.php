@@ -52,30 +52,16 @@ final class Pricing_Engine {
 	public function set_guardrails( Pricing_Guardrails $g ): void          { $this->guardrails = $g; }
 
 	public function resolve( Pricing_Context $ctx ): ?Price_Decision {
-		if ( $this->is_excluded( $ctx->product, $ctx->target ) ) {
+		if ( null === $this->guardrails ) {
 			return null;
 		}
-		if ( null === $this->policies || null === $this->guardrails ) {
-			return null;
-		}
-
-		$applicable = $this->policies->for_context( $ctx );
-		usort( $applicable, fn( Pricing_Rule $a, Pricing_Rule $b ) => $a->priority <=> $b->priority );
 
 		$decision = null;
-		foreach ( $applicable as $rule ) {
+		foreach ( $this->matching_rules( $ctx ) as $rule ) {
 			if ( $decision && $decision->is_locked ) {
 				break;
 			}
-
-			$strategy = $this->strategies[ $rule->strategy_id ] ?? null;
-			if ( ! $strategy || ! $strategy->applies_to( $ctx, $rule->params ) ) {
-				continue;
-			}
-			if ( ! $rule->passes_conditions( $ctx, $this ) ) {
-				continue;
-			}
-			$d = $strategy->decide( $ctx, $rule->params );
+			$d = $this->strategies[ $rule->strategy_id ]->decide( $ctx, $rule->params );
 			if ( ! $d ) {
 				continue;
 			}
@@ -84,6 +70,41 @@ final class Pricing_Engine {
 			$decision     = $this->guardrails->compose( $decision, $d, $rule, $ctx );
 		}
 		return $decision ? $this->guardrails->guard( $decision, $ctx ) : null;
+	}
+
+	/**
+	 * The rules that survive every pre-decision gate for this context —
+	 * exclusions, intent-aware sourcing, registered strategy + applies_to,
+	 * conditions — sorted by priority. resolve() iterates exactly this list;
+	 * the acquisition pin write captures its locked members so the snapshot
+	 * set equals the composed deal as evaluated (docs 08). Also feeds the
+	 * subscription metabox's "also in effect" listing.
+	 *
+	 * @return Pricing_Rule[]
+	 */
+	public function matching_rules( Pricing_Context $ctx ): array {
+		if ( $this->is_excluded( $ctx->product, $ctx->target ) ) {
+			return [];
+		}
+		if ( null === $this->policies ) {
+			return [];
+		}
+
+		$applicable = $this->policies->for_context( $ctx );
+		usort( $applicable, fn( Pricing_Rule $a, Pricing_Rule $b ) => $a->priority <=> $b->priority );
+
+		$matched = [];
+		foreach ( $applicable as $rule ) {
+			$strategy = $this->strategies[ $rule->strategy_id ] ?? null;
+			if ( ! $strategy || ! $strategy->applies_to( $ctx, $rule->params ) ) {
+				continue;
+			}
+			if ( ! $rule->passes_conditions( $ctx, $this ) ) {
+				continue;
+			}
+			$matched[] = $rule;
+		}
+		return $matched;
 	}
 
 	/**

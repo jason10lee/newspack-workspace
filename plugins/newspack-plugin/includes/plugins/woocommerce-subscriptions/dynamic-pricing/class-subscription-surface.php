@@ -76,15 +76,16 @@ final class Subscription_Surface implements Price_Surface {
 		}
 		foreach ( $recurring_cart->get_cart() as $cart_item_key => $cart_item ) {
 			$applied = WooProduct_Surface::get_applied_for( (string) $cart_item_key );
-			if ( ! $applied || '' === (string) $applied['rule_id'] ) {
+			if ( ! $applied ) {
 				continue;
 			}
-			$post = get_post( (int) $applied['rule_id'] );
-			if ( ! $post ) {
-				continue;
-			}
-			$rule = Pricing_Rule::from_post( $post );
-			if ( Pricing_Rule::APPLICATION_LOCKED !== $rule->application ) {
+			// EVERY locked rule that matched at acquisition gets pinned — not
+			// just the cycle-1 winner. The checkout schedule composed all of
+			// them (a rule that lost cycle 1 may govern cycle 3), so a partial
+			// pin would charge renewals more than the schedule promised
+			// (docs 08). Captured at cart time by the cart surface.
+			$snapshots = is_array( $applied['locked_snapshots'] ?? null ) ? $applied['locked_snapshots'] : [];
+			if ( empty( $snapshots ) ) {
 				continue;
 			}
 
@@ -92,12 +93,18 @@ final class Subscription_Surface implements Price_Surface {
 			if ( ! $line ) {
 				continue;
 			}
-			Subscription_Pin::pin( $line, $rule );
+			Subscription_Pin::pin_set( $line, $snapshots );
+			$ids = implode( ', ', array_map( fn( array $s ): string => (string) ( $s['rule_id'] ?? '' ), $snapshots ) );
 			$subscription->add_order_note(
 				sprintf(
-					/* translators: 1: rule id */
-					__( 'Newspack Dynamic Pricing [rule %1$s]: terms locked at purchase — renewals follow this rule as configured at purchase; later edits affect new purchases only.', 'newspack-plugin' ),
-					$rule->id
+					/* translators: 1: comma-separated rule id list */
+					_n(
+						'Newspack Dynamic Pricing [rule %1$s]: terms locked at purchase — renewals follow this rule as configured at purchase; later edits affect new purchases only.',
+						'Newspack Dynamic Pricing [rules %1$s]: terms locked at purchase — renewals compose these rules as configured at purchase; later edits affect new purchases only.',
+						count( $snapshots ),
+						'newspack-plugin'
+					),
+					$ids
 				)
 			);
 		}

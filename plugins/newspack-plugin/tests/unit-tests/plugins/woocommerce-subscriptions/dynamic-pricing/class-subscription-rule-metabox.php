@@ -102,6 +102,33 @@ class Newspack_Test_Subscription_Rule_Metabox extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'first 3 cycles', $html );
 	}
 
+	public function test_multi_pin_renders_every_snapshot_with_compose_note() {
+		$second                = $this->stepped_snapshot( 424243 );
+		$second['title']       = 'Season promo';
+		$second['strategy_id'] = 'simple_price';
+		$second['params']      = [
+			'calc_type'    => 'percent_of_base',
+			'value'        => 80,
+			'cycles_limit' => 5,
+			'label'        => '',
+		];
+
+		$line = new \WC_Order_Item_Product(
+			[
+				'product_id' => self::PRODUCT_ID,
+				'quantity'   => 1,
+				'meta'       => [ '_newspack_dp_locked_rule' => [ $this->stepped_snapshot( 424242 ), $second ] ],
+			]
+		);
+		$html = $this->render( $this->mock_subscription_with_line( $line ) );
+
+		$this->assertStringContainsString( '2 rules locked at purchase', $html );
+		$this->assertStringContainsString( 'Test rule', $html );
+		$this->assertStringContainsString( 'Season promo', $html );
+		$this->assertStringContainsString( '80% of regular price', $html );
+		$this->assertStringContainsString( 'first 5 cycles', $html );
+	}
+
 	public function test_always_current_attribution_without_snapshot() {
 		$rule_id = wp_insert_post(
 			[

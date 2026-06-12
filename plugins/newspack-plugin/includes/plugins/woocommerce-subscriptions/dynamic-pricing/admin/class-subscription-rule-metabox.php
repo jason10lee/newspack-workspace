@@ -54,7 +54,7 @@ final class Subscription_Rule_Metabox {
 		if ( ! $line ) {
 			return;
 		}
-		if ( ! Subscription_Pin::snapshot( $line ) && '' === (string) $line->get_meta( WooProduct_Surface::LINE_META_RULE_ID ) ) {
+		if ( empty( Subscription_Pin::snapshots( $line ) ) && '' === (string) $line->get_meta( WooProduct_Surface::LINE_META_RULE_ID ) ) {
 			return; // No rule ever touched this subscription.
 		}
 
@@ -84,22 +84,100 @@ final class Subscription_Rule_Metabox {
 			return;
 		}
 
-		$snapshot = Subscription_Pin::snapshot( $line );
-		$rule_id  = (string) $line->get_meta( WooProduct_Surface::LINE_META_RULE_ID );
-		$product  = $line->get_product();
-		$base     = $product instanceof \WC_Product ? Amount_Calculator::base_price_for( $product ) : 0.0;
+		$snapshots = Subscription_Pin::snapshots( $line );
+		$rule_id   = (string) $line->get_meta( WooProduct_Surface::LINE_META_RULE_ID );
+		$product   = $line->get_product();
+		$base      = $product instanceof \WC_Product ? Amount_Calculator::base_price_for( $product ) : 0.0;
 
 		echo '<div class="newspack-dp-subscription-rule">';
 
-		if ( $snapshot ) {
-			self::render_pinned( $sub, $snapshot, $base );
+		$named_ids = [];
+		if ( ! empty( $snapshots ) ) {
+			if ( count( $snapshots ) > 1 ) {
+				echo '<p><strong>' . esc_html(
+					sprintf(
+						/* translators: %d: number of pinned rules */
+						_n( '%d rule locked at purchase.', '%d rules locked at purchase — for each cycle they compose (Best price wins by default).', count( $snapshots ), 'newspack-plugin' ),
+						count( $snapshots )
+					)
+				) . '</strong></p>';
+			}
+			foreach ( $snapshots as $snapshot ) {
+				self::render_pinned( $sub, $snapshot, $base );
+				$named_ids[] = (string) ( $snapshot['rule_id'] ?? '' );
+			}
 		} else {
 			self::render_always_current( $rule_id );
+			$named_ids[] = $rule_id;
 		}
 
+		self::render_also_in_effect( $sub, $named_ids );
 		self::render_next_renewal( $sub );
 
 		echo '</div>';
+	}
+
+	/**
+	 * Matching ALWAYS-CURRENT rules that also reach this subscription's
+	 * renewals — they compose with the pins above but hold no snapshot, so
+	 * without this list the box would understate what's in effect. Sourced
+	 * through the engine's real matching pipeline (scope + conditions); pins
+	 * are naturally excluded (they hydrate as locked-application).
+	 *
+	 * @param \WC_Subscription $sub       Subscription.
+	 * @param string[]         $named_ids Rule ids already presented above.
+	 */
+	private static function render_also_in_effect( $sub, array $named_ids ): void {
+		try {
+			$surface = Pricing_Engine::instance()->surface( 'subscription' );
+			if ( ! $surface ) {
+				return;
+			}
+			$ctx     = $surface->context( $sub, Subscription_Surface::TRIGGER_SCHEDULED_STEP );
+			$current = array_filter(
+				Pricing_Engine::instance()->matching_rules( $ctx ),
+				fn( Pricing_Rule $rule ): bool => Pricing_Rule::APPLICATION_CURRENT === $rule->application
+					&& ! in_array( (string) $rule->id, $named_ids, true )
+			);
+			if ( empty( $current ) ) {
+				return;
+			}
+
+			echo '<p><strong>' . esc_html__( 'Also in effect (always current):', 'newspack-plugin' ) . '</strong></p><ul style="margin-top:0">';
+			foreach ( $current as $rule ) {
+				$id        = (int) $rule->id;
+				$edit_link = get_edit_post_link( $id );
+				$title     = '' !== $rule->title ? $rule->title : sprintf( '#%d', $id );
+				$name_html = $edit_link
+					? '<a href="' . esc_url( $edit_link ) . '">' . esc_html( $title ) . '</a>'
+					: esc_html( $title );
+				echo '<li>' . wp_kses_post( $name_html ) . ' (#' . (int) $id . ') — ' . esc_html( self::rule_summary( $rule ) ) . '</li>';
+			}
+			echo '</ul>';
+			echo '<p class="description">' . esc_html__( 'These follow their rule’s latest settings at every renewal and compose with the locked terms above.', 'newspack-plugin' ) . '</p>';
+		} catch ( \Throwable $e ) {
+			return; // Display-only — never break the edit screen.
+		}
+	}
+
+	/**
+	 * One-line summary of a rule's configuration for the "also in effect" list.
+	 */
+	private static function rule_summary( Pricing_Rule $rule ): string {
+		if ( 'stepped_by_cycle' === $rule->strategy_id ) {
+			$steps = is_array( $rule->params['steps'] ?? null ) ? count( $rule->params['steps'] ) : 0;
+			/* translators: %d: number of steps */
+			return sprintf( _n( 'Price Schedule (%d step)', 'Price Schedule (%d steps)', $steps, 'newspack-plugin' ), $steps );
+		}
+		if ( 'simple_price' === $rule->strategy_id ) {
+			$phrase = self::calc_phrase( (string) ( $rule->params['calc_type'] ?? '' ), (float) ( $rule->params['value'] ?? 0 ) );
+			$limit  = max( 0, (int) ( $rule->params['cycles_limit'] ?? 0 ) );
+			return 0 === $limit
+				? $phrase
+				/* translators: 1: calc phrase, 2: number of cycles */
+				: sprintf( __( '%1$s, first %2$d cycles', 'newspack-plugin' ), $phrase, $limit );
+		}
+		return $rule->strategy_id;
 	}
 
 	/**

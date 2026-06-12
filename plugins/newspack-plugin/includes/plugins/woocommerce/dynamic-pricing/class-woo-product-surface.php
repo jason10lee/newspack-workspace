@@ -421,15 +421,40 @@ final class WooProduct_Surface implements Price_Surface {
 	 */
 	private static function decision_entry( Pricing_Context $ctx, Price_Decision $d ): array {
 		return [
-			'rule_id'   => (string) ( $d->rule_id ?? '' ),
-			'label'     => $d->label,
-			'reason'    => $d->reason,
-			'amount'    => $d->amount,
-			'original'  => $ctx->base_price,
-			'item_name' => (string) $ctx->product->get_name(),
-			'quantity'  => isset( $ctx->target['quantity'] ) ? max( 1, (int) $ctx->target['quantity'] ) : 1,
-			'publicize' => (bool) $d->publicize,
+			'rule_id'          => (string) ( $d->rule_id ?? '' ),
+			'label'            => $d->label,
+			'reason'           => $d->reason,
+			'amount'           => $d->amount,
+			'original'         => $ctx->base_price,
+			'item_name'        => (string) $ctx->product->get_name(),
+			'quantity'         => isset( $ctx->target['quantity'] ) ? max( 1, (int) $ctx->target['quantity'] ) : 1,
+			'publicize'        => (bool) $d->publicize,
+			'locked_snapshots' => self::locked_snapshots_for( $ctx ),
 		];
+	}
+
+	/**
+	 * Snapshot payloads for EVERY locked-class rule matching this acquisition
+	 * context — not just the cycle-1 winner. The checkout schedule composes
+	 * all of them across future cycles (a losing rule at cycle 1 may govern
+	 * cycle 3), so the pin must capture the full set or renewals diverge from
+	 * the promise (docs 08). Captured at CART time, where conditions like
+	 * first_time_only still evaluate pre-purchase.
+	 *
+	 * @return array<int, array>
+	 */
+	private static function locked_snapshots_for( Pricing_Context $ctx ): array {
+		try {
+			$snapshots = [];
+			foreach ( Pricing_Engine::instance()->matching_rules( $ctx ) as $rule ) {
+				if ( Pricing_Rule::APPLICATION_LOCKED === $rule->application ) {
+					$snapshots[] = $rule->to_snapshot();
+				}
+			}
+			return $snapshots;
+		} catch ( \Throwable $e ) {
+			return [];
+		}
 	}
 
 	/**

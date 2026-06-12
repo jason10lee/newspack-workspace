@@ -53,16 +53,16 @@ final class CPT_Pricing_Rule_Repository implements Pricing_Rule_Repository {
 	 */
 	public function for_context( Pricing_Context $ctx ): array {
 		$is_renewal = Pricing_Context::INTENT_RENEWAL === $ctx->intent;
-		$pinned     = $is_renewal ? self::pinned_rule_for( $ctx->target ) : null;
+		$pinned     = $is_renewal ? self::pinned_rules_for( $ctx->target ) : [];
 
-		// The zero-rules short-circuit must not block pinned rules: a snapshot
-		// outlives its rule row by design (it may be the only rule left).
+		// The zero-rules short-circuit must not block pinned rules: snapshots
+		// outlive their rule rows by design (they may be the only rules left).
 		if ( ! self::has_policies() ) {
-			return $pinned ? [ $pinned ] : [];
+			return $pinned;
 		}
 
 		$engine   = Pricing_Engine::instance();
-		$policies = $pinned ? [ $pinned ] : [];
+		$policies = $pinned;
 		foreach ( $this->all_active() as $rule ) {
 			if ( $is_renewal && Pricing_Rule::APPLICATION_LOCKED === $rule->application ) {
 				continue;
@@ -75,21 +75,25 @@ final class CPT_Pricing_Rule_Repository implements Pricing_Rule_Repository {
 	}
 
 	/**
-	 * Read the pinned-rule snapshot off a renewal target's recurring line item
-	 * and hydrate it. Multi-line subscriptions are excluded upstream, so the
-	 * first line item is the recurring line.
+	 * Read every pinned-rule snapshot off a renewal target's recurring line
+	 * item and hydrate them all — the composed deal acquired at purchase
+	 * (docs 08). Multi-line subscriptions are excluded upstream, so the first
+	 * line item is the recurring line.
 	 *
 	 * @param mixed $target Surface-native target; only WC_Subscription carries pins.
+	 * @return Pricing_Rule[]
 	 */
-	public static function pinned_rule_for( mixed $target ): ?Pricing_Rule {
+	public static function pinned_rules_for( mixed $target ): array {
 		if ( ! $target instanceof \WC_Subscription ) {
-			return null;
+			return [];
 		}
 		foreach ( $target->get_items( 'line_item' ) as $line ) {
-			$snapshot = Subscription_Pin::snapshot( $line );
-			return $snapshot ? Pricing_Rule::from_snapshot( $snapshot ) : null;
+			return array_map(
+				[ Pricing_Rule::class, 'from_snapshot' ],
+				Subscription_Pin::snapshots( $line )
+			);
 		}
-		return null;
+		return [];
 	}
 
 	/**

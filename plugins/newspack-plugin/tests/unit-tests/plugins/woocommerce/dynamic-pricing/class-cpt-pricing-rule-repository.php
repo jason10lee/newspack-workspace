@@ -189,6 +189,27 @@ class Newspack_Test_CPT_Pricing_Rule_Repository extends WP_UnitTestCase {
 		$this->assertSame( [], $this->repo->for_context( $ctx ), 'Unknown snapshot schema versions must not resolve.' );
 	}
 
+	public function test_multi_pin_list_hydrates_every_snapshot() {
+		delete_option( CPT_Pricing_Rule_Repository::HAS_POLICIES_OPTION );
+
+		$second            = $this->snapshot_fixture();
+		$second['rule_id'] = '888';
+		$second['strategy_id'] = 'simple_price';
+		$second['params']  = [ 'calc_type' => 'percent_of_base', 'value' => 80, 'cycles_limit' => 5, 'label' => '' ];
+
+		// LIST shape (multi-pin) — both entries hydrate, order preserved.
+		$ctx    = $this->renewal_context(
+			$this->mock_product( 42 ),
+			$this->mock_pinned_subscription( [ $this->snapshot_fixture(), $second ] )
+		);
+		$result = $this->repo->for_context( $ctx );
+
+		$this->assertCount( 2, $result );
+		$this->assertSame( '777', $result[0]->id );
+		$this->assertSame( '888', $result[1]->id );
+		$this->assertSame( Pricing_Rule::APPLICATION_LOCKED, $result[1]->application );
+	}
+
 	private function snapshot_fixture(): array {
 		return [
 			'schema_version' => 1,
