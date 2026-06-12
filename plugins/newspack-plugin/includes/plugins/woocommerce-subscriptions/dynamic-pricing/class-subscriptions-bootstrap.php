@@ -20,6 +20,9 @@ final class Subscriptions_Bootstrap {
 		$engine->add_surface( new Subscription_Surface() );
 		$engine->register( new Stepped_By_Cycle_Strategy() );
 		Subscription_Surface::init();
+		if ( is_admin() ) {
+			Subscription_Rule_Metabox::init();
+		}
 	}
 }
 
