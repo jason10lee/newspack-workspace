@@ -168,6 +168,25 @@ class Jetpack {
 
 		// Disable Jetpack Image Studio as late as possible so dequeues cannot be overridden.
 		add_action( 'admin_print_scripts', [ __CLASS__, 'disable_image_studio' ], 999 );
+
+		// Disable Jetpack AI Assistant unless the publisher has opted in (NPPM-2915). Off by default fleet-wide.
+		add_filter( 'jetpack_ai_enabled', [ __CLASS__, 'maybe_disable_ai_assistant' ] );
+	}
+
+	/**
+	 * Disable Jetpack AI Assistant unless the publisher has explicitly opted in.
+	 *
+	 * Jetpack AI is off by default across Newspack sites; publishers opt back in via
+	 * Settings → Connections (the `jetpack-ai` optional module). See NPPM-2915.
+	 *
+	 * @param bool $enabled Whether Jetpack AI is enabled (incoming filter value).
+	 * @return bool False when the site has not opted in; the unchanged value otherwise.
+	 */
+	public static function maybe_disable_ai_assistant( $enabled ) {
+		if ( ! Optional_Modules::is_optional_module_active( 'jetpack-ai' ) ) {
+			return false;
+		}
+		return $enabled;
 	}
 
 	/**
