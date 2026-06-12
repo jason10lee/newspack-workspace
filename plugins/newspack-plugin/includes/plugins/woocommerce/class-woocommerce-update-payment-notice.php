@@ -18,6 +18,16 @@ class WooCommerce_Update_Payment_Notice {
 	const NOTICE_INTERVAL = 60 * 60 * 24; // 24 hours.
 
 	/**
+	 * Subscription statuses for which the "needs payment" notice is actionable.
+	 * Only states where paying actually restores the subscription. Terminal
+	 * statuses (expired, cancelled, switched) and states where the reader still
+	 * has access (active, pending-cancel) are intentionally excluded. NPPM-2926.
+	 *
+	 * @var string[]
+	 */
+	const NOTICE_SUBSCRIPTION_STATUSES = [ 'on-hold', 'pending' ];
+
+	/**
 	 * Initialize the class.
 	 */
 	public static function init() {
@@ -137,7 +147,10 @@ class WooCommerce_Update_Payment_Notice {
 		$notices = [];
 
 		foreach ( $subscriptions as $subscription ) {
-			if ( 'cancelled' === $subscription->get_status() ) {
+			// Only nag for statuses where paying actually restores the subscription.
+			// Terminal/ended statuses (e.g. expired) can carry a stale unpaid renewal
+			// order that trips needs_payment() with no live payment to resolve. NPPM-2926.
+			if ( ! $subscription->has_status( self::NOTICE_SUBSCRIPTION_STATUSES ) ) {
 				continue;
 			}
 			if ( ! $subscription->needs_payment() ) {
