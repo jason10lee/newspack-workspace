@@ -63,6 +63,15 @@ class Optional_Modules {
 	/**
 	 * Get the list of available optional modules.
 	 *
+	 * Note: this list is consumed by the Syndication settings batch-writer
+	 * (`Syndication::api_update_settings()` overwrites every listed module from
+	 * the request, and the route marks each one `required`). Modules managed by
+	 * their own dedicated section/endpoint must NOT be added here, or an
+	 * unrelated Syndication save would clobber/422 them. `jetpack-ai` is one such
+	 * module — it has a default in `get_settings()` and its own
+	 * `Jetpack_AI_Section` REST endpoint (Settings → Connections), so it is
+	 * intentionally excluded from this list.
+	 *
 	 * @return array List of available optional modules.
 	 */
 	public static function get_available_optional_modules(): array {
