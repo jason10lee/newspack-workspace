@@ -1,3 +1,10 @@
+# newspack-newsletters [3.34.0-alpha.2](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.34.0-alpha.1...newspack-newsletters@3.34.0-alpha.2) (2026-06-12)
+
+
+### Features
+
+* **content-gate:** add newsletter link access-control bypass ([#136](https://github.com/Automattic/newspack-workspace/issues/136)) ([508f57c](https://github.com/Automattic/newspack-workspace/commit/508f57c623cfb3e2a6ba8d06d89a4f6a7ad3b97f))
+
 # newspack-newsletters [3.34.0-alpha.1](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.33.6...newspack-newsletters@3.34.0-alpha.1) (2026-06-05)
 
 
