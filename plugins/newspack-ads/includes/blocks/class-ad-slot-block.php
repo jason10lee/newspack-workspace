@@ -72,7 +72,59 @@ final class Ad_Slot_Block {
 		}
 		ob_start();
 		do_action( $hook_name );
-		return ob_get_clean();
+		$content = ob_get_clean();
+
+		return self::apply_spacing( $content, $attrs );
+	}
+
+	/**
+	 * Merge the block's spacing (padding/margin) styles onto the first element of
+	 * the rendered ad markup, rather than wrapping it in a new element. The ad
+	 * markup is provider-owned (e.g. the GAM `<div id='div-gpt-ad-…'>` or the
+	 * Broadstreet `.newspack-broadstreet-ad` div), so we attach the inline style
+	 * directly to keep template-part markup free of an extra wrapper.
+	 *
+	 * Styles are derived from the block's `style` attribute via the style engine,
+	 * which resolves theme spacing presets and needs no global render context.
+	 *
+	 * @param string $content Rendered ad markup.
+	 * @param array  $attrs   Block attributes.
+	 *
+	 * @return string Markup with spacing applied.
+	 */
+	private static function apply_spacing( $content, $attrs ) {
+		if ( '' === trim( (string) $content ) || empty( $attrs['style']['spacing'] ) ) {
+			return $content;
+		}
+
+		$styles = wp_style_engine_get_styles( [ 'spacing' => $attrs['style']['spacing'] ] );
+		$css    = $styles['css'] ?? '';
+		if ( '' === $css ) {
+			return $content;
+		}
+
+		// Advance to the first rendered element, skipping leading <style>/<script>
+		// tags. Fixed-height GAM placements emit a <style> block (via
+		// print_fixed_height_css on newspack_ads_before_placement_ad) ahead of the
+		// ad container, and spacing must land on the visible container, not that.
+		$processor = new \WP_HTML_Tag_Processor( $content );
+		$found     = false;
+		while ( $processor->next_tag() ) {
+			$tag = $processor->get_tag();
+			if ( 'STYLE' === $tag || 'SCRIPT' === $tag ) {
+				continue;
+			}
+			$found = true;
+			break;
+		}
+		if ( ! $found ) {
+			return $content;
+		}
+		$existing = $processor->get_attribute( 'style' );
+		$merged   = $existing ? rtrim( trim( $existing ), ';' ) . ';' . $css : $css;
+		$processor->set_attribute( 'style', $merged );
+
+		return $processor->get_updated_html();
 	}
 }
 Ad_Slot_Block::init();
