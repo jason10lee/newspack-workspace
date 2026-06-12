@@ -99,10 +99,8 @@ export default function Edit( { attributes, setAttributes } ) {
 	}
 
 	// Selected: reuse the ad-unit block's placeholder visual so styling is identical.
-	// Presentational fill/stroke attributes are set inline so the mock paints
-	// correctly on first render — the editor stylesheet loads into the canvas
-	// iframe asynchronously, and without these the bare <rect> would flash its
-	// default black fill until the CSS arrives. The stylesheet still overrides.
+	// Fill/stroke are set inline so the mock paints correctly before the editor
+	// stylesheet loads into the canvas iframe; the stylesheet still overrides.
 	return (
 		<div { ...blockProps }>
 			{ inspector }

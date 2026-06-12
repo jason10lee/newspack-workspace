@@ -79,13 +79,9 @@ final class Ad_Slot_Block {
 
 	/**
 	 * Merge the block's spacing (padding/margin) styles onto the first element of
-	 * the rendered ad markup, rather than wrapping it in a new element. The ad
-	 * markup is provider-owned (e.g. the GAM `<div id='div-gpt-ad-…'>` or the
-	 * Broadstreet `.newspack-broadstreet-ad` div), so we attach the inline style
-	 * directly to keep template-part markup free of an extra wrapper.
-	 *
-	 * Styles are derived from the block's `style` attribute via the style engine,
-	 * which resolves theme spacing presets and needs no global render context.
+	 * the rendered ad markup, instead of adding a wrapper element. Styles come
+	 * from the block's `style` attribute via the style engine, which resolves
+	 * theme spacing presets and needs no global render context.
 	 *
 	 * @param string $content Rendered ad markup.
 	 * @param array  $attrs   Block attributes.
@@ -103,10 +99,8 @@ final class Ad_Slot_Block {
 			return $content;
 		}
 
-		// Advance to the first rendered element, skipping leading <style>/<script>
-		// tags. Fixed-height GAM placements emit a <style> block (via
-		// print_fixed_height_css on newspack_ads_before_placement_ad) ahead of the
-		// ad container, and spacing must land on the visible container, not that.
+		// Skip leading <style>/<script> tags so spacing lands on the visible
+		// container (fixed-height GAM placements emit a <style> block first).
 		$processor = new \WP_HTML_Tag_Processor( $content );
 		$found     = false;
 		while ( $processor->next_tag() ) {
