@@ -41,20 +41,27 @@ class AdSlotBlockTest extends WP_UnitTestCase {
 	 * A registered placement with no ad unit bound renders nothing.
 	 */
 	public function test_render_with_registered_placement_no_assignment() {
-		// Force the block-theme branch so block placements are registered.
-		add_filter( 'newspack_ads_is_block_theme', '__return_true' );
-
-		// Reset and re-register placements.
-		$ref      = new \ReflectionClass( \Newspack_Ads\Placements::class );
-		$prop     = $ref->getProperty( 'placements' );
-		$prop->setAccessible( true );
-		$prop->setValue( null, [] );
-		\Newspack_Ads\Placements::register_default_placements();
+		$this->register_block_placements();
 
 		$html = \Newspack_Ads\Ad_Slot_Block::render_block( [ 'placement' => 'global_above_header' ] );
 		self::assertSame( '', $html );
 
 		remove_filter( 'newspack_ads_is_block_theme', '__return_true' );
+	}
+
+	/**
+	 * Force the block-theme branch and re-register the default placements so the
+	 * synthetic block-placement hooks exist for the duration of a test. Callers
+	 * are responsible for removing the filter afterwards.
+	 */
+	private function register_block_placements() {
+		add_filter( 'newspack_ads_is_block_theme', '__return_true' );
+
+		$ref  = new \ReflectionClass( \Newspack_Ads\Placements::class );
+		$prop = $ref->getProperty( 'placements' );
+		$prop->setAccessible( true );
+		$prop->setValue( null, [] );
+		\Newspack_Ads\Placements::register_default_placements();
 	}
 
 	/**
@@ -67,15 +74,7 @@ class AdSlotBlockTest extends WP_UnitTestCase {
 	 * @return string Rendered block HTML.
 	 */
 	private function render_with_output( $attrs, $output_html ) {
-		// Force the block-theme branch so block placements are registered.
-		add_filter( 'newspack_ads_is_block_theme', '__return_true' );
-
-		// Reset placement registry and re-register so we hold the hook subscription.
-		$ref  = new \ReflectionClass( \Newspack_Ads\Placements::class );
-		$prop = $ref->getProperty( 'placements' );
-		$prop->setAccessible( true );
-		$prop->setValue( null, [] );
-		\Newspack_Ads\Placements::register_default_placements();
+		$this->register_block_placements();
 
 		$listener = function () use ( $output_html ) {
 			echo $output_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
@@ -185,33 +184,53 @@ class AdSlotBlockTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Non-empty output with no element to attach to (e.g. a comment) is returned
+	 * unchanged even when spacing is set.
+	 */
+	public function test_render_with_no_matchable_element_is_unchanged() {
+		$attrs = [
+			'style' => [
+				'spacing' => [
+					'margin' => [ 'top' => '30px' ],
+				],
+			],
+		];
+
+		$output = '<!-- ad failed to render -->';
+		$html   = $this->render_with_output( $attrs, $output );
+
+		self::assertSame( $output, $html );
+		self::assertStringNotContainsString( 'style=', $html );
+	}
+
+	/**
+	 * An existing inline style without a trailing semicolon still merges cleanly
+	 * (the separator is added between the existing declarations and the spacing).
+	 */
+	public function test_render_merges_onto_style_without_trailing_semicolon() {
+		$attrs = [
+			'style' => [
+				'spacing' => [
+					'margin' => [ 'top' => '30px' ],
+				],
+			],
+		];
+
+		$html = $this->render_with_output( $attrs, '<div style="width:300px"></div>' );
+
+		self::assertStringContainsString( 'width:300px;margin-top:30px', $html );
+	}
+
+	/**
 	 * When a registered placement's hook is fired, the block's render callback
 	 * captures the hook's output.
 	 */
 	public function test_render_captures_hook_output() {
-		// Force the block-theme branch so block placements are registered.
-		add_filter( 'newspack_ads_is_block_theme', '__return_true' );
-
-		// Reset placement registry and re-register so we hold the hook subscription.
-		$ref  = new \ReflectionClass( \Newspack_Ads\Placements::class );
-		$prop = $ref->getProperty( 'placements' );
-		$prop->setAccessible( true );
-		$prop->setValue( null, [] );
-		\Newspack_Ads\Placements::register_default_placements();
-
-		// Plant a known-output hook listener on the synthetic hook for `global_above_header`.
 		// This stands in for whatever inject_placement_ad would normally emit when
 		// an ad unit is bound and a provider is active.
-		$marker   = 'PLACEMENT_RENDERED_MARKER';
-		$listener = function () use ( $marker ) {
-			echo esc_html( $marker );
-		};
-		add_action( 'newspack_ads_block_placement_global_above_header', $listener, 999 );
+		$marker = 'PLACEMENT_RENDERED_MARKER';
 
-		$html = \Newspack_Ads\Ad_Slot_Block::render_block( [ 'placement' => 'global_above_header' ] );
+		$html = $this->render_with_output( [], esc_html( $marker ) );
 		self::assertStringContainsString( $marker, $html );
-
-		remove_action( 'newspack_ads_block_placement_global_above_header', $listener, 999 );
-		remove_filter( 'newspack_ads_is_block_theme', '__return_true' );
 	}
 }

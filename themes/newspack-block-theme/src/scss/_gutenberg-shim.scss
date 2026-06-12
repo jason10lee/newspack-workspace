@@ -71,7 +71,7 @@ figcaption a {
  *
  * When an ad slot is immediately after the header, remove the bottom margin from the header to prevent extra spacing.
  */
- .editor-styles-wrapper {
+.editor-styles-wrapper {
 	.wp-block-newspack-responsive-container:has( + .wp-block-newspack-ads-ad-slot ) {
 		.newspack-responsive-container-breakpoint .block-editor-block-list__layout > *:last-child {
 			margin-bottom: 0 !important;

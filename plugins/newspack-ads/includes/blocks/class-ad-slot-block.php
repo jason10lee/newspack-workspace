@@ -111,6 +111,7 @@ final class Ad_Slot_Block {
 			$found = true;
 			break;
 		}
+		// No element to attach to (e.g. comment- or text-only output); leave as-is.
 		if ( ! $found ) {
 			return $content;
 		}
