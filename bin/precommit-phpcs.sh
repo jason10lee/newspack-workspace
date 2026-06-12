@@ -21,4 +21,8 @@ if [ ! -x "$PHPCS" ]; then
 	exit 1
 fi
 
+# No files passed (e.g. a manual no-arg invocation) — exit cleanly instead of
+# falling through to phpcs, which would read stdin and appear to hang.
+[ "$#" -eq 0 ] && exit 0
+
 exec "$PHPCS" --standard="$ROOT/phpcs.xml" "$@"
