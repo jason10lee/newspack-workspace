@@ -57,7 +57,8 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 
 	public function test_apply_persists_amount_onto_recurring_line_item() {
 		$line = $this->mock_line_item( 10.0 );
-		$line->expects( $this->once() )->method( 'set_subtotal' )->with( 8.0 );
+		// Discount split: subtotal carries the regular price, total the charged.
+		$line->expects( $this->once() )->method( 'set_subtotal' )->with( 10.0 );
 		$line->expects( $this->once() )->method( 'set_total' )->with( 8.0 );
 		$line->expects( $this->once() )->method( 'save' );
 
@@ -90,9 +91,10 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 	}
 
 	public function test_apply_multiplies_per_unit_amount_by_line_quantity() {
-		// Decision amounts are per unit; a qty-3 line must total 3 × $8 = $24.
+		// Decision amounts are per unit; a qty-3 line must total 3 × $8 = $24,
+		// with the subtotal carrying 3 × $10 regular.
 		$line = $this->mock_line_item( 30.0, 3 );
-		$line->expects( $this->once() )->method( 'set_subtotal' )->with( 24.0 );
+		$line->expects( $this->once() )->method( 'set_subtotal' )->with( 30.0 );
 		$line->expects( $this->once() )->method( 'set_total' )->with( 24.0 );
 		$line->expects( $this->once() )->method( 'save' );
 
@@ -103,6 +105,48 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 		$d->rule_id = 'pol_1';
 
 		( new Subscription_Surface() )->apply( $ctx, $d );
+	}
+
+	public function test_apply_restore_writes_equal_subtotal_and_clears_label() {
+		// Restoring to the regular price ends the split — subtotal == total ==
+		// regular, and any visible rule label is removed (a stale "Intro" on a
+		// regular-priced line would be a lie).
+		$line = $this->mock_line_item( 8.0 );
+		$line->expects( $this->once() )->method( 'set_subtotal' )->with( 10.0 );
+		$line->expects( $this->once() )->method( 'set_total' )->with( 10.0 );
+		$line->expects( $this->once() )->method( 'delete_meta_data' )
+			->with( \Newspack\Dynamic_Pricing\WooProduct_Surface::LINE_META_LABEL );
+		$line->expects( $this->once() )->method( 'save' );
+
+		$sub = $this->mock_subscription( completed_payments: 3, line_item: $line );
+
+		$ctx = $this->ctx( $sub, base_price: 10.0 );
+		$d   = new Price_Decision( 10.0, Price_Decision::DURABLE, 'restore_base_after_3_cycles', '', 'simple_price', 4 );
+		$d->rule_id = 'pol_1';
+
+		( new Subscription_Surface() )->apply( $ctx, $d );
+	}
+
+	public function test_apply_publicized_reduction_refreshes_visible_label() {
+		$line = $this->mock_line_item( 10.0 );
+		$captured_meta = [];
+		$line->method( 'update_meta_data' )->willReturnCallback(
+			function ( $key, $value ) use ( &$captured_meta ) {
+				$captured_meta[ $key ] = $value;
+			}
+		);
+
+		$sub = $this->mock_subscription( completed_payments: 3, line_item: $line );
+
+		$ctx = $this->ctx( $sub, base_price: 10.0 );
+		$d   = new Price_Decision( 7.5, Price_Decision::DURABLE, 'step_at_2_percent_of_base', 'Second', 'stepped_by_cycle', 2 );
+		$d->rule_id   = '18';
+		$d->publicize = true;
+
+		( new Subscription_Surface() )->apply( $ctx, $d );
+
+		$this->assertSame( '18', $captured_meta[ \Newspack\Dynamic_Pricing\WooProduct_Surface::LINE_META_RULE_ID ] ?? null );
+		$this->assertSame( 'Second', $captured_meta[ \Newspack\Dynamic_Pricing\WooProduct_Surface::LINE_META_LABEL ] ?? null );
 	}
 
 	public function test_apply_quantity_aware_idempotency_short_circuit() {
@@ -295,13 +339,14 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 	 * shim does not declare `get_variation_id`, `set_subtotal`, `set_total`, or
 	 * `save` — the real WC class does.
 	 */
-	private function mock_line_item( float $subtotal, int $quantity = 1 ): \WC_Order_Item_Product {
+	private function mock_line_item( float $total, int $quantity = 1 ): \WC_Order_Item_Product {
 		$line = $this->getMockBuilder( \WC_Order_Item_Product::class )
 			->disableOriginalConstructor()
-			->onlyMethods( [ 'get_subtotal', 'get_product_id', 'get_quantity' ] )
-			->addMethods( [ 'get_variation_id', 'set_subtotal', 'set_total', 'save' ] )
+			->onlyMethods( [ 'get_total', 'get_subtotal', 'get_product_id', 'get_quantity' ] )
+			->addMethods( [ 'get_variation_id', 'set_subtotal', 'set_total', 'save', 'update_meta_data', 'delete_meta_data' ] )
 			->getMock();
-		$line->method( 'get_subtotal' )->willReturn( $subtotal );
+		$line->method( 'get_total' )->willReturn( $total );
+		$line->method( 'get_subtotal' )->willReturn( $total );
 		$line->method( 'get_product_id' )->willReturn( self::PRODUCT_ID );
 		$line->method( 'get_quantity' )->willReturn( $quantity );
 		$line->method( 'get_variation_id' )->willReturn( 0 );

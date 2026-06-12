@@ -54,6 +54,21 @@ final class WooProduct_Surface implements Price_Surface {
 	const TRIGGER_CART = 'cart';
 
 	/**
+	 * Hidden line-item meta: the id of the rule that priced the line. Written
+	 * at order/subscription creation and refreshed on every renewal reprice —
+	 * structured attribution beyond the order notes.
+	 */
+	const LINE_META_RULE_ID = '_newspack_dp_rule_id';
+
+	/**
+	 * Visible line-item meta key holding the rule's reader-facing label.
+	 * Stored UNTRANSLATED so renewal repricing can delete/update it regardless
+	 * of the locale active at write time; localized for display via the
+	 * `woocommerce_order_item_display_meta_key` filter.
+	 */
+	const LINE_META_LABEL = 'Pricing rule';
+
+	/**
 	 * Request-scoped registry of every applied decision, keyed by cart item key.
 	 * Feeds the operator-facing audit trail (order/subscription notes at
 	 * checkout) — which records every rule interaction unconditionally — and,
@@ -100,6 +115,18 @@ final class WooProduct_Surface implements Price_Surface {
 		// different hooks; the handler is shared and idempotent.
 		add_action( 'woocommerce_checkout_order_processed', [ __CLASS__, 'note_acquisition_on_order' ], 20, 1 );
 		add_action( 'woocommerce_store_api_checkout_order_processed', [ __CLASS__, 'note_acquisition_on_order' ], 20, 1 );
+
+		// Order line representation (specs 06): rule-priced lines carry the
+		// REGULAR price as the line subtotal and the charged amount as the
+		// total — WooCommerce's native discount split, the same one coupons
+		// use. The dashboard then renders the reduction per line and a
+		// "Discount" totals row, and discount reporting attributes the
+		// difference, instead of the line looking like a mispriced product.
+		// This single hook covers all three creation paths — classic checkout,
+		// Store API checkout, and WCS subscription creation — because they all
+		// funnel through WC_Checkout::create_order_line_items().
+		add_action( 'woocommerce_checkout_create_order_line_item', [ __CLASS__, 'present_order_line_item' ], 20, 4 );
+		add_filter( 'woocommerce_order_item_display_meta_key', [ __CLASS__, 'filter_line_meta_display_key' ], 10, 2 );
 
 		// Reader-facing price display, Layer 2 cart-totals slice (specs 05 §5):
 		// when the price changes again BEYOND the next renewal (multi-step
@@ -936,6 +963,65 @@ final class WooProduct_Surface implements Price_Surface {
 		}
 		$order->update_meta_data( '_newspack_dp_acquisition_noted', '1' );
 		$order->save();
+	}
+
+	/**
+	 * Present a rule-priced line on the order (or subscription) being created:
+	 * subtotal = regular price, total = charged amount — WC's native discount
+	 * split — plus attribution meta. Fires for the parent order AND the
+	 * subscription (WCS creates it from the recurring cart via the same
+	 * `create_order_line_items()`, sharing cart item keys with our registry).
+	 *
+	 * Direction rule: the split only applies when charged < regular. A
+	 * surcharge or an at-regular price writes nothing — subtotal stays equal
+	 * to total, because a negative "Discount" row is nonsense. At acquisition
+	 * the no-harm clamp already guarantees the discount direction; the
+	 * asymmetry only matters for the subscription line (cycle-2 amount).
+	 *
+	 * Tax note: line subtotal_tax is left as WC computed it (on the charged
+	 * amount). The ex-tax discount — what reports and the admin Discount row
+	 * read — is exact; only the tax-inclusive discount variant would be
+	 * approximate.
+	 *
+	 * No save: checkout saves the items after this hook.
+	 *
+	 * @param \WC_Order_Item_Product $item          Order line item being created.
+	 * @param string                 $cart_item_key Originating cart item key.
+	 * @param array                  $values        Cart item values (unused).
+	 * @param \WC_Order              $order         Order or WC_Subscription being created.
+	 */
+	public static function present_order_line_item( $item, $cart_item_key, $values, $order ): void {
+		$applied = self::$applied_decisions[ (string) $cart_item_key ] ?? null;
+		if ( ! $applied || ! is_object( $item ) ) {
+			return;
+		}
+
+		$qty          = max( 1, (int) $item->get_quantity() );
+		$charged_line = (float) $item->get_total();
+		$regular_line = round( (float) $applied['original'] * $qty, 2 );
+
+		if ( $regular_line > $charged_line + 0.005 ) {
+			$item->set_subtotal( (string) $regular_line );
+		}
+
+		$item->add_meta_data( self::LINE_META_RULE_ID, (string) $applied['rule_id'], true );
+		if ( ! empty( $applied['publicize'] ) && '' !== (string) $applied['label'] ) {
+			$item->add_meta_data( self::LINE_META_LABEL, (string) $applied['label'], true );
+		}
+	}
+
+	/**
+	 * Localize the visible line-meta key for display (it is stored
+	 * untranslated — see LINE_META_LABEL).
+	 *
+	 * @param string $display_key Key as displayed.
+	 * @param object $meta        Meta object with ->key.
+	 */
+	public static function filter_line_meta_display_key( $display_key, $meta ) {
+		if ( is_object( $meta ) && isset( $meta->key ) && self::LINE_META_LABEL === $meta->key ) {
+			return __( 'Pricing rule', 'newspack-plugin' );
+		}
+		return $display_key;
 	}
 
 	/**

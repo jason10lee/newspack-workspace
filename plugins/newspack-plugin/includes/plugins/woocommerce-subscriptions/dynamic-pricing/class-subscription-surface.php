@@ -236,10 +236,13 @@ final class Subscription_Surface implements Price_Surface {
 		}
 
 		// The decision amount is PER UNIT; line subtotal/total aggregate quantity.
-		$qty         = max( 1, (int) $line->get_quantity() );
-		$line_amount = round( $d->amount * $qty, 2 );
+		$qty          = max( 1, (int) $line->get_quantity() );
+		$line_amount  = round( $d->amount * $qty, 2 );
+		$regular_line = round( $ctx->base_price * $qty, 2 );
 
-		if ( abs( (float) $line->get_subtotal() - $line_amount ) < 0.01 ) {
+		// Idempotency reads the TOTAL (the charged amount) — the subtotal
+		// carries the regular price under the discount split below.
+		if ( abs( (float) $line->get_total() - $line_amount ) < 0.01 ) {
 			return;
 		}
 
@@ -247,8 +250,21 @@ final class Subscription_Surface implements Price_Surface {
 			return;
 		}
 
-		$line->set_subtotal( $line_amount );
+		// Discount split (specs 06): subtotal = regular, total = charged, so
+		// renewal orders (which copy these fields) represent the reduction
+		// like a native WC discount. At-regular or surcharge amounts write
+		// subtotal == total — no negative-discount weirdness.
+		$is_reduced = $regular_line > $line_amount + 0.005;
+		$line->set_subtotal( $is_reduced ? $regular_line : $line_amount );
 		$line->set_total( $line_amount );
+		$line->update_meta_data( WooProduct_Surface::LINE_META_RULE_ID, (string) $d->rule_id );
+		if ( $is_reduced && $d->publicize && '' !== (string) $d->label ) {
+			$line->update_meta_data( WooProduct_Surface::LINE_META_LABEL, (string) $d->label );
+		} else {
+			// Stale labels must not survive a step-up/restore: a visible
+			// "Intro" on a regular-priced renewal line would be a lie.
+			$line->delete_meta_data( WooProduct_Surface::LINE_META_LABEL );
+		}
 		$line->save();
 
 		$sub->calculate_totals();

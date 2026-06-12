@@ -211,6 +211,77 @@ class Newspack_Test_WooProduct_Surface extends WP_UnitTestCase {
 		$this->assertNotNull( WooProduct_Surface::get_applied_for( 'survives_key' ), 'The charged amounts must survive the projection pass for the checkout note writers.' );
 	}
 
+	public function test_present_order_line_item_splits_subtotal_and_attributes() {
+		// Seed the registry the way checkout would: via apply().
+		$product = $this->mock_product_with_set_price();
+		$ctx = new Pricing_Context( WooProduct_Surface::TRIGGER_CART, $product, null, 10.0, [ 'completed_cycles' => 1 ], [ 'data' => $product, 'key' => 'split_key', 'quantity' => 2 ] );
+		$d   = new Price_Decision( 5.0, Price_Decision::DURABLE, 'step_at_1_percent_of_base', 'Intro', 'stepped_by_cycle', 1 );
+		$d->rule_id   = '18';
+		$d->publicize = true;
+		( new WooProduct_Surface() )->apply( $ctx, $d );
+
+		$item = $this->getMockBuilder( \WC_Order_Item_Product::class )
+			->disableOriginalConstructor()
+			->onlyMethods( [ 'get_quantity', 'get_total' ] )
+			->addMethods( [ 'set_subtotal', 'add_meta_data' ] )
+			->getMock();
+		$item->method( 'get_quantity' )->willReturn( 2 );
+		$item->method( 'get_total' )->willReturn( 10.0 ); // 2 × $5 charged.
+		$item->expects( $this->once() )->method( 'set_subtotal' )->with( '20' ); // 2 × $10 regular.
+		$captured_meta = [];
+		$item->method( 'add_meta_data' )->willReturnCallback(
+			function ( $key, $value ) use ( &$captured_meta ) {
+				$captured_meta[ $key ] = $value;
+			}
+		);
+
+		WooProduct_Surface::present_order_line_item( $item, 'split_key', [], null );
+
+		$this->assertSame( '18', $captured_meta[ WooProduct_Surface::LINE_META_RULE_ID ] ?? null );
+		$this->assertSame( 'Intro', $captured_meta[ WooProduct_Surface::LINE_META_LABEL ] ?? null, 'Publicized label becomes visible line meta.' );
+	}
+
+	public function test_present_order_line_item_silent_rule_splits_without_visible_label() {
+		$product = $this->mock_product_with_set_price();
+		$ctx = new Pricing_Context( WooProduct_Surface::TRIGGER_CART, $product, null, 10.0, [ 'completed_cycles' => 1 ], [ 'data' => $product, 'key' => 'silent_split', 'quantity' => 1 ] );
+		$d   = new Price_Decision( 5.0, Price_Decision::DURABLE, 'r', 'Intro', 'simple_price', 1 );
+		$d->rule_id = '19';
+		( new WooProduct_Surface() )->apply( $ctx, $d );
+
+		$item = $this->getMockBuilder( \WC_Order_Item_Product::class )
+			->disableOriginalConstructor()
+			->onlyMethods( [ 'get_quantity', 'get_total' ] )
+			->addMethods( [ 'set_subtotal', 'add_meta_data' ] )
+			->getMock();
+		$item->method( 'get_quantity' )->willReturn( 1 );
+		$item->method( 'get_total' )->willReturn( 5.0 );
+		// The split is representation accuracy, not promotion — silent rules get it too.
+		$item->expects( $this->once() )->method( 'set_subtotal' )->with( '10' );
+		$captured_meta = [];
+		$item->method( 'add_meta_data' )->willReturnCallback(
+			function ( $key, $value ) use ( &$captured_meta ) {
+				$captured_meta[ $key ] = $value;
+			}
+		);
+
+		WooProduct_Surface::present_order_line_item( $item, 'silent_split', [], null );
+
+		$this->assertSame( '19', $captured_meta[ WooProduct_Surface::LINE_META_RULE_ID ] ?? null, 'Hidden attribution always written.' );
+		$this->assertArrayNotHasKey( WooProduct_Surface::LINE_META_LABEL, $captured_meta, 'No visible label for silent rules.' );
+	}
+
+	public function test_present_order_line_item_ignores_unannotated_lines() {
+		$item = $this->getMockBuilder( \WC_Order_Item_Product::class )
+			->disableOriginalConstructor()
+			->onlyMethods( [ 'get_quantity', 'get_total' ] )
+			->addMethods( [ 'set_subtotal', 'add_meta_data' ] )
+			->getMock();
+		$item->expects( $this->never() )->method( 'set_subtotal' );
+		$item->expects( $this->never() )->method( 'add_meta_data' );
+
+		WooProduct_Surface::present_order_line_item( $item, 'unknown_key', [], null );
+	}
+
 	public function test_reset_clears_applied_registry() {
 		$product = $this->mock_product_with_set_price();
 		$ctx = new Pricing_Context( WooProduct_Surface::TRIGGER_CART, $product, null, 10.0, [], [ 'data' => $product, 'key' => 'reset_key' ] );

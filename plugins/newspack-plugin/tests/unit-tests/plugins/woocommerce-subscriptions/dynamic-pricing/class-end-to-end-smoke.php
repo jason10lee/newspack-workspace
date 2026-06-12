@@ -66,7 +66,7 @@ class Newspack_Test_Dynamic_Pricing_End_To_End extends WP_UnitTestCase {
 	private int $completed_payments = 0;
 
 	/** @var float Per-test view of the current line subtotal. Drives `get_subtotal`. */
-	private float $line_subtotal = self::BASE_PRICE;
+	private float $line_total = self::BASE_PRICE;
 
 	/** @var array Per-test view of the `_newspack_dynamic_pricing_state` map. */
 	private array $state_meta = [];
@@ -100,7 +100,7 @@ class Newspack_Test_Dynamic_Pricing_End_To_End extends WP_UnitTestCase {
 		$this->line               = $this->mock_line_item();
 		$this->sub                = $this->mock_subscription( $this->line );
 		$this->completed_payments = 0;
-		$this->line_subtotal      = self::BASE_PRICE;
+		$this->line_total      = self::BASE_PRICE;
 		$this->state_meta         = [];
 	}
 
@@ -126,7 +126,7 @@ class Newspack_Test_Dynamic_Pricing_End_To_End extends WP_UnitTestCase {
 		$this->assertSame( 1.0, $d->amount );
 
 		$surface->apply( $ctx, $d );
-		$this->assertSame( self::BASE_PRICE, $this->line_subtotal, 'Apply must short-circuit when subtotal already matches.' );
+		$this->assertSame( self::BASE_PRICE, $this->line_total, 'Apply must short-circuit when total already matches.' );
 		$this->assertSame( [], $this->state_meta, 'No-op apply must not record state.' );
 
 		// --- Cycle 3 paid: upcoming=4; step_at_4 ($8) ≠ base ⇒ persist $8. ---
@@ -141,7 +141,7 @@ class Newspack_Test_Dynamic_Pricing_End_To_End extends WP_UnitTestCase {
 		$this->assertSame( 4, $d->dimension_value );
 
 		$surface->apply( $ctx, $d );
-		$this->assertSame( 8.0, $this->line_subtotal, 'Line subtotal must persist as $8 after apply.' );
+		$this->assertSame( 8.0, $this->line_total, 'Line total must persist as $8 after apply.' );
 		$this->assertArrayHasKey( (string) $this->rule_id, $this->state_meta );
 		$this->assertSame( 4, $this->state_meta[ (string) $this->rule_id ]['dimension_value'] );
 		$this->assertSame( 8.0, $this->state_meta[ (string) $this->rule_id ]['amount'] );
@@ -158,7 +158,7 @@ class Newspack_Test_Dynamic_Pricing_End_To_End extends WP_UnitTestCase {
 
 		$surface->apply( $ctx, $d );
 		$this->assertSame( $state_before, $this->state_meta, 'Short-circuit must leave state map unchanged.' );
-		$this->assertSame( 8.0, $this->line_subtotal, 'Short-circuit must leave line subtotal unchanged.' );
+		$this->assertSame( 8.0, $this->line_total, 'Short-circuit must leave line total unchanged.' );
 
 		// --- Cycle 12 paid: upcoming=13; step_at_13 ($10) ≠ $8 ⇒ persist $10. ---
 		$this->completed_payments = 12;
@@ -170,7 +170,7 @@ class Newspack_Test_Dynamic_Pricing_End_To_End extends WP_UnitTestCase {
 		$this->assertSame( 13, $d->dimension_value );
 
 		$surface->apply( $ctx, $d );
-		$this->assertSame( 10.0, $this->line_subtotal, 'Line subtotal must persist as $10 after final step.' );
+		$this->assertSame( 10.0, $this->line_total, 'Line total must persist as $10 after final step.' );
 		$this->assertSame( 13, $this->state_meta[ (string) $this->rule_id ]['dimension_value'] );
 		$this->assertSame( 10.0, $this->state_meta[ (string) $this->rule_id ]['amount'] );
 	}
@@ -210,29 +210,27 @@ class Newspack_Test_Dynamic_Pricing_End_To_End extends WP_UnitTestCase {
 	/**
 	 * Mocked recurring line item.
 	 *
-	 * Captures `set_subtotal` + `save` into `$this->line_subtotal` so the test can
-	 * read back persisted state across cycles. `get_subtotal` returns the live
-	 * value, which is what powers the amount-equality short-circuit in apply().
+	 * Captures `set_total` into `$this->line_total` so the test can read back
+	 * the persisted CHARGED amount across cycles. `get_total` returns the live
+	 * value, which powers the amount-equality short-circuit in apply(). Under
+	 * the discount split, `set_subtotal` carries the regular price and isn't
+	 * what the lifecycle assertions track.
 	 *
 	 * @return \WC_Order_Item_Product&\PHPUnit\Framework\MockObject\MockObject
 	 */
 	private function mock_line_item(): \WC_Order_Item_Product {
 		$line = $this->getMockBuilder( \WC_Order_Item_Product::class )
 			->disableOriginalConstructor()
-			->onlyMethods( [ 'get_subtotal', 'get_product_id' ] )
-			->addMethods( [ 'get_variation_id', 'set_subtotal', 'set_total', 'save' ] )
+			->onlyMethods( [ 'get_subtotal', 'get_total', 'get_product_id' ] )
+			->addMethods( [ 'get_variation_id', 'set_subtotal', 'set_total', 'save', 'update_meta_data', 'delete_meta_data' ] )
 			->getMock();
-		$line->method( 'get_subtotal' )->willReturnCallback( fn() => $this->line_subtotal );
+		$line->method( 'get_total' )->willReturnCallback( fn() => $this->line_total );
+		$line->method( 'get_subtotal' )->willReturnCallback( fn() => $this->line_total );
 		$line->method( 'get_product_id' )->willReturn( self::PRODUCT_ID );
 		$line->method( 'get_variation_id' )->willReturn( 0 );
-		$line->method( 'set_subtotal' )->willReturnCallback(
-			function ( $value ) {
-				$this->line_subtotal = (float) $value;
-			}
-		);
 		$line->method( 'set_total' )->willReturnCallback(
 			function ( $value ) {
-				// set_subtotal already mirrors here; nothing extra to capture.
+				$this->line_total = (float) $value;
 			}
 		);
 		return $line;
