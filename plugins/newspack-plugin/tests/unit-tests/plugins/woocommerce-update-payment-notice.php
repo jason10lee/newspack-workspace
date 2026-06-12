@@ -10,6 +10,8 @@ use Newspack\WooCommerce_Update_Payment_Notice;
 require_once __DIR__ . '/../../mocks/wc-mocks.php';
 
 /**
+ * Tests for WooCommerce_Update_Payment_Notice status allowlist logic.
+ *
  * @group update_payment_notice
  */
 class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
@@ -54,13 +56,36 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 	 */
 	private function make_line_item( $product_id ) {
 		return new class( $product_id ) {
+			/**
+			 * Product ID this line item refers to.
+			 *
+			 * @var int
+			 */
 			private $product_id;
+
+			/**
+			 * Constructor.
+			 *
+			 * @param int $product_id Product ID.
+			 */
 			public function __construct( $product_id ) {
 				$this->product_id = $product_id;
 			}
+
+			/**
+			 * Return the product ID.
+			 *
+			 * @return int
+			 */
 			public function get_product_id() {
 				return $this->product_id;
 			}
+
+			/**
+			 * Return the WC_Product object for this line item.
+			 *
+			 * @return WC_Product|false
+			 */
 			public function get_product() {
 				return wc_get_product( $this->product_id );
 			}
@@ -103,13 +128,20 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Non-recoverable statuses must not produce a payment notice even if needs_payment() is true.
+	 *
 	 * @dataProvider terminal_status_provider
 	 *
 	 * @param string $status Subscription status.
 	 */
 	public function test_no_notice_for_non_recoverable_status( $status ) {
 		$customer_id = $this->make_current_customer();
-		$product     = wc_create_mock_product( [ 'id' => 4242, 'name' => 'Newsroom Pro' ] );
+		$product     = wc_create_mock_product(
+			[
+				'id'   => 4242,
+				'name' => 'Newsroom Pro',
+			] 
+		);
 		$this->make_needs_payment_subscription( $customer_id, $status, $product->get_id() );
 
 		$this->assertSame( [], $this->get_notices(), "Status '$status' must not produce a payment notice." );
@@ -120,7 +152,12 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 	 */
 	public function test_no_notice_for_expired_with_stale_unpaid_order() {
 		$customer_id = $this->make_current_customer();
-		$product     = wc_create_mock_product( [ 'id' => 54427, 'name' => 'Newsroom Pro – Monthly' ] );
+		$product     = wc_create_mock_product(
+			[
+				'id'   => 54427,
+				'name' => 'Newsroom Pro – Monthly',
+			] 
+		);
 		// needs_payment() true models the stale unpaid failed-renewal order still attached.
 		$this->make_needs_payment_subscription( $customer_id, 'expired', $product->get_id() );
 
@@ -132,7 +169,12 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 	 */
 	public function test_notice_fires_for_on_hold() {
 		$customer_id = $this->make_current_customer();
-		$product     = wc_create_mock_product( [ 'id' => 4242, 'name' => 'Newsroom Pro' ] );
+		$product     = wc_create_mock_product(
+			[
+				'id'   => 4242,
+				'name' => 'Newsroom Pro',
+			] 
+		);
 		$this->make_needs_payment_subscription( $customer_id, 'on-hold', $product->get_id() );
 
 		$notices = $this->get_notices();
@@ -140,9 +182,17 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'Newsroom Pro', $notices[0] );
 	}
 
+	/**
+	 * A pending subscription that needs payment fires a notice (regression guard).
+	 */
 	public function test_notice_fires_for_pending() {
 		$customer_id = $this->make_current_customer();
-		$product     = wc_create_mock_product( [ 'id' => 4242, 'name' => 'Newsroom Pro' ] );
+		$product     = wc_create_mock_product(
+			[
+				'id'   => 4242,
+				'name' => 'Newsroom Pro',
+			] 
+		);
 		$this->make_needs_payment_subscription( $customer_id, 'pending', $product->get_id() );
 
 		$this->assertCount( 1, $this->get_notices(), 'A pending subscription that needs payment must produce a notice.' );
@@ -153,7 +203,12 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 	 */
 	public function test_no_notice_when_payment_not_needed() {
 		$customer_id = $this->make_current_customer();
-		$product     = wc_create_mock_product( [ 'id' => 4242, 'name' => 'Newsroom Pro' ] );
+		$product     = wc_create_mock_product(
+			[
+				'id'   => 4242,
+				'name' => 'Newsroom Pro',
+			] 
+		);
 		wcs_create_subscription(
 			[
 				'customer_id'   => $customer_id,
