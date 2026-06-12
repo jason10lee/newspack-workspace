@@ -195,20 +195,27 @@ final class Subscription_Rule_Metabox {
 		$edit_link = $rule_id ? get_edit_post_link( $rule_id ) : null;
 		$pinned_at = (string) ( $snapshot['pinned_at'] ?? '' );
 
-		echo '<p>';
-		printf(
-			/* translators: 1: linked rule title, 2: rule id */
-			wp_kses_post( __( 'Locked at purchase to %1$s (#%2$d).', 'newspack-plugin' ) ),
-			$edit_link ? '<a href="' . esc_url( $edit_link ) . '">' . esc_html( $title ) . '</a>' : '<strong>' . esc_html( $title ) . '</strong>',
-			(int) $rule_id
-		);
+		// One bordered card per pinned rule: the rule name is the anchor, the
+		// lock provenance its subtitle, then status and the snapshot config —
+		// so multi-pin deals scan as distinct blocks instead of run-on prose.
+		echo '<div class="newspack-dp-pinned-rule" style="border:1px solid #dcdcde;border-radius:4px;padding:12px 16px;margin:0 0 12px;background:#fff">';
+
+		echo '<h4 style="margin:0 0 2px;font-size:14px">';
+		echo $edit_link
+			? '<a href="' . esc_url( $edit_link ) . '">' . esc_html( $title ) . '</a>'
+			: esc_html( $title );
+		echo ' <span style="font-weight:normal;color:#646970">(#' . (int) $rule_id . ')</span>';
+		echo '</h4>';
+
+		echo '<p class="description" style="margin:0 0 8px">';
 		if ( '' !== $pinned_at ) {
-			echo ' ';
 			printf(
 				/* translators: %s: localized date */
-				esc_html__( 'Snapshotted on %s (UTC).', 'newspack-plugin' ),
+				esc_html__( 'Locked at purchase — snapshotted on %s (UTC).', 'newspack-plugin' ),
 				esc_html( date_i18n( get_option( 'date_format' ), strtotime( $pinned_at ) ) )
 			);
+		} else {
+			esc_html_e( 'Locked at purchase.', 'newspack-plugin' );
 		}
 		echo '</p>';
 
@@ -217,19 +224,20 @@ final class Subscription_Rule_Metabox {
 		// differ from the rule's current settings.
 		$live = $rule_id ? get_post( $rule_id ) : null;
 		if ( ! $live || 'shop_pricing_rule' !== $live->post_type ) {
-			echo '<p><em>' . esc_html__( 'The rule no longer exists — the snapshot below remains in effect.', 'newspack-plugin' ) . '</em></p>';
+			echo '<p style="margin:0 0 8px"><em>' . esc_html__( 'The rule no longer exists — the snapshot below remains in effect.', 'newspack-plugin' ) . '</em></p>';
 		} else {
 			$live_rule = Pricing_Rule::from_post( $live );
 			$drifted   = wp_json_encode( $live_rule->params ) !== wp_json_encode( $pinned->params )
 				|| $live_rule->strategy_id !== $pinned->strategy_id;
 			if ( $drifted ) {
-				echo '<p><em>' . esc_html__( 'The rule has been edited since — this subscription keeps the snapshot below. Use the migrate CLI to re-lock it to the current configuration.', 'newspack-plugin' ) . '</em></p>';
+				echo '<p style="margin:0 0 8px"><em>' . esc_html__( 'The rule has been edited since — this subscription keeps the snapshot below. Use the migrate CLI to re-lock it to the current configuration.', 'newspack-plugin' ) . '</em></p>';
 			} else {
-				echo '<p class="description">' . esc_html__( 'The snapshot matches the rule’s current configuration.', 'newspack-plugin' ) . '</p>';
+				echo '<p class="description" style="margin:0 0 8px">' . esc_html__( 'The snapshot matches the rule’s current configuration.', 'newspack-plugin' ) . '</p>';
 			}
 		}
 
 		self::render_config( $pinned, $base, self::upcoming_cycle( $sub ) );
+		echo '</div>';
 	}
 
 	/**

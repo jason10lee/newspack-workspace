@@ -42,7 +42,8 @@ class Newspack_Test_Subscription_Rule_Metabox extends WP_UnitTestCase {
 
 		$this->assertStringContainsString( 'Locked at purchase', $html );
 		$this->assertStringContainsString( 'Test rule', $html );
-		$this->assertStringContainsString( 'Snapshotted on', $html );
+		$this->assertStringContainsString( 'snapshotted on', $html );
+		$this->assertStringContainsString( 'newspack-dp-pinned-rule', $html, 'Each pinned rule renders as its own card.' );
 		$this->assertStringContainsString( '$5.00', $html, 'Step amounts computed against the regular price.' );
 		$this->assertStringContainsString( '$7.50', $html );
 		$this->assertSame( 1, substr_count( $html, '← next renewal' ), 'Exactly one governing step is marked.' );
