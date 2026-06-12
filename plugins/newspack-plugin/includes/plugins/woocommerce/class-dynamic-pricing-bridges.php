@@ -22,6 +22,12 @@ defined( 'ABSPATH' ) || exit;
  *
  *  - Donation products (via Newspack\Donations::is_donation_product).
  *  - Group subscriptions (via Newspack\Group_Subscription::is_group_subscription).
+ *
+ * Also bridges the standalone plugin's reader-facing annotation onto the
+ * Newspack Blocks Modal Checkout summary line — the modal's JS does
+ * `textContent = price_summary`, so the plugin's HTML-filter annotations
+ * never reach it; we hook the modal's own summary filter and emit plain text
+ * built from the surface's public API.
  */
 final class Dynamic_Pricing_Bridges {
 	/**
@@ -30,6 +36,7 @@ final class Dynamic_Pricing_Bridges {
 	public static function init(): void {
 		add_filter( 'wc_dynamic_pricing_is_excluded', [ __CLASS__, 'exclude_donations' ], 10, 3 );
 		add_filter( 'wc_dynamic_pricing_is_excluded', [ __CLASS__, 'exclude_group_subscriptions' ], 10, 3 );
+		add_filter( 'newspack_modal_checkout_price_summary', [ __CLASS__, 'annotate_modal_checkout_summary' ], 20, 2 );
 	}
 
 	/**
@@ -71,6 +78,55 @@ final class Dynamic_Pricing_Bridges {
 		return $excluded;
 	}
 
+	/**
+	 * Annotate the Newspack Blocks Modal Checkout price summary with the
+	 * dynamic-pricing rule (regular-price comparison, rule label, first-cycle
+	 * qualifier when the charged price doesn't recur). Output is plain text —
+	 * the modal's JS assigns it via `textContent`, so HTML would be stripped.
+	 *
+	 * Inert when the standalone plugin isn't active (the surface class won't
+	 * exist) and a no-op when no annotation applies to the displayed product.
+	 *
+	 * @param string $summary    Pre-formatted summary like "Sub: $5.00 / month".
+	 * @param int    $product_id Product (or variation) id displayed in the modal.
+	 */
+	public static function annotate_modal_checkout_summary( $summary, $product_id ): string {
+		$summary = (string) $summary;
+		$surface = '\\Automattic\\WooCommerce\\DynamicPricing\\WooProduct_Surface';
+		if ( ! class_exists( $surface ) ) {
+			return $summary;
+		}
+		if ( ! function_exists( 'WC' ) || ! WC() || ! WC()->cart ) {
+			return $summary;
+		}
+		$pid = (int) $product_id;
+		foreach ( WC()->cart->get_cart() as $cart_item_key => $cart_item ) {
+			$item_pid = (int) ( ! empty( $cart_item['variation_id'] ) ? $cart_item['variation_id'] : ( $cart_item['product_id'] ?? 0 ) );
+			if ( $item_pid !== $pid ) {
+				continue;
+			}
+			$annotation = $surface::get_annotation_for( (string) $cart_item_key );
+			if ( ! $annotation || abs( $annotation['original'] - $annotation['amount'] ) < 0.01 ) {
+				return $summary;
+			}
+			$qualifier = $surface::first_cycle_qualifier( $cart_item );
+			if ( '' !== $qualifier && $cart_item['data'] instanceof \WC_Product ) {
+				$summary = $surface::strip_period_suffix( $summary, $cart_item['data'] );
+			}
+			$original = wp_strip_all_tags( html_entity_decode( wc_price( (float) $annotation['original'] ), ENT_QUOTES ) );
+			$parts    = [];
+			if ( '' !== (string) $annotation['label'] ) {
+				$parts[] = $annotation['label'];
+			}
+			/* translators: %s: regular price */
+			$parts[] = sprintf( __( 'regularly %s', 'newspack-plugin' ), $original );
+			if ( '' !== $qualifier ) {
+				$parts[] = $qualifier;
+			}
+			return sprintf( '%1$s (%2$s)', $summary, implode( ' — ', $parts ) );
+		}
+		return $summary;
+	}
 }
 
 Dynamic_Pricing_Bridges::init();
