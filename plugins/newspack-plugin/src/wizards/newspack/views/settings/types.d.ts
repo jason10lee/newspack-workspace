@@ -107,3 +107,10 @@ type JetpackSSOSettings = Partial< {
 type PrintData = {
 	module_enabled_print: boolean;
 };
+
+/**
+ * Jetpack AI API data
+ */
+type JetpackAiData = {
+	module_enabled_jetpack_ai: boolean;
+};

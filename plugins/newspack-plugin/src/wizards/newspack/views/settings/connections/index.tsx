@@ -16,6 +16,7 @@ import Webhooks from './webhooks';
 import Analytics from './analytics';
 import Recaptcha from './recaptcha';
 import JetpackSSO from './jetpack-sso';
+import JetpackAI from './jetpack-ai';
 import Mailchimp from './mailchimp';
 import GoogleOAuth from './google-oauth';
 import CustomEvents from './custom-events';
@@ -45,6 +46,11 @@ function Connections() {
 					<JetpackSSO />
 				</WizardSection>
 			) : null }
+
+			{ /* Jetpack AI Assistant */ }
+			<WizardSection title={ __( 'Jetpack AI Assistant', 'newspack-plugin' ) }>
+				<JetpackAI />
+			</WizardSection>
 
 			{ /* reCAPTCHA */ }
 			<WizardSection scrollToAnchor="newspack-settings-recaptcha" title={ __( 'reCAPTCHA', 'newspack-plugin' ) }>
