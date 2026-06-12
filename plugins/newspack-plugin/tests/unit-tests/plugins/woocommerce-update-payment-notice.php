@@ -166,4 +166,25 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 
 		$this->assertSame( [], $this->get_notices(), 'No notice when the subscription does not need payment.' );
 	}
+
+	/**
+	 * Pin the allowlist against the full set of WCS statuses known at authoring
+	 * time. If WCS adds a status, this fails so a human decides whether it is a
+	 * recoverable (notice-worthy) state rather than silently skipping it. NPPM-2926.
+	 */
+	public function test_allowlist_is_pinned_against_known_wcs_statuses() {
+		$known_wcs_statuses = [ 'pending', 'active', 'on-hold', 'cancelled', 'switched', 'expired', 'pending-cancel' ];
+
+		$reflection = new ReflectionClass( \Newspack\WooCommerce_Update_Payment_Notice::class );
+		$allowlist  = $reflection->getConstant( 'NOTICE_SUBSCRIPTION_STATUSES' );
+
+		$unknown = array_diff( $allowlist, $known_wcs_statuses );
+		$this->assertSame( [], array_values( $unknown ), 'Allowlist contains a status not in the known WCS set.' );
+
+		$this->assertEqualSets(
+			[ 'on-hold', 'pending' ],
+			$allowlist,
+			'Allowlist changed. Confirm any new status is genuinely recoverable before updating this guard.'
+		);
+	}
 }
