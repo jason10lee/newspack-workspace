@@ -40,6 +40,7 @@ class Optional_Modules {
 			self::MODULE_ENABLED_PREFIX . 'collections'    => false,
 			self::MODULE_ENABLED_PREFIX . 'indesign-export' => false,
 			self::MODULE_ENABLED_PREFIX . 'nextdoor'       => false,
+			self::MODULE_ENABLED_PREFIX . 'jetpack-ai'     => false,
 		];
 		return wp_parse_args( get_option( self::OPTION_NAME ), $default_settings );
 	}

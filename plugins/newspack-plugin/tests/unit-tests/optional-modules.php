@@ -32,6 +32,7 @@ class Newspack_Test_Settings extends WP_UnitTestCase {
 				'module_enabled_collections'           => false,
 				'module_enabled_indesign-export'       => false,
 				'module_enabled_nextdoor'              => false,
+				'module_enabled_jetpack-ai'            => false,
 			],
 			'Default settings are as expected.'
 		);
@@ -53,6 +54,7 @@ class Newspack_Test_Settings extends WP_UnitTestCase {
 				'module_enabled_collections'           => false,
 				'module_enabled_indesign-export'       => false,
 				'module_enabled_nextdoor'              => false,
+				'module_enabled_jetpack-ai'            => false,
 			],
 			'Settings is updated.'
 		);
@@ -68,6 +70,7 @@ class Newspack_Test_Settings extends WP_UnitTestCase {
 				'module_enabled_collections'           => true,
 				'module_enabled_indesign-export'       => false,
 				'module_enabled_nextdoor'              => false,
+				'module_enabled_jetpack-ai'            => false,
 			],
 			'Settings is updated.'
 		);
@@ -83,6 +86,7 @@ class Newspack_Test_Settings extends WP_UnitTestCase {
 				'module_enabled_collections'           => true,
 				'module_enabled_indesign-export'       => false,
 				'module_enabled_nextdoor'              => false,
+				'module_enabled_jetpack-ai'            => false,
 			],
 			'A non-existent setting is not saved.'
 		);
@@ -132,6 +136,27 @@ class Newspack_Test_Settings extends WP_UnitTestCase {
 			Optional_Modules::is_optional_module_active( 'collections' ),
 			false,
 			'Collections module is deactivated.'
+		);
+
+		// Test Jetpack AI module activation.
+		self::assertEquals(
+			Optional_Modules::is_optional_module_active( 'jetpack-ai' ),
+			false,
+			'Jetpack AI module is not active by default.'
+		);
+
+		Optional_Modules::activate_optional_module( 'jetpack-ai' );
+		self::assertEquals(
+			Optional_Modules::is_optional_module_active( 'jetpack-ai' ),
+			true,
+			'Jetpack AI module is active after being activated.'
+		);
+
+		Optional_Modules::deactivate_optional_module( 'jetpack-ai' );
+		self::assertEquals(
+			Optional_Modules::is_optional_module_active( 'jetpack-ai' ),
+			false,
+			'Jetpack AI module is deactivated.'
 		);
 	}
 }
