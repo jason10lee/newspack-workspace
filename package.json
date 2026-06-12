@@ -71,9 +71,9 @@
 		]
 	},
 	"lint-staged": {
-		"*.{js,jsx,ts,tsx}": "eslint --fix",
-		"*.{css,scss}": "stylelint --fix",
-		"*.php": "composer phpcbf --"
+		"*.{js,jsx,ts,tsx}": "eslint",
+		"*.scss": "stylelint --customSyntax postcss-scss",
+		"*.php": "composer phpcs --"
 	},
 	"pnpm": {
 		"overrides": {
