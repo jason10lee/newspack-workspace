@@ -107,15 +107,11 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 		( new Subscription_Surface() )->apply( $ctx, $d );
 	}
 
-	public function test_apply_restore_writes_equal_subtotal_and_clears_label() {
-		// Restoring to the regular price ends the split — subtotal == total ==
-		// regular, and any visible rule label is removed (a stale "Intro" on a
-		// regular-priced line would be a lie).
+	public function test_apply_restore_writes_equal_subtotal() {
+		// Restoring to the regular price ends the split — subtotal == total == regular.
 		$line = $this->mock_line_item( 8.0 );
 		$line->expects( $this->once() )->method( 'set_subtotal' )->with( 10.0 );
 		$line->expects( $this->once() )->method( 'set_total' )->with( 10.0 );
-		$line->expects( $this->once() )->method( 'delete_meta_data' )
-			->with( \Newspack\Dynamic_Pricing\WooProduct_Surface::LINE_META_LABEL );
 		$line->expects( $this->once() )->method( 'save' );
 
 		$sub = $this->mock_subscription( completed_payments: 3, line_item: $line );
@@ -127,7 +123,7 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 		( new Subscription_Surface() )->apply( $ctx, $d );
 	}
 
-	public function test_apply_publicized_reduction_refreshes_visible_label() {
+	public function test_apply_refreshes_rule_id_attribution_meta() {
 		$line = $this->mock_line_item( 10.0 );
 		$captured_meta = [];
 		$line->method( 'update_meta_data' )->willReturnCallback(
@@ -140,13 +136,11 @@ class Newspack_Test_Subscription_Surface extends WP_UnitTestCase {
 
 		$ctx = $this->ctx( $sub, base_price: 10.0 );
 		$d   = new Price_Decision( 7.5, Price_Decision::DURABLE, 'step_at_2_percent_of_base', 'Second', 'stepped_by_cycle', 2 );
-		$d->rule_id   = '18';
-		$d->publicize = true;
+		$d->rule_id = '18';
 
 		( new Subscription_Surface() )->apply( $ctx, $d );
 
 		$this->assertSame( '18', $captured_meta[ \Newspack\Dynamic_Pricing\WooProduct_Surface::LINE_META_RULE_ID ] ?? null );
-		$this->assertSame( 'Second', $captured_meta[ \Newspack\Dynamic_Pricing\WooProduct_Surface::LINE_META_LABEL ] ?? null );
 	}
 
 	public function test_apply_quantity_aware_idempotency_short_circuit() {

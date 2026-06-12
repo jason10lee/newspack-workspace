@@ -54,19 +54,16 @@ final class WooProduct_Surface implements Price_Surface {
 	const TRIGGER_CART = 'cart';
 
 	/**
-	 * Hidden line-item meta: the id of the rule that priced the line. Written
-	 * at order/subscription creation and refreshed on every renewal reprice —
+	 * Line-item meta: the id of the rule that priced the line. Written at
+	 * order/subscription creation and refreshed on every renewal reprice —
 	 * structured attribution beyond the order notes.
+	 *
+	 * Underscore-prefixed, so customers never see it (frontend formatted-meta
+	 * uses `$hideprefix = '_'`). The ADMIN order screen shows all meta, so the
+	 * display filters below render it as "Pricing rule: <title> (#id)" linked
+	 * to the rule's edit screen — derived live from the id, never stale.
 	 */
 	const LINE_META_RULE_ID = '_newspack_dp_rule_id';
-
-	/**
-	 * Visible line-item meta key holding the rule's reader-facing label.
-	 * Stored UNTRANSLATED so renewal repricing can delete/update it regardless
-	 * of the locale active at write time; localized for display via the
-	 * `woocommerce_order_item_display_meta_key` filter.
-	 */
-	const LINE_META_LABEL = 'Pricing rule';
 
 	/**
 	 * Request-scoped registry of every applied decision, keyed by cart item key.
@@ -127,6 +124,7 @@ final class WooProduct_Surface implements Price_Surface {
 		// funnel through WC_Checkout::create_order_line_items().
 		add_action( 'woocommerce_checkout_create_order_line_item', [ __CLASS__, 'present_order_line_item' ], 20, 4 );
 		add_filter( 'woocommerce_order_item_display_meta_key', [ __CLASS__, 'filter_line_meta_display_key' ], 10, 2 );
+		add_filter( 'woocommerce_order_item_display_meta_value', [ __CLASS__, 'filter_line_meta_display_value' ], 10, 2 );
 
 		// Reader-facing price display, Layer 2 cart-totals slice (specs 05 §5):
 		// when the price changes again BEYOND the next renewal (multi-step
@@ -1005,23 +1003,45 @@ final class WooProduct_Surface implements Price_Surface {
 		}
 
 		$item->add_meta_data( self::LINE_META_RULE_ID, (string) $applied['rule_id'], true );
-		if ( ! empty( $applied['publicize'] ) && '' !== (string) $applied['label'] ) {
-			$item->add_meta_data( self::LINE_META_LABEL, (string) $applied['label'], true );
-		}
 	}
 
 	/**
-	 * Localize the visible line-meta key for display (it is stored
-	 * untranslated — see LINE_META_LABEL).
+	 * Admin display: render the attribution meta key as "Pricing rule" instead
+	 * of the raw `_newspack_dp_rule_id`. Customers never reach this — frontend
+	 * formatted meta hides underscore-prefixed keys before display filters run.
 	 *
 	 * @param string $display_key Key as displayed.
 	 * @param object $meta        Meta object with ->key.
 	 */
 	public static function filter_line_meta_display_key( $display_key, $meta ) {
-		if ( is_object( $meta ) && isset( $meta->key ) && self::LINE_META_LABEL === $meta->key ) {
+		if ( is_object( $meta ) && isset( $meta->key ) && self::LINE_META_RULE_ID === $meta->key ) {
 			return __( 'Pricing rule', 'newspack-plugin' );
 		}
 		return $display_key;
+	}
+
+	/**
+	 * Admin display: render the attribution meta value as the rule's title,
+	 * linked to its edit screen — "<a>Intro pricing</a> (#18)". Derived live
+	 * from the stored id, so a renamed rule shows its current title and a
+	 * deleted rule degrades to the bare "#18".
+	 *
+	 * @param string $display_value Value as displayed.
+	 * @param object $meta          Meta object with ->key/->value.
+	 */
+	public static function filter_line_meta_display_value( $display_value, $meta ) {
+		if ( ! is_object( $meta ) || ! isset( $meta->key ) || self::LINE_META_RULE_ID !== $meta->key ) {
+			return $display_value;
+		}
+		$rule_id = (int) $meta->value;
+		$title   = $rule_id ? get_the_title( $rule_id ) : '';
+		if ( '' === $title ) {
+			return sprintf( '#%d', $rule_id );
+		}
+		$edit_link = get_edit_post_link( $rule_id );
+		return $edit_link
+			? sprintf( '<a href="%s">%s</a> (#%d)', esc_url( $edit_link ), esc_html( $title ), $rule_id )
+			: sprintf( '%s (#%d)', esc_html( $title ), $rule_id );
 	}
 
 	/**

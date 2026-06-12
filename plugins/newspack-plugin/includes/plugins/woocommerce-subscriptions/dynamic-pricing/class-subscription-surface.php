@@ -253,18 +253,12 @@ final class Subscription_Surface implements Price_Surface {
 		// Discount split (specs 06): subtotal = regular, total = charged, so
 		// renewal orders (which copy these fields) represent the reduction
 		// like a native WC discount. At-regular or surcharge amounts write
-		// subtotal == total — no negative-discount weirdness.
+		// subtotal == total — no negative-discount weirdness. Attribution is
+		// the hidden rule-id meta, rendered for admins via display filters.
 		$is_reduced = $regular_line > $line_amount + 0.005;
 		$line->set_subtotal( $is_reduced ? $regular_line : $line_amount );
 		$line->set_total( $line_amount );
 		$line->update_meta_data( WooProduct_Surface::LINE_META_RULE_ID, (string) $d->rule_id );
-		if ( $is_reduced && $d->publicize && '' !== (string) $d->label ) {
-			$line->update_meta_data( WooProduct_Surface::LINE_META_LABEL, (string) $d->label );
-		} else {
-			// Stale labels must not survive a step-up/restore: a visible
-			// "Intro" on a regular-priced renewal line would be a lie.
-			$line->delete_meta_data( WooProduct_Surface::LINE_META_LABEL );
-		}
 		$line->save();
 
 		$sub->calculate_totals();

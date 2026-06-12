@@ -238,36 +238,37 @@ class Newspack_Test_WooProduct_Surface extends WP_UnitTestCase {
 		WooProduct_Surface::present_order_line_item( $item, 'split_key', [], null );
 
 		$this->assertSame( '18', $captured_meta[ WooProduct_Surface::LINE_META_RULE_ID ] ?? null );
-		$this->assertSame( 'Intro', $captured_meta[ WooProduct_Surface::LINE_META_LABEL ] ?? null, 'Publicized label becomes visible line meta.' );
+		$this->assertCount( 1, $captured_meta, 'Only the hidden attribution meta is written — admin display filters render it; customers never see it.' );
 	}
 
-	public function test_present_order_line_item_silent_rule_splits_without_visible_label() {
-		$product = $this->mock_product_with_set_price();
-		$ctx = new Pricing_Context( WooProduct_Surface::TRIGGER_CART, $product, null, 10.0, [ 'completed_cycles' => 1 ], [ 'data' => $product, 'key' => 'silent_split', 'quantity' => 1 ] );
-		$d   = new Price_Decision( 5.0, Price_Decision::DURABLE, 'r', 'Intro', 'simple_price', 1 );
-		$d->rule_id = '19';
-		( new WooProduct_Surface() )->apply( $ctx, $d );
-
-		$item = $this->getMockBuilder( \WC_Order_Item_Product::class )
-			->disableOriginalConstructor()
-			->onlyMethods( [ 'get_quantity', 'get_total' ] )
-			->addMethods( [ 'set_subtotal', 'add_meta_data' ] )
-			->getMock();
-		$item->method( 'get_quantity' )->willReturn( 1 );
-		$item->method( 'get_total' )->willReturn( 5.0 );
-		// The split is representation accuracy, not promotion — silent rules get it too.
-		$item->expects( $this->once() )->method( 'set_subtotal' )->with( '10' );
-		$captured_meta = [];
-		$item->method( 'add_meta_data' )->willReturnCallback(
-			function ( $key, $value ) use ( &$captured_meta ) {
-				$captured_meta[ $key ] = $value;
-			}
+	public function test_line_meta_display_filters_render_admin_attribution() {
+		$rule_id = wp_insert_post(
+			[
+				'post_type'   => 'shop_pricing_rule',
+				'post_status' => 'publish',
+				'post_title'  => 'Intro pricing',
+			]
 		);
 
-		WooProduct_Surface::present_order_line_item( $item, 'silent_split', [], null );
+		$meta        = new \stdClass();
+		$meta->key   = WooProduct_Surface::LINE_META_RULE_ID;
+		$meta->value = (string) $rule_id;
 
-		$this->assertSame( '19', $captured_meta[ WooProduct_Surface::LINE_META_RULE_ID ] ?? null, 'Hidden attribution always written.' );
-		$this->assertArrayNotHasKey( WooProduct_Surface::LINE_META_LABEL, $captured_meta, 'No visible label for silent rules.' );
+		$this->assertSame( 'Pricing rule', WooProduct_Surface::filter_line_meta_display_key( $meta->key, $meta ) );
+
+		$display = WooProduct_Surface::filter_line_meta_display_value( $meta->value, $meta );
+		$this->assertStringContainsString( 'Intro pricing', $display, 'Rule title resolved live from the id.' );
+		$this->assertStringContainsString( "(#{$rule_id})", $display );
+
+		// Deleted rule: degrade to the bare id, never an empty cell.
+		wp_delete_post( $rule_id, true );
+		$this->assertSame( "#{$rule_id}", WooProduct_Surface::filter_line_meta_display_value( $meta->value, $meta ) );
+
+		// Unrelated meta passes through untouched.
+		$other      = new \stdClass();
+		$other->key = '_some_other_meta';
+		$this->assertSame( 'raw', WooProduct_Surface::filter_line_meta_display_value( 'raw', $other ) );
+		$this->assertSame( '_some_other_meta', WooProduct_Surface::filter_line_meta_display_key( '_some_other_meta', $other ) );
 	}
 
 	public function test_present_order_line_item_ignores_unannotated_lines() {
