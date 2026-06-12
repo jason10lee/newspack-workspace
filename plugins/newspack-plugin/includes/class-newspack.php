@@ -185,6 +185,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-recirculation-section.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-collections-section.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-privacy-section.php';
+		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-jetpack-ai-section.php';
 
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/class-setup-wizard.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/class-components-demo.php';
