@@ -17,7 +17,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Newspack bridges for the Dynamic Pricing engine.
  *
- * Registers callbacks against the `wc_dynamic_pricing_is_excluded`
+ * Registers callbacks against the `woocommerce_dynamic_pricing_is_excluded`
  * filter to opt specific products / subscriptions out of dynamic pricing:
  *
  *  - Donation products (via Newspack\Donations::is_donation_product).
@@ -34,8 +34,8 @@ final class Dynamic_Pricing_Bridges {
 	 * Register all bridge filter callbacks.
 	 */
 	public static function init(): void {
-		add_filter( 'wc_dynamic_pricing_is_excluded', [ __CLASS__, 'exclude_donations' ], 10, 3 );
-		add_filter( 'wc_dynamic_pricing_is_excluded', [ __CLASS__, 'exclude_group_subscriptions' ], 10, 3 );
+		add_filter( 'woocommerce_dynamic_pricing_is_excluded', [ __CLASS__, 'exclude_donations' ], 10, 3 );
+		add_filter( 'woocommerce_dynamic_pricing_is_excluded', [ __CLASS__, 'exclude_group_subscriptions' ], 10, 3 );
 		add_filter( 'newspack_modal_checkout_price_summary', [ __CLASS__, 'annotate_modal_checkout_summary' ], 20, 2 );
 	}
 
