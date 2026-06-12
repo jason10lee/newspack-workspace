@@ -82,7 +82,6 @@ class Initializer {
 		WP_CLI::add_command( 'newspack backfill-non-editing-contributors', [ 'Newspack\CLI\Co_Authors_Plus', 'backfill_non_editing_contributor' ] );
 		WP_CLI::add_command( 'newspack migrate-expired-subscriptions', [ 'Newspack\CLI\WooCommerce_Subscriptions', 'migrate_expired_subscriptions' ] );
 		WP_CLI::add_command( 'newspack ga4-dimensions', 'Newspack\CLI\GA4_Dimensions' );
-		WP_CLI::add_command( 'newspack dynamic-pricing', 'Newspack\CLI\Dynamic_Pricing_CLI' );
 
 		// Only register the Teams for Memberships diagnostics command on sites where the
 		// SkyVerge plugin is active. No reason to surface it in `wp help` otherwise.
