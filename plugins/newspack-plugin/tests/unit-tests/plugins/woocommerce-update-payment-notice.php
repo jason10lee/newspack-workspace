@@ -29,6 +29,8 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 		$wc_memberships_plans                      = [];
 		$wc_memberships_active_memberships         = [];
 		$wc_memberships_plan_subscription_products = [];
+		global $wcs_grouped_parents;
+		$wcs_grouped_parents = [];
 	}
 
 	/**
@@ -386,5 +388,99 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 		$this->make_needs_payment_subscription( $customer_id, 'on-hold', 4242 );
 
 		$this->assertCount( 1, $this->get_notices(), 'No equivalent access — the notice must still fire.' );
+	}
+
+	/**
+	 * A product belonging to a grouped product is matched to a plan granting the grouped parent.
+	 */
+	public function test_plan_lookup_matches_grouped_parent() {
+		newspack_register_mock_membership_plan( 704, [ 8000 ] );
+		global $wcs_grouped_parents;
+		$product = wc_create_mock_product(
+			[
+				'id'   => 8001,
+				'name' => 'Grouped child',
+			]
+		);
+		$wcs_grouped_parents[8001] = [ 8000 ];
+		$this->assertSame( [ 704 ], $this->get_plan_ids_for_product( $product ) );
+	}
+
+	/**
+	 * A pending-cancel subscription (still has access until period end) counts as equivalent access.
+	 */
+	public function test_equivalent_access_via_pending_cancel_subscription() {
+		$user_id = self::factory()->user->create();
+		newspack_register_mock_membership_plan( 803, [ 4242, 99603 ] );
+		wcs_create_subscription(
+			[
+				'customer_id' => $user_id,
+				'status'      => 'pending-cancel',
+				'products'    => [ 99603 ],
+			]
+		);
+		$product = wc_create_mock_product(
+			[
+				'id'   => 4242,
+				'name' => 'Newsroom Pro – Monthly',
+			]
+		);
+		$this->assertTrue( \Newspack\Memberships::user_has_equivalent_active_access( $product, $user_id ) );
+	}
+
+	/**
+	 * Variation-accuracy guard: when a plan grants ONLY the variation (not its
+	 * parent), suppression must use the variation-accurate $line_item->get_product()
+	 * and not wc_get_product( get_product_id() ) (which returns the parent).
+	 */
+	public function test_no_notice_for_variation_when_plan_grants_the_variation() {
+		$customer_id = $this->make_current_customer();
+		// Plan grants ONLY the variation (54427), not its parent (54426).
+		newspack_register_mock_membership_plan( 903, [ 54427 ] );
+		global $wc_memberships_active_memberships;
+		$wc_memberships_active_memberships[ $customer_id ] = [ 903 ];
+		wc_create_mock_product(
+			[
+				'id'   => 54426,
+				'name' => 'Newsroom Pro – Monthly (variable)',
+			]
+		);
+		wc_create_mock_product(
+			[
+				'id'        => 54427,
+				'name'      => 'Newsroom Pro – Monthly',
+				'parent_id' => 54426,
+			]
+		);
+		// Line item: get_product_id() is the PARENT (54426); get_product() is the VARIATION (54427).
+		$line_item = new class() {
+			/**
+			 * Return the parent product ID (54426), not the variation.
+			 *
+			 * @return int
+			 */
+			public function get_product_id() {
+				return 54426;
+			}
+			/**
+			 * Return the variation product object (54427).
+			 *
+			 * @return WC_Product|false
+			 */
+			public function get_product() {
+				return wc_get_product( 54427 );
+			}
+		};
+		wcs_create_subscription(
+			[
+				'customer_id'   => $customer_id,
+				'status'        => 'on-hold',
+				'needs_payment' => true,
+				'products'      => [ 54426 ],
+				'items'         => [ $line_item ],
+			]
+		);
+
+		$this->assertSame( [], $this->get_notices(), 'A variation-only plan must suppress via the variation-accurate product.' );
 	}
 }

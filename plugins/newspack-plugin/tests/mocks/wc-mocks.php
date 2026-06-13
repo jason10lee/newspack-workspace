@@ -129,6 +129,8 @@ class WC_Customer {
 $orders_database = [];
 $subscriptions_database = [];
 $products_database = [];
+global $wcs_grouped_parents;
+$wcs_grouped_parents = []; // Map of product_id to array of grouped parent product IDs.
 
 class WC_Order_Item_Product {
 	private $data = [];
@@ -489,6 +491,11 @@ if ( ! class_exists( 'WC_Subscriptions_Product' ) ) {
 				return 0;
 			}
 			return (float) $product->get_meta( '_subscription_price' );
+		}
+		public static function get_visible_grouped_parent_product_ids( $product ) {
+			global $wcs_grouped_parents;
+			$id = is_object( $product ) ? $product->get_id() : (int) $product;
+			return $wcs_grouped_parents[ $id ] ?? [];
 		}
 	}
 }
