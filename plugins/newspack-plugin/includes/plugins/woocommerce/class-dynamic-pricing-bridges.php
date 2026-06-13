@@ -109,10 +109,10 @@ final class Dynamic_Pricing_Bridges {
 			if ( ! $annotation || abs( $annotation['original'] - $annotation['amount'] ) < 0.01 ) {
 				return $summary;
 			}
-			$qualifier = $surface::first_cycle_qualifier( $cart_item );
-			if ( '' !== $qualifier && $cart_item['data'] instanceof \WC_Product ) {
-				$summary = $surface::strip_period_suffix( $summary, $cart_item['data'] );
-			}
+			// Match the cart/product surfaces: keep the WCS period suffix on the
+			// summary and append a "(Label — regularly $X)" annotation. The
+			// schedule disclosure owns the first-cycle-vs-renewals story; the
+			// summary line stays focused on what's charged with its native suffix.
 			$original = wp_strip_all_tags( html_entity_decode( wc_price( (float) $annotation['original'] ), ENT_QUOTES ) );
 			$parts    = [];
 			if ( '' !== (string) $annotation['label'] ) {
@@ -120,9 +120,6 @@ final class Dynamic_Pricing_Bridges {
 			}
 			/* translators: %s: regular price */
 			$parts[] = sprintf( __( 'regularly %s', 'newspack-plugin' ), $original );
-			if ( '' !== $qualifier ) {
-				$parts[] = $qualifier;
-			}
 			return sprintf( '%1$s (%2$s)', $summary, implode( ' — ', $parts ) );
 		}
 		return $summary;
