@@ -864,6 +864,46 @@ class Memberships {
 	}
 
 	/**
+	 * Get the IDs of membership plans granted by a product, matching the product
+	 * itself, its parent (variations), and its grouped parents. NPPM-2926.
+	 *
+	 * @param \WC_Product $product Product.
+	 *
+	 * @return int[] Plan IDs.
+	 */
+	private static function get_plan_ids_for_product( $product ) {
+		if ( ! self::is_active() || ! $product || ! function_exists( 'wc_memberships_get_membership_plans' ) ) {
+			return [];
+		}
+
+		// Build the set of product IDs that could be configured on a plan: the
+		// purchased product/variation, its parent variable product, and any
+		// grouped parents (mirrors the resolution in WooCommerce_Update_Payment_Notice).
+		$candidate_ids = [ (int) $product->get_id() ];
+		$parent_id     = (int) $product->get_parent_id();
+		if ( $parent_id > 0 ) {
+			$candidate_ids[] = $parent_id;
+		}
+		if ( class_exists( 'WC_Subscriptions_Product' ) && method_exists( 'WC_Subscriptions_Product', 'get_visible_grouped_parent_product_ids' ) ) {
+			foreach ( (array) \WC_Subscriptions_Product::get_visible_grouped_parent_product_ids( $product ) as $grouped_id ) {
+				$candidate_ids[] = (int) $grouped_id;
+			}
+		}
+		$candidate_ids = array_unique( array_filter( $candidate_ids ) );
+
+		$plan_ids = [];
+		foreach ( wc_memberships_get_membership_plans() as $plan ) {
+			foreach ( $candidate_ids as $candidate_id ) {
+				if ( $plan->has_product( $candidate_id ) ) {
+					$plan_ids[] = (int) $plan->get_id();
+					break;
+				}
+			}
+		}
+		return array_values( array_unique( $plan_ids ) );
+	}
+
+	/**
 	 * Handle reevaluation request, triggered by the User Membership meta box action.
 	 * Membership and subscription can get unlinked, this will help the administrator
 	 * resync the membership status after relinking the subscription.

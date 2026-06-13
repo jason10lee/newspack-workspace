@@ -8,6 +8,7 @@
 use Newspack\WooCommerce_Update_Payment_Notice;
 
 require_once __DIR__ . '/../../mocks/wc-mocks.php';
+require_once __DIR__ . '/../../mocks/wc-memberships-mocks.php';
 
 /**
  * Tests for WooCommerce_Update_Payment_Notice status allowlist logic.
@@ -24,6 +25,10 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 		$subscriptions_database = [];
 		$products_database      = [];
 		$orders_database        = [];
+		global $wc_memberships_plans, $wc_memberships_active_memberships, $wc_memberships_plan_subscription_products;
+		$wc_memberships_plans                      = [];
+		$wc_memberships_active_memberships         = [];
+		$wc_memberships_plan_subscription_products = [];
 	}
 
 	/**
@@ -243,5 +248,59 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 			$allowlist,
 			'Allowlist changed. Confirm any new status is genuinely recoverable before updating this guard.'
 		);
+	}
+
+	/**
+	 * Invoke the private Memberships::get_plan_ids_for_product() via reflection.
+	 *
+	 * @param \WC_Product $product Product.
+	 * @return int[]
+	 */
+	private function get_plan_ids_for_product( $product ) {
+		$method = new ReflectionMethod( \Newspack\Memberships::class, 'get_plan_ids_for_product' );
+		$method->setAccessible( true );
+		return $method->invoke( null, $product );
+	}
+
+	/**
+	 * A simple product is matched to the plan that grants it.
+	 */
+	public function test_plan_lookup_matches_simple_product() {
+		newspack_register_mock_membership_plan( 700, [ 4242 ] );
+		$product = wc_create_mock_product( [ 'id' => 4242, 'name' => 'Newsroom Pro' ] );
+		$this->assertSame( [ 700 ], $this->get_plan_ids_for_product( $product ) );
+	}
+
+	/**
+	 * A variation is matched via its parent variable product.
+	 */
+	public function test_plan_lookup_matches_variation_via_parent() {
+		newspack_register_mock_membership_plan( 701, [ 54426 ] );
+		$variation = wc_create_mock_product(
+			[
+				'id'        => 54427,
+				'name'      => 'Newsroom Pro – Monthly',
+				'parent_id' => 54426,
+			]
+		);
+		$this->assertSame( [ 701 ], $this->get_plan_ids_for_product( $variation ) );
+	}
+
+	/**
+	 * A simple product (parent_id 0) must never match a plan that grants product 0.
+	 */
+	public function test_plan_lookup_does_not_query_empty_parent() {
+		newspack_register_mock_membership_plan( 702, [ 0 ] );
+		$product = wc_create_mock_product( [ 'id' => 4242, 'name' => 'Newsroom Pro' ] );
+		$this->assertSame( [], $this->get_plan_ids_for_product( $product ) );
+	}
+
+	/**
+	 * No plan grants the product → empty result.
+	 */
+	public function test_plan_lookup_empty_when_memberships_have_no_match() {
+		newspack_register_mock_membership_plan( 703, [ 9999 ] );
+		$product = wc_create_mock_product( [ 'id' => 4242, 'name' => 'Newsroom Pro' ] );
+		$this->assertSame( [], $this->get_plan_ids_for_product( $product ) );
 	}
 }
