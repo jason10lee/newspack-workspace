@@ -129,8 +129,9 @@ class WC_Customer {
 $orders_database = [];
 $subscriptions_database = [];
 $products_database = [];
+// Mock registry: product_id => array of grouped-parent product IDs (NPPM-2926).
 global $wcs_grouped_parents;
-$wcs_grouped_parents = []; // Map of product_id to array of grouped parent product IDs.
+$wcs_grouped_parents = [];
 
 class WC_Order_Item_Product {
 	private $data = [];
