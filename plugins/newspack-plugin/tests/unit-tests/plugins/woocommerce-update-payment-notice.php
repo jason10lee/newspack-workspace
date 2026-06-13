@@ -346,4 +346,45 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 		$product = wc_create_mock_product( [ 'id' => 4242, 'name' => 'Newsroom Pro' ] );
 		$this->assertFalse( \Newspack\Memberships::user_has_equivalent_active_access( $product, $user_id ) );
 	}
+
+	public function test_no_notice_when_equivalent_membership_access_exists() {
+		$customer_id = $this->make_current_customer();
+		// Two different products granting the same plan; reader holds active membership.
+		newspack_register_mock_membership_plan( 900, [ 4242, 99603 ] );
+		global $wc_memberships_active_memberships;
+		$wc_memberships_active_memberships[ $customer_id ] = [ 900 ];
+		wc_create_mock_product( [ 'id' => 4242, 'name' => 'Newsroom Pro – Monthly' ] );
+		// The offending, recoverable subscription on product 4242.
+		$this->make_needs_payment_subscription( $customer_id, 'on-hold', 4242 );
+
+		$this->assertSame( [], $this->get_notices(), 'Equivalent active membership must suppress the notice.' );
+	}
+
+	public function test_no_notice_when_equivalent_active_subscription_exists() {
+		$customer_id = $this->make_current_customer();
+		newspack_register_mock_membership_plan( 901, [ 4242, 99603 ] );
+		wc_create_mock_product( [ 'id' => 4242, 'name' => 'Newsroom Pro – Monthly' ] );
+		// Active subscription on the *other* product 99603 grants the same plan.
+		wcs_create_subscription(
+			[
+				'customer_id' => $customer_id,
+				'status'      => 'active',
+				'products'    => [ 99603 ],
+			]
+		);
+		// The offending, recoverable subscription on product 4242.
+		$this->make_needs_payment_subscription( $customer_id, 'on-hold', 4242 );
+
+		$this->assertSame( [], $this->get_notices(), 'An active subscription for the same plan must suppress the notice.' );
+	}
+
+	public function test_notice_still_fires_without_equivalent_access() {
+		$customer_id = $this->make_current_customer();
+		// Plan exists but the reader has neither active membership nor an equivalent active sub.
+		newspack_register_mock_membership_plan( 902, [ 4242, 99603 ] );
+		wc_create_mock_product( [ 'id' => 4242, 'name' => 'Newsroom Pro – Monthly' ] );
+		$this->make_needs_payment_subscription( $customer_id, 'on-hold', 4242 );
+
+		$this->assertCount( 1, $this->get_notices(), 'No equivalent access — the notice must still fire.' );
+	}
 }
