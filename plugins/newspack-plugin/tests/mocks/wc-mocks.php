@@ -643,6 +643,10 @@ function wcs_get_users_subscriptions( $user_id ) {
 	return apply_filters( 'wcs_get_users_subscriptions', $user_subscriptions, $user_id );
 }
 function wcs_get_subscriptions( $args = [] ) {
+	// Minimal mock: implements only the `customer_id` filter, the sole arg the code
+	// under test passes. If a future test needs status/paging args
+	// (subscription_status, subscriptions_per_page, paged, offset), extend the filter
+	// here rather than relying on this returning the full set.
 	global $subscriptions_database;
 	$customer_id = $args['customer_id'] ?? null;
 	$matches     = [];

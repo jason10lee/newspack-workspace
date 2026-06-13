@@ -25,7 +25,7 @@ class WooCommerce_Update_Payment_Notice {
 	 *
 	 * @var string[]
 	 */
-	const NOTICE_SUBSCRIPTION_STATUSES = [ 'on-hold', 'pending' ];
+	const NOTICE_RECOVERABLE_STATUSES = [ 'on-hold', 'pending' ];
 
 	/**
 	 * Initialize the class.
@@ -147,10 +147,9 @@ class WooCommerce_Update_Payment_Notice {
 		$notices = [];
 
 		foreach ( $subscriptions as $subscription ) {
-			// Only nag for statuses where paying actually restores the subscription.
-			// Terminal/ended statuses (e.g. expired) can carry a stale unpaid renewal
-			// order that trips needs_payment() with no live payment to resolve. NPPM-2926.
-			if ( ! $subscription->has_status( self::NOTICE_SUBSCRIPTION_STATUSES ) ) {
+			// Only nag for statuses where paying can restore the subscription (NPPM-2926);
+			// see NOTICE_RECOVERABLE_STATUSES for why terminal/has-access statuses are excluded.
+			if ( ! $subscription->has_status( self::NOTICE_RECOVERABLE_STATUSES ) ) {
 				continue;
 			}
 			if ( ! $subscription->needs_payment() ) {

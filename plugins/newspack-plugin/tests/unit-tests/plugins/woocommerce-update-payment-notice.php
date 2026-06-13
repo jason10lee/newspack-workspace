@@ -117,7 +117,7 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 	 *
 	 * @return array<string,array{0:string}>
 	 */
-	public function terminal_status_provider() {
+	public function non_recoverable_status_provider() {
 		return [
 			'expired'        => [ 'expired' ],
 			'switched'       => [ 'switched' ],
@@ -130,7 +130,7 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 	/**
 	 * Non-recoverable statuses must not produce a payment notice even if needs_payment() is true.
 	 *
-	 * @dataProvider terminal_status_provider
+	 * @dataProvider non_recoverable_status_provider
 	 *
 	 * @param string $status Subscription status.
 	 */
@@ -140,7 +140,7 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 			[
 				'id'   => 4242,
 				'name' => 'Newsroom Pro',
-			] 
+			]
 		);
 		$this->make_needs_payment_subscription( $customer_id, $status, $product->get_id() );
 
@@ -156,7 +156,7 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 			[
 				'id'   => 54427,
 				'name' => 'Newsroom Pro – Monthly',
-			] 
+			]
 		);
 		// needs_payment() true models the stale unpaid failed-renewal order still attached.
 		$this->make_needs_payment_subscription( $customer_id, 'expired', $product->get_id() );
@@ -173,7 +173,7 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 			[
 				'id'   => 4242,
 				'name' => 'Newsroom Pro',
-			] 
+			]
 		);
 		$this->make_needs_payment_subscription( $customer_id, 'on-hold', $product->get_id() );
 
@@ -191,7 +191,7 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 			[
 				'id'   => 4242,
 				'name' => 'Newsroom Pro',
-			] 
+			]
 		);
 		$this->make_needs_payment_subscription( $customer_id, 'pending', $product->get_id() );
 
@@ -207,7 +207,7 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 			[
 				'id'   => 4242,
 				'name' => 'Newsroom Pro',
-			] 
+			]
 		);
 		wcs_create_subscription(
 			[
@@ -223,15 +223,17 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Pin the allowlist against the full set of WCS statuses known at authoring
-	 * time. If WCS adds a status, this fails so a human decides whether it is a
-	 * recoverable (notice-worthy) state rather than silently skipping it. NPPM-2926.
+	 * Pin the recoverable-status allowlist to its reviewed value. This does NOT
+	 * auto-detect new WooCommerce Subscriptions statuses — the known set is listed
+	 * here, not queried. It fails when the allowlist itself changes, or gains a
+	 * status outside the known set, forcing a human to confirm a new status is
+	 * genuinely recoverable before it ships. NPPM-2926.
 	 */
 	public function test_allowlist_is_pinned_against_known_wcs_statuses() {
 		$known_wcs_statuses = [ 'pending', 'active', 'on-hold', 'cancelled', 'switched', 'expired', 'pending-cancel' ];
 
 		$reflection = new ReflectionClass( \Newspack\WooCommerce_Update_Payment_Notice::class );
-		$allowlist  = $reflection->getConstant( 'NOTICE_SUBSCRIPTION_STATUSES' );
+		$allowlist  = $reflection->getConstant( 'NOTICE_RECOVERABLE_STATUSES' );
 
 		$unknown = array_diff( $allowlist, $known_wcs_statuses );
 		$this->assertSame( [], array_values( $unknown ), 'Allowlist contains a status not in the known WCS set.' );
