@@ -864,6 +864,47 @@ class Memberships {
 	}
 
 	/**
+	 * Whether the user still holds active access equivalent to what $product
+	 * grants — via an active membership of a plan the product grants (Layer 3),
+	 * or another active subscription that grants the same plan (Layer 2).
+	 *
+	 * Used to suppress the "update payment" notice when a recoverable
+	 * subscription is effectively superseded by equivalent active access bought
+	 * through a different product. NPPM-2926.
+	 *
+	 * @param \WC_Product $product The purchased product (variation-accurate).
+	 * @param int|null    $user_id User ID. Defaults to the current user.
+	 *
+	 * @return bool
+	 */
+	public static function user_has_equivalent_active_access( $product, $user_id = null ) {
+		if ( ! self::is_active() || ! $product ) {
+			return false;
+		}
+		$user_id = $user_id ?? get_current_user_id();
+		if ( ! $user_id ) {
+			return false;
+		}
+
+		foreach ( self::get_plan_ids_for_product( $product ) as $plan_id ) {
+			// Layer 3 — currently-active membership access (active-only, not delayed).
+			if ( function_exists( 'wc_memberships_is_user_active_member' )
+				&& wc_memberships_is_user_active_member( $user_id, $plan_id ) ) {
+				return true;
+			}
+			// Layer 2 — another active subscription that grants the same plan.
+			// get_user_subscription_for_membership_plan() resolves through
+			// WooCommerce_Connection::get_active_subscriptions_for_user(), which
+			// filters to ACTIVE_SUBSCRIPTION_STATUSES — so the on-hold/pending
+			// subscription under evaluation can never self-match here.
+			if ( self::get_user_subscription_for_membership_plan( $user_id, $plan_id ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Get the IDs of membership plans granted by a product, matching the product
 	 * itself, its parent (variations), and its grouped parents. NPPM-2926.
 	 *

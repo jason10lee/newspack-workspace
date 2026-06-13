@@ -303,4 +303,47 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 		$product = wc_create_mock_product( [ 'id' => 4242, 'name' => 'Newsroom Pro' ] );
 		$this->assertSame( [], $this->get_plan_ids_for_product( $product ) );
 	}
+
+	public function test_equivalent_access_via_active_membership() {
+		$user_id = self::factory()->user->create();
+		newspack_register_mock_membership_plan( 800, [ 4242, 99603 ] );
+		global $wc_memberships_active_memberships;
+		$wc_memberships_active_memberships[ $user_id ] = [ 800 ];
+
+		$product = wc_create_mock_product( [ 'id' => 4242, 'name' => 'Newsroom Pro – Monthly' ] );
+		$this->assertTrue( \Newspack\Memberships::user_has_equivalent_active_access( $product, $user_id ) );
+	}
+
+	public function test_equivalent_access_via_active_subscription_for_same_plan() {
+		$user_id = self::factory()->user->create();
+		// Plan 801 is granted by products 4242 (the offending one's product) and 99603 (the active one's).
+		newspack_register_mock_membership_plan( 801, [ 4242, 99603 ] );
+		// User holds an ACTIVE subscription on the *other* product (99603), no active membership record.
+		wcs_create_subscription(
+			[
+				'customer_id' => $user_id,
+				'status'      => 'active',
+				'products'    => [ 99603 ],
+			]
+		);
+
+		$product = wc_create_mock_product( [ 'id' => 4242, 'name' => 'Newsroom Pro – Monthly' ] );
+		$this->assertTrue( \Newspack\Memberships::user_has_equivalent_active_access( $product, $user_id ) );
+	}
+
+	public function test_no_equivalent_access_when_neither_membership_nor_subscription() {
+		$user_id = self::factory()->user->create();
+		newspack_register_mock_membership_plan( 802, [ 4242, 99603 ] );
+
+		$product = wc_create_mock_product( [ 'id' => 4242, 'name' => 'Newsroom Pro – Monthly' ] );
+		$this->assertFalse( \Newspack\Memberships::user_has_equivalent_active_access( $product, $user_id ) );
+	}
+
+	public function test_no_equivalent_access_when_memberships_inactive() {
+		// With no registered plans, get_plan_ids_for_product() returns [] and the
+		// helper must return false (fallback to Layer 1 only).
+		$user_id = self::factory()->user->create();
+		$product = wc_create_mock_product( [ 'id' => 4242, 'name' => 'Newsroom Pro' ] );
+		$this->assertFalse( \Newspack\Memberships::user_has_equivalent_active_access( $product, $user_id ) );
+	}
 }
