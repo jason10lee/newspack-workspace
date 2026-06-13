@@ -1,4 +1,4 @@
-<?php
+<?php // phpcs:disable WordPress.Files.FileName.InvalidClassFileName, Squiz.Commenting.FunctionComment.Missing, Squiz.Commenting.ClassComment.Missing, Squiz.Commenting.VariableComment.Missing, Squiz.Commenting.FileComment.Missing, Generic.Files.OneObjectStructurePerFile.MultipleFound, Universal.Files.SeparateFunctionsFromOO.Mixed
 /**
  * Minimal WooCommerce Memberships test doubles for the Newspack plugin.
  *
@@ -10,11 +10,12 @@
  * @package Newspack\Tests
  */
 
-// Mock registries. Tests reset these in set_up().
+// Mock registries, reset by tests in set_up(): registered plans, active
+// memberships keyed by user ID, and each plan's subscription product IDs.
 global $wc_memberships_plans, $wc_memberships_active_memberships, $wc_memberships_plan_subscription_products;
-$wc_memberships_plans                       = []; // Newspack_Mock_Membership_Plan[]
-$wc_memberships_active_memberships          = []; // [ user_id => [ plan_id, ... ] ]
-$wc_memberships_plan_subscription_products  = []; // [ plan_id => [ product_id, ... ] ]
+$wc_memberships_plans                      = [];
+$wc_memberships_active_memberships         = [];
+$wc_memberships_plan_subscription_products = [];
 
 // Satisfies Memberships::is_active()'s class_exists( 'WC_Memberships' ) check.
 if ( ! class_exists( 'WC_Memberships' ) ) {

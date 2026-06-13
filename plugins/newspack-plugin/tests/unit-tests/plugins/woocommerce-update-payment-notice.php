@@ -269,7 +269,12 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 	 */
 	public function test_plan_lookup_matches_simple_product() {
 		newspack_register_mock_membership_plan( 700, [ 4242 ] );
-		$product = wc_create_mock_product( [ 'id' => 4242, 'name' => 'Newsroom Pro' ] );
+		$product = wc_create_mock_product(
+			[
+				'id'   => 4242,
+				'name' => 'Newsroom Pro',
+			]
+		);
 		$this->assertSame( [ 700 ], $this->get_plan_ids_for_product( $product ) );
 	}
 
@@ -293,7 +298,12 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 	 */
 	public function test_plan_lookup_does_not_query_empty_parent() {
 		newspack_register_mock_membership_plan( 702, [ 0 ] );
-		$product = wc_create_mock_product( [ 'id' => 4242, 'name' => 'Newsroom Pro' ] );
+		$product = wc_create_mock_product(
+			[
+				'id'   => 4242,
+				'name' => 'Newsroom Pro',
+			]
+		);
 		$this->assertSame( [], $this->get_plan_ids_for_product( $product ) );
 	}
 
@@ -302,20 +312,36 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 	 */
 	public function test_plan_lookup_empty_when_memberships_have_no_match() {
 		newspack_register_mock_membership_plan( 703, [ 9999 ] );
-		$product = wc_create_mock_product( [ 'id' => 4242, 'name' => 'Newsroom Pro' ] );
+		$product = wc_create_mock_product(
+			[
+				'id'   => 4242,
+				'name' => 'Newsroom Pro',
+			]
+		);
 		$this->assertSame( [], $this->get_plan_ids_for_product( $product ) );
 	}
 
+	/**
+	 * Equivalent access is detected via an active membership record.
+	 */
 	public function test_equivalent_access_via_active_membership() {
 		$user_id = self::factory()->user->create();
 		newspack_register_mock_membership_plan( 800, [ 4242, 99603 ] );
 		global $wc_memberships_active_memberships;
 		$wc_memberships_active_memberships[ $user_id ] = [ 800 ];
 
-		$product = wc_create_mock_product( [ 'id' => 4242, 'name' => 'Newsroom Pro – Monthly' ] );
+		$product = wc_create_mock_product(
+			[
+				'id'   => 4242,
+				'name' => 'Newsroom Pro – Monthly',
+			]
+		);
 		$this->assertTrue( \Newspack\Memberships::user_has_equivalent_active_access( $product, $user_id ) );
 	}
 
+	/**
+	 * Equivalent access is detected via an active subscription covering the same plan.
+	 */
 	public function test_equivalent_access_via_active_subscription_for_same_plan() {
 		$user_id = self::factory()->user->create();
 		// Plan 801 is granted by products 4242 (the offending one's product) and 99603 (the active one's).
@@ -329,43 +355,80 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 			]
 		);
 
-		$product = wc_create_mock_product( [ 'id' => 4242, 'name' => 'Newsroom Pro – Monthly' ] );
+		$product = wc_create_mock_product(
+			[
+				'id'   => 4242,
+				'name' => 'Newsroom Pro – Monthly',
+			]
+		);
 		$this->assertTrue( \Newspack\Memberships::user_has_equivalent_active_access( $product, $user_id ) );
 	}
 
+	/**
+	 * No equivalent access when the user has neither an active membership nor subscription.
+	 */
 	public function test_no_equivalent_access_when_neither_membership_nor_subscription() {
 		$user_id = self::factory()->user->create();
 		newspack_register_mock_membership_plan( 802, [ 4242, 99603 ] );
 
-		$product = wc_create_mock_product( [ 'id' => 4242, 'name' => 'Newsroom Pro – Monthly' ] );
+		$product = wc_create_mock_product(
+			[
+				'id'   => 4242,
+				'name' => 'Newsroom Pro – Monthly',
+			]
+		);
 		$this->assertFalse( \Newspack\Memberships::user_has_equivalent_active_access( $product, $user_id ) );
 	}
 
+	/**
+	 * No equivalent access when no membership plans are registered.
+	 */
 	public function test_no_equivalent_access_when_memberships_inactive() {
 		// With no registered plans, get_plan_ids_for_product() returns [] and the
 		// helper must return false (fallback to Layer 1 only).
 		$user_id = self::factory()->user->create();
-		$product = wc_create_mock_product( [ 'id' => 4242, 'name' => 'Newsroom Pro' ] );
+		$product = wc_create_mock_product(
+			[
+				'id'   => 4242,
+				'name' => 'Newsroom Pro',
+			]
+		);
 		$this->assertFalse( \Newspack\Memberships::user_has_equivalent_active_access( $product, $user_id ) );
 	}
 
+	/**
+	 * An active membership for the same plan suppresses the payment notice.
+	 */
 	public function test_no_notice_when_equivalent_membership_access_exists() {
 		$customer_id = $this->make_current_customer();
 		// Two different products granting the same plan; reader holds active membership.
 		newspack_register_mock_membership_plan( 900, [ 4242, 99603 ] );
 		global $wc_memberships_active_memberships;
 		$wc_memberships_active_memberships[ $customer_id ] = [ 900 ];
-		wc_create_mock_product( [ 'id' => 4242, 'name' => 'Newsroom Pro – Monthly' ] );
+		wc_create_mock_product(
+			[
+				'id'   => 4242,
+				'name' => 'Newsroom Pro – Monthly',
+			]
+		);
 		// The offending, recoverable subscription on product 4242.
 		$this->make_needs_payment_subscription( $customer_id, 'on-hold', 4242 );
 
 		$this->assertSame( [], $this->get_notices(), 'Equivalent active membership must suppress the notice.' );
 	}
 
+	/**
+	 * An active subscription for the same plan suppresses the payment notice.
+	 */
 	public function test_no_notice_when_equivalent_active_subscription_exists() {
 		$customer_id = $this->make_current_customer();
 		newspack_register_mock_membership_plan( 901, [ 4242, 99603 ] );
-		wc_create_mock_product( [ 'id' => 4242, 'name' => 'Newsroom Pro – Monthly' ] );
+		wc_create_mock_product(
+			[
+				'id'   => 4242,
+				'name' => 'Newsroom Pro – Monthly',
+			]
+		);
 		// Active subscription on the *other* product 99603 grants the same plan.
 		wcs_create_subscription(
 			[
@@ -380,11 +443,19 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 		$this->assertSame( [], $this->get_notices(), 'An active subscription for the same plan must suppress the notice.' );
 	}
 
+	/**
+	 * Without equivalent access the payment notice still fires (regression guard).
+	 */
 	public function test_notice_still_fires_without_equivalent_access() {
 		$customer_id = $this->make_current_customer();
 		// Plan exists but the reader has neither active membership nor an equivalent active sub.
 		newspack_register_mock_membership_plan( 902, [ 4242, 99603 ] );
-		wc_create_mock_product( [ 'id' => 4242, 'name' => 'Newsroom Pro – Monthly' ] );
+		wc_create_mock_product(
+			[
+				'id'   => 4242,
+				'name' => 'Newsroom Pro – Monthly',
+			]
+		);
 		$this->make_needs_payment_subscription( $customer_id, 'on-hold', 4242 );
 
 		$this->assertCount( 1, $this->get_notices(), 'No equivalent access — the notice must still fire.' );
