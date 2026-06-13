@@ -125,6 +125,8 @@ jobs:
        # build). Without it pnpm exits non-zero on a missing script.
       - run: pnpm --filter "${{ matrix.package }}" run --if-present lint:js
         continue-on-error: false
+      - run: pnpm --filter "${{ matrix.package }}" run --if-present lint:scss
+        continue-on-error: false
       - run: pnpm --filter "${{ matrix.package }}" run --if-present build
       - run: pnpm --filter "${{ matrix.package }}" run --if-present test
         continue-on-error: false
