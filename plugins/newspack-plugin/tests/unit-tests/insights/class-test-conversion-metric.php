@@ -19,7 +19,9 @@ namespace Newspack\Tests\Insights;
 
 use DateTimeImmutable;
 use DateTimeZone;
+use Newspack\Insights\BigQuery_Proxy_Client;
 use Newspack\Insights\Conversion_Metric;
+use Newspack\Insights\Woo_Order_Resolver;
 use WP_UnitTestCase;
 
 /**
@@ -62,6 +64,72 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	private function window(): array {
 		return [ $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) ];
 	}
+
+	// --- C1 scaffolding tests ------------------------------------------------
+
+	/**
+	 * Constructor accepts an injected proxy client (test seam).
+	 */
+	public function test_constructor_accepts_injected_proxy() {
+		$proxy  = $this->createMock( BigQuery_Proxy_Client::class );
+		$metric = new Conversion_Metric( $proxy );
+		$this->assertInstanceOf( Conversion_Metric::class, $metric );
+	}
+
+	/**
+	 * Constructor accepts an injected Woo resolver (test seam).
+	 */
+	public function test_constructor_accepts_injected_woo_resolver() {
+		$proxy        = $this->createMock( BigQuery_Proxy_Client::class );
+		$woo_resolver = $this->createMock( Woo_Order_Resolver::class );
+		$metric       = new Conversion_Metric( $proxy, $woo_resolver );
+		$this->assertInstanceOf( Conversion_Metric::class, $metric );
+	}
+
+	/**
+	 * Injected proxy is stored and actually used when a wired method is called.
+	 *
+	 * Verifies via reflection that $proxy is stored in the private property,
+	 * and via a mock expectation that its query() method is called when
+	 * compute_metric_from_proxy is exercised indirectly through a future wired
+	 * method. For Phase 1, we assert the proxy property is set correctly since
+	 * no public method calls the proxy yet.
+	 */
+	public function test_injected_proxy_is_stored_on_private_property() {
+		$proxy  = $this->createMock( BigQuery_Proxy_Client::class );
+		$metric = new Conversion_Metric( $proxy );
+
+		$reflection = new \ReflectionProperty( Conversion_Metric::class, 'proxy' );
+		$this->assertSame( $proxy, $reflection->getValue( $metric ) );
+	}
+
+	/**
+	 * Injected Woo resolver is stored on the private property.
+	 */
+	public function test_injected_woo_resolver_is_stored_on_private_property() {
+		$proxy        = $this->createMock( BigQuery_Proxy_Client::class );
+		$woo_resolver = $this->createMock( Woo_Order_Resolver::class );
+		$metric       = new Conversion_Metric( $proxy, $woo_resolver );
+
+		$reflection = new \ReflectionProperty( Conversion_Metric::class, 'woo_resolver' );
+		$this->assertSame( $woo_resolver, $reflection->getValue( $metric ) );
+	}
+
+	/**
+	 * Default constructor (no injected deps) creates a BigQuery_Proxy_Client
+	 * and a Woo_Order_Resolver and stores them on the private properties.
+	 */
+	public function test_default_constructor_creates_default_deps() {
+		$metric = new Conversion_Metric();
+
+		$proxy_ref = new \ReflectionProperty( Conversion_Metric::class, 'proxy' );
+		$this->assertInstanceOf( BigQuery_Proxy_Client::class, $proxy_ref->getValue( $metric ) );
+
+		$woo_ref = new \ReflectionProperty( Conversion_Metric::class, 'woo_resolver' );
+		$this->assertInstanceOf( Woo_Order_Resolver::class, $woo_ref->getValue( $metric ) );
+	}
+
+	// --- Existing Phase 1 placeholder tests ----------------------------------
 
 	/**
 	 * Every scalar scorecard returns the Phase 1 placeholder envelope: a

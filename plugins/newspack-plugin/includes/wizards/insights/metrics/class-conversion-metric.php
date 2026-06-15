@@ -35,6 +35,14 @@
  * cohort (5.2), and the three opportunity-bucket counts (8.1–8.3). These
  * are Woo-only (or Woo-plus-a-recently-active-UID-set), computed locally.
  *
+ * Phase 2 (Phase A) note: this class now also carries the state-envelope
+ * helpers copied from {@see Prompts_Metric} — error_scalar, populated_scalar,
+ * error_collection, malformed_collection, compute_metric_from_proxy, and
+ * fetch_paid_attempts_woo_join — plus coming_soon helpers for the deferred
+ * (Phase B) sections. Wired methods report an explicit `state`
+ * ('error' | 'empty' | 'populated'), replacing the Phase 1 `pending` flag;
+ * deferred-section methods report `state: 'coming_soon'`.
+ *
  * @package Newspack
  */
 
@@ -43,11 +51,22 @@ namespace Newspack\Insights;
 defined( 'ABSPATH' ) || exit;
 
 use DateTimeInterface;
+use Newspack\Insights\BigQuery_Proxy_Client;
+use Newspack\Insights\Woo_Order_Resolver;
 
 /**
  * Tab 3 placeholder metric orchestrator.
  *
  * @phpstan-type ScalarMetric array{
+ *   state: string,
+ *   value: int|float,
+ *   computable: bool,
+ *   denominator: int|null,
+ *   placeholder_type: string,
+ *   error_code?: string,
+ *   error_message?: string,
+ * }
+ * @phpstan-type PlaceholderMetric array{
  *   value: int|float,
  *   computable: bool,
  *   pending: bool,
@@ -74,6 +93,252 @@ final class Conversion_Metric {
 	 * @var string[]
 	 */
 	const SOURCES = [ 'gate', 'prompt', 'direct' ];
+
+	/**
+	 * Proxy client used to dispatch catalog queries to the hub.
+	 *
+	 * @var BigQuery_Proxy_Client
+	 */
+	private BigQuery_Proxy_Client $proxy;
+
+	/**
+	 * Resolver used to match BQ paid-conversion attempts against Woo orders.
+	 *
+	 * @var Woo_Order_Resolver
+	 */
+	private Woo_Order_Resolver $woo_resolver;
+
+	/**
+	 * Per-request memoization for paid-conversion BQ row fetches.
+	 *
+	 * Keyed by `<query_name>|Ymd|Ymd` of (query_name, start UTC, end UTC). The
+	 * conversion-rate and revenue methods for the same intent + same window
+	 * share one round-trip to the hub.
+	 *
+	 * @var array<string, array{rows:array, conversions:int, revenue:float}|\WP_Error>
+	 */
+	private array $paid_attempt_cache = [];
+
+	/**
+	 * Constructor. Optionally inject collaborators (used in tests).
+	 *
+	 * @param BigQuery_Proxy_Client|null $proxy        Injected proxy client, or null to lazy-resolve.
+	 * @param Woo_Order_Resolver|null    $woo_resolver Injected Woo resolver, or null to lazy-create.
+	 */
+	public function __construct(
+		?BigQuery_Proxy_Client $proxy = null,
+		?Woo_Order_Resolver $woo_resolver = null
+	) {
+		$this->proxy        = $proxy ?? new BigQuery_Proxy_Client();
+		$this->woo_resolver = $woo_resolver ?? new Woo_Order_Resolver();
+	}
+
+	/**
+	 * Error payload for a scalar scorecard metric. Carries the proxy's error
+	 * code + message so the UI can render an error treatment (without exposing
+	 * internals to the reader) instead of a misleading zero.
+	 *
+	 * @param string    $placeholder_type One of 'count', 'rate', 'currency', 'decimal'.
+	 * @param \WP_Error $error            The originating proxy error.
+	 * @return array
+	 */
+	private function error_scalar( string $placeholder_type, \WP_Error $error ): array {
+		return [
+			'state'            => 'error',
+			'value'            => 'decimal' === $placeholder_type ? 0.0 : 0,
+			'computable'       => false,
+			'denominator'      => null,
+			'placeholder_type' => $placeholder_type,
+			'error_code'       => $error->get_error_code(),
+			'error_message'    => $error->get_error_message(),
+		];
+	}
+
+	/**
+	 * Populated payload for a scalar scorecard metric. A successful query that
+	 * yields no usable value is still 'populated' — it renders as a
+	 * non-computable zero ('empty' has no meaning for a single scalar).
+	 *
+	 * @param int|float $value            Metric value.
+	 * @param bool      $computable       Whether the value is a real computed figure.
+	 * @param int|null  $denominator      Optional denominator.
+	 * @param string    $placeholder_type One of 'count', 'rate', 'currency', 'decimal'.
+	 * @return array
+	 */
+	private function populated_scalar( $value, bool $computable, ?int $denominator, string $placeholder_type ): array {
+		return [
+			'state'            => 'populated',
+			'value'            => $value,
+			'computable'       => $computable,
+			'denominator'      => $denominator,
+			'placeholder_type' => $placeholder_type,
+		];
+	}
+
+	/**
+	 * Error payload for a collection metric (funnel / distribution / table).
+	 *
+	 * @param string    $rows_key Key holding the (empty) collection: 'stages'|'slices'|'points'|'groups'|'cohorts'|'rows'.
+	 * @param \WP_Error $error    The originating proxy error.
+	 * @return array
+	 */
+	private function error_collection( string $rows_key, \WP_Error $error ): array {
+		return [
+			'state'         => 'error',
+			'error_code'    => $error->get_error_code(),
+			'error_message' => $error->get_error_message(),
+			$rows_key       => [],
+		];
+	}
+
+	/**
+	 * Error payload for a collection whose query succeeded but returned an
+	 * unexpected (non-array) shape — a data-quality bug, not an empty window.
+	 *
+	 * @param string $rows_key Key holding the (empty) collection: 'stages'|'slices'|'points'|'groups'|'cohorts'|'rows'.
+	 * @return array
+	 */
+	private function malformed_collection( string $rows_key ): array {
+		return $this->error_collection(
+			$rows_key,
+			new \WP_Error( 'bigquery_proxy_malformed_rows', __( 'The query returned an unexpected shape.', 'newspack-plugin' ) )
+		);
+	}
+
+	/**
+	 * Run a scalar catalog query and extract a single value from the first row.
+	 *
+	 * A proxy WP_Error becomes state 'error'. A successful query with no usable
+	 * value (empty rows, missing key, non-numeric, or count drift) becomes a
+	 * 'populated' non-computable zero.
+	 *
+	 * @param string            $query_name        Catalog `query_name`.
+	 * @param string            $row_key           Column to extract from the first row.
+	 * @param string            $placeholder_type  'count' | 'rate' | 'currency' | 'decimal'.
+	 * @param DateTimeInterface $start             Window start.
+	 * @param DateTimeInterface $end               Window end.
+	 * @return array
+	 */
+	private function compute_metric_from_proxy(
+		string $query_name,
+		string $row_key,
+		string $placeholder_type,
+		DateTimeInterface $start,
+		DateTimeInterface $end
+	): array {
+		$rows = $this->proxy->query( $query_name, $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $this->error_scalar( $placeholder_type, $rows );
+		}
+		$zero = 'decimal' === $placeholder_type ? 0.0 : 0;
+		if ( empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( $row_key, $rows[0] ) ) {
+			// Query succeeded with no usable value → non-computable zero.
+			return $this->populated_scalar( $zero, false, null, $placeholder_type );
+		}
+		$value = $rows[0][ $row_key ];
+		// SAFE_DIVIDE returns NULL when the denominator is zero — a legitimate
+		// "no eligible events to compute a rate" case, not a schema regression.
+		// Same handling as the missing-key branch above: non-computable zero.
+		if ( null === $value ) {
+			return $this->populated_scalar( $zero, false, null, $placeholder_type );
+		}
+		// Non-numeric, or (for counts) a non-integer value, signals catalog/schema
+		// drift — malformed data, not an empty window. Surface it as an error so a
+		// real data-quality regression isn't masked as a benign zero.
+		if ( ! is_numeric( $value ) || ( 'count' === $placeholder_type && (float) $value !== (float) (int) $value ) ) {
+			return $this->error_scalar(
+				$placeholder_type,
+				new \WP_Error( 'bigquery_proxy_malformed_value', __( 'The query returned a non-numeric value.', 'newspack-plugin' ) )
+			);
+		}
+		return $this->populated_scalar( 'count' === $placeholder_type ? (int) $value : (float) $value, true, null, $placeholder_type );
+	}
+
+	/**
+	 * Fetch paid-conversion rows for a given query and Woo-join them.
+	 *
+	 * Returns { rows, conversions, revenue } on success or a WP_Error on proxy
+	 * failure. Used by both the conversion-rate and revenue methods for the
+	 * same intent + direction; the per-(query_name, window) memoization avoids
+	 * a redundant round-trip to the hub when both methods run in one request.
+	 *
+	 * @param string            $query_name The conversion catalog query name.
+	 * @param DateTimeInterface $start      Window start.
+	 * @param DateTimeInterface $end        Window end.
+	 * @return array{rows:array, conversions:int, revenue:float}|\WP_Error
+	 */
+	private function fetch_paid_attempts_woo_join(
+		string $query_name,
+		DateTimeInterface $start,
+		DateTimeInterface $end
+	) {
+		// Normalize both bounds to UTC Ymd so callers passing different timezone
+		// objects don't bust the cache for the same logical window. Matches the
+		// proxy client's own UTC normalization.
+		$utc       = new \DateTimeZone( 'UTC' );
+		$cache_key = $query_name . '|'
+			. \DateTimeImmutable::createFromInterface( $start )->setTimezone( $utc )->format( 'Ymd' )
+			. '|'
+			. \DateTimeImmutable::createFromInterface( $end )->setTimezone( $utc )->format( 'Ymd' );
+
+		if ( array_key_exists( $cache_key, $this->paid_attempt_cache ) ) {
+			return $this->paid_attempt_cache[ $cache_key ];
+		}
+
+		$rows = $this->proxy->query( $query_name, $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			$this->paid_attempt_cache[ $cache_key ] = $rows;
+			return $rows;
+		}
+
+		// A successful but empty response is real "no conversions", not an error:
+		// zero conversions / zero revenue, which the callers render as $0.00.
+		$rows   = is_array( $rows ) ? $rows : [];
+		$result = [
+			'rows'        => $rows,
+			'conversions' => $this->woo_resolver->count_completed_orders( $rows ),
+			'revenue'     => $this->woo_resolver->sum_completed_revenue( $rows ),
+		];
+		$this->paid_attempt_cache[ $cache_key ] = $result;
+		return $result;
+	}
+
+	/**
+	 * Placeholder for a scalar metric in a Phase B "coming soon" section.
+	 *
+	 * Returns a lightweight sentinel that the React layer can detect and render
+	 * as a "coming soon" treatment instead of an error or empty state. Phase B
+	 * tasks (C20–C24) will replace the call sites of this helper with real
+	 * proxy dispatches.
+	 *
+	 * @param string $placeholder_type One of 'count', 'rate', 'currency', 'decimal'.
+	 * @return array
+	 */
+	private function coming_soon( string $placeholder_type ): array {
+		return [
+			'state'            => 'coming_soon',
+			'placeholder_type' => $placeholder_type,
+		];
+	}
+
+	/**
+	 * Placeholder for a collection metric in a Phase B "coming soon" section.
+	 *
+	 * Returns a lightweight sentinel with an empty collection keyed by
+	 * `$rows_key` (e.g. 'stages', 'slices', 'points', 'groups', 'cohorts',
+	 * 'rows') so the React layer can render a "coming soon" treatment without
+	 * needing to know which key the real payload will use.
+	 *
+	 * @param string $rows_key Key holding the empty collection, matching the
+	 *                         key the populated shape will use once wired.
+	 * @return array
+	 */
+	private function coming_soon_collection( string $rows_key ): array {
+		return [
+			'state'   => 'coming_soon',
+			$rows_key => [],
+		];
+	}
 
 	/**
 	 * Build the standard placeholder shape for a single scorecard metric.
