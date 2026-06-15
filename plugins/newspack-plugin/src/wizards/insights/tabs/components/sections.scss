@@ -168,13 +168,6 @@
 			font-weight: 600;
 			font-variant-numeric: tabular-nums;
 
-			// Directional glyph (↑/↓) prefixed to the delta; inherits the delta
-			// tone color. Direction is factual; color is good/bad.
-			&-arrow {
-				margin-right: 3px;
-				letter-spacing: 0.02em;
-			}
-
 			// Spec calls for newspack-colors $success-600 / $error-600.
 			// Chrome stylesheet only imports @wordpress/base-styles, so
 			// using its alert tokens here keeps the import surface tight;

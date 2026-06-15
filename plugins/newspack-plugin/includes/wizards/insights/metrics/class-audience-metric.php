@@ -107,17 +107,6 @@ final class Audience_Metric {
 	}
 
 	/**
-	 * Realistic fixture payload for UI smoke testing without a GA4 connection.
-	 * Returned by the REST controller when NEWSPACK_INSIGHTS_FIXTURE_MODE is on.
-	 * Same { current, previous } shape the live controller assembles.
-	 *
-	 * @return array
-	 */
-	public static function get_fixture(): array {
-		return require NEWSPACK_ABSPATH . 'includes/wizards/insights/fixtures/audience-fixture.php';
-	}
-
-	/**
 	 * Immediately-preceding window of equal length.
 	 *
 	 * @param string $start_date YYYY-MM-DD.
@@ -170,29 +159,36 @@ final class Audience_Metric {
 			],
 			// Reach.
 			'active_readers'                     => self::active_readers_via_ga4( $pid, $start_date, $end_date ),
+			'sessions'                           => self::sessions_via_ga4( $pid, $start_date, $end_date ),
 			'pageviews'                          => self::pageviews_via_ga4( $pid, $start_date, $end_date ),
 			'avg_sessions_per_reader'            => self::avg_sessions_per_reader_via_ga4( $pid, $start_date, $end_date ),
-			'newsletter_signups'                 => self::newsletter_signups_via_ga4( $pid, $start_date, $end_date ),
+			'engaged_session_rate'               => self::engaged_session_rate_via_ga4( $pid, $start_date, $end_date ),
 			// Time trends.
+			'active_readers_over_time'           => self::active_readers_over_time_via_ga4( $pid, $start_date, $end_date ),
+			'new_vs_returning_counts'            => self::new_vs_returning_counts_via_ga4( $pid, $start_date, $end_date ),
 			'new_vs_returning_over_time'         => self::new_vs_returning_over_time_via_ga4( $pid, $start_date, $end_date ),
 			'readership_by_day_of_week'          => self::readership_by_day_of_week_via_ga4( $pid, $start_date, $end_date ),
 			'readership_by_hour_of_day'          => self::readership_by_hour_of_day_via_ga4( $pid, $start_date, $end_date ),
 			// Traffic sources.
 			'traffic_sources_breakdown'          => self::traffic_sources_breakdown_via_ga4( $pid, $start_date, $end_date ),
 			'top_campaigns'                      => self::top_campaigns_via_ga4( $pid, $start_date, $end_date ),
-			// Composition (pies only).
+			// Composition.
 			'device_breakdown'                   => self::device_breakdown_via_ga4( $pid, $start_date, $end_date ),
+			'newsletter_subscriber_rate'         => self::newsletter_subscriber_rate_via_ga4( $pid, $start_date, $end_date ),
 			'newsletter_subscriber_composition'  => self::newsletter_subscriber_composition_via_ga4( $pid, $start_date, $end_date ),
+			'logged_in_reader_rate'              => self::logged_in_reader_rate_via_ga4( $pid, $start_date, $end_date ),
 			'logged_in_vs_anonymous_composition' => self::logged_in_vs_anonymous_composition_via_ga4( $pid, $start_date, $end_date ),
-			'supporter_type'                     => self::supporter_type_via_ga4( $pid, $start_date, $end_date ),
 			// Geographic.
+			'top_countries'                      => self::top_countries_via_ga4( $pid, $start_date, $end_date ),
 			'top_regions'                        => self::top_regions_via_ga4( $pid, $start_date, $end_date ),
 			'top_cities'                         => self::top_cities_via_ga4( $pid, $start_date, $end_date ),
+			'top_dmas'                           => self::top_dmas_via_ga4( $pid, $start_date, $end_date ),
+			'local_reader_rate'                  => self::local_reader_rate_via_ga4( $pid, $start_date, $end_date ),
 			// Content performance.
-			'top_pages'                          => self::top_pages_via_ga4( $pid, $start_date, $end_date ),
+			'top_pages_by_pageviews'             => self::top_pages_by_pageviews_via_ga4( $pid, $start_date, $end_date ),
+			'top_pages_by_reader_count'          => self::top_pages_by_reader_count_via_ga4( $pid, $start_date, $end_date ),
 			'top_authors_by_reader_count'        => self::top_authors_by_reader_count_via_ga4( $pid, $start_date, $end_date ),
 			// BQ-only (hidden in v1).
-			'top_categories'                     => self::bq_only_payload( 'available when BigQuery catalog ships' ),
 			'returning_reader_rate_strict'       => self::hidden_in_v1_payload(),
 		];
 	}
@@ -209,21 +205,29 @@ final class Audience_Metric {
 	private static function compute_via_bq( string $start_date, string $end_date ): array {
 		$keys = [
 			'active_readers',
+			'sessions',
 			'pageviews',
 			'avg_sessions_per_reader',
-			'newsletter_signups',
+			'engaged_session_rate',
+			'active_readers_over_time',
+			'new_vs_returning_counts',
 			'new_vs_returning_over_time',
 			'readership_by_day_of_week',
 			'readership_by_hour_of_day',
 			'traffic_sources_breakdown',
 			'top_campaigns',
 			'device_breakdown',
+			'newsletter_subscriber_rate',
 			'newsletter_subscriber_composition',
+			'logged_in_reader_rate',
 			'logged_in_vs_anonymous_composition',
-			'supporter_type',
+			'top_countries',
 			'top_regions',
 			'top_cities',
-			'top_pages',
+			'top_dmas',
+			'local_reader_rate',
+			'top_pages_by_pageviews',
+			'top_pages_by_reader_count',
 			'top_authors_by_reader_count',
 		];
 		$payload = [
@@ -235,7 +239,6 @@ final class Audience_Metric {
 		foreach ( $keys as $key ) {
 			$payload[ $key ] = self::not_implemented_payload();
 		}
-		$payload['top_categories']               = self::bq_only_payload( 'available when BigQuery catalog ships' );
 		$payload['returning_reader_rate_strict'] = self::hidden_in_v1_payload();
 		return $payload;
 	}
@@ -256,6 +259,19 @@ final class Audience_Metric {
 	 */
 	private static function active_readers_via_ga4( string $pid, string $s, string $e ): array {
 		$result = self::safe_run_report( $pid, self::body( $s, $e, [], [ 'totalUsers' ] ) );
+		return self::scalar( $result, 'count' );
+	}
+
+	/**
+	 * Sessions — sessions.
+	 *
+	 * @param string $pid Property ID.
+	 * @param string $s   Start date.
+	 * @param string $e   End date.
+	 * @return array
+	 */
+	private static function sessions_via_ga4( string $pid, string $s, string $e ): array {
+		$result = self::safe_run_report( $pid, self::body( $s, $e, [], [ 'sessions' ] ) );
 		return self::scalar( $result, 'count' );
 	}
 
@@ -298,35 +314,56 @@ final class Audience_Metric {
 	}
 
 	/**
-	 * Newsletter Signups — count of `np_newsletter_subscribed` events in the
-	 * window. Fires on every successful Newspack newsletter signup (Registration
-	 * block, Subscription Form block, account-creation modal, My Account →
-	 * Newsletters). Counts signup *events*, not unique readers; direct-from-ESP
-	 * signups outside Newspack flows are not captured. Zero is a valid result.
+	 * Engaged Session Rate — engagementRate (already a 0-1 ratio).
 	 *
 	 * @param string $pid Property ID.
 	 * @param string $s   Start date.
 	 * @param string $e   End date.
 	 * @return array
 	 */
-	private static function newsletter_signups_via_ga4( string $pid, string $s, string $e ): array {
-		$body                    = self::body( $s, $e, [], [ 'eventCount' ] );
-		$body['dimensionFilter'] = [
-			'filter' => [
-				'fieldName'    => 'eventName',
-				'stringFilter' => [
-					'matchType' => 'EXACT',
-					'value'     => 'np_newsletter_subscribed',
-				],
-			],
+	private static function engaged_session_rate_via_ga4( string $pid, string $s, string $e ): array {
+		$result = self::safe_run_report( $pid, self::body( $s, $e, [], [ 'engagementRate' ] ) );
+		if ( isset( $result['error'] ) || isset( $result['overlay'] ) ) {
+			return $result;
+		}
+		$raw = $result['raw']['rows'][0]['metricValues'][0]['value'] ?? null;
+		return [
+			'value'      => null === $raw ? 0.0 : (float) $raw,
+			'computable' => null !== $raw,
+			'type'       => 'rate',
 		];
-		return self::scalar( self::safe_run_report( $pid, $body ), 'count' );
 	}
 
 	/**
-	 * New vs Returning Over Time — date + newVsReturning / totalUsers, pivoted
-	 * into one wide row per date carrying parallel `new` and `returning` series
-	 * so the UI can draw two color-coded lines on a shared x-axis.
+	 * Active Readers Over Time — date / totalUsers.
+	 *
+	 * @param string $pid Property ID.
+	 * @param string $s   Start date.
+	 * @param string $e   End date.
+	 * @return array
+	 */
+	private static function active_readers_over_time_via_ga4( string $pid, string $s, string $e ): array {
+		$body                = self::body( $s, $e, [ 'date' ], [ 'totalUsers' ] );
+		$body['orderBys']    = [ [ 'dimension' => [ 'dimensionName' => 'date' ] ] ];
+		$result              = self::safe_run_report( $pid, $body );
+		return self::rows( $result, [ 'date' ], [ 'active_readers' ], 'timeseries' );
+	}
+
+	/**
+	 * New vs Returning Counts — newVsReturning / totalUsers (pie).
+	 *
+	 * @param string $pid Property ID.
+	 * @param string $s   Start date.
+	 * @param string $e   End date.
+	 * @return array
+	 */
+	private static function new_vs_returning_counts_via_ga4( string $pid, string $s, string $e ): array {
+		$result = self::safe_run_report( $pid, self::body( $s, $e, [ 'newVsReturning' ], [ 'totalUsers' ] ) );
+		return self::rows( $result, [ 'reader_type' ], [ 'readers' ], 'breakdown' );
+	}
+
+	/**
+	 * New vs Returning Over Time — date + newVsReturning / totalUsers.
 	 *
 	 * @param string $pid Property ID.
 	 * @param string $s   Start date.
@@ -337,38 +374,7 @@ final class Audience_Metric {
 		$body             = self::body( $s, $e, [ 'date', 'newVsReturning' ], [ 'totalUsers' ] );
 		$body['orderBys'] = [ [ 'dimension' => [ 'dimensionName' => 'date' ] ] ];
 		$result           = self::safe_run_report( $pid, $body );
-		if ( isset( $result['error'] ) || isset( $result['overlay'] ) ) {
-			return $result;
-		}
-		$by_date = [];
-		foreach ( $result['raw']['rows'] ?? [] as $row ) {
-			$date = $row['dimensionValues'][0]['value'] ?? '';
-			if ( '' === $date ) {
-				continue;
-			}
-			$type = strtolower( $row['dimensionValues'][1]['value'] ?? '' );
-			$val  = (int) ( $row['metricValues'][0]['value'] ?? 0 );
-			if ( ! isset( $by_date[ $date ] ) ) {
-				$by_date[ $date ] = [
-					'date'      => $date,
-					'new'       => 0,
-					'returning' => 0,
-				];
-			}
-			// GA4 returns "new" / "returning" (plus an occasional empty bucket
-			// for unknown); fold anything that isn't "returning" into new.
-			if ( 'returning' === $type ) {
-				$by_date[ $date ]['returning'] += $val;
-			} else {
-				$by_date[ $date ]['new'] += $val;
-			}
-		}
-		ksort( $by_date );
-		return [
-			'rows'       => array_values( $by_date ),
-			'computable' => true,
-			'type'       => 'timeseries',
-		];
+		return self::rows( $result, [ 'date', 'reader_type' ], [ 'readers' ], 'timeseries' );
 	}
 
 	/**
@@ -445,6 +451,22 @@ final class Audience_Metric {
 	}
 
 	/**
+	 * Top Countries — country / totalUsers.
+	 *
+	 * @param string $pid Property ID.
+	 * @param string $s   Start date.
+	 * @param string $e   End date.
+	 * @return array
+	 */
+	private static function top_countries_via_ga4( string $pid, string $s, string $e ): array {
+		$body          = self::body( $s, $e, [ 'country' ], [ 'totalUsers' ] );
+		$body         += self::order_by_metric_desc( 'totalUsers' );
+		$body['limit'] = 25;
+		$result        = self::safe_run_report( $pid, $body );
+		return self::rows( $result, [ 'country' ], [ 'readers' ], 'table' );
+	}
+
+	/**
 	 * Top Regions/States — country, region / totalUsers.
 	 *
 	 * @param string $pid Property ID.
@@ -476,11 +498,49 @@ final class Audience_Metric {
 		return self::rows( $result, [ 'country', 'region', 'city' ], [ 'readers' ], 'table' );
 	}
 
+	/**
+	 * Top DMAs (US-only) — metro / totalUsers, filtered to United States.
+	 *
+	 * @param string $pid Property ID.
+	 * @param string $s   Start date.
+	 * @param string $e   End date.
+	 * @return array
+	 */
+	private static function top_dmas_via_ga4( string $pid, string $s, string $e ): array {
+		$body                    = self::body( $s, $e, [ 'metro' ], [ 'totalUsers' ] );
+		$body['dimensionFilter'] = [
+			'filter' => [
+				'fieldName'    => 'country',
+				'stringFilter' => [
+					'matchType' => 'EXACT',
+					'value'     => 'United States',
+				],
+			],
+		];
+		$body         += self::order_by_metric_desc( 'totalUsers' );
+		$body['limit'] = 50;
+		$result        = self::safe_run_report( $pid, $body );
+		return self::rows( $result, [ 'dma' ], [ 'readers' ], 'table' );
+	}
+
 	/*
 	===================================================================
 	 * GA4-conditional metrics (custom dimensions)
 	 * ===================================================================
 	 */
+
+	/**
+	 * Newsletter Subscriber Rate — customEvent:is_newsletter_subscriber.
+	 *
+	 * @param string $pid Property ID.
+	 * @param string $s   Start date.
+	 * @param string $e   End date.
+	 * @return array
+	 */
+	private static function newsletter_subscriber_rate_via_ga4( string $pid, string $s, string $e ): array {
+		$result = self::safe_run_report( $pid, self::body( $s, $e, [ 'customEvent:is_newsletter_subscriber' ], [ 'totalUsers' ] ) );
+		return self::yes_rate( $result );
+	}
 
 	/**
 	 * Newsletter Subscriber Composition — same query, two-slice pie.
@@ -493,6 +553,19 @@ final class Audience_Metric {
 	private static function newsletter_subscriber_composition_via_ga4( string $pid, string $s, string $e ): array {
 		$result = self::safe_run_report( $pid, self::body( $s, $e, [ 'customEvent:is_newsletter_subscriber' ], [ 'totalUsers' ] ) );
 		return self::yes_composition( $result, __( 'Newsletter subscriber', 'newspack-plugin' ), __( 'Not subscribed', 'newspack-plugin' ) );
+	}
+
+	/**
+	 * Logged-In Reader Rate — customEvent:logged_in.
+	 *
+	 * @param string $pid Property ID.
+	 * @param string $s   Start date.
+	 * @param string $e   End date.
+	 * @return array
+	 */
+	private static function logged_in_reader_rate_via_ga4( string $pid, string $s, string $e ): array {
+		$result = self::safe_run_report( $pid, self::body( $s, $e, [ 'customEvent:logged_in' ], [ 'totalUsers' ] ) );
+		return self::yes_rate( $result );
 	}
 
 	/**
@@ -509,143 +582,40 @@ final class Audience_Metric {
 	}
 
 	/**
-	 * Supporter Type — composition of the logged-in audience by support status,
-	 * grouped on customEvent:is_subscriber × customEvent:is_donor. The slices
-	 * adapt to which products the publisher actually sells: both, subscriptions
-	 * only, donations only, or — when neither is configured — the metric is
-	 * hidden entirely (there is nothing to segment by).
+	 * Top Pages by Pageviews — customEvent:post_id (degrade to all URLs if missing).
 	 *
 	 * @param string $pid Property ID.
 	 * @param string $s   Start date.
 	 * @param string $e   End date.
 	 * @return array
 	 */
-	private static function supporter_type_via_ga4( string $pid, string $s, string $e ): array {
-		$products = self::detect_supporter_products();
-		if ( ! $products['subscriptions'] && ! $products['donations'] ) {
-			return self::bq_only_payload( 'no subscription or donation products configured' );
-		}
-
-		// is_subscriber / is_donor are only set for logged-in readers, so
-		// requiring is_subscriber present scopes the report to the logged-in
-		// audience without adding a third custom-dimension dependency.
-		$body                    = self::body( $s, $e, [ 'customEvent:is_subscriber', 'customEvent:is_donor' ], [ 'totalUsers' ] );
-		$body['dimensionFilter'] = self::custom_event_present_filter( 'is_subscriber' );
+	private static function top_pages_by_pageviews_via_ga4( string $pid, string $s, string $e ): array {
+		$body                    = self::body( $s, $e, [ 'customEvent:post_id', 'pagePath', 'pageTitle' ], [ 'screenPageViews' ] );
+		$body['dimensionFilter'] = self::custom_event_present_filter( 'post_id' );
+		$body                   += self::order_by_metric_desc( 'screenPageViews' );
+		$body['limit']           = 50;
 		$result                  = self::safe_run_report( $pid, $body );
-		if ( isset( $result['error'] ) || isset( $result['overlay'] ) ) {
-			return $result;
-		}
 
-		$sub_only   = 0;
-		$donor_only = 0;
-		$both       = 0;
-		$neither    = 0;
-		foreach ( $result['raw']['rows'] ?? [] as $row ) {
-			$is_sub   = 'yes' === ( $row['dimensionValues'][0]['value'] ?? '' );
-			$is_donor = 'yes' === ( $row['dimensionValues'][1]['value'] ?? '' );
-			$users    = (int) ( $row['metricValues'][0]['value'] ?? 0 );
-			if ( $is_sub && $is_donor ) {
-				$both += $users;
-			} elseif ( $is_sub ) {
-				$sub_only += $users;
-			} elseif ( $is_donor ) {
-				$donor_only += $users;
-			} else {
-				$neither += $users;
-			}
+		if ( self::is_custom_dimension_missing( $result ) ) {
+			// Degrade rather than hide: drop the post_id dimension + filter.
+			$degraded          = self::body( $s, $e, [ 'pagePath', 'pageTitle' ], [ 'screenPageViews' ] );
+			$degraded         += self::order_by_metric_desc( 'screenPageViews' );
+			$degraded['limit'] = 50;
+			$out               = self::rows( self::safe_run_report( $pid, $degraded ), [ 'page_path', 'page_title' ], [ 'pageviews' ], 'table' );
+			return self::mark_degraded( $out, __( 'Singular content filter unavailable; showing all URLs.', 'newspack-plugin' ) );
 		}
-
-		if ( $products['subscriptions'] && $products['donations'] ) {
-			$rows = [
-				[
-					'label' => __( 'Subscriber only', 'newspack-plugin' ),
-					'value' => $sub_only,
-				],
-				[
-					'label' => __( 'Donor only', 'newspack-plugin' ),
-					'value' => $donor_only,
-				],
-				[
-					'label' => __( 'Both', 'newspack-plugin' ),
-					'value' => $both,
-				],
-				[
-					'label' => __( 'Logged-in only', 'newspack-plugin' ),
-					'value' => $neither,
-				],
-			];
-		} elseif ( $products['subscriptions'] ) {
-			$rows = [
-				[
-					'label' => __( 'Subscriber', 'newspack-plugin' ),
-					'value' => $sub_only + $both,
-				],
-				[
-					'label' => __( 'Logged-in only', 'newspack-plugin' ),
-					'value' => $neither + $donor_only,
-				],
-			];
-		} else {
-			$rows = [
-				[
-					'label' => __( 'Donor', 'newspack-plugin' ),
-					'value' => $donor_only + $both,
-				],
-				[
-					'label' => __( 'Logged-in only', 'newspack-plugin' ),
-					'value' => $neither + $sub_only,
-				],
-			];
-		}
-
-		$total = array_sum( array_column( $rows, 'value' ) );
-		return [
-			'rows'       => $rows,
-			'computable' => $total > 0,
-			'type'       => 'breakdown',
-		];
+		return self::rows( $result, [ 'post_id', 'page_path', 'page_title' ], [ 'pageviews' ], 'table' );
 	}
 
 	/**
-	 * Detect which supporter products the publisher sells. Side-effect free:
-	 * donations are inferred from the saved donation-product option, and
-	 * subscriptions from the presence of a published WooCommerce Subscriptions
-	 * product. Used to shape (or hide) the Supporter Type pie.
-	 *
-	 * @return array{subscriptions:bool,donations:bool}
-	 */
-	private static function detect_supporter_products(): array {
-		$has_donations = (int) get_option( 'newspack_donation_product_id', 0 ) > 0;
-
-		$has_subscriptions = false;
-		if ( class_exists( 'WC_Subscriptions' ) && function_exists( 'wc_get_products' ) ) {
-			$subs = wc_get_products(
-				[
-					'type'   => [ 'subscription', 'variable-subscription' ],
-					'status' => 'publish',
-					'limit'  => 1,
-					'return' => 'ids',
-				]
-			);
-			$has_subscriptions = ! empty( $subs );
-		}
-
-		return [
-			'subscriptions' => $has_subscriptions,
-			'donations'     => $has_donations,
-		];
-	}
-
-	/**
-	 * Top Pages — customEvent:post_id (degrade to all URLs if missing). Ranked by
-	 * unique readers; returns both reader and pageview counts.
+	 * Top Pages by Reader Count — customEvent:post_id (degrade if missing).
 	 *
 	 * @param string $pid Property ID.
 	 * @param string $s   Start date.
 	 * @param string $e   End date.
 	 * @return array
 	 */
-	private static function top_pages_via_ga4( string $pid, string $s, string $e ): array {
+	private static function top_pages_by_reader_count_via_ga4( string $pid, string $s, string $e ): array {
 		$body                    = self::body( $s, $e, [ 'customEvent:post_id', 'pagePath', 'pageTitle' ], [ 'totalUsers', 'screenPageViews' ] );
 		$body['dimensionFilter'] = self::custom_event_present_filter( 'post_id' );
 		$body                   += self::order_by_metric_desc( 'totalUsers' );
@@ -684,6 +654,99 @@ final class Audience_Metric {
 		$body['limit'] = 25;
 		$result        = self::safe_run_report( $pid, $body );
 		return self::rows( $result, [ 'author' ], [ 'unique_readers', 'pageviews' ], 'table' );
+	}
+
+	/**
+	 * Local Reader Rate — geo report merged in PHP against configured tuples.
+	 * Hidden (not_configured) when no coverage area is set.
+	 *
+	 * @param string $pid Property ID.
+	 * @param string $s   Start date.
+	 * @param string $e   End date.
+	 * @return array
+	 */
+	private static function local_reader_rate_via_ga4( string $pid, string $s, string $e ): array {
+		$filters = get_option( 'newspack_insights_local_geo_filters', [] );
+		if ( ! is_array( $filters ) || empty( $filters ) ) {
+			return [
+				'value'          => null,
+				'computable'     => false,
+				'type'           => 'rate',
+				'not_configured' => true,
+			];
+		}
+
+		$body          = self::body( $s, $e, [ 'country', 'region', 'city', 'metro' ], [ 'totalUsers' ] );
+		$body['limit'] = 100000;
+		$result        = self::safe_run_report( $pid, $body );
+		if ( isset( $result['error'] ) || isset( $result['overlay'] ) ) {
+			return $result;
+		}
+
+		// This rate is computed from the full geo row set in PHP, so a truncated
+		// response would silently skew the numerator/denominator. GA4 reports the
+		// total matching row count in `rowCount`; if it exceeds the rows actually
+		// returned, bail with an explicit error rather than reporting a wrong rate.
+		$returned_rows = count( $result['raw']['rows'] ?? [] );
+		$row_count     = isset( $result['raw']['rowCount'] ) ? (int) $result['raw']['rowCount'] : $returned_rows;
+		if ( $row_count > $returned_rows ) {
+			return [
+				'value'      => null,
+				'computable' => false,
+				'type'       => 'rate',
+				'error'      => __( 'Local Reader Rate could not be computed: the geo breakdown exceeded the row limit and was truncated.', 'newspack-plugin' ),
+			];
+		}
+
+		$total = 0;
+		$local = 0;
+		foreach ( $result['raw']['rows'] ?? [] as $row ) {
+			$geo   = [
+				'country' => $row['dimensionValues'][0]['value'] ?? '',
+				'region'  => $row['dimensionValues'][1]['value'] ?? '',
+				'city'    => $row['dimensionValues'][2]['value'] ?? '',
+				'metro'   => $row['dimensionValues'][3]['value'] ?? '',
+			];
+			$users = (int) ( $row['metricValues'][0]['value'] ?? 0 );
+			$total += $users;
+			if ( self::geo_matches_any( $geo, $filters ) ) {
+				$local += $users;
+			}
+		}
+		return [
+			'value'       => $total > 0 ? $local / $total : 0,
+			'computable'  => $total > 0,
+			'type'        => 'rate',
+			'numerator'   => $local,
+			'denominator' => $total,
+		];
+	}
+
+	/**
+	 * Whether a geo row matches any configured filter tuple. Each tuple's
+	 * present (non-empty) fields must all equal the row's values.
+	 *
+	 * @param array $geo     Row geo [country, region, city, metro].
+	 * @param array $filters Array of partial geo tuples.
+	 * @return bool
+	 */
+	private static function geo_matches_any( array $geo, array $filters ): bool {
+		foreach ( $filters as $tuple ) {
+			if ( ! is_array( $tuple ) ) {
+				continue;
+			}
+			$match = true;
+			foreach ( [ 'country', 'region', 'city', 'metro' ] as $field ) {
+				if ( ! empty( $tuple[ $field ] ) && $tuple[ $field ] !== ( $geo[ $field ] ?? '' ) ) {
+					$match = false;
+					break;
+				}
+			}
+			if ( $match ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/*
@@ -869,6 +932,35 @@ final class Audience_Metric {
 	}
 
 	/**
+	 * Rate from a yes/no custom-dimension split (numerator = 'yes').
+	 *
+	 * @param array $result safe_run_report result.
+	 * @return array
+	 */
+	private static function yes_rate( array $result ): array {
+		if ( isset( $result['error'] ) || isset( $result['overlay'] ) ) {
+			return $result;
+		}
+		$num   = 0;
+		$total = 0;
+		foreach ( $result['raw']['rows'] ?? [] as $row ) {
+			$dim   = $row['dimensionValues'][0]['value'] ?? '';
+			$users = (int) ( $row['metricValues'][0]['value'] ?? 0 );
+			$total += $users;
+			if ( 'yes' === $dim ) {
+				$num += $users;
+			}
+		}
+		return [
+			'value'       => $total > 0 ? $num / $total : 0,
+			'computable'  => $total > 0,
+			'type'        => 'rate',
+			'numerator'   => $num,
+			'denominator' => $total,
+		];
+	}
+
+	/**
 	 * Two-slice composition (yes vs everything else) for a pie.
 	 *
 	 * @param array  $result    safe_run_report result.
@@ -936,23 +1028,6 @@ final class Audience_Metric {
 			'value'        => null,
 			'computable'   => false,
 			'hidden_in_v1' => true,
-		];
-	}
-
-	/**
-	 * Hidden_in_v1 payload that records why the metric is unavailable in v1
-	 * (e.g. a BQ-only metric, or a publisher with no supporter products). The UI
-	 * skips rendering on `hidden_in_v1`; the reason is for docs/diagnostics.
-	 *
-	 * @param string $reason Short machine-ish reason.
-	 * @return array
-	 */
-	private static function bq_only_payload( string $reason ): array {
-		return [
-			'value'        => null,
-			'computable'   => false,
-			'hidden_in_v1' => true,
-			'reason'       => $reason,
 		];
 	}
 

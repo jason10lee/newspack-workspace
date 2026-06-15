@@ -87,7 +87,7 @@ class Newspack_Test_Insights_Audience_Metric extends WP_UnitTestCase {
 				'dimensions' => [ 'is_newsletter_subscriber' ],
 			],
 		];
-		$payload = $this->invoke( 'yes_composition', [ $overlay, 'Subscribed', 'Not subscribed' ] );
+		$payload = $this->invoke( 'yes_rate', [ $overlay ] );
 		$this->assertSame( 'custom_dimension_missing', $payload['overlay']['type'] );
 		$this->assertSame( [ 'is_newsletter_subscriber' ], $payload['overlay']['dimensions'] );
 		$this->assertFalse( $payload['computable'] );
@@ -108,9 +108,9 @@ class Newspack_Test_Insights_Audience_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The yes_composition() helper splits a yes/no dimension into two pie slices.
+	 * The yes_rate() helper computes numerator/denominator from a yes/no split.
 	 */
-	public function test_yes_composition_splits_into_slices() {
+	public function test_yes_rate_computes_from_split() {
 		$raw     = [
 			'raw' => [
 				'rows' => [
@@ -125,12 +125,10 @@ class Newspack_Test_Insights_Audience_Metric extends WP_UnitTestCase {
 				],
 			],
 		];
-		$payload = $this->invoke( 'yes_composition', [ $raw, 'Subscribed', 'Not subscribed' ] );
-		$this->assertSame( 'breakdown', $payload['type'] );
+		$payload = $this->invoke( 'yes_rate', [ $raw ] );
+		$this->assertEqualsWithDelta( 0.3, $payload['value'], 0.0001 );
+		$this->assertSame( 30, $payload['numerator'] );
+		$this->assertSame( 100, $payload['denominator'] );
 		$this->assertTrue( $payload['computable'] );
-		$this->assertSame( 'Subscribed', $payload['rows'][0]['label'] );
-		$this->assertSame( 30, $payload['rows'][0]['value'] );
-		$this->assertSame( 'Not subscribed', $payload['rows'][1]['label'] );
-		$this->assertSame( 70, $payload['rows'][1]['value'] );
 	}
 }
