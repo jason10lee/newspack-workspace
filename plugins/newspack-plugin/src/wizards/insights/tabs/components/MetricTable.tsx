@@ -12,7 +12,6 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useState } from '@wordpress/element';
 
 /**
  * Internal dependencies
@@ -43,14 +42,6 @@ export interface MetricTableProps {
 	 * stay visible.
 	 */
 	collapseColumn?: string;
-	/**
-	 * When `expandable`, the number of rows shown collapsed. If the table has
-	 * more rows than this (up to `rowLimit`), a "See more"/"See less" toggle is
-	 * rendered. Collapsed state is per-render (not persisted).
-	 */
-	defaultRowLimit?: number;
-	/** Enable the collapse/expand toggle. Requires `defaultRowLimit`. */
-	expandable?: boolean;
 }
 
 const formatCell = ( value: string | number | null, format?: MetricTableColumn[ 'format' ] ): string => {
@@ -74,10 +65,7 @@ const formatCell = ( value: string | number | null, format?: MetricTableColumn[ 
 	return String( value );
 };
 
-const MetricTable = ( { payload, columns, emptyMessage, rowLimit = 10, collapseColumn, defaultRowLimit, expandable = false }: MetricTableProps ) => {
-	// Hook must run unconditionally, before any early return.
-	const [ expanded, setExpanded ] = useState( false );
-
+const MetricTable = ( { payload, columns, emptyMessage, rowLimit = 10, collapseColumn }: MetricTableProps ) => {
 	// A degraded payload also carries an overlay object, but it's an informational
 	// note over a still-valid table (rendered below with an inline note) — not a
 	// replacement state. Only the non-degraded overlay (missing custom dimension)
@@ -98,13 +86,8 @@ const MetricTable = ( { payload, columns, emptyMessage, rowLimit = 10, collapseC
 		return <p className="newspack-insights__section-empty">{ emptyMessage }</p>;
 	}
 
-	// Collapse to `defaultRowLimit` rows behind a toggle when there are more.
-	const collapsible = expandable && typeof defaultRowLimit === 'number' && rows.length > defaultRowLimit;
-	const visibleRows = collapsible && ! expanded ? rows.slice( 0, defaultRowLimit ) : rows;
-
 	// Hide a uniform column (e.g. country) — the consumer surfaces the value as a
-	// scope pill next to the title. Computed over the full set so the column set
-	// stays stable when expanding.
+	// scope pill next to the title.
 	const collapsedValue = collapseColumn ? uniformValue( rows, collapseColumn ) : null;
 	const displayColumns = collapsedValue !== null ? columns.filter( col => col.key !== collapseColumn ) : columns;
 
@@ -132,7 +115,7 @@ const MetricTable = ( { payload, columns, emptyMessage, rowLimit = 10, collapseC
 						</tr>
 					</thead>
 					<tbody>
-						{ visibleRows.map( ( row, i ) => (
+						{ rows.map( ( row, i ) => (
 							<tr key={ i }>
 								{ displayColumns.map( col => (
 									<td key={ col.key } className={ numClass( col ) }>
@@ -144,16 +127,6 @@ const MetricTable = ( { payload, columns, emptyMessage, rowLimit = 10, collapseC
 					</tbody>
 				</table>
 			</div>
-			{ collapsible && (
-				<button
-					type="button"
-					className="newspack-insights__table-toggle"
-					aria-expanded={ expanded }
-					onClick={ () => setExpanded( ! expanded ) }
-				>
-					{ expanded ? __( 'See less', 'newspack-plugin' ) : __( 'See more', 'newspack-plugin' ) }
-				</button>
-			) }
 		</>
 	);
 };

@@ -30,11 +30,7 @@ export type MetricFormat = 'number' | 'currency' | 'percent' | 'decimal' | 'dura
 
 export interface MetricCardOverlay {
 	type: string;
-	/**
-	 * Custom-dimension parameter names (GA4 `custom_dimension_missing` overlays).
-	 * Absent for dimension-less overlays such as GAM's `data_unavailable`.
-	 */
-	dimensions?: string[];
+	dimensions: string[];
 }
 
 export interface MetricCardProps {
