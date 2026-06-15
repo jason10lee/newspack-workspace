@@ -185,49 +185,35 @@ class Content_Restriction_Control {
 				continue;
 			}
 
-			// Standard AND evaluation across remaining rules.
+			// Combine non-specific rules with the gate's match mode (default AND).
+			$match                 = 'any' === ( $gate['content_rules_match'] ?? 'all' ) ? 'any' : 'all';
 			$has_non_specific_rule = false;
+			$any_matched           = false;
 			foreach ( $content_rules as $content_rule ) {
 				if ( 'specific_posts' === $content_rule['slug'] ) {
-					// Skip — already evaluated above as an override-only rule.
+					// Override-only; already evaluated above.
 					continue;
 				}
 				$has_non_specific_rule = true;
-				$is_exclusion          = isset( $content_rule['exclusion'] ) && $content_rule['exclusion'];
-				if ( $content_rule['slug'] === 'post_types' ) {
-					$post_type = get_post_type( $post_id );
-					if ( $is_exclusion ? in_array( $post_type, $content_rule['value'], true ) : ! in_array( $post_type, $content_rule['value'], true ) ) {
-						continue 2;
+				$matches               = self::rule_matches_post( $content_rule, $post_id );
+				if ( 'all' === $match ) {
+					if ( ! $matches ) {
+						continue 2; // One miss disqualifies the gate.
 					}
-				} elseif ( $content_rule['slug'] === 'newsletters' ) {
-					$newsletter_lists = array_map( 'intval', $content_rule['value'] );
-					if ( ! in_array( $post_id, $newsletter_lists, true ) ) {
-						continue 2;
-					}
-				} else {
-					$taxonomy = get_taxonomy( $content_rule['slug'] );
-					if ( ! $taxonomy ) {
-						continue 2;
-					}
-					$terms = wp_get_post_terms( $post_id, $content_rule['slug'], [ 'fields' => 'ids' ] );
-					if ( ( ! $is_exclusion && ! $terms ) || is_wp_error( $terms ) ) {
-						continue 2;
-					}
-					// For hierarchical taxonomies, a rule targeting a term also covers
-					// that term's descendants, mirroring WooCommerce Memberships' cascade.
-					// The helper also normalizes the rule's term IDs to integers: stored
-					// rule values can be strings, and array_intersect() below compares as
-					// strings, so this keeps both sides of the comparison consistent.
-					$target_terms = self::expand_hierarchical_terms( (array) $content_rule['value'], $taxonomy );
-					if ( $is_exclusion ? ! empty( array_intersect( $terms, $target_terms ) ) : empty( array_intersect( $terms, $target_terms ) ) ) {
-						continue 2;
-					}
+				} elseif ( $matches ) {
+					$any_matched = true;
+					break; // One hit is enough.
 				}
 			}
 
-			// If the gate ONLY had a specific_posts rule and we got here, it means the
-			// override didn't match — don't include this gate.
+			// If the gate ONLY had a specific_posts rule and we got here, the override
+			// didn't match — don't include this gate.
 			if ( ! $has_non_specific_rule ) {
+				continue;
+			}
+
+			// OR mode with no matching rule: gate does not apply.
+			if ( 'any' === $match && ! $any_matched ) {
 				continue;
 			}
 
@@ -235,6 +221,42 @@ class Content_Restriction_Control {
 		}
 		self::$post_gates_map[ $post_id ] = $post_gates;
 		return $post_gates;
+	}
+
+	/**
+	 * Whether a single (non specific_posts) content rule matches the post.
+	 *
+	 * @param array $content_rule Rule with 'slug', 'value', optional 'exclusion'.
+	 * @param int   $post_id      Post ID.
+	 *
+	 * @return bool
+	 */
+	private static function rule_matches_post( $content_rule, $post_id ) {
+		$is_exclusion = isset( $content_rule['exclusion'] ) && $content_rule['exclusion'];
+
+		if ( 'post_types' === $content_rule['slug'] ) {
+			$in = in_array( get_post_type( $post_id ), $content_rule['value'], true );
+			return $is_exclusion ? ! $in : $in;
+		}
+
+		if ( 'newsletters' === $content_rule['slug'] ) {
+			return in_array( $post_id, array_map( 'intval', $content_rule['value'] ), true );
+		}
+
+		$taxonomy = get_taxonomy( $content_rule['slug'] );
+		if ( ! $taxonomy ) {
+			return false;
+		}
+		$terms = wp_get_post_terms( $post_id, $content_rule['slug'], [ 'fields' => 'ids' ] );
+		if ( is_wp_error( $terms ) ) {
+			return false;
+		}
+		if ( ! $is_exclusion && ! $terms ) {
+			return false;
+		}
+		$target_terms = self::expand_hierarchical_terms( (array) $content_rule['value'], $taxonomy );
+		$overlap      = ! empty( array_intersect( $terms, $target_terms ) );
+		return $is_exclusion ? ! $overlap : $overlap;
 	}
 
 	/**

@@ -11,6 +11,7 @@ use Newspack\Reader_Activation;
 use Newspack\Access_Rules;
 use Newspack\Content_Rules;
 use Newspack\Content_Gate;
+use Newspack\Content_Gate_API;
 use Newspack\Content_Restriction_Control;
 use Newspack\Content_Gate\IP_Access_Rule;
 use Newspack\Institution;
@@ -1228,7 +1229,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		$this->assertSame( [], $rule['default'] );
 		$this->assertTrue( $rule['include_only'], 'specific_posts is include-only (no exclusion mode)' );
 		$this->assertSame( '/' . NEWSPACK_API_NAMESPACE . '/wizard/newspack-audience-access-control/posts-search', $rule['endpoint'], 'endpoint matches the registered REST route' );
-		$this->assertStringContainsString( 'restrict specific posts', $rule['description'], 'description signals override behavior' );
+		$this->assertStringContainsStringIgnoringCase( 'restrict specific posts', $rule['description'], 'description signals override behavior' );
 	}
 
 	/**
@@ -2205,5 +2206,170 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		wp_delete_user( $queue_user );
 		wp_delete_user( $page_user );
 		$this->reset_visitor_state();
+	}
+
+	/**
+	 * The sanitize_gate() method passes content_rules_match through and defaults invalid values to 'all'.
+	 */
+	public function test_sanitize_gate_preserves_content_rules_match() {
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Sanitize Test Gate' ] );
+		$this->gate_ids[] = $gate_id;
+
+		$sanitized = Content_Gate_API::sanitize_gate(
+			[
+				'id'                  => $gate_id,
+				'title'               => 'Sanitize Test Gate',
+				'status'              => 'draft',
+				'content_rules_match' => 'any',
+			]
+		);
+		$this->assertArrayHasKey( 'content_rules_match', $sanitized, 'sanitize_gate() must include content_rules_match in output' );
+		$this->assertSame( 'any', $sanitized['content_rules_match'], 'Valid value "any" must be preserved' );
+
+		$sanitized_invalid = Content_Gate_API::sanitize_gate(
+			[
+				'id'                  => $gate_id,
+				'title'               => 'Sanitize Test Gate',
+				'status'              => 'draft',
+				'content_rules_match' => 'garbage',
+			]
+		);
+		$this->assertSame( 'all', $sanitized_invalid['content_rules_match'], 'Invalid value must fall back to "all"' );
+
+		$sanitized_missing = Content_Gate_API::sanitize_gate(
+			[
+				'id'    => $gate_id,
+				'title' => 'Sanitize Test Gate',
+			]
+		);
+		$this->assertArrayNotHasKey( 'content_rules_match', $sanitized_missing, 'Missing field must not be injected into the sanitized output' );
+	}
+
+	/**
+	 * 'any' mode restricts a post matching only one of several rule types;
+	 * 'all' mode does not. Reproduces the The Assembly leak.
+	 */
+	public function test_content_rules_match_any() {
+		$cat_id  = self::factory()->category->create( [ 'name' => 'All Access' ] );
+		$post_id = self::factory()->post->create();
+		wp_set_post_terms( $post_id, [ $cat_id ], 'category' );
+		$this->post_ids[] = $post_id;
+
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'AND/OR Gate' ] );
+		$this->gate_ids[] = $gate_id;
+		$rules   = [
+			[
+				'slug'  => 'category',
+				'value' => [ $cat_id ],
+			],
+			[
+				'slug'  => 'newsletters',
+				'value' => [ 999999 ],
+			], // A list this post can never belong to.
+		];
+
+		// AND (default): post fails the newsletters rule -> gate does NOT apply.
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'               => 'AND/OR Gate',
+				'priority'            => 0,
+				'content_rules'       => $rules,
+				'content_rules_match' => 'all',
+				'registration'        => [ 'active' => true ],
+			]
+		);
+		$this->reset_restriction_cache();
+		$gate_ids = wp_list_pluck( Content_Restriction_Control::get_post_gates( $post_id ), 'id' );
+		$this->assertNotContains( $gate_id, $gate_ids, 'AND should not gate a category-only post' );
+
+		// OR: post matches the category rule -> gate applies.
+		Content_Gate::update_gate_setting( $gate_id, 'content_rules_match', 'any' );
+		$this->reset_restriction_cache();
+		$gate_ids = wp_list_pluck( Content_Restriction_Control::get_post_gates( $post_id ), 'id' );
+		$this->assertContains( $gate_id, $gate_ids, 'OR should gate a post matching any one rule' );
+	}
+
+	/**
+	 * A gate's match mode persists and defaults to 'all'.
+	 */
+	public function test_content_rules_match_persistence() {
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Match Mode Gate' ] );
+
+		// Defaults to 'all' when never set.
+		$gate = Content_Gate::get_gate( $gate_id );
+		$this->assertSame( 'all', $gate['content_rules_match'] );
+
+		// Persists via update_gate_settings.
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'               => 'Match Mode Gate',
+				'priority'            => 0,
+				'content_rules'       => [
+					[
+						'slug'  => 'post_types',
+						'value' => [ 'post' ],
+					],
+				],
+				'content_rules_match' => 'any',
+			]
+		);
+		$this->assertSame( 'any', Content_Gate::get_gate( $gate_id )['content_rules_match'] );
+
+		// Persists via single-setting update.
+		Content_Gate::update_gate_setting( $gate_id, 'content_rules_match', 'all' );
+		$this->assertSame( 'all', Content_Gate::get_gate( $gate_id )['content_rules_match'] );
+	}
+
+	/**
+	 * A gate created with a match mode persists it immediately.
+	 */
+	public function test_create_gate_persists_content_rules_match() {
+		$gate_id = Content_Gate::create_gate(
+			[
+				'title'               => 'Created Match Mode Gate',
+				'content_rules_match' => 'any',
+			]
+		);
+		$this->gate_ids[] = $gate_id;
+
+		$this->assertSame( 'any', Content_Gate::get_gate( $gate_id )['content_rules_match'] );
+	}
+
+	/**
+	 * Updating a gate via a payload that omits content_rules_match must not reset
+	 * an existing 'any' (OR) gate back to the 'all' (AND) default.
+	 */
+	public function test_update_gate_without_match_field_preserves_stored_mode() {
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'OR Gate' ] );
+		$this->gate_ids[] = $gate_id;
+
+		// Establish the gate with OR mode.
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'               => 'OR Gate',
+				'priority'            => 0,
+				'content_rules'       => [
+					[
+						'slug'  => 'post_types',
+						'value' => [ 'post' ],
+					],
+				],
+				'content_rules_match' => 'any',
+			]
+		);
+		$this->assertSame( 'any', Content_Rules::get_gate_content_rules_match( $gate_id ), 'Pre-condition: stored mode is any' );
+
+		// Simulate a REST update that omits the content_rules_match field.
+		$raw_payload  = [
+			'title'    => 'OR Gate',
+			'priority' => 1,
+		];
+		$sanitized    = Content_Gate_API::sanitize_gate( $raw_payload );
+		Content_Gate::update_gate_settings( $gate_id, $sanitized );
+
+		$this->assertSame( 'any', Content_Rules::get_gate_content_rules_match( $gate_id ), 'Stored match mode must not be reset when the field is absent from the update payload' );
 	}
 }
