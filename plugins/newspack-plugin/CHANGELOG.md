@@ -1,3 +1,10 @@
+## newspack [6.42.8](https://github.com/Automattic/newspack-workspace/compare/newspack@6.42.7...newspack@6.42.8) (2026-06-15)
+
+
+### Bug Fixes
+
+* **content-gate:** cascade taxonomy content rules to child terms (NPPD-1670, [#283](https://github.com/Automattic/newspack-workspace/issues/283)) ([12dcbab](https://github.com/Automattic/newspack-workspace/commit/12dcbab5bcba286100ca8d6f8373b912451d829a))
+
 ## newspack [6.42.7](https://github.com/Automattic/newspack-workspace/compare/newspack@6.42.6...newspack@6.42.7) (2026-06-11)
 
 
