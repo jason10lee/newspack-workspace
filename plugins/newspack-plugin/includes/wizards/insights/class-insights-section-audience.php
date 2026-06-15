@@ -6,15 +6,14 @@
  * engaged the audience is at a high level. The "lobby" of the Insights
  * page — answers "what's the shape of my audience this period?"
  *
- * The Tab 1 data layer (GA4-first, NPPD-1648) registers its REST route
- * from {@see self::register_hooks()} via {@see \Newspack\Insights\Audience_REST_Controller}.
+ * Future REST endpoints for the Audience tab register from
+ * {@see self::register_hooks()}. Currently a stub; the React side renders
+ * a "Coming soon" placeholder for this tab.
  *
  * @package Newspack
  */
 
 namespace Newspack;
-
-use Newspack\Insights\Audience_REST_Controller;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -31,41 +30,18 @@ class Insights_Section_Audience {
 	const SECTION_NAME = 'Audience';
 
 	/**
-	 * Initialize. Loads the Tab 1 data layer and registers its REST route
-	 * (NPPD-1648).
+	 * Initialize. Hooks REST endpoints for this tab when implementations
+	 * arrive (NPPD-1608).
 	 */
 	public static function init() {
 		if ( ! Insights_Wizard::is_enabled() ) {
 			return;
 		}
-		self::load_dependencies();
 		self::register_hooks();
 	}
 
 	/**
-	 * Include Tab 1 PHP files (metric orchestrator + REST controller),
-	 * matching the per-section include convention.
-	 *
-	 * @return void
+	 * Register hooks for this section. Currently a stub.
 	 */
-	private static function load_dependencies(): void {
-		$base = NEWSPACK_ABSPATH . 'includes/wizards/insights/';
-		include_once $base . 'metrics/class-audience-metric.php';
-		include_once $base . 'api/class-audience-rest-controller.php';
-	}
-
-	/**
-	 * Register the Tab 1 REST route.
-	 *
-	 * @return void
-	 */
-	public static function register_hooks(): void {
-		add_action(
-			'rest_api_init',
-			function () {
-				$controller = new Audience_REST_Controller();
-				$controller->register_routes();
-			}
-		);
-	}
+	public static function register_hooks() {}
 }
