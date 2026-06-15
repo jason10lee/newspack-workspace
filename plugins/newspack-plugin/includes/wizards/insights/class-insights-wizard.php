@@ -123,11 +123,15 @@ class Insights_Wizard extends Wizard {
 		$thirty_ago = $today->modify( '-29 days' );
 
 		return [
-			// Tab visibility. Real computation (feature detection: GAM
-			// dataset presence, scroll event presence, non-donation
-			// subscription product count, donation activity count) needs
-			// the BigQuery wrapper (NPPD-1598) plus Woo queries. Stubbed
-			// to all-on for now per the prompt's scope note.
+			// Tab visibility. The audience/engagement/conversion/gates/
+			// prompts/advertising tabs are stubbed to true until their
+			// data layers land (each needs BQ for proper feature
+			// detection, NPPD-1598). Subscribers stays all-on for now;
+			// Tab 6 visibility detection (non-donation subscription
+			// product presence) is a separate follow-up. Donors hides
+			// when there are no donation products on the publisher,
+			// using the shared Donation_Product_Classifier (cached 1h)
+			// as the single source of truth.
 			'tabs'              => [
 				'audience'    => true,
 				'engagement'  => true,
