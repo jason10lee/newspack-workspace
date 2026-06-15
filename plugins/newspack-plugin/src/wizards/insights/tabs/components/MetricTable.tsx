@@ -9,6 +9,12 @@
  */
 
 /**
+ * WordPress dependencies
+ */
+import { __ } from '@wordpress/i18n';
+import { useState } from '@wordpress/element';
+
+/**
  * Internal dependencies
  */
 import { formatCurrency, formatDecimal, formatDuration, formatNumber, formatPercent } from './format';
@@ -69,7 +75,10 @@ const formatCell = ( value: string | number | null, format?: MetricTableColumn[ 
 	return String( value );
 };
 
-const MetricTable = ( { payload, columns, emptyMessage, rowLimit = 10, collapseColumn }: MetricTableProps ) => {
+const MetricTable = ( { payload, columns, emptyMessage, rowLimit = 10, collapseColumn, defaultRowLimit, expandable = false }: MetricTableProps ) => {
+	// Hook must run unconditionally, before any early return.
+	const [ expanded, setExpanded ] = useState( false );
+
 	if ( payload?.overlay ) {
 		return <MetricNote overlay={ payload.overlay } />;
 	}
@@ -99,30 +108,42 @@ const MetricTable = ( { payload, columns, emptyMessage, rowLimit = 10, collapseC
 	const numClass = ( col: MetricTableColumn ) => ( col.align === 'right' ? 'newspack-insights__table-num' : undefined );
 
 	return (
-		<div className="newspack-insights__table-wrap">
-			<table className="newspack-insights__table">
-				<thead>
-					<tr>
-						{ displayColumns.map( col => (
-							<th key={ col.key } className={ numClass( col ) }>
-								{ col.label }
-							</th>
-						) ) }
-					</tr>
-				</thead>
-				<tbody>
-					{ rows.map( ( row, i ) => (
-						<tr key={ i }>
+		<>
+			<div className="newspack-insights__table-wrap">
+				<table className="newspack-insights__table">
+					<thead>
+						<tr>
 							{ displayColumns.map( col => (
-								<td key={ col.key } className={ numClass( col ) }>
-									{ formatCell( row[ col.key ] ?? null, col.format ) }
-								</td>
+								<th key={ col.key } className={ numClass( col ) }>
+									{ col.label }
+								</th>
 							) ) }
 						</tr>
-					) ) }
-				</tbody>
-			</table>
-		</div>
+					</thead>
+					<tbody>
+						{ visibleRows.map( ( row, i ) => (
+							<tr key={ i }>
+								{ displayColumns.map( col => (
+									<td key={ col.key } className={ numClass( col ) }>
+										{ formatCell( row[ col.key ] ?? null, col.format ) }
+									</td>
+								) ) }
+							</tr>
+						) ) }
+					</tbody>
+				</table>
+			</div>
+			{ collapsible && (
+				<button
+					type="button"
+					className="newspack-insights__table-toggle"
+					aria-expanded={ expanded }
+					onClick={ () => setExpanded( ! expanded ) }
+				>
+					{ expanded ? __( 'See less', 'newspack-plugin' ) : __( 'See more', 'newspack-plugin' ) }
+				</button>
+			) }
+		</>
 	);
 };
 
