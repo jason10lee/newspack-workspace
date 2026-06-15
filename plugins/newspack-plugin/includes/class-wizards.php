@@ -69,7 +69,6 @@ class Wizards {
 			'audience-content-gates'  => new Audience_Content_Gates(),
 			'audience-donations'      => new Audience_Donations(),
 			'audience-integrations'   => new Audience_Integrations(),
-			'insights'                => new Insights_Wizard(),
 			'listings'                => new Listings_Wizard(),
 			'network'                 => new Network_Wizard(),
 			'newsletters'             => new Newsletters_Wizard(),
@@ -78,18 +77,6 @@ class Wizards {
 		if ( Memberships::is_active() ) {
 			self::$wizards['audience-subscriptions'] = new Audience_Subscriptions();
 		}
-
-		// Initialize Insights section classes. These are plain classes (not
-		// Wizard_Section subclasses) that hold the hook points for future
-		// per-tab REST endpoint registration as each tab's data layer lands.
-		Insights_Section_Audience::init();
-		Insights_Section_Engagement::init();
-		Insights_Section_Conversion::init();
-		Insights_Section_Gates::init();
-		Insights_Section_Prompts::init();
-		Insights_Section_Subscribers::init();
-		Insights_Section_Donors::init();
-		Insights_Section_Advertising::init();
 	}
 
 	/**
