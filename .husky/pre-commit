@@ -1,1 +1,10 @@
 pnpm exec lint-staged --config .lintstagedrc.json
+
+# Optional personal pre-commit hook. Drop your own commands in
+# `.husky/pre-commit.local` (gitignored, per-clone) and they run after the lint
+# above — git honours a single core.hooksPath, so this is how personal hooks
+# coexist with husky instead of being overwritten. Exit non-zero to block the
+# commit. Absent file = no-op.
+if [ -f .husky/pre-commit.local ]; then
+	sh .husky/pre-commit.local
+fi
