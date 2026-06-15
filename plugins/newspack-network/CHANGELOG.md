@@ -1,3 +1,10 @@
+## newspack-network [2.20.4](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.20.3...newspack-network@2.20.4) (2026-06-15)
+
+
+### Bug Fixes
+
+* update paragraph markup to fix failing tests ([2fbadaa](https://github.com/Automattic/newspack-workspace/commit/2fbadaaece75644ff3d40e54bfabede2bd406f7f))
+
 ## newspack-network [2.20.4-alpha.1](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.20.3...newspack-network@2.20.4-alpha.1) (2026-06-15)
 
 
