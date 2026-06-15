@@ -27,4 +27,13 @@ class Test_Renderer_Controller extends WP_UnitTestCase {
 		Renderer_Controller::stamp_renderer( $post_id, 'wc' );
 		$this->assertSame( 'wc', Renderer_Controller::get_post_renderer( $post_id ) );
 	}
+
+	/**
+	 * An unknown engine value is normalized to the legacy MJML engine.
+	 */
+	public function test_unknown_engine_normalizes_to_mjml() {
+		$post_id = self::factory()->post->create();
+		Renderer_Controller::stamp_renderer( $post_id, 'something-else' );
+		$this->assertSame( 'mjml', Renderer_Controller::get_post_renderer( $post_id ) );
+	}
 }
