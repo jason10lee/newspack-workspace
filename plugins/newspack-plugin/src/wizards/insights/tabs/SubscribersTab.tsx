@@ -64,7 +64,7 @@ const SubscribersTab = ( { range, previousRange }: SubscribersTabProps ) => {
 			<ScorecardSection snapshot={ data.snapshot } />
 			<WindowedSection range={ range } current={ data.current } previous={ data.previous } />
 			<TenureSection rows={ data.snapshot.tenure_distribution } />
-			<PerformanceSection rows={ data.current.subscriptions_by_product } />
+			<PerformanceSection rows={ data.current.performance_by_product } />
 		</div>
 	);
 };

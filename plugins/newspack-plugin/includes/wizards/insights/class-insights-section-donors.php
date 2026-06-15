@@ -1,19 +1,20 @@
 <?php
 /**
- * Newspack Insights — Donors section (NPPD-1617).
+ * Newspack Insights — Donors section (NPPD-1602).
  *
- * Donors tab scope: donation activity. Mirrors the Subscribers
- * section's wiring: loads the Tab 7 PHP files (Donors_Storage_*,
- * Donors_Metric, Donors_REST_Controller — the shared Storage_Detector
- * and Donation_Product_Classifier from Tab 6 are reused as-is) and
- * registers the `newspack-insights/v1/donors` REST route.
+ * Donors tab scope: donation activity. One-time vs recurring, donor
+ * mix, average gift size, retention of recurring donors. Like
+ * Subscribers, local-DB-driven (WooCommerce + Donations). Visible only
+ * when the publisher has donation activity in the period.
+ *
+ * Future REST endpoints for the Donors tab register from
+ * {@see self::register_hooks()}. Currently a stub; the React side renders
+ * a "Coming soon" placeholder for this tab.
  *
  * @package Newspack
  */
 
 namespace Newspack;
-
-use Newspack\Insights\Donors_REST_Controller;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -30,48 +31,18 @@ class Insights_Section_Donors {
 	const SECTION_NAME = 'Donors';
 
 	/**
-	 * Initialize.
+	 * Initialize. Hooks REST endpoints for this tab when implementations
+	 * arrive (NPPD-1617).
 	 */
 	public static function init() {
 		if ( ! Insights_Wizard::is_enabled() ) {
 			return;
 		}
-		self::load_dependencies();
 		self::register_hooks();
 	}
 
 	/**
-	 * Include Tab 7 PHP files. Tab 6 already loaded the shared
-	 * storage_interface, storage_detector, and donation classifier
-	 * via Insights_Section_Subscribers::load_dependencies(), but
-	 * boot ordering can vary so we re-include defensively
-	 * (include_once is idempotent).
-	 *
-	 * @return void
+	 * Register hooks for this section. Currently a stub.
 	 */
-	private static function load_dependencies(): void {
-		$base = NEWSPACK_ABSPATH . 'includes/wizards/insights/';
-		include_once $base . 'storage/class-storage-detector.php';
-		include_once $base . 'classifiers/class-donation-product-classifier.php';
-		include_once $base . 'storage/class-donors-storage-interface.php';
-		include_once $base . 'storage/class-hpos-donors-storage.php';
-		include_once $base . 'storage/class-legacy-donors-storage.php';
-		include_once $base . 'metrics/class-donors-metric.php';
-		include_once $base . 'api/class-donors-rest-controller.php';
-	}
-
-	/**
-	 * Register the Tab 7 REST route.
-	 *
-	 * @return void
-	 */
-	public static function register_hooks(): void {
-		add_action(
-			'rest_api_init',
-			function () {
-				$controller = new Donors_REST_Controller();
-				$controller->register_routes();
-			}
-		);
-	}
+	public static function register_hooks() {}
 }

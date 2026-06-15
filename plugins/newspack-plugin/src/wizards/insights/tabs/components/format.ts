@@ -16,11 +16,6 @@ const numberFormatter = new Intl.NumberFormat( undefined, {
 	maximumFractionDigits: 0,
 } );
 
-const decimalFormatter = new Intl.NumberFormat( undefined, {
-	minimumFractionDigits: 1,
-	maximumFractionDigits: 1,
-} );
-
 const currencyFormatter = new Intl.NumberFormat( undefined, {
 	style: 'currency',
 	currency: 'USD',
@@ -39,9 +34,6 @@ const signedPercentFormatter = new Intl.NumberFormat( undefined, {
 } );
 
 export const formatNumber = ( n: number ): string => numberFormatter.format( n );
-
-/** Format a number with exactly one decimal place: 0 -> "0.0", 1.23 -> "1.2". */
-export const formatDecimal = ( n: number ): string => decimalFormatter.format( n );
 
 export const formatCurrency = ( n: number ): string => currencyFormatter.format( n );
 

@@ -104,25 +104,14 @@ interface Storage_Interface {
 	public function get_subscription_revenue_net( DateTimeInterface $start, DateTimeInterface $end ): float;
 
 	/**
-	 * Refund count divided by subscription order count in the window.
-	 *
-	 * Return shape:
-	 *   [
-	 *     'value'       => float, // refunds / orders, range [0,1], 0 when not computable
-	 *     'computable'  => bool,  // false when there were no subscription orders in window
-	 *     'denominator' => int,   // subscription order count in window
-	 *   ]
-	 *
-	 * The UI uses `computable` to render a "No subscription orders in
-	 * this timeframe" empty state instead of a misleading 0%, and
-	 * surfaces `denominator` inline as context so small-cohort 0%
-	 * reads as "0% of N orders" rather than bare 0%.
+	 * Refund count divided by subscription order count in the window. 0 when
+	 * there are no subscription orders to divide into.
 	 *
 	 * @param DateTimeInterface $start Inclusive window start.
 	 * @param DateTimeInterface $end   Inclusive window end.
-	 * @return array{value: float, computable: bool, denominator: int}
+	 * @return float Fraction in [0, 1].
 	 */
-	public function get_subscription_refund_rate( DateTimeInterface $start, DateTimeInterface $end ): array;
+	public function get_subscription_refund_rate( DateTimeInterface $start, DateTimeInterface $end ): float;
 
 	/**
 	 * Per-subscription tenure rows for the active non-donation subscriber
@@ -148,44 +137,15 @@ interface Storage_Interface {
 	public function get_upcoming_renewals_30d(): array;
 
 	/**
-	 * Count + total value of non-donation subscriptions known to be
-	 * ending in the next 30 days. Covers two cohorts:
-	 *
-	 *   - `wc-active` subs with `_schedule_end` in next 30d
-	 *     (fixed-term subscription reaching its scheduled end)
-	 *   - `wc-pending-cancel` subs with `_schedule_end` in next 30d
-	 *     (customer-initiated cancellation, paid period not yet
-	 *     exhausted — the sub remains usable until end)
-	 *
-	 * Both legitimately signal "ending soon" to publishers; WCS uses
-	 * `_schedule_end` as the canonical end marker regardless of which
-	 * status set it.
-	 *
-	 *   [ 'count' => int, 'total_value' => float ]
-	 *
-	 * @return array{count: int, total_value: float}
-	 */
-	public function get_upcoming_cancellations_30d(): array;
-
-	/**
 	 * Fraction of payment retry attempts in the window that resulted in
-	 * a subscription returning to `wc-active`.
-	 *
-	 * Return shape:
-	 *   [
-	 *     'value'       => float, // recoveries / attempts, range [0,1], 0 when not computable
-	 *     'computable'  => bool,  // false when no payment retries were scheduled in window
-	 *     'denominator' => int,   // retry attempts in window
-	 *   ]
-	 *
-	 * See {@see get_subscription_refund_rate()} for the UI contract
-	 * on `computable` and `denominator`.
+	 * a subscription returning to `wc-active`. 0 when there are no retry
+	 * attempts to divide into.
 	 *
 	 * @param DateTimeInterface $start Inclusive window start.
 	 * @param DateTimeInterface $end   Inclusive window end.
-	 * @return array{value: float, computable: bool, denominator: int}
+	 * @return float Fraction in [0, 1].
 	 */
-	public function get_failed_payment_retry_rate( DateTimeInterface $start, DateTimeInterface $end ): array;
+	public function get_failed_payment_retry_rate( DateTimeInterface $start, DateTimeInterface $end ): float;
 
 	/**
 	 * Per-product performance for non-donation subscription products.
@@ -223,7 +183,7 @@ interface Storage_Interface {
 	 * @param DateTimeInterface $end   Inclusive window end.
 	 * @return array<int, array<string, mixed>>
 	 */
-	public function get_subscriptions_by_product( DateTimeInterface $start, DateTimeInterface $end ): array;
+	public function get_performance_by_product( DateTimeInterface $start, DateTimeInterface $end ): array;
 
 	/**
 	 * Cancellation reason buckets for non-donation subscriptions whose

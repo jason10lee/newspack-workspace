@@ -56,9 +56,8 @@
 
 	&__section-caption {
 		margin: 0;
-		font-size: 14px;
+		font-size: 13px;
 		font-weight: 400;
-		line-height: 1.5;
 		color: wp-colors.$gray-700;
 	}
 
@@ -154,15 +153,6 @@
 			text-align: left;
 		}
 
-		&-secondary {
-			margin: -4px 0 0;
-			font-size: 13px;
-			font-weight: 400;
-			line-height: 1.4;
-			color: wp-colors.$gray-700;
-			font-variant-numeric: tabular-nums;
-		}
-
 		&-delta {
 			font-size: 13px;
 			font-weight: 600;
@@ -192,21 +182,6 @@
 			line-height: 1.4;
 			color: wp-colors.$gray-700;
 			text-align: left;
-		}
-
-		// Empty-state variant: same card chrome as a populated metric
-		// (preserves grid alignment) but the body slot renders an
-		// explanatory line instead of a hero value. Used by sections
-		// where a per-metric "no data yet" message reads cleaner than
-		// collapsing to a section-wide block.
-		&--empty {
-			.newspack-insights__metric-card-empty-note {
-				margin: 16px 0 0;
-				font-size: 13px;
-				font-weight: 400;
-				line-height: 1.4;
-				color: wp-colors.$gray-700;
-			}
 		}
 	}
 
@@ -250,15 +225,6 @@
 		&-num {
 			text-align: right;
 			font-variant-numeric: tabular-nums;
-		}
-
-		// Em-dash for cells where the column doesn't apply to the row
-		// (one-time products can't have recurring donors / recurring
-		// revenue; recurring products can't have one-time gifts).
-		// Visually subordinate — gray-700, matching the body-text color
-		// — to read as "not applicable" rather than "data missing."
-		&-na {
-			color: wp-colors.$gray-700;
 		}
 
 		// Nested variation/child rows sit directly under their parent.

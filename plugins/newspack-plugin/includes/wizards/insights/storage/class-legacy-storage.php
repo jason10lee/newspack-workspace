@@ -409,9 +409,9 @@ class Legacy_Storage implements Storage_Interface {
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{value: float, computable: bool, denominator: int}
+	 * @return float
 	 */
-	public function get_subscription_refund_rate( DateTimeInterface $start, DateTimeInterface $end ): array {
+	public function get_subscription_refund_rate( DateTimeInterface $start, DateTimeInterface $end ): float {
 		global $wpdb;
 		$prefix         = $wpdb->prefix;
 		$donations      = $this->id_list( $this->donation_product_ids );
@@ -435,11 +435,7 @@ class Legacy_Storage implements Storage_Interface {
 		$orders     = (int) $wpdb->get_var( $orders_sql );
 
 		if ( 0 === $orders ) {
-			return [
-				'value'       => 0.0,
-				'computable'  => false,
-				'denominator' => 0,
-			];
+			return 0.0;
 		}
 
 		$refunds_sql = $wpdb->prepare(
@@ -458,11 +454,7 @@ class Legacy_Storage implements Storage_Interface {
 		);
 		$refunds     = (int) $wpdb->get_var( $refunds_sql );
 
-		return [
-			'value'       => $refunds / $orders,
-			'computable'  => true,
-			'denominator' => $orders,
-		];
+		return $refunds / $orders;
 	}
 
 	/**
@@ -549,51 +541,11 @@ class Legacy_Storage implements Storage_Interface {
 	/**
 	 * {@inheritDoc}
 	 *
-	 * @return array{count: int, total_value: float}
-	 */
-	public function get_upcoming_cancellations_30d(): array {
-		global $wpdb;
-		$prefix    = $wpdb->prefix;
-		$donations = $this->id_list( $this->donation_product_ids );
-
-		// Mirrors HPOS implementation; see that variant for rationale.
-		$row = $wpdb->get_row(
-			"SELECT
-				COUNT(*) AS upcoming_count,
-				COALESCE(SUM(CAST(tot.meta_value AS DECIMAL(15,2))), 0) AS upcoming_value
-			FROM {$prefix}posts p
-			JOIN {$prefix}postmeta end_meta
-				ON end_meta.post_id = p.ID AND end_meta.meta_key = '_schedule_end'
-			JOIN {$prefix}postmeta tot
-				ON tot.post_id = p.ID AND tot.meta_key = '_order_total'
-			WHERE p.post_type = 'shop_subscription'
-			  AND p.post_status IN ('wc-active', 'wc-pending-cancel')
-			  AND p.ID IN (
-				SELECT DISTINCT oi.order_id
-				FROM {$prefix}woocommerce_order_items oi
-				JOIN {$prefix}woocommerce_order_itemmeta oim
-					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
-				WHERE oi.order_item_type = 'line_item'
-				  AND oim.meta_value NOT IN ($donations)
-			  )
-			  AND end_meta.meta_value BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 30 DAY)",
-			ARRAY_A
-		);
-
-		return [
-			'count'       => (int) ( $row['upcoming_count'] ?? 0 ),
-			'total_value' => (float) ( $row['upcoming_value'] ?? 0 ),
-		];
-	}
-
-	/**
-	 * {@inheritDoc}
-	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{value: float, computable: bool, denominator: int}
+	 * @return float
 	 */
-	public function get_failed_payment_retry_rate( DateTimeInterface $start, DateTimeInterface $end ): array {
+	public function get_failed_payment_retry_rate( DateTimeInterface $start, DateTimeInterface $end ): float {
 		global $wpdb;
 		$prefix    = $wpdb->prefix;
 		$donations = $this->id_list( $this->donation_product_ids );
@@ -627,19 +579,7 @@ class Legacy_Storage implements Storage_Interface {
 		$attempt = (int) ( $row['retry_attempts'] ?? 0 );
 		$success = (int) ( $row['recoveries'] ?? 0 );
 
-		if ( 0 === $attempt ) {
-			return [
-				'value'       => 0.0,
-				'computable'  => false,
-				'denominator' => 0,
-			];
-		}
-
-		return [
-			'value'       => $success / $attempt,
-			'computable'  => true,
-			'denominator' => $attempt,
-		];
+		return 0 === $attempt ? 0.0 : $success / $attempt;
 	}
 
 	/**
@@ -649,12 +589,12 @@ class Legacy_Storage implements Storage_Interface {
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
-	public function get_subscriptions_by_product( DateTimeInterface $start, DateTimeInterface $end ): array {
+	public function get_performance_by_product( DateTimeInterface $start, DateTimeInterface $end ): array {
 		global $wpdb;
 		$prefix    = $wpdb->prefix;
 		$donations = $this->id_list( $this->donation_product_ids );
 
-		// Column scope mirrors HPOS_Storage::get_subscriptions_by_product():
+		// Column scope mirrors HPOS_Storage::get_performance_by_product():
 		// active_subs       — current state
 		// active_value      — current state
 		// lifetime_revenue  — lifetime sum (intentionally not windowed)
@@ -667,7 +607,7 @@ class Legacy_Storage implements Storage_Interface {
 		// (a documented v1 simplification).
 		// COALESCE _variation_id over _product_id to resolve to the
 		// actual variation for variable products. See
-		// HPOS_Storage::get_subscriptions_by_product() for the rationale.
+		// HPOS_Storage::get_performance_by_product() for the rationale.
 		$sql = $wpdb->prepare(
 			"SELECT
 				pv.ID AS variation_id,
