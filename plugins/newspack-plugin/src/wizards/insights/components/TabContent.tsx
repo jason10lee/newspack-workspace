@@ -3,17 +3,14 @@
  *
  * Lazy-loads the appropriate tab component based on activeTab and renders
  * it inside a Suspense boundary with a skeleton fallback. Each tab is
- * code-split via React.lazy. An ErrorBoundary wraps Suspense so a chunk
- * load failure (deploy mid-session, ad blocker, transient network) shows
- * a recoverable message instead of crashing the wizard.
+ * code-split via React.lazy.
  */
 
 /**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { Component, lazy, Suspense } from '@wordpress/element';
-import type { ErrorInfo, ReactNode } from 'react';
+import { lazy, Suspense } from '@wordpress/element';
 
 /**
  * Internal dependencies
@@ -30,18 +27,10 @@ const SubscribersTab = lazy( () => import( '../tabs/SubscribersTab' ) );
 const DonorsTab = lazy( () => import( '../tabs/DonorsTab' ) );
 const AdvertisingTab = lazy( () => import( '../tabs/AdvertisingTab' ) );
 
-/**
- * Props every tab component receives. Exported so each tab module can
- * type its own props from the same source, satisfying strict-mode TS
- * when TabContent passes range / previousRange via the spread below.
- */
-export interface TabSectionProps {
+export interface TabContentProps {
+	activeTab: TabKey;
 	range: DateRange;
 	previousRange: DateRange | null;
-}
-
-export interface TabContentProps extends TabSectionProps {
-	activeTab: TabKey;
 }
 
 const Fallback = () => (
@@ -50,67 +39,26 @@ const Fallback = () => (
 	</div>
 );
 
-interface TabErrorBoundaryProps {
-	children: ReactNode;
-}
-
-interface TabErrorBoundaryState {
-	error: Error | null;
-}
-
-class TabErrorBoundary extends Component< TabErrorBoundaryProps, TabErrorBoundaryState > {
-	state: TabErrorBoundaryState = { error: null };
-
-	static getDerivedStateFromError( error: Error ): TabErrorBoundaryState {
-		return { error };
-	}
-
-	componentDidCatch( error: Error, info: ErrorInfo ): void {
-		// eslint-disable-next-line no-console
-		console.error( 'Insights tab failed to load', error, info );
-	}
-
-	handleReload = (): void => {
-		if ( typeof window !== 'undefined' ) {
-			window.location.reload();
-		}
-	};
-
-	render() {
-		if ( this.state.error ) {
-			return (
-				<div className="newspack-insights__tab-error" role="alert">
-					<p>{ __( 'This section could not be loaded.', 'newspack-plugin' ) }</p>
-					<button type="button" className="newspack-insights__tab-error-action" onClick={ this.handleReload }>
-						{ __( 'Reload the page', 'newspack-plugin' ) }
-					</button>
-				</div>
-			);
-		}
-		return this.props.children;
-	}
-}
-
-const TabContent = ( { activeTab, range, previousRange }: TabContentProps ) => {
-	const sectionProps: TabSectionProps = { range, previousRange };
+const TabContent = ( props: TabContentProps ) => {
+	const { activeTab } = props;
 	const renderTab = () => {
 		switch ( activeTab ) {
 			case 'audience':
-				return <AudienceTab { ...sectionProps } />;
+				return <AudienceTab { ...props } />;
 			case 'engagement':
-				return <EngagementTab { ...sectionProps } />;
+				return <EngagementTab { ...props } />;
 			case 'conversion':
-				return <ConversionTab { ...sectionProps } />;
+				return <ConversionTab { ...props } />;
 			case 'gates':
-				return <GatesTab { ...sectionProps } />;
+				return <GatesTab { ...props } />;
 			case 'prompts':
-				return <PromptsTab { ...sectionProps } />;
+				return <PromptsTab { ...props } />;
 			case 'subscribers':
-				return <SubscribersTab { ...sectionProps } />;
+				return <SubscribersTab { ...props } />;
 			case 'donors':
-				return <DonorsTab { ...sectionProps } />;
+				return <DonorsTab { ...props } />;
 			case 'advertising':
-				return <AdvertisingTab { ...sectionProps } />;
+				return <AdvertisingTab { ...props } />;
 			default:
 				return null;
 		}
@@ -122,12 +70,7 @@ const TabContent = ( { activeTab, range, previousRange }: TabContentProps ) => {
 			id={ `newspack-insights-panel-${ activeTab }` }
 			aria-labelledby={ `newspack-insights-tab-${ activeTab }` }
 		>
-			{ /* Keyed by activeTab so switching tabs remounts the boundary and
-			     clears any error from a failed chunk load — otherwise the error
-			     UI would persist across tabs and lock the content area. */ }
-			<TabErrorBoundary key={ activeTab }>
-				<Suspense fallback={ <Fallback /> }>{ renderTab() }</Suspense>
-			</TabErrorBoundary>
+			<Suspense fallback={ <Fallback /> }>{ renderTab() }</Suspense>
 		</div>
 	);
 };
