@@ -179,18 +179,18 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The seven scalar scorecards: Section 7 influenced rates (4) and
-	 * Section 8 opportunity snapshot counts (3).
+	 * The five scalar scorecards still on placeholders: two Section 7 influenced
+	 * rates deferred to C14/C15 (Woo-join) and three Section 8 opportunity
+	 * snapshot counts. C7 (influenced_registration_rate_7d) and C8
+	 * (influenced_newsletter_rate_7d) have been wired and are tested separately.
 	 *
 	 * @return array<string, array{0:string,1:string}>
 	 */
 	public function provide_scalar_methods(): array {
 		return [
-			// Section 7 — cross-tab influenced attribution.
-			'influenced_registration_rate_7d'  => [ 'get_influenced_registration_rate_7d', 'rate' ],
+			// Section 7 — Woo-join influenced rates deferred to C14/C15.
 			'influenced_subscription_rate_14d' => [ 'get_influenced_subscription_rate_14d', 'rate' ],
 			'influenced_donation_rate_14d'     => [ 'get_influenced_donation_rate_14d', 'rate' ],
-			'influenced_newsletter_rate_7d'    => [ 'get_influenced_newsletter_rate_7d', 'rate' ],
 			// Section 8 — opportunity buckets (snapshot counts).
 			'stale_registered_count'           => [ 'get_stale_registered_count', 'count' ],
 			'at_risk_subscriber_count'         => [ 'get_at_risk_subscriber_count', 'count' ],
@@ -389,31 +389,9 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		];
 	}
 
-	/**
-	 * The Section 6 weekly trends return a pending envelope with empty
-	 * `weeks` and the two tracked series keys.
-	 */
-	public function test_weekly_trends_returns_empty_weeks_with_series() {
-		[ $start, $end ] = $this->window();
-		$result          = $this->metric->get_weekly_conversion_rates( $start, $end );
+	// C6 weekly trends — see test_weekly_conversion_rates_* tests below.
 
-		$this->assertTrue( $result['pending'] );
-		$this->assertSame( [], $result['weeks'] );
-		$this->assertSame( [ 'registration_rate', 'subscription_attempt_rate' ], $result['series'] );
-	}
-
-	/**
-	 * The Section 8.4 table returns a pending envelope with empty `rows` and
-	 * the pageview threshold, so the React table renders its empty-state row.
-	 */
-	public function test_top_pages_table_returns_empty_rows_with_threshold() {
-		[ $start, $end ] = $this->window();
-		$result          = $this->metric->get_top_pages_no_conversion( $start, $end );
-
-		$this->assertTrue( $result['pending'] );
-		$this->assertSame( [], $result['rows'] );
-		$this->assertSame( 100, $result['threshold_pageviews'] );
-	}
+	// C9 top-pages table — see test_top_pages_no_conversion_* tests below.
 
 	// --- Phase 2A wired method tests (C2–C5) --------------------------------
 
@@ -769,5 +747,236 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'bigquery_proxy_http_error', $result['error_code'] );
 		$this->assertSame( 'Bad gateway', $result['error_message'] );
 		$this->assertSame( [], $result['points'] );
+	}
+
+	// --- Phase 2A wired method tests (C6–C9) --------------------------------
+
+	// --- C6: get_weekly_conversion_rates -----------------------------------
+
+	/**
+	 * C6 populated: proxy returns rows of {week_start,
+	 * registration_conversion_rate, subscription_attempt_rate} → state
+	 * 'populated', `weeks` carries each row keyed by the three columns.
+	 */
+	public function test_weekly_conversion_rates_returns_populated_weeks_on_success() {
+		$rows   = [
+			[
+				'week_start'                   => '2026-03-22',
+				'registration_conversion_rate' => 0.12,
+				'subscription_attempt_rate'    => 0.08,
+			],
+			[
+				'week_start'                   => '2026-03-29',
+				'registration_conversion_rate' => 0.15,
+				'subscription_attempt_rate'    => 0.09,
+			],
+		];
+		$metric = new Conversion_Metric( $this->proxy_returning( $rows ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_weekly_conversion_rates( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertArrayNotHasKey( 'pending', $result );
+		$this->assertSame( [ 'registration_rate', 'subscription_attempt_rate' ], $result['series'] );
+		$this->assertCount( 2, $result['weeks'] );
+
+		// First week row: keys and cast values.
+		$week0 = $result['weeks'][0];
+		$this->assertSame( '2026-03-22', $week0['week'] );
+		$this->assertEqualsWithDelta( 0.12, $week0['registration_conversion_rate'], 1e-9 );
+		$this->assertEqualsWithDelta( 0.08, $week0['subscription_attempt_rate'], 1e-9 );
+	}
+
+	/**
+	 * C6 empty: proxy returns [] → state 'empty', empty weeks, series keys preserved.
+	 */
+	public function test_weekly_conversion_rates_returns_empty_state_on_no_rows() {
+		$metric          = new Conversion_Metric( $this->proxy_returning( [] ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_weekly_conversion_rates( $start, $end );
+
+		$this->assertSame( 'empty', $result['state'] );
+		$this->assertSame( [], $result['weeks'] );
+		$this->assertSame( [ 'registration_rate', 'subscription_attempt_rate' ], $result['series'] );
+	}
+
+	/**
+	 * C6 error: proxy returns WP_Error → state 'error' with code/message,
+	 * and `series` is present (React reads it unconditionally to build the legend).
+	 */
+	public function test_weekly_conversion_rates_returns_error_state_on_proxy_error() {
+		$wp_error        = new \WP_Error( 'bigquery_proxy_http_error', 'HTTP 502' );
+		$metric          = new Conversion_Metric( $this->proxy_returning( $wp_error ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_weekly_conversion_rates( $start, $end );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_http_error', $result['error_code'] );
+		$this->assertSame( 'HTTP 502', $result['error_message'] );
+		$this->assertSame( [], $result['weeks'] );
+		$this->assertSame( [ 'registration_rate', 'subscription_attempt_rate' ], $result['series'] );
+	}
+
+	// --- C7: get_influenced_registration_rate_7d ---------------------------
+
+	/**
+	 * C7 populated: proxy returns one row with influenced_registration_rate →
+	 * state 'populated', computable, correct float value.
+	 */
+	public function test_influenced_registration_rate_7d_returns_populated_scalar_on_success() {
+		$metric          = new Conversion_Metric( $this->proxy_returning( [ [ 'influenced_registration_rate' => 0.37 ] ] ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_influenced_registration_rate_7d( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertArrayNotHasKey( 'pending', $result );
+		$this->assertTrue( $result['computable'] );
+		$this->assertSame( 'rate', $result['placeholder_type'] );
+		$this->assertEqualsWithDelta( 0.37, $result['value'], 1e-9 );
+	}
+
+	/**
+	 * C7 empty: proxy returns [] → populated non-computable zero.
+	 */
+	public function test_influenced_registration_rate_7d_returns_non_computable_zero_on_empty() {
+		$metric          = new Conversion_Metric( $this->proxy_returning( [] ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_influenced_registration_rate_7d( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertFalse( $result['computable'] );
+		$this->assertEqualsWithDelta( 0.0, $result['value'], 1e-9 );
+	}
+
+	/**
+	 * C7 error: proxy returns WP_Error → state 'error'.
+	 */
+	public function test_influenced_registration_rate_7d_returns_error_state_on_proxy_error() {
+		$wp_error        = new \WP_Error( 'bigquery_proxy_http_error', 'timeout' );
+		$metric          = new Conversion_Metric( $this->proxy_returning( $wp_error ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_influenced_registration_rate_7d( $start, $end );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_http_error', $result['error_code'] );
+		$this->assertSame( 'timeout', $result['error_message'] );
+	}
+
+	// --- C8: get_influenced_newsletter_rate_7d -----------------------------
+
+	/**
+	 * C8 populated: proxy returns one row with influenced_newsletter_rate →
+	 * state 'populated', computable, correct float value.
+	 */
+	public function test_influenced_newsletter_rate_7d_returns_populated_scalar_on_success() {
+		$metric          = new Conversion_Metric( $this->proxy_returning( [ [ 'influenced_newsletter_rate' => 0.22 ] ] ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_influenced_newsletter_rate_7d( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertArrayNotHasKey( 'pending', $result );
+		$this->assertTrue( $result['computable'] );
+		$this->assertSame( 'rate', $result['placeholder_type'] );
+		$this->assertEqualsWithDelta( 0.22, $result['value'], 1e-9 );
+	}
+
+	/**
+	 * C8 empty: proxy returns [] → populated non-computable zero.
+	 */
+	public function test_influenced_newsletter_rate_7d_returns_non_computable_zero_on_empty() {
+		$metric          = new Conversion_Metric( $this->proxy_returning( [] ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_influenced_newsletter_rate_7d( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertFalse( $result['computable'] );
+		$this->assertEqualsWithDelta( 0.0, $result['value'], 1e-9 );
+	}
+
+	/**
+	 * C8 error: proxy returns WP_Error → state 'error'.
+	 */
+	public function test_influenced_newsletter_rate_7d_returns_error_state_on_proxy_error() {
+		$wp_error        = new \WP_Error( 'bigquery_proxy_http_error', 'timeout' );
+		$metric          = new Conversion_Metric( $this->proxy_returning( $wp_error ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_influenced_newsletter_rate_7d( $start, $end );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_http_error', $result['error_code'] );
+		$this->assertSame( 'timeout', $result['error_message'] );
+	}
+
+	// --- C9: get_top_pages_no_conversion -----------------------------------
+
+	/**
+	 * C9 populated: proxy returns rows of {post_id, page_url, page_title,
+	 * pageviews, unique_readers, conversion_rate} → state 'populated', rows
+	 * with correct casts and threshold preserved.
+	 */
+	public function test_top_pages_no_conversion_returns_populated_rows_on_success() {
+		$rows   = [
+			[
+				'post_id'         => '42',
+				'page_url'        => '/article/foo',
+				'page_title'      => 'Foo Article',
+				'pageviews'       => '5000',
+				'unique_readers'  => '3200',
+				'conversion_rate' => '0.0045',
+			],
+			[
+				'post_id'         => '99',
+				'page_url'        => '/article/bar',
+				'page_title'      => 'Bar Article',
+				'pageviews'       => '2100',
+				'unique_readers'  => '1800',
+				'conversion_rate' => '0.0012',
+			],
+		];
+		$metric = new Conversion_Metric( $this->proxy_returning( $rows ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_top_pages_no_conversion( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertArrayNotHasKey( 'pending', $result );
+		$this->assertSame( 100, $result['threshold_pageviews'] );
+		$this->assertCount( 2, $result['rows'] );
+
+		// First row: verify type casts.
+		$row0 = $result['rows'][0];
+		$this->assertSame( 42, $row0['post_id'] );
+		$this->assertSame( '/article/foo', $row0['page_url'] );
+		$this->assertSame( 'Foo Article', $row0['page_title'] );
+		$this->assertSame( 5000, $row0['pageviews'] );
+		$this->assertSame( 3200, $row0['unique_readers'] );
+		$this->assertEqualsWithDelta( 0.0045, $row0['conversion_rate'], 1e-9 );
+	}
+
+	/**
+	 * C9 empty: proxy returns [] → state 'empty', empty rows, threshold preserved.
+	 */
+	public function test_top_pages_no_conversion_returns_empty_state_on_no_rows() {
+		$metric          = new Conversion_Metric( $this->proxy_returning( [] ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_top_pages_no_conversion( $start, $end );
+
+		$this->assertSame( 'empty', $result['state'] );
+		$this->assertSame( [], $result['rows'] );
+		$this->assertSame( 100, $result['threshold_pageviews'] );
+	}
+
+	/**
+	 * C9 error: proxy returns WP_Error → state 'error' with code/message.
+	 */
+	public function test_top_pages_no_conversion_returns_error_state_on_proxy_error() {
+		$wp_error        = new \WP_Error( 'bigquery_proxy_http_error', 'HTTP 503' );
+		$metric          = new Conversion_Metric( $this->proxy_returning( $wp_error ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_top_pages_no_conversion( $start, $end );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_http_error', $result['error_code'] );
+		$this->assertSame( 'HTTP 503', $result['error_message'] );
+		$this->assertSame( [], $result['rows'] );
 	}
 }

@@ -2,13 +2,13 @@
 /**
  * Newspack Insights — Conversion Journey Metric orchestrator (NPPD-1609, Phase 2A).
  *
- * Tab 3 (Conversion Journey) metric orchestrator. Phase 2A wiring is in
- * progress: C2–C5 methods (lifecycle funnel, anon-to-registered funnel,
- * source-mix registrations, time-to-register distribution) now dispatch live
- * BigQuery queries via the proxy and return structured state envelopes
- * ('populated' | 'empty' | 'error'). Remaining sections still return
- * placeholder `pending: true` payloads and will be wired in Phase B
- * (NPPD-1630, tasks C20–C24).
+ * Tab 3 (Conversion Journey) metric orchestrator. C2–C9 are now wired to
+ * live BigQuery queries via the proxy: lifecycle funnel (C2), anon-to-
+ * registered funnel (C3), source-mix registrations (C4), time-to-register
+ * distribution (C5), weekly conversion rates (C6), influenced registration 7d
+ * (C7), influenced newsletter 7d (C8), and top pages (C9). Remaining
+ * placeholders are the Woo-join metrics (C10–C15) and deferred Phase B
+ * sections (C20–C24).
  *
  * Mirrors {@see Prompts_Metric} (Tab 5) one-for-one: same placeholder
  * shape for scalars, same `pending` + ordered-collection shape for viz,
@@ -177,7 +177,7 @@ final class Conversion_Metric {
 	/**
 	 * Error payload for a collection metric (funnel / distribution / table).
 	 *
-	 * @param string    $rows_key Key holding the (empty) collection: 'stages'|'slices'|'points'|'groups'|'cohorts'|'rows'.
+	 * @param string    $rows_key Key holding the (empty) collection: 'stages'|'slices'|'points'|'groups'|'cohorts'|'rows'|'weeks'.
 	 * @param \WP_Error $error    The originating proxy error.
 	 * @return array
 	 */
@@ -194,7 +194,7 @@ final class Conversion_Metric {
 	 * Error payload for a collection whose query succeeded but returned an
 	 * unexpected (non-array) shape — a data-quality bug, not an empty window.
 	 *
-	 * @param string $rows_key Key holding the (empty) collection: 'stages'|'slices'|'points'|'groups'|'cohorts'|'rows'.
+	 * @param string $rows_key Key holding the (empty) collection: 'stages'|'slices'|'points'|'groups'|'cohorts'|'rows'|'weeks'.
 	 * @return array
 	 */
 	private function malformed_collection( string $rows_key ): array {
@@ -847,20 +847,55 @@ final class Conversion_Metric {
 	// --- Section 6: Conversion rate trends ------------------------------
 
 	/**
-	 * Weekly conversion rates (6) — multi-series LineChart. Phase 1 returns
-	 * an empty `weeks` array so the LineChart renders its empty state. The
-	 * `series` keys name the two tracked rates.
+	 * Weekly conversion rates (6) — multi-series LineChart. Dispatches
+	 * `conversion_journey_weekly_rates`; the hub returns per-week rows with
+	 * { week_start, registration_conversion_rate, subscription_attempt_rate }.
+	 * The `series` keys name the two tracked rates and are preserved in every
+	 * state so React can always build its legend without guarding for absence.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, weeks: array, series: string[]}
+	 * @return array{state: string, weeks: array, series: string[]}
 	 */
 	public function get_weekly_conversion_rates( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
+		$rows = $this->proxy->query( 'conversion_journey_weekly_rates', $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return array_merge(
+				$this->error_collection( 'weeks', $rows ),
+				[ 'series' => [ 'registration_rate', 'subscription_attempt_rate' ] ]
+			);
+		}
+		if ( ! is_array( $rows ) || ( ! empty( $rows ) && ! is_array( $rows[0] ) ) ) {
+			return array_merge(
+				$this->malformed_collection( 'weeks' ),
+				[ 'series' => [ 'registration_rate', 'subscription_attempt_rate' ] ]
+			);
+		}
+		if ( empty( $rows ) ) {
+			return [
+				'state'  => 'empty',
+				'weeks'  => [],
+				'series' => [ 'registration_rate', 'subscription_attempt_rate' ],
+			];
+		}
+		$weeks = [];
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				return array_merge(
+					$this->malformed_collection( 'weeks' ),
+					[ 'series' => [ 'registration_rate', 'subscription_attempt_rate' ] ]
+				);
+			}
+			$weeks[] = [
+				'week'                         => (string) ( $row['week_start'] ?? '' ),
+				'registration_conversion_rate' => (float) ( $row['registration_conversion_rate'] ?? 0.0 ),
+				'subscription_attempt_rate'    => (float) ( $row['subscription_attempt_rate'] ?? 0.0 ),
+			];
+		}
 		return [
-			'pending' => true,
-			'weeks'   => [],
-			'series'  => [ 'registration_rate', 'subscription_attempt_rate' ],
+			'state'  => 'populated',
+			'weeks'  => $weeks,
+			'series' => [ 'registration_rate', 'subscription_attempt_rate' ],
 		];
 	}
 
@@ -871,15 +906,22 @@ final class Conversion_Metric {
 	// approach is locked in.
 
 	/**
-	 * Influenced registration rate, 7-day lookback (7.1).
+	 * Influenced registration rate, 7-day lookback (7.1). Dispatches
+	 * `conversion_journey_influenced_registration_7d`; the hub returns one row
+	 * with column `influenced_registration_rate`.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
 	public function get_influenced_registration_rate_7d( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder( 'rate' );
+		return $this->compute_metric_from_proxy(
+			'conversion_journey_influenced_registration_7d',
+			'influenced_registration_rate',
+			'rate',
+			$start,
+			$end
+		);
 	}
 
 	/**
@@ -907,15 +949,22 @@ final class Conversion_Metric {
 	}
 
 	/**
-	 * Influenced newsletter signup rate, 7-day lookback (7.4).
+	 * Influenced newsletter signup rate, 7-day lookback (7.4). Dispatches
+	 * `conversion_journey_influenced_newsletter_7d`; the hub returns one row
+	 * with column `influenced_newsletter_rate`.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
 	public function get_influenced_newsletter_rate_7d( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder( 'rate' );
+		return $this->compute_metric_from_proxy(
+			'conversion_journey_influenced_newsletter_7d',
+			'influenced_newsletter_rate',
+			'rate',
+			$start,
+			$end
+		);
 	}
 
 	// --- Section 8: Opportunity buckets ---------------------------------
@@ -971,20 +1020,57 @@ final class Conversion_Metric {
 	}
 
 	/**
-	 * Top pages that don't convert (8.4) — windowed table. Phase 1 returns
-	 * an empty `rows` array so the React table renders its empty-state row.
-	 * `threshold_pageviews` is the minimum-traffic cutoff (a starting guess
-	 * per the spec; tuned in Phase 2).
+	 * Top pages that don't convert (8.4) — windowed table. Dispatches
+	 * `conversion_journey_top_pages_no_conversion`; the hub returns rows of
+	 * { post_id, page_url, page_title, pageviews, unique_readers,
+	 * conversion_rate }. `threshold_pageviews` is the minimum-traffic cutoff
+	 * (spec starting value of 100; tunable in a future phase).
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, rows: array, threshold_pageviews: int}
+	 * @return array{state: string, rows: array, threshold_pageviews: int}
 	 */
 	public function get_top_pages_no_conversion( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
+		$rows = $this->proxy->query( 'conversion_journey_top_pages_no_conversion', $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return array_merge(
+				$this->error_collection( 'rows', $rows ),
+				[ 'threshold_pageviews' => 100 ]
+			);
+		}
+		if ( ! is_array( $rows ) || ( ! empty( $rows ) && ! is_array( $rows[0] ) ) ) {
+			return array_merge(
+				$this->malformed_collection( 'rows' ),
+				[ 'threshold_pageviews' => 100 ]
+			);
+		}
+		if ( empty( $rows ) ) {
+			return [
+				'state'               => 'empty',
+				'rows'                => [],
+				'threshold_pageviews' => 100,
+			];
+		}
+		$table_rows = [];
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				return array_merge(
+					$this->malformed_collection( 'rows' ),
+					[ 'threshold_pageviews' => 100 ]
+				);
+			}
+			$table_rows[] = [
+				'post_id'         => (int) ( $row['post_id'] ?? 0 ),
+				'page_url'        => (string) ( $row['page_url'] ?? '' ),
+				'page_title'      => (string) ( $row['page_title'] ?? '' ),
+				'pageviews'       => (int) ( $row['pageviews'] ?? 0 ),
+				'unique_readers'  => (int) ( $row['unique_readers'] ?? 0 ),
+				'conversion_rate' => (float) ( $row['conversion_rate'] ?? 0.0 ),
+			];
+		}
 		return [
-			'pending'             => true,
-			'rows'                => [],
+			'state'               => 'populated',
+			'rows'                => $table_rows,
 			'threshold_pageviews' => 100,
 		];
 	}

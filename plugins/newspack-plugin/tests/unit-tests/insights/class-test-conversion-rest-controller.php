@@ -122,10 +122,11 @@ class Test_Conversion_REST_Controller extends WP_UnitTestCase {
 			$this->assertArrayHasKey( $key, $current, "Missing window key: $key" );
 		}
 
-		// A scalar carries the placeholder envelope.
-		$this->assertTrue( $current['influenced_registration_rate_7d']['pending'] );
+		// A wired scalar carries a state envelope (not the legacy pending flag).
+		$this->assertArrayHasKey( 'state', $current['influenced_registration_rate_7d'] );
+		$this->assertArrayNotHasKey( 'pending', $current['influenced_registration_rate_7d'] );
 		$this->assertSame( 'rate', $current['influenced_registration_rate_7d']['placeholder_type'] );
-		// The opportunity table ships empty rows for the empty-state UI.
+		// The opportunity table ships empty rows (error or empty state) for the empty-state UI.
 		$this->assertSame( [], $current['top_pages_no_conversion']['rows'] );
 	}
 
