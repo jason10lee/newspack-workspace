@@ -98,4 +98,12 @@ class Test_Renderer_Controller extends WP_UnitTestCase {
 		$this->assertSame( 'wc', Renderer_Controller::active_engine() );
 		remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
 	}
+
+	/**
+	 * Renders to an empty string for an invalid post instead of fataling on a
+	 * non-WP_Post argument, honoring the documented render_wc() contract.
+	 */
+	public function test_render_wc_returns_empty_string_for_invalid_post() {
+		$this->assertSame( '', Renderer_Controller::render_wc( null ) );
+	}
 }

@@ -83,17 +83,23 @@ class Renderer_Controller {
 	 * renderer so the theme.json filter can apply per-newsletter colors, then
 	 * clears it in a finally block so it is reset even if rendering throws.
 	 *
+	 * Returns an empty string (never fatals) when the post is invalid, the WC
+	 * email-editor package is unavailable, or the renderer throws.
+	 *
 	 * @param \WP_Post $post Newsletter post to render.
 	 * @return string Rendered email HTML, or an empty string when unavailable.
 	 */
 	public static function render_wc( $post ) {
-		$container = \Automattic\WooCommerce\EmailEditor\Email_Editor_Container::container();
-		$renderer  = $container->get( \Automattic\WooCommerce\EmailEditor\Engine\Renderer\Renderer::class );
-		$preheader = (string) get_post_meta( $post->ID, 'preview_text', true );
+		if ( ! $post instanceof \WP_Post || ! class_exists( \Automattic\WooCommerce\EmailEditor\Email_Editor_Container::class ) ) {
+			return '';
+		}
 
 		self::$rendering_post = $post;
 		try {
-			$result = $renderer->render(
+			$container = \Automattic\WooCommerce\EmailEditor\Email_Editor_Container::container();
+			$renderer  = $container->get( \Automattic\WooCommerce\EmailEditor\Engine\Renderer\Renderer::class );
+			$preheader = (string) get_post_meta( $post->ID, 'preview_text', true );
+			$result    = $renderer->render(
 				$post,
 				(string) $post->post_title,
 				$preheader,
@@ -101,11 +107,13 @@ class Renderer_Controller {
 				'',
 				Editor_Bootstrap::TEMPLATE_SLUG
 			);
+			return isset( $result['html'] ) ? (string) $result['html'] : '';
+		} catch ( \Throwable $e ) {
+			\Newspack_Newsletters_Logger::log( 'Email editor: WC render failed — ' . $e->getMessage() );
+			return '';
 		} finally {
 			self::$rendering_post = null;
 		}
-
-		return isset( $result['html'] ) ? (string) $result['html'] : '';
 	}
 
 	/**
