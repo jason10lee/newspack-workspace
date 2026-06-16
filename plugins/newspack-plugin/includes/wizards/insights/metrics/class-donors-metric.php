@@ -355,6 +355,34 @@ class Donors_Metric {
 		);
 	}
 
+	// -------------------------------------------------------------------------
+	// Conversion Journey (Tab 3) metric wrappers.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * COUNT(DISTINCT customer_id) among $subscriber_ids who completed a
+	 * donation order within the window. List-param — NOT cached.
+	 *
+	 * @param int[]             $subscriber_ids Customer IDs to check.
+	 * @param DateTimeInterface $start          Inclusive window start.
+	 * @param DateTimeInterface $end            Inclusive window end.
+	 * @return int
+	 */
+	public function get_subscriber_donors_in_window( array $subscriber_ids, DateTimeInterface $start, DateTimeInterface $end ): int {
+		return $this->storage->get_subscriber_donors_in_window( $subscriber_ids, $start, $end );
+	}
+
+	/**
+	 * COUNT(DISTINCT customer_id) among $customer_ids who have at least one
+	 * completed donation order (any time). List-param — NOT cached.
+	 *
+	 * @param int[] $customer_ids Customer IDs to check.
+	 * @return int
+	 */
+	public function count_completed_donation_order_customers_by_customer_ids( array $customer_ids ): int {
+		return $this->storage->count_completed_donation_order_customers_by_customer_ids( $customer_ids );
+	}
+
 	/**
 	 * Flush all Tab 7 metric caches. Hook point for NPPD-1605.
 	 *

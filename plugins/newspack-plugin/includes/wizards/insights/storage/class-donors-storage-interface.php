@@ -223,6 +223,34 @@ interface Donors_Storage_Interface {
 	 */
 	public function get_recurring_donor_retention( DateTimeInterface $start, DateTimeInterface $end ): array;
 
+	// -------------------------------------------------------------------------
+	// Conversion Journey (Tab 3) methods — added for NPPD-1609 Phase 2B.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * COUNT(DISTINCT customer_id) among $subscriber_ids who completed a
+	 * donation order (type `shop_order`, status IN wc-completed/wc-processing,
+	 * product IN donation IDs) with `date_created_gmt` in [start, end].
+	 *
+	 * Empty $subscriber_ids returns 0 immediately (no DB round-trip).
+	 *
+	 * @param int[]             $subscriber_ids Customer IDs (active non-donation subscribers).
+	 * @param DateTimeInterface $start          Inclusive window start.
+	 * @param DateTimeInterface $end            Inclusive window end.
+	 * @return int
+	 */
+	public function get_subscriber_donors_in_window( array $subscriber_ids, DateTimeInterface $start, DateTimeInterface $end ): int;
+
+	/**
+	 * COUNT(DISTINCT customer_id) among $customer_ids who have at least one
+	 * completed donation order at any time (status wc-completed/wc-processing,
+	 * product IN donation IDs). Empty input returns 0 immediately.
+	 *
+	 * @param int[] $customer_ids Customer IDs to check.
+	 * @return int
+	 */
+	public function count_completed_donation_order_customers_by_customer_ids( array $customer_ids ): int;
+
 	/**
 	 * Per-product donor performance breakdown. One entry per parent
 	 * donation product (or standalone product), sorted by lifetime
