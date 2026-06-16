@@ -179,22 +179,20 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The five scalar scorecards still on placeholders: two Section 7 influenced
-	 * rates deferred to C14/C15 (Woo-join) and three Section 8 opportunity
-	 * snapshot counts. C7 (influenced_registration_rate_7d) and C8
-	 * (influenced_newsletter_rate_7d) have been wired and are tested separately.
+	 * The three scalar scorecards still on placeholders: three Section 8
+	 * opportunity snapshot counts. C7 (influenced_registration_rate_7d), C8
+	 * (influenced_newsletter_rate_7d), C14 (influenced_subscription_rate_14d),
+	 * and C15 (influenced_donation_rate_14d) have been wired and are tested
+	 * separately.
 	 *
 	 * @return array<string, array{0:string,1:string}>
 	 */
 	public function provide_scalar_methods(): array {
 		return [
-			// Section 7 — Woo-join influenced rates deferred to C14/C15.
-			'influenced_subscription_rate_14d' => [ 'get_influenced_subscription_rate_14d', 'rate' ],
-			'influenced_donation_rate_14d'     => [ 'get_influenced_donation_rate_14d', 'rate' ],
 			// Section 8 — opportunity buckets (snapshot counts).
-			'stale_registered_count'           => [ 'get_stale_registered_count', 'count' ],
-			'at_risk_subscriber_count'         => [ 'get_at_risk_subscriber_count', 'count' ],
-			'lapsed_donor_count'               => [ 'get_lapsed_donor_count', 'count' ],
+			'stale_registered_count'   => [ 'get_stale_registered_count', 'count' ],
+			'at_risk_subscriber_count' => [ 'get_at_risk_subscriber_count', 'count' ],
+			'lapsed_donor_count'       => [ 'get_lapsed_donor_count', 'count' ],
 		];
 	}
 
@@ -246,43 +244,6 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 
 		$this->assertSame( 'hidden', $result['visibility'] );
 		$this->assertSame( 'insufficient_data', $result['visibility_reason'] );
-	}
-
-	/**
-	 * Every Section 3 PieChart returns a pending envelope with a zero total
-	 * and the three zeroed source slices (gate / prompt / direct).
-	 *
-	 * @dataProvider provide_source_mix_methods
-	 * @param string $method Method on Conversion_Metric to call.
-	 */
-	public function test_source_mix_returns_zeroed_slices( string $method ) {
-		[ $start, $end ] = $this->window();
-		$result          = $this->metric->$method( $start, $end );
-
-		$this->assertTrue( $result['pending'] );
-		$this->assertSame( 0, $result['total'] );
-		$this->assertCount( 3, $result['slices'] );
-		$this->assertSame(
-			[ 'gate', 'prompt', 'direct' ],
-			array_column( $result['slices'], 'source' )
-		);
-		foreach ( $result['slices'] as $slice ) {
-			$this->assertSame( 0, $slice['count'] );
-			$this->assertSame( 0.0, $slice['pct'] );
-		}
-	}
-
-	/**
-	 * The still-pending Section 3 PieCharts (subscribers and donors).
-	 * The registrations PieChart (C4) has been wired and is tested separately below.
-	 *
-	 * @return array<string, array{0:string}>
-	 */
-	public function provide_source_mix_methods(): array {
-		return [
-			'subscribers' => [ 'get_source_mix_subscribers' ],
-			'donors'      => [ 'get_source_mix_donors' ],
-		];
 	}
 
 	/**
@@ -905,6 +866,414 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'error', $result['state'] );
 		$this->assertSame( 'bigquery_proxy_http_error', $result['error_code'] );
 		$this->assertSame( 'timeout', $result['error_message'] );
+	}
+
+	// --- C12: get_source_mix_subscribers -----------------------------------
+
+	/**
+	 * Build sample BQ attempt rows for subscriber/donor source-mix tests.
+	 * Two gate rows, one prompt row, one direct row.
+	 *
+	 * @return array
+	 */
+	private function source_mix_rows(): array {
+		return [
+			[
+				'uid'          => '101',
+				'session_id'   => 's1',
+				'attempt_ts'   => 1717000000000000,
+				'gate_post_id' => '55',
+				'popup_id'     => '',
+			],
+			[
+				'uid'          => '102',
+				'session_id'   => 's2',
+				'attempt_ts'   => 1717001000000000,
+				'gate_post_id' => '55',
+				'popup_id'     => '42',
+			],
+			[
+				'uid'          => '103',
+				'session_id'   => 's3',
+				'attempt_ts'   => 1717002000000000,
+				'gate_post_id' => '',
+				'popup_id'     => '42',
+			],
+			[
+				'uid'          => '104',
+				'session_id'   => 's4',
+				'attempt_ts'   => 1717003000000000,
+				'gate_post_id' => '',
+				'popup_id'     => '',
+			],
+		];
+	}
+
+	/**
+	 * C12 populated: proxy returns attempt rows; resolver assigns 1 order per
+	 * non-empty source bucket → correct total, slices, pct values.
+	 */
+	public function test_source_mix_subscribers_returns_populated_slices_on_success() {
+		$rows  = $this->source_mix_rows();
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )
+			->with( 'conversion_journey_source_mix_subscribers' )
+			->willReturn( $rows );
+
+		// Each bucket gets count_completed_orders called once; return 1 for gate
+		// (2 rows), 1 for prompt (1 row), 1 for direct (1 row).
+		$resolver = $this->createMock( Woo_Order_Resolver::class );
+		$resolver->method( 'count_completed_orders' )->willReturn( 1 );
+
+		$metric          = new Conversion_Metric( $proxy, $resolver );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_subscribers( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertArrayNotHasKey( 'pending', $result );
+		$this->assertSame( 3, $result['total'] ); // 1 gate + 1 prompt + 1 direct.
+		$this->assertCount( 3, $result['slices'] );
+
+		$by_source = array_column( $result['slices'], null, 'source' );
+		$this->assertSame( 1, $by_source['gate']['count'] );
+		$this->assertSame( 1, $by_source['prompt']['count'] );
+		$this->assertSame( 1, $by_source['direct']['count'] );
+		// pct = 1/3 each.
+		$this->assertEqualsWithDelta( 1 / 3, $by_source['gate']['pct'], 1e-9 );
+	}
+
+	/**
+	 * C12 empty: proxy returns [] → state 'empty', total=0, slices=[].
+	 */
+	public function test_source_mix_subscribers_returns_empty_state_on_no_rows() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( [] );
+
+		$resolver        = $this->createMock( Woo_Order_Resolver::class );
+		$metric          = new Conversion_Metric( $proxy, $resolver );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_subscribers( $start, $end );
+
+		$this->assertSame( 'empty', $result['state'] );
+		$this->assertSame( 0, $result['total'] );
+		$this->assertSame( [], $result['slices'] );
+	}
+
+	/**
+	 * C12 error: proxy returns WP_Error → state 'error' with code/message, slices=[].
+	 */
+	public function test_source_mix_subscribers_returns_error_state_on_proxy_error() {
+		$wp_error = new \WP_Error( 'bigquery_proxy_http_error', 'HTTP 500' );
+		$proxy    = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( $wp_error );
+
+		$resolver        = $this->createMock( Woo_Order_Resolver::class );
+		$metric          = new Conversion_Metric( $proxy, $resolver );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_subscribers( $start, $end );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_http_error', $result['error_code'] );
+		$this->assertSame( 'HTTP 500', $result['error_message'] );
+		$this->assertSame( [], $result['slices'] );
+	}
+
+	/**
+	 * C12 populated: zero-total guard — when all buckets resolve to 0 orders,
+	 * total=0 and pct=0.0 for all slices (no div-by-zero).
+	 */
+	public function test_source_mix_subscribers_guards_zero_total() {
+		$rows  = $this->source_mix_rows();
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( $rows );
+
+		$resolver = $this->createMock( Woo_Order_Resolver::class );
+		$resolver->method( 'count_completed_orders' )->willReturn( 0 );
+
+		$metric          = new Conversion_Metric( $proxy, $resolver );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_subscribers( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 0, $result['total'] );
+		foreach ( $result['slices'] as $slice ) {
+			$this->assertSame( 0.0, $slice['pct'] );
+		}
+	}
+
+	// --- C13: get_source_mix_donors -----------------------------------------
+
+	/**
+	 * C13 populated: identical logic to C12, different query name.
+	 */
+	public function test_source_mix_donors_returns_populated_slices_on_success() {
+		$rows  = $this->source_mix_rows();
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )
+			->with( 'conversion_journey_source_mix_donors' )
+			->willReturn( $rows );
+
+		$resolver = $this->createMock( Woo_Order_Resolver::class );
+		$resolver->method( 'count_completed_orders' )->willReturn( 1 );
+
+		$metric          = new Conversion_Metric( $proxy, $resolver );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_donors( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertArrayNotHasKey( 'pending', $result );
+		$this->assertSame( 3, $result['total'] );
+		$this->assertCount( 3, $result['slices'] );
+	}
+
+	/**
+	 * C13 empty: proxy returns [] → state 'empty'.
+	 */
+	public function test_source_mix_donors_returns_empty_state_on_no_rows() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( [] );
+
+		$resolver        = $this->createMock( Woo_Order_Resolver::class );
+		$metric          = new Conversion_Metric( $proxy, $resolver );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_donors( $start, $end );
+
+		$this->assertSame( 'empty', $result['state'] );
+		$this->assertSame( 0, $result['total'] );
+		$this->assertSame( [], $result['slices'] );
+	}
+
+	/**
+	 * C13 error: proxy returns WP_Error → state 'error'.
+	 */
+	public function test_source_mix_donors_returns_error_state_on_proxy_error() {
+		$wp_error = new \WP_Error( 'bigquery_proxy_http_error', 'HTTP 503' );
+		$proxy    = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( $wp_error );
+
+		$resolver        = $this->createMock( Woo_Order_Resolver::class );
+		$metric          = new Conversion_Metric( $proxy, $resolver );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_donors( $start, $end );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_http_error', $result['error_code'] );
+		$this->assertSame( 'HTTP 503', $result['error_message'] );
+		$this->assertSame( [], $result['slices'] );
+	}
+
+	// --- C14: get_influenced_subscription_rate_14d --------------------------
+
+	/**
+	 * C14 populated: both proxies return rows; numerator = count_unique_completed_users
+	 * of influenced rows; denominator = count_unique_completed_users of source_mix_subscribers rows.
+	 */
+	public function test_influenced_subscription_rate_14d_returns_populated_rate_on_success() {
+		$influenced_rows = [
+			[
+				'uid'          => '101',
+				'session_id'   => 's1',
+				'attempt_ts'   => 1717000000000000,
+				'gate_post_id' => '55',
+				'popup_id'     => '',
+			],
+		];
+		$all_rows        = $this->source_mix_rows(); // 4 rows.
+
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )
+			->willReturnCallback(
+				function ( string $query_name ) use ( $influenced_rows, $all_rows ) {
+					if ( 'conversion_journey_influenced_subscription_14d' === $query_name ) {
+						return $influenced_rows;
+					}
+					if ( 'conversion_journey_source_mix_subscribers' === $query_name ) {
+						return $all_rows;
+					}
+					return [];
+				}
+			);
+
+		$resolver = $this->createMock( Woo_Order_Resolver::class );
+		$resolver->method( 'count_unique_completed_users' )
+			->willReturnOnConsecutiveCalls( 1, 4 ); // numerator=1, denominator=4 (first call influenced, second source_mix).
+
+		$metric          = new Conversion_Metric( $proxy, $resolver );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_influenced_subscription_rate_14d( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertArrayNotHasKey( 'pending', $result );
+		$this->assertTrue( $result['computable'] );
+		$this->assertSame( 'rate', $result['placeholder_type'] );
+		$this->assertSame( 4, $result['denominator'] );
+		$this->assertEqualsWithDelta( 0.25, $result['value'], 1e-9 ); // 1/4.
+	}
+
+	/**
+	 * C14 zero denominator: denominator query returns rows but resolver returns 0 unique users
+	 * → non-computable zero (not an error).
+	 */
+	public function test_influenced_subscription_rate_14d_returns_noncomputable_zero_when_denominator_is_zero() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( $this->source_mix_rows() );
+
+		$resolver = $this->createMock( Woo_Order_Resolver::class );
+		$resolver->method( 'count_unique_completed_users' )->willReturn( 0 ); // Both numerator and denominator = 0.
+
+		$metric          = new Conversion_Metric( $proxy, $resolver );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_influenced_subscription_rate_14d( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertFalse( $result['computable'] );
+		$this->assertSame( 0, $result['denominator'] );
+		$this->assertSame( 0.0, $result['value'] );
+	}
+
+	/**
+	 * C14 error: influenced proxy returns WP_Error → state 'error'.
+	 */
+	public function test_influenced_subscription_rate_14d_returns_error_on_influenced_proxy_error() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )
+			->willReturnCallback(
+				function ( string $query_name ) {
+					if ( 'conversion_journey_influenced_subscription_14d' === $query_name ) {
+						return new \WP_Error( 'bigquery_proxy_http_error', 'HTTP 500' );
+					}
+					return $this->source_mix_rows();
+				}
+			);
+
+		$resolver        = $this->createMock( Woo_Order_Resolver::class );
+		$metric          = new Conversion_Metric( $proxy, $resolver );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_influenced_subscription_rate_14d( $start, $end );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_http_error', $result['error_code'] );
+		$this->assertSame( 'rate', $result['placeholder_type'] );
+	}
+
+	/**
+	 * C14 error: source_mix_subscribers proxy returns WP_Error → state 'error'.
+	 */
+	public function test_influenced_subscription_rate_14d_returns_error_on_denominator_proxy_error() {
+		$influenced_rows = [
+			[
+				'uid'        => '101',
+				'session_id' => 's1',
+				'attempt_ts' => 1717000000000000,
+			],
+		];
+		$proxy           = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )
+			->willReturnCallback(
+				function ( string $query_name ) use ( $influenced_rows ) {
+					if ( 'conversion_journey_influenced_subscription_14d' === $query_name ) {
+						return $influenced_rows;
+					}
+					return new \WP_Error( 'bigquery_proxy_http_error', 'HTTP 503' );
+				}
+			);
+
+		$resolver        = $this->createMock( Woo_Order_Resolver::class );
+		$metric          = new Conversion_Metric( $proxy, $resolver );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_influenced_subscription_rate_14d( $start, $end );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_http_error', $result['error_code'] );
+		$this->assertSame( 'rate', $result['placeholder_type'] );
+	}
+
+	// --- C15: get_influenced_donation_rate_14d ------------------------------
+
+	/**
+	 * C15 populated: identical logic to C14 with donation queries.
+	 */
+	public function test_influenced_donation_rate_14d_returns_populated_rate_on_success() {
+		$influenced_rows = [
+			[
+				'uid'        => '101',
+				'session_id' => 's1',
+				'attempt_ts' => 1717000000000000,
+			],
+			[
+				'uid'        => '102',
+				'session_id' => 's2',
+				'attempt_ts' => 1717001000000000,
+			],
+		];
+		$all_rows        = $this->source_mix_rows();
+
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )
+			->willReturnCallback(
+				function ( string $query_name ) use ( $influenced_rows, $all_rows ) {
+					if ( 'conversion_journey_influenced_donation_14d' === $query_name ) {
+						return $influenced_rows;
+					}
+					if ( 'conversion_journey_source_mix_donors' === $query_name ) {
+						return $all_rows;
+					}
+					return [];
+				}
+			);
+
+		$resolver = $this->createMock( Woo_Order_Resolver::class );
+		$resolver->method( 'count_unique_completed_users' )
+			->willReturnOnConsecutiveCalls( 2, 4 ); // numerator=2, denominator=4.
+
+		$metric          = new Conversion_Metric( $proxy, $resolver );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_influenced_donation_rate_14d( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertArrayNotHasKey( 'pending', $result );
+		$this->assertTrue( $result['computable'] );
+		$this->assertSame( 'rate', $result['placeholder_type'] );
+		$this->assertSame( 4, $result['denominator'] );
+		$this->assertEqualsWithDelta( 0.5, $result['value'], 1e-9 ); // 2/4.
+	}
+
+	/**
+	 * C15 error: donation proxy returns WP_Error → state 'error'.
+	 */
+	public function test_influenced_donation_rate_14d_returns_error_on_proxy_error() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( new \WP_Error( 'bigquery_proxy_http_error', 'timeout' ) );
+
+		$resolver        = $this->createMock( Woo_Order_Resolver::class );
+		$metric          = new Conversion_Metric( $proxy, $resolver );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_influenced_donation_rate_14d( $start, $end );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_http_error', $result['error_code'] );
+		$this->assertSame( 'rate', $result['placeholder_type'] );
+	}
+
+	/**
+	 * C15 zero denominator: both queries succeed but resolver returns 0 unique users
+	 * → non-computable zero.
+	 */
+	public function test_influenced_donation_rate_14d_returns_noncomputable_zero_when_denominator_is_zero() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( $this->source_mix_rows() );
+
+		$resolver = $this->createMock( Woo_Order_Resolver::class );
+		$resolver->method( 'count_unique_completed_users' )->willReturn( 0 );
+
+		$metric          = new Conversion_Metric( $proxy, $resolver );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_influenced_donation_rate_14d( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertFalse( $result['computable'] );
+		$this->assertSame( 0, $result['denominator'] );
+		$this->assertSame( 0.0, $result['value'] );
 	}
 
 	// --- C9: get_top_pages_no_conversion -----------------------------------

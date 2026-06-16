@@ -375,26 +375,6 @@ final class Conversion_Metric {
 	}
 
 	/**
-	 * Build the three zeroed source slices for a Section 3 PieChart. Phase 1
-	 * returns all three surfaces with zero values so the PieChart renders
-	 * its legend chrome; Phase 2 fills in real counts.
-	 *
-	 * @return array<int, array{source: string, count: int, pct: float}>
-	 */
-	private function source_slices(): array {
-		return array_map(
-			static function ( string $source ): array {
-				return [
-					'source' => $source,
-					'count'  => 0,
-					'pct'    => 0.0,
-				];
-			},
-			self::SOURCES
-		);
-	}
-
-	/**
 	 * Build the three empty per-source series for a Section 4 multi-series
 	 * cumulative distribution (4.2, 4.3). Each series carries an empty
 	 * `points` array; Phase 1 renders the LineChart empty state.
@@ -643,34 +623,116 @@ final class Conversion_Metric {
 	}
 
 	/**
-	 * Source mix for new subscribers (3.2) — gate / prompt / direct.
+	 * Source mix for new subscribers (C12 / 3.2) — gate / prompt / direct.
+	 *
+	 * Fetches `conversion_journey_source_mix_subscribers` checkout-attempt rows
+	 * from the hub, buckets them by source (gate if `gate_post_id` is non-empty;
+	 * else prompt if `popup_id` non-empty; else direct), and Woo-joins each
+	 * non-empty bucket via {@see Woo_Order_Resolver::count_completed_orders()} to
+	 * get the actual subscriber count attributable to that surface. The
+	 * `fetch_paid_attempts_woo_join` memoized cache is shared with C14
+	 * (influenced subscription rate), which reads the same rows for its
+	 * denominator.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, total: int, slices: array<int, array{source: string, count: int, pct: float}>}
+	 * @return array{state: string, total: int, slices: array<int, array{source: string, count: int, pct: float}>}
 	 */
 	public function get_source_mix_subscribers( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return [
-			'pending' => true,
-			'total'   => 0,
-			'slices'  => $this->source_slices(),
-		];
+		return $this->compute_source_mix( 'conversion_journey_source_mix_subscribers', $start, $end );
 	}
 
 	/**
-	 * Source mix for new donors (3.3) — gate / prompt / direct.
+	 * Source mix for new donors (C13 / 3.3) — gate / prompt / direct.
+	 *
+	 * Identical logic to C12 using the `conversion_journey_source_mix_donors`
+	 * query. The memoized cache is shared with C15 (influenced donation rate),
+	 * which reads the same rows for its denominator.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, total: int, slices: array<int, array{source: string, count: int, pct: float}>}
+	 * @return array{state: string, total: int, slices: array<int, array{source: string, count: int, pct: float}>}
 	 */
 	public function get_source_mix_donors( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
+		return $this->compute_source_mix( 'conversion_journey_source_mix_donors', $start, $end );
+	}
+
+	/**
+	 * Shared source-mix computation for C12 and C13.
+	 *
+	 * Fetches attempt rows via `fetch_paid_attempts_woo_join` (memoized), buckets
+	 * by source (gate → prompt → direct), Woo-joins each bucket independently,
+	 * and builds the { state, total, slices } collection.
+	 *
+	 * @param string            $query_name Hub catalog query name.
+	 * @param DateTimeInterface $start      Window start.
+	 * @param DateTimeInterface $end        Window end.
+	 * @return array
+	 */
+	private function compute_source_mix( string $query_name, DateTimeInterface $start, DateTimeInterface $end ): array {
+		$joined = $this->fetch_paid_attempts_woo_join( $query_name, $start, $end );
+		if ( is_wp_error( $joined ) ) {
+			return $this->error_collection( 'slices', $joined );
+		}
+
+		$rows = $joined['rows'];
+
+		if ( empty( $rows ) ) {
+			return [
+				'state'  => 'empty',
+				'total'  => 0,
+				'slices' => [],
+			];
+		}
+
+		// Bucket rows by source. Each row's source is classified:
+		// gate   — gate_post_id is non-empty.
+		// prompt — gate_post_id is empty but popup_id is non-empty.
+		// direct — both are empty.
+		$buckets = [
+			'gate'   => [],
+			'prompt' => [],
+			'direct' => [],
+		];
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				return $this->malformed_collection( 'slices' );
+			}
+			if ( ! empty( $row['gate_post_id'] ) ) {
+				$buckets['gate'][] = $row;
+			} elseif ( ! empty( $row['popup_id'] ) ) {
+				$buckets['prompt'][] = $row;
+			} else {
+				$buckets['direct'][] = $row;
+			}
+		}
+
+		// For each non-empty bucket, Woo-join to get the completed-order count.
+		$counts = [];
+		$total  = 0;
+		foreach ( self::SOURCES as $source ) {
+			$count          = empty( $buckets[ $source ] )
+				? 0
+				: $this->woo_resolver->count_completed_orders( $buckets[ $source ] );
+			$counts[ $source ] = $count;
+			$total            += $count;
+		}
+
+		$safe   = $total > 0 ? $total : 1;
+		$slices = [];
+		foreach ( self::SOURCES as $source ) {
+			$count    = $counts[ $source ];
+			$slices[] = [
+				'source' => $source,
+				'count'  => $count,
+				'pct'    => (float) ( $count / $safe ),
+			];
+		}
+
 		return [
-			'pending' => true,
-			'total'   => 0,
-			'slices'  => $this->source_slices(),
+			'state'  => 'populated',
+			'total'  => $total,
+			'slices' => $slices,
 		];
 	}
 
@@ -925,27 +987,92 @@ final class Conversion_Metric {
 	}
 
 	/**
-	 * Influenced subscription rate, 14-day lookback (7.2).
+	 * Influenced subscription rate, 14-day lookback (C14 / 7.2).
+	 *
+	 * Rate = (unique users who had a checkout attempt in `conversion_journey_influenced_subscription_14d`
+	 *         AND completed a Woo order) / (unique users who had any subscription attempt
+	 *         in `conversion_journey_source_mix_subscribers` AND completed a Woo order).
+	 *
+	 * Both fetches go through `fetch_paid_attempts_woo_join` so the
+	 * `source_mix_subscribers` rows are memoized and shared with C12. If EITHER
+	 * proxy call fails → error_scalar. Denominator = 0 → non-computable zero.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
 	public function get_influenced_subscription_rate_14d( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder( 'rate' );
+		return $this->compute_influenced_rate(
+			'conversion_journey_influenced_subscription_14d',
+			'conversion_journey_source_mix_subscribers',
+			$start,
+			$end
+		);
 	}
 
 	/**
-	 * Influenced donation rate, 14-day lookback (7.3).
+	 * Influenced donation rate, 14-day lookback (C15 / 7.3).
+	 *
+	 * Identical logic to C14 using the donation catalog queries.
+	 * The `source_mix_donors` fetch is memoized and shared with C13.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
 	public function get_influenced_donation_rate_14d( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder( 'rate' );
+		return $this->compute_influenced_rate(
+			'conversion_journey_influenced_donation_14d',
+			'conversion_journey_source_mix_donors',
+			$start,
+			$end
+		);
+	}
+
+	/**
+	 * Shared influenced-rate computation for C14 and C15.
+	 *
+	 * Fetches the influenced attempt rows (`$influenced_query`) and the full
+	 * population rows (`$population_query`) via `fetch_paid_attempts_woo_join`,
+	 * Woo-joins both via `count_unique_completed_users`, and returns the rate as
+	 * a `placeholder_type: 'rate'` scalar envelope.
+	 *
+	 * @param string            $influenced_query  Hub catalog query for influenced-subset rows.
+	 * @param string            $population_query  Hub catalog query for all-attempts rows.
+	 * @param DateTimeInterface $start             Window start.
+	 * @param DateTimeInterface $end               Window end.
+	 * @return array
+	 */
+	private function compute_influenced_rate(
+		string $influenced_query,
+		string $population_query,
+		DateTimeInterface $start,
+		DateTimeInterface $end
+	): array {
+		$influenced_joined = $this->fetch_paid_attempts_woo_join( $influenced_query, $start, $end );
+		if ( is_wp_error( $influenced_joined ) ) {
+			return $this->error_scalar( 'rate', $influenced_joined );
+		}
+
+		$population_joined = $this->fetch_paid_attempts_woo_join( $population_query, $start, $end );
+		if ( is_wp_error( $population_joined ) ) {
+			return $this->error_scalar( 'rate', $population_joined );
+		}
+
+		$numerator   = $this->woo_resolver->count_unique_completed_users( $influenced_joined['rows'] );
+		$denominator = $this->woo_resolver->count_unique_completed_users( $population_joined['rows'] );
+
+		if ( $denominator <= 0 ) {
+			// Legitimate non-computable: no converting subscribers/donors in window.
+			return $this->populated_scalar( 0.0, false, 0, 'rate' );
+		}
+
+		return $this->populated_scalar(
+			(float) ( $numerator / $denominator ),
+			true,
+			$denominator,
+			'rate'
+		);
 	}
 
 	/**
