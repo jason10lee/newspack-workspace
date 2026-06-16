@@ -77,6 +77,10 @@ class Wizards {
 		if ( Memberships::is_active() ) {
 			self::$wizards['audience-subscriptions'] = new Audience_Subscriptions();
 		}
+		// RSM exploratory: surface the Subscription Products page where Woo Subscriptions is available.
+		if ( class_exists( 'WC_Subscriptions' ) || function_exists( 'wcs_get_subscriptions' ) ) {
+			self::$wizards['audience-subscription-products'] = new Audience_Subscription_Products();
+		}
 
 		// Insights wizard + section init are gated together. The wizard's
 		// own constructor short-circuits when the feature flag is off and
