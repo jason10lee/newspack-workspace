@@ -72,7 +72,7 @@ class Renderer_Controller {
 	 *
 	 * @return \WP_Post|null The render post, or null when not rendering.
 	 */
-	public static function get_rendering_post() {
+	public static function get_rendering_post(): ?\WP_Post {
 		return self::$rendering_post;
 	}
 
@@ -86,14 +86,17 @@ class Renderer_Controller {
 	 * Returns an empty string (never fatals) when the post is invalid, the WC
 	 * email-editor package is unavailable, or the renderer throws.
 	 *
-	 * @param \WP_Post $post Newsletter post to render.
+	 * @param \WP_Post|null $post Newsletter post to render.
 	 * @return string Rendered email HTML, or an empty string when unavailable.
 	 */
-	public static function render_wc( $post ) {
+	public static function render_wc( ?\WP_Post $post ): string {
 		if ( ! $post instanceof \WP_Post || ! class_exists( \Automattic\WooCommerce\EmailEditor\Email_Editor_Container::class ) ) {
 			return '';
 		}
 
+		// Save/restore rather than clear so a nested render_wc() (post B mid-render
+		// of post A) leaves the outer render's post intact when the inner one returns.
+		$previous             = self::$rendering_post;
 		self::$rendering_post = $post;
 		try {
 			$container = \Automattic\WooCommerce\EmailEditor\Email_Editor_Container::container();
@@ -103,7 +106,7 @@ class Renderer_Controller {
 				$post,
 				(string) $post->post_title,
 				$preheader,
-				'en',
+				(string) get_bloginfo( 'language' ),
 				'',
 				Editor_Bootstrap::TEMPLATE_SLUG
 			);
@@ -112,7 +115,7 @@ class Renderer_Controller {
 			\Newspack_Newsletters_Logger::log( 'Email editor: WC render failed — ' . $e->getMessage() );
 			return '';
 		} finally {
-			self::$rendering_post = null;
+			self::$rendering_post = $previous;
 		}
 	}
 
@@ -121,7 +124,7 @@ class Renderer_Controller {
 	 *
 	 * @return string self::ENGINE_WC when the WC renderer flag is on, else self::ENGINE_MJML.
 	 */
-	public static function active_engine() {
+	public static function active_engine(): string {
 		return Feature_Flag::is_enabled() ? self::ENGINE_WC : self::ENGINE_MJML;
 	}
 }

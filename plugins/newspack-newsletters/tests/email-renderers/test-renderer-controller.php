@@ -106,4 +106,29 @@ class Test_Renderer_Controller extends WP_UnitTestCase {
 	public function test_render_wc_returns_empty_string_for_invalid_post() {
 		$this->assertSame( '', Renderer_Controller::render_wc( null ) );
 	}
+
+	/**
+	 * A failure raised inside the package renderer is swallowed: render_wc() logs
+	 * and returns an empty string instead of letting the \Throwable escape, and the
+	 * render post is still cleared by the finally block.
+	 *
+	 * Forces the failure by hooking the theme.json filter (which fires inside the
+	 * render) to throw, exercising the catch ( \Throwable ) branch directly.
+	 */
+	public function test_render_wc_returns_empty_string_when_renderer_throws() {
+		\Newspack\Newsletters\Email_Renderers\Editor_Bootstrap::init();
+		$post_id = $this->create_newsletter_with_paragraph( 'Boom' );
+
+		$thrower = function () {
+			throw new \RuntimeException( 'forced render failure' );
+		};
+		add_filter( 'woocommerce_email_editor_theme_json', $thrower, 99 );
+
+		$html = Renderer_Controller::render_wc( get_post( $post_id ) );
+
+		remove_filter( 'woocommerce_email_editor_theme_json', $thrower, 99 );
+
+		$this->assertSame( '', $html );
+		$this->assertNull( Renderer_Controller::get_rendering_post(), 'render post is cleared even when rendering throws' );
+	}
 }
