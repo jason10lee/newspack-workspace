@@ -1114,7 +1114,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 
 		$resolver = $this->createMock( Woo_Order_Resolver::class );
 		$resolver->method( 'count_unique_completed_users' )
-			->willReturnOnConsecutiveCalls( 2, 4 ); // numerator=2, denominator=4.
+			->willReturnOnConsecutiveCalls( 2, 4 ); // First call is the numerator, second the denominator.
 
 		$metric          = new Conversion_Metric( $proxy, $resolver );
 		[ $start, $end ] = $this->window();
