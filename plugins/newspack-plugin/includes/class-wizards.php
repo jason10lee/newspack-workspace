@@ -81,6 +81,11 @@ class Wizards {
 		if ( class_exists( 'WC_Subscriptions' ) || function_exists( 'wcs_get_subscriptions' ) ) {
 			self::$wizards['audience-subscription-products'] = new Audience_Subscription_Products();
 		}
+		// RSM exploratory: the pricing-rules manager, available when the
+		// dynamic-pricing engine plugin is active (it owns the rules REST).
+		if ( class_exists( 'Automattic\\WooCommerce\\DynamicPricing\\Dynamic_Pricing' ) ) {
+			self::$wizards['audience-pricing-rules'] = new Audience_Pricing_Rules();
+		}
 
 		// Insights wizard + section init are gated together. The wizard's
 		// own constructor short-circuits when the feature flag is off and
