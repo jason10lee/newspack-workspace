@@ -3,8 +3,13 @@
  *
  * Three snapshot scorecards (stale registered readers, at-risk
  * subscribers, lapsed donors) above a full-width "top pages that don't
- * convert" table. The scorecards are current-state counts — no comparison
- * deltas. Phase 1 renders the table's empty-state row.
+ * convert" table (8.4). The scorecards are current-state counts — no
+ * comparison deltas.
+ *
+ * Phase 2: scalar metrics (8.1–8.3) use `state` ('error' | 'populated' |
+ * 'coming_soon'). The table (8.4) uses the full `ConversionMetricState`
+ * and is gated via SectionState. The `scalarToMetricCardProps` helper maps
+ * `coming_soon` to `pending: true` on the MetricCard.
  */
 
 /**
@@ -21,6 +26,7 @@ import SectionHeading from '../components/SectionHeading';
 import { formatNumber, formatPercent } from '../components/format';
 import { scalarToMetricCardProps } from './scalarToCard';
 import SortableTable, { type SortableColumn } from './viz/SortableTable';
+import SectionState from './SectionState';
 
 export interface OpportunityBucketsSectionProps {
 	current: ConversionWindow;
@@ -108,12 +114,8 @@ const OpportunityBucketsSection = ( { current }: OpportunityBucketsSectionProps 
 		</div>
 		<div className="newspack-insights__conversion-top-pages">
 			<h3 className="newspack-insights__conversion-subheading">{ __( 'Top pages that don’t convert', 'newspack-plugin' ) }</h3>
-			<SortableTable
-				columns={ TOP_PAGES_COLUMNS }
-				rows={ current.top_pages_no_conversion.rows }
-				getRowKey={ row => row.post_id }
-				defaultSortKey="pageviews"
-				initialRowLimit={ TOP_PAGES_ROW_LIMIT }
+			<SectionState
+				state={ current.top_pages_no_conversion.state }
 				emptyMessage={ sprintf(
 					/* translators: %s: minimum pageview count for a page to qualify (formatted). */
 					__(
@@ -122,7 +124,23 @@ const OpportunityBucketsSection = ( { current }: OpportunityBucketsSectionProps 
 					),
 					formatNumber( current.top_pages_no_conversion.threshold_pageviews )
 				) }
-			/>
+			>
+				<SortableTable
+					columns={ TOP_PAGES_COLUMNS }
+					rows={ current.top_pages_no_conversion.rows }
+					getRowKey={ row => row.post_id }
+					defaultSortKey="pageviews"
+					initialRowLimit={ TOP_PAGES_ROW_LIMIT }
+					emptyMessage={ sprintf(
+						/* translators: %s: minimum pageview count for a page to qualify (formatted). */
+						__(
+							'No qualifying pages yet. Pages with at least %s pageviews and a measurable conversion rate will appear here.',
+							'newspack-plugin'
+						),
+						formatNumber( current.top_pages_no_conversion.threshold_pageviews )
+					) }
+				/>
+			</SectionState>
 			<p className="newspack-insights__conversion-top-pages-note">
 				{ __(
 					'These pages get traffic but don’t drive registrations. Consider adding a gate or prompt where engagement is high but conversion is low.',

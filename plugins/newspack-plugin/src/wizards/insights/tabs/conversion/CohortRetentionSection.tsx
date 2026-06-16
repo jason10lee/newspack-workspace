@@ -3,8 +3,10 @@
  *
  * Two stacked multi-series cohort LineCharts (registration → conversion,
  * subscriber retention), each with a hardcoded reference-line target.
- * Snapshot — refreshed weekly, independent of the date picker. Phase 1
- * renders the empty state per chart.
+ * Snapshot — refreshed weekly, independent of the date picker.
+ *
+ * Phase 2: both metrics (5.1, 5.2) are `coming_soon` (Phase B). Each
+ * chart's rendering is gated on the metric's `state` envelope.
  */
 
 /**
@@ -18,6 +20,7 @@ import { __ } from '@wordpress/i18n';
 import type { ConversionCohortData } from '../../api/conversion';
 import SectionHeading from '../components/SectionHeading';
 import LineChart, { type LineSeries } from './viz/LineChart';
+import SectionState from './SectionState';
 
 export interface CohortRetentionSectionProps {
 	current: {
@@ -41,12 +44,14 @@ interface CohortChartProps {
 const CohortChart = ( { title, data }: CohortChartProps ) => (
 	<div className="newspack-insights__conversion-cohort-cell">
 		<h3 className="newspack-insights__conversion-subheading">{ title }</h3>
-		<LineChart
-			series={ toCohortSeries( data ) }
-			referenceLine={ data.reference_line }
-			yMax={ 1 }
-			emptyMessage={ __( 'Cohort data will appear after the first weekly refresh.', 'newspack-plugin' ) }
-		/>
+		<SectionState state={ data.state } emptyMessage={ __( 'Cohort data will appear after the first weekly refresh.', 'newspack-plugin' ) }>
+			<LineChart
+				series={ toCohortSeries( data ) }
+				referenceLine={ data.reference_line }
+				yMax={ 1 }
+				emptyMessage={ __( 'Cohort data will appear after the first weekly refresh.', 'newspack-plugin' ) }
+			/>
+		</SectionState>
 	</div>
 );
 
@@ -59,7 +64,7 @@ const CohortRetentionSection = ( { current }: CohortRetentionSectionProps ) => (
 			id="newspack-insights-conversion-cohort-heading"
 			title={ __( 'Cohort retention', 'newspack-plugin' ) }
 			description={ __(
-				'Retention curves by monthly cohort. The vertical axis is the share of each cohort still on a given lifecycle stage at each point in time. Updated weekly (see callout above).',
+				'Retention curves by monthly cohort. The vertical axis is the share of each cohort still on a given lifecycle stage at each point in time. Updated weekly.',
 				'newspack-plugin'
 			) }
 		/>
