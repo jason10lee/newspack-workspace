@@ -1,6 +1,6 @@
 <?php
 /**
- * Test Conversion_Metric (NPPD-1609, Phase 1).
+ * Test Conversion_Metric (NPPD-1609, Phase 1 + Phase 2A).
  *
  * Phase 1 orchestrator returns placeholder envelopes only — no proxy, no
  * SQL. These tests pin the envelope shape every Phase 2 swap must preserve:
@@ -11,6 +11,10 @@
  * collections (4.4 visibility-gated); the two cohorts carry empty `cohorts`
  * + a hardcoded reference line; the weekly trends carry empty `weeks` + the
  * series keys; and the opportunity table carries empty `rows` + a threshold.
+ *
+ * Phase 2A (C2–C5): four methods are now wired to BigQuery via the proxy.
+ * Their old `pending: true` placeholders are replaced by state-envelope
+ * tests that cover populated / empty / error paths.
  *
  * @package Newspack\Tests\Insights
  */
@@ -37,6 +41,18 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 * @var Conversion_Metric
 	 */
 	private $metric;
+
+	/**
+	 * Mock proxy stub that returns the given value for every query() call.
+	 *
+	 * @param mixed $return Value the mock proxy returns (rows array or WP_Error).
+	 * @return BigQuery_Proxy_Client
+	 */
+	private function proxy_returning( $return ): BigQuery_Proxy_Client {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( $return );
+		return $proxy;
+	}
 
 	/**
 	 * Set up.
@@ -205,15 +221,15 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The five funnels and their stage counts: the Section 1 lifecycle
-	 * funnel (5) and the four Section 2 per-journey funnels (3/3/3/2).
+	 * The still-pending funnel methods: two Section 2 per-journey funnels
+	 * (3/3/2) plus the visibility-gated cross-upsell funnel. The lifecycle
+	 * (C2) and anon-to-registered (C3) funnels have been wired and are tested
+	 * separately below.
 	 *
 	 * @return array<string, array{0:string,1:int}>
 	 */
 	public function provide_funnel_methods(): array {
 		return [
-			'reader_lifecycle'         => [ 'get_reader_lifecycle_funnel', 5 ],
-			'anonymous_to_registered'  => [ 'get_anonymous_to_registered_funnel', 3 ],
 			'registered_to_subscriber' => [ 'get_registered_to_subscriber_funnel', 3 ],
 			'registered_to_donor'      => [ 'get_registered_to_donor_funnel', 3 ],
 			'subscriber_to_donor'      => [ 'get_subscriber_to_donor_funnel', 2 ],
@@ -257,15 +273,15 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The three Section 3 PieCharts.
+	 * The still-pending Section 3 PieCharts (subscribers and donors).
+	 * The registrations PieChart (C4) has been wired and is tested separately below.
 	 *
 	 * @return array<string, array{0:string}>
 	 */
 	public function provide_source_mix_methods(): array {
 		return [
-			'registrations' => [ 'get_source_mix_registrations' ],
-			'subscribers'   => [ 'get_source_mix_subscribers' ],
-			'donors'        => [ 'get_source_mix_donors' ],
+			'subscribers' => [ 'get_source_mix_subscribers' ],
+			'donors'      => [ 'get_source_mix_donors' ],
 		];
 	}
 
@@ -286,13 +302,13 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The single-series cumulative distributions (4.1 and 4.4).
+	 * The still-pending single-series cumulative distributions (4.4 only).
+	 * The time-to-register distribution (C5) has been wired and is tested separately below.
 	 *
 	 * @return array<string, array{0:string}>
 	 */
 	public function provide_single_series_distribution_methods(): array {
 		return [
-			'time_to_register'        => [ 'get_time_to_register_distribution' ],
 			'subscriber_to_donor_lag' => [ 'get_subscriber_to_donor_lag_distribution' ],
 		];
 	}
@@ -397,5 +413,361 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertTrue( $result['pending'] );
 		$this->assertSame( [], $result['rows'] );
 		$this->assertSame( 100, $result['threshold_pageviews'] );
+	}
+
+	// --- Phase 2A wired method tests (C2–C5) --------------------------------
+
+	// --- C2: get_reader_lifecycle_funnel ------------------------------------
+
+	/**
+	 * C2 populated: proxy returns one row with five step counts → builds five
+	 * stages with correct labels, counts, and pct_of_top proportions.
+	 */
+	public function test_lifecycle_funnel_returns_populated_stages_on_success() {
+		$row    = [
+			'step_1_anonymous'  => 1000,
+			'step_2_engaged'    => 600,
+			'step_3_registered' => 300,
+			'step_4_subscriber' => 120,
+			'step_5_supporter'  => 60,
+		];
+		$metric = new Conversion_Metric( $this->proxy_returning( [ $row ] ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_reader_lifecycle_funnel( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertArrayNotHasKey( 'pending', $result );
+		$this->assertCount( 5, $result['stages'] );
+
+		// Stage 1: top of funnel → pct_of_top must be 1.0.
+		$this->assertSame( 1000, $result['stages'][0]['count'] );
+		$this->assertSame( 1.0, $result['stages'][0]['pct_of_top'] );
+
+		// Stage 5: 60 / 1000 = 0.06.
+		$this->assertSame( 60, $result['stages'][4]['count'] );
+		$this->assertEqualsWithDelta( 0.06, $result['stages'][4]['pct_of_top'], 1e-9 );
+
+		// Every stage must have a non-empty label.
+		foreach ( $result['stages'] as $stage ) {
+			$this->assertNotSame( '', $stage['label'] );
+		}
+	}
+
+	/**
+	 * C2 populated: zero anonymous readers (division-by-zero guard) → pct_of_top
+	 * for all stages is 0.0, not NaN/Inf.
+	 */
+	public function test_lifecycle_funnel_guards_zero_top_stage() {
+		$row    = [
+			'step_1_anonymous'  => 0,
+			'step_2_engaged'    => 0,
+			'step_3_registered' => 0,
+			'step_4_subscriber' => 0,
+			'step_5_supporter'  => 0,
+		];
+		$metric = new Conversion_Metric( $this->proxy_returning( [ $row ] ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_reader_lifecycle_funnel( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		foreach ( $result['stages'] as $stage ) {
+			$this->assertSame( 0.0, $stage['pct_of_top'] );
+		}
+	}
+
+	/**
+	 * C2 empty: proxy returns [] → state 'empty', empty stages array.
+	 */
+	public function test_lifecycle_funnel_returns_empty_state_on_no_rows() {
+		$metric          = new Conversion_Metric( $this->proxy_returning( [] ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_reader_lifecycle_funnel( $start, $end );
+
+		$this->assertSame( 'empty', $result['state'] );
+		$this->assertSame( [], $result['stages'] );
+	}
+
+	/**
+	 * C2 error: proxy returns WP_Error → state 'error' with code/message.
+	 */
+	public function test_lifecycle_funnel_returns_error_state_on_proxy_error() {
+		$wp_error        = new \WP_Error( 'bigquery_proxy_http_error', 'HTTP 500' );
+		$metric          = new Conversion_Metric( $this->proxy_returning( $wp_error ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_reader_lifecycle_funnel( $start, $end );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_http_error', $result['error_code'] );
+		$this->assertSame( 'HTTP 500', $result['error_message'] );
+		$this->assertSame( [], $result['stages'] );
+	}
+
+	// --- C3: get_anonymous_to_registered_funnel ----------------------------
+
+	/**
+	 * C3 populated: proxy returns one row with three step counts → three stages.
+	 */
+	public function test_anon_to_registered_funnel_returns_populated_stages_on_success() {
+		$row    = [
+			'step_1_anonymous'              => 500,
+			'step_2_saw_conversion_surface' => 200,
+			'step_3_registered'             => 80,
+		];
+		$metric = new Conversion_Metric( $this->proxy_returning( [ $row ] ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_anonymous_to_registered_funnel( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertArrayNotHasKey( 'pending', $result );
+		$this->assertCount( 3, $result['stages'] );
+
+		// Stage 1: top → pct_of_top must be 1.0.
+		$this->assertSame( 500, $result['stages'][0]['count'] );
+		$this->assertSame( 1.0, $result['stages'][0]['pct_of_top'] );
+
+		// Stage 3: 80 / 500 = 0.16.
+		$this->assertSame( 80, $result['stages'][2]['count'] );
+		$this->assertEqualsWithDelta( 0.16, $result['stages'][2]['pct_of_top'], 1e-9 );
+
+		// Every stage must have a non-empty label.
+		foreach ( $result['stages'] as $stage ) {
+			$this->assertNotSame( '', $stage['label'] );
+		}
+	}
+
+	/**
+	 * C3 populated: zero anonymous (division-by-zero guard).
+	 */
+	public function test_anon_to_registered_funnel_guards_zero_top_stage() {
+		$row    = [
+			'step_1_anonymous'              => 0,
+			'step_2_saw_conversion_surface' => 0,
+			'step_3_registered'             => 0,
+		];
+		$metric = new Conversion_Metric( $this->proxy_returning( [ $row ] ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_anonymous_to_registered_funnel( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		foreach ( $result['stages'] as $stage ) {
+			$this->assertSame( 0.0, $stage['pct_of_top'] );
+		}
+	}
+
+	/**
+	 * C3 empty: proxy returns [] → state 'empty', empty stages array.
+	 */
+	public function test_anon_to_registered_funnel_returns_empty_state_on_no_rows() {
+		$metric          = new Conversion_Metric( $this->proxy_returning( [] ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_anonymous_to_registered_funnel( $start, $end );
+
+		$this->assertSame( 'empty', $result['state'] );
+		$this->assertSame( [], $result['stages'] );
+	}
+
+	/**
+	 * C3 error: proxy returns WP_Error → state 'error' with code/message.
+	 */
+	public function test_anon_to_registered_funnel_returns_error_state_on_proxy_error() {
+		$wp_error        = new \WP_Error( 'bigquery_proxy_http_error', 'HTTP 503' );
+		$metric          = new Conversion_Metric( $this->proxy_returning( $wp_error ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_anonymous_to_registered_funnel( $start, $end );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_http_error', $result['error_code'] );
+		$this->assertSame( 'HTTP 503', $result['error_message'] );
+		$this->assertSame( [], $result['stages'] );
+	}
+
+	// --- C4: get_source_mix_registrations ----------------------------------
+
+	/**
+	 * C4 populated: proxy returns rows of {source, registrations} → correct
+	 * total and per-slice counts and pct values.
+	 */
+	public function test_source_mix_registrations_returns_populated_slices_on_success() {
+		$rows   = [
+			[
+				'source'        => 'gate',
+				'registrations' => 400,
+			],
+			[
+				'source'        => 'prompt',
+				'registrations' => 350,
+			],
+			[
+				'source'        => 'direct',
+				'registrations' => 250,
+			],
+		];
+		$metric = new Conversion_Metric( $this->proxy_returning( $rows ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_registrations( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertArrayNotHasKey( 'pending', $result );
+		$this->assertSame( 1000, $result['total'] );
+		$this->assertCount( 3, $result['slices'] );
+
+		// Check gate slice.
+		$by_source = array_column( $result['slices'], null, 'source' );
+		$this->assertSame( 400, $by_source['gate']['count'] );
+		$this->assertEqualsWithDelta( 0.4, $by_source['gate']['pct'], 1e-9 );
+		$this->assertSame( 350, $by_source['prompt']['count'] );
+		$this->assertEqualsWithDelta( 0.35, $by_source['prompt']['pct'], 1e-9 );
+		$this->assertSame( 250, $by_source['direct']['count'] );
+		$this->assertEqualsWithDelta( 0.25, $by_source['direct']['pct'], 1e-9 );
+	}
+
+	/**
+	 * C4 empty: proxy returns [] → state 'empty', slices and total zeroed.
+	 */
+	public function test_source_mix_registrations_returns_empty_state_on_no_rows() {
+		$metric          = new Conversion_Metric( $this->proxy_returning( [] ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_registrations( $start, $end );
+
+		$this->assertSame( 'empty', $result['state'] );
+		$this->assertSame( 0, $result['total'] );
+		$this->assertSame( [], $result['slices'] );
+	}
+
+	/**
+	 * C4 error: proxy returns WP_Error → state 'error' with code/message.
+	 */
+	public function test_source_mix_registrations_returns_error_state_on_proxy_error() {
+		$wp_error        = new \WP_Error( 'bigquery_proxy_http_error', 'timeout' );
+		$metric          = new Conversion_Metric( $this->proxy_returning( $wp_error ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_registrations( $start, $end );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_http_error', $result['error_code'] );
+		$this->assertSame( 'timeout', $result['error_message'] );
+		$this->assertSame( [], $result['slices'] );
+	}
+
+	// --- C5: get_time_to_register_distribution -----------------------------
+
+	/**
+	 * C5 populated: proxy returns per-day rows → CDF computed in PHP, sorted
+	 * by day, each point has cumulative_pct rounded to 4 decimal places.
+	 */
+	public function test_time_to_register_returns_cdf_points_on_success() {
+		// 100 conversions: 50 on day 1, 30 on day 3, 20 on day 7.
+		$rows   = [
+			[
+				'days'        => 3,
+				'conversions' => 30,
+			],
+			[
+				'days'        => 7,
+				'conversions' => 20,
+			],
+			[
+				'days'        => 1,
+				'conversions' => 50,
+			],
+		];
+		$metric = new Conversion_Metric( $this->proxy_returning( $rows ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_time_to_register_distribution( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertArrayNotHasKey( 'pending', $result );
+		$this->assertArrayHasKey( 'points', $result );
+
+		// Points must be sorted by day.
+		$points = $result['points'];
+		$this->assertCount( 3, $points );
+		$this->assertSame( 1, $points[0]['day'] );
+		$this->assertSame( 3, $points[1]['day'] );
+		$this->assertSame( 7, $points[2]['day'] );
+
+		// CDF: day 1 = 50/100 = 0.5, day 3 = 80/100 = 0.8, day 7 = 100/100 = 1.0.
+		$this->assertSame( 0.5, $points[0]['cumulative_pct'] );
+		$this->assertSame( 0.8, $points[1]['cumulative_pct'] );
+		$this->assertSame( 1.0, $points[2]['cumulative_pct'] );
+	}
+
+	/**
+	 * C5 populated: cumulative_pct values are rounded to 4 decimal places.
+	 */
+	public function test_time_to_register_rounds_cumulative_pct_to_4dp() {
+		// 3 conversions: 1+1+1 → each point is 1/3, 2/3, 3/3.
+		$rows   = [
+			[
+				'days'        => 1,
+				'conversions' => 1,
+			],
+			[
+				'days'        => 2,
+				'conversions' => 1,
+			],
+			[
+				'days'        => 3,
+				'conversions' => 1,
+			],
+		];
+		$metric = new Conversion_Metric( $this->proxy_returning( $rows ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_time_to_register_distribution( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		// 1/3 ≈ 0.3333, 2/3 ≈ 0.6667, 3/3 = 1.0.
+		$this->assertSame( round( 1 / 3, 4 ), $result['points'][0]['cumulative_pct'] );
+		$this->assertSame( round( 2 / 3, 4 ), $result['points'][1]['cumulative_pct'] );
+		$this->assertSame( 1.0, $result['points'][2]['cumulative_pct'] );
+	}
+
+	/**
+	 * C5 empty: proxy returns [] → state 'empty', empty points.
+	 */
+	public function test_time_to_register_returns_empty_state_on_no_rows() {
+		$metric          = new Conversion_Metric( $this->proxy_returning( [] ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_time_to_register_distribution( $start, $end );
+
+		$this->assertSame( 'empty', $result['state'] );
+		$this->assertSame( [], $result['points'] );
+	}
+
+	/**
+	 * C5 empty: rows sum to zero conversions → state 'empty'.
+	 */
+	public function test_time_to_register_returns_empty_state_on_zero_total() {
+		$rows            = [
+			[
+				'days'        => 1,
+				'conversions' => 0,
+			],
+			[
+				'days'        => 2,
+				'conversions' => 0,
+			],
+		];
+		$metric          = new Conversion_Metric( $this->proxy_returning( $rows ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_time_to_register_distribution( $start, $end );
+
+		$this->assertSame( 'empty', $result['state'] );
+		$this->assertSame( [], $result['points'] );
+	}
+
+	/**
+	 * C5 error: proxy returns WP_Error → state 'error' with code/message.
+	 */
+	public function test_time_to_register_returns_error_state_on_proxy_error() {
+		$wp_error        = new \WP_Error( 'bigquery_proxy_http_error', 'Bad gateway' );
+		$metric          = new Conversion_Metric( $this->proxy_returning( $wp_error ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_time_to_register_distribution( $start, $end );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_http_error', $result['error_code'] );
+		$this->assertSame( 'Bad gateway', $result['error_message'] );
+		$this->assertSame( [], $result['points'] );
 	}
 }

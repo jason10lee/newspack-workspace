@@ -1,15 +1,14 @@
 <?php
 /**
- * Newspack Insights — Conversion Journey Metric orchestrator (NPPD-1609, Phase 1).
+ * Newspack Insights — Conversion Journey Metric orchestrator (NPPD-1609, Phase 2A).
  *
- * Phase 1 placeholder layer for Tab 3 (Conversion Journey). Every metric
- * returns a `pending: true` payload in the eventual real shape — zeroed
- * scalars, zeroed funnel stages, empty viz collections — so the React
- * layer can render the full tab (eight sections, all visualizations) with
- * empty states before BigQuery wiring lands in Phase 2 (NPPD-1630). No
- * storage layer, no SQL: the data is intentionally synthetic until Phase 2
- * swaps each method body to a query dispatch against the Newspack Manager
- * BQ catalog without touching signatures or the response envelope.
+ * Tab 3 (Conversion Journey) metric orchestrator. Phase 2A wiring is in
+ * progress: C2–C5 methods (lifecycle funnel, anon-to-registered funnel,
+ * source-mix registrations, time-to-register distribution) now dispatch live
+ * BigQuery queries via the proxy and return structured state envelopes
+ * ('populated' | 'empty' | 'error'). Remaining sections still return
+ * placeholder `pending: true` payloads and will be wired in Phase B
+ * (NPPD-1630, tasks C20–C24).
  *
  * Mirrors {@see Prompts_Metric} (Tab 5) one-for-one: same placeholder
  * shape for scalars, same `pending` + ordered-collection shape for viz,
@@ -418,45 +417,109 @@ final class Conversion_Metric {
 
 	/**
 	 * Reader lifecycle funnel — five nested stages from anonymous reader to
-	 * supporter. Stage shape kept stable so the React Funnel renders the
-	 * same chrome regardless of phase.
+	 * supporter. Dispatches `conversion_journey_lifecycle_funnel`; the hub
+	 * returns one row with step_1_anonymous … step_5_supporter counts.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, stages: array<int, array{label: string, count: int, pct_of_top: float}>}
+	 * @return array{state: string, stages: array<int, array{label: string, count: int, pct_of_top: float}>}
 	 */
 	public function get_reader_lifecycle_funnel( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
+		$rows = $this->proxy->query( 'conversion_journey_lifecycle_funnel', $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $this->error_collection( 'stages', $rows );
+		}
+		if ( ! is_array( $rows ) || ( ! empty( $rows ) && ! is_array( $rows[0] ) ) ) {
+			return $this->malformed_collection( 'stages' );
+		}
+		if ( empty( $rows ) ) {
+			return [
+				'state'  => 'empty',
+				'stages' => [],
+			];
+		}
+		$row  = $rows[0];
+		$top  = (int) ( $row['step_1_anonymous'] ?? 0 );
+		$safe = $top > 0 ? $top : 1; // Guard division-by-zero; pct_of_top = 0.0 when top is 0.
+		$labels = [
+			__( 'Anonymous reader', 'newspack-plugin' ),
+			__( 'Engaged reader', 'newspack-plugin' ),
+			__( 'Registered reader', 'newspack-plugin' ),
+			__( 'Newsletter subscriber', 'newspack-plugin' ),
+			__( 'Subscriber or donor', 'newspack-plugin' ),
+		];
+		$keys   = [
+			'step_1_anonymous',
+			'step_2_engaged',
+			'step_3_registered',
+			'step_4_subscriber',
+			'step_5_supporter',
+		];
+		$stages = [];
+		foreach ( $keys as $i => $key ) {
+			$count    = (int) ( $row[ $key ] ?? 0 );
+			$stages[] = [
+				'label'      => $labels[ $i ],
+				'count'      => $count,
+				'pct_of_top' => $top > 0 ? (float) ( $count / $safe ) : 0.0,
+			];
+		}
 		return [
-			'pending' => true,
-			'stages'  => [
-				$this->funnel_stage( __( 'Anonymous reader', 'newspack-plugin' ) ),
-				$this->funnel_stage( __( 'Engaged reader', 'newspack-plugin' ) ),
-				$this->funnel_stage( __( 'Registered reader', 'newspack-plugin' ) ),
-				$this->funnel_stage( __( 'Newsletter subscriber', 'newspack-plugin' ) ),
-				$this->funnel_stage( __( 'Subscriber or donor', 'newspack-plugin' ) ),
-			],
+			'state'  => 'populated',
+			'stages' => $stages,
 		];
 	}
 
 	// --- Section 2: Per-journey conversion funnels ----------------------
 
 	/**
-	 * Anonymous → Registered funnel (2.1) — three stages.
+	 * Anonymous → Registered funnel (2.1) — three stages. Dispatches
+	 * `conversion_journey_funnel_anon_to_registered`; the hub returns one row
+	 * with step_1_anonymous, step_2_saw_conversion_surface, step_3_registered.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, stages: array<int, array{label: string, count: int, pct_of_top: float}>}
+	 * @return array{state: string, stages: array<int, array{label: string, count: int, pct_of_top: float}>}
 	 */
 	public function get_anonymous_to_registered_funnel( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
+		$rows = $this->proxy->query( 'conversion_journey_funnel_anon_to_registered', $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $this->error_collection( 'stages', $rows );
+		}
+		if ( ! is_array( $rows ) || ( ! empty( $rows ) && ! is_array( $rows[0] ) ) ) {
+			return $this->malformed_collection( 'stages' );
+		}
+		if ( empty( $rows ) ) {
+			return [
+				'state'  => 'empty',
+				'stages' => [],
+			];
+		}
+		$row    = $rows[0];
+		$top    = (int) ( $row['step_1_anonymous'] ?? 0 );
+		$safe   = $top > 0 ? $top : 1;
+		$labels = [
+			__( 'Anonymous', 'newspack-plugin' ),
+			__( 'Saw a conversion surface', 'newspack-plugin' ),
+			__( 'Registered', 'newspack-plugin' ),
+		];
+		$keys   = [
+			'step_1_anonymous',
+			'step_2_saw_conversion_surface',
+			'step_3_registered',
+		];
+		$stages = [];
+		foreach ( $keys as $i => $key ) {
+			$count    = (int) ( $row[ $key ] ?? 0 );
+			$stages[] = [
+				'label'      => $labels[ $i ],
+				'count'      => $count,
+				'pct_of_top' => $top > 0 ? (float) ( $count / $safe ) : 0.0,
+			];
+		}
 		return [
-			'pending' => true,
-			'stages'  => [
-				$this->funnel_stage( __( 'Anonymous', 'newspack-plugin' ) ),
-				$this->funnel_stage( __( 'Saw a conversion surface', 'newspack-plugin' ) ),
-				$this->funnel_stage( __( 'Registered', 'newspack-plugin' ) ),
-			],
+			'state'  => 'populated',
+			'stages' => $stages,
 		];
 	}
 
@@ -530,17 +593,52 @@ final class Conversion_Metric {
 
 	/**
 	 * Source mix for new registrations (3.1) — gate / prompt / direct.
+	 * Dispatches `conversion_journey_source_mix_registrations`; the hub returns
+	 * rows of `{ source, registrations }` where source ∈ gate/prompt/direct.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, total: int, slices: array<int, array{source: string, count: int, pct: float}>}
+	 * @return array{state: string, total: int, slices: array<int, array{source: string, count: int, pct: float}>}
 	 */
 	public function get_source_mix_registrations( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
+		$rows = $this->proxy->query( 'conversion_journey_source_mix_registrations', $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $this->error_collection( 'slices', $rows );
+		}
+		if ( ! is_array( $rows ) ) {
+			return $this->malformed_collection( 'slices' );
+		}
+		if ( empty( $rows ) ) {
+			return [
+				'state'  => 'empty',
+				'total'  => 0,
+				'slices' => [],
+			];
+		}
+		$total  = 0;
+		$counts = [];
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				return $this->malformed_collection( 'slices' );
+			}
+			$source          = (string) ( $row['source'] ?? '' );
+			$count           = (int) ( $row['registrations'] ?? 0 );
+			$counts[ $source ] = $count;
+			$total          += $count;
+		}
+		$safe   = $total > 0 ? $total : 1;
+		$slices = [];
+		foreach ( $counts as $source => $count ) {
+			$slices[] = [
+				'source' => $source,
+				'count'  => $count,
+				'pct'    => (float) ( $count / $safe ),
+			];
+		}
 		return [
-			'pending' => true,
-			'total'   => 0,
-			'slices'  => $this->source_slices(),
+			'state'  => 'populated',
+			'total'  => $total,
+			'slices' => $slices,
 		];
 	}
 
@@ -583,16 +681,66 @@ final class Conversion_Metric {
 
 	/**
 	 * Time-to-register cumulative distribution (4.1) — single series.
+	 * Dispatches `conversion_journey_time_to_register`; the hub returns per-day
+	 * rows `{ days, conversions }`. The CDF is computed in PHP: rows are sorted
+	 * by day, a running cumulative sum / total produces `cumulative_pct`
+	 * (rounded to 4 dp) for each day.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, points: array}
+	 * @return array{state: string, points: array<int, array{day: int, cumulative_pct: float}>}
 	 */
 	public function get_time_to_register_distribution( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
+		$rows = $this->proxy->query( 'conversion_journey_time_to_register', $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $this->error_collection( 'points', $rows );
+		}
+		if ( ! is_array( $rows ) ) {
+			return $this->malformed_collection( 'points' );
+		}
+		if ( empty( $rows ) ) {
+			return [
+				'state'  => 'empty',
+				'points' => [],
+			];
+		}
+
+		// Sort by day ascending.
+		usort(
+			$rows,
+			static function ( array $a, array $b ): int {
+				return (int) ( $a['days'] ?? 0 ) <=> (int) ( $b['days'] ?? 0 );
+			}
+		);
+
+		// Compute total conversions.
+		$total = 0;
+		foreach ( $rows as $row ) {
+			$total += (int) ( $row['conversions'] ?? 0 );
+		}
+
+		// Guard: if all conversions are zero, treat as empty.
+		if ( $total <= 0 ) {
+			return [
+				'state'  => 'empty',
+				'points' => [],
+			];
+		}
+
+		// Build CDF: running cumulative sum / total, rounded to 4 dp.
+		$running = 0;
+		$points  = [];
+		foreach ( $rows as $row ) {
+			$running   += (int) ( $row['conversions'] ?? 0 );
+			$points[]   = [
+				'day'            => (int) ( $row['days'] ?? 0 ),
+				'cumulative_pct' => round( $running / $total, 4 ),
+			];
+		}
+
 		return [
-			'pending' => true,
-			'points'  => [],
+			'state'  => 'populated',
+			'points' => $points,
 		];
 	}
 
