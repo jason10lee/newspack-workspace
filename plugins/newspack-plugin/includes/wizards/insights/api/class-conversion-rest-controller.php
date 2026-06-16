@@ -141,7 +141,8 @@ class Conversion_REST_Controller extends WP_REST_Controller {
 	 */
 	public function get_conversion_data( WP_REST_Request $request ) {
 		// Dev smoke-test path: serve canned fixture data so the UI renders without
-		// a BigQuery proxy connection. Never enable in production.
+		// a BigQuery proxy connection. The optional _fixture_state param selects a
+		// render path ('populated' | 'empty' | 'error'). Never enable in production.
 		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
 			$parsed = $this->parse_window_args( $request );
 			if ( is_wp_error( $parsed ) ) {
@@ -150,9 +151,6 @@ class Conversion_REST_Controller extends WP_REST_Controller {
 			[ , , $compare_start, $compare_end ] = $parsed;
 			$variant  = (string) ( $request->get_param( '_fixture_state' ) ?? 'populated' );
 			$compare  = null !== $compare_start && null !== $compare_end;
-			$metric   = new Conversion_Metric();
-			$start_dt = $parsed[0];
-			$end_dt   = $parsed[1];
 			$response = rest_ensure_response(
 				[
 					'cache' => [
@@ -160,7 +158,7 @@ class Conversion_REST_Controller extends WP_REST_Controller {
 						'computed_at'    => gmdate( 'Y-m-d\TH:i:s\Z' ),
 						'cooldown_until' => null,
 					],
-					'data'  => $this->build_response( $metric, $start_dt, $end_dt, $compare ? $compare_start : null, $compare ? $compare_end : null ),
+					'data'  => Conversion_Metric::get_fixture( $variant, $compare ),
 				]
 			);
 			$response->header( 'Cache-Control', 'no-store, private' );

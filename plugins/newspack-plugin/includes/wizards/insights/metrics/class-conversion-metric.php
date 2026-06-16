@@ -165,6 +165,22 @@ final class Conversion_Metric {
 	}
 
 	/**
+	 * Return the canned fixture payload for the Conversion Journey tab.
+	 *
+	 * Returned by the REST controller when NEWSPACK_INSIGHTS_FIXTURE_MODE is on.
+	 * The variant selects a render path: 'populated' (default), 'empty', 'error'.
+	 *
+	 * @param string $variant One of 'populated', 'empty', 'error'.
+	 * @param bool   $compare Whether comparison was requested; when false the
+	 *                        `previous` window is null (no period-over-period deltas).
+	 * @return array Full { tab_error, current, previous } response shape.
+	 */
+	public static function get_fixture( string $variant = 'populated', bool $compare = false ): array {
+		$build = require NEWSPACK_ABSPATH . 'includes/wizards/insights/fixtures/conversion-fixture.php';
+		return $build( $variant, $compare );
+	}
+
+	/**
 	 * Error payload for a scalar scorecard metric. Carries the proxy's error
 	 * code + message so the UI can render an error treatment (without exposing
 	 * internals to the reader) instead of a misleading zero.

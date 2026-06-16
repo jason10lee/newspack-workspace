@@ -1648,4 +1648,219 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'HTTP 503', $result['error_message'] );
 		$this->assertSame( [], $result['rows'] );
 	}
+
+	// --- Fixture tests (get_fixture delegates to conversion-fixture.php) --------
+
+	/**
+	 * Returns the full { tab_error, current, previous } outer shape.
+	 *
+	 * Smoke-test that the fixture file loads correctly.
+	 */
+	public function test_get_fixture_returns_outer_shape() {
+		$payload = Conversion_Metric::get_fixture( 'populated', false );
+
+		$this->assertArrayHasKey( 'tab_error', $payload );
+		$this->assertArrayHasKey( 'current', $payload );
+		$this->assertArrayHasKey( 'previous', $payload );
+	}
+
+	/**
+	 * Populated fixture: tab_error is false; Phase-A metrics carry
+	 * state:'populated'; deferred sections carry state:'coming_soon' in ALL
+	 * three variants.
+	 */
+	public function test_fixture_populated_variant() {
+		$payload = Conversion_Metric::get_fixture( 'populated', false );
+
+		$this->assertFalse( $payload['tab_error'] );
+		$this->assertNull( $payload['previous'] );
+
+		$current = $payload['current'];
+
+		// Section 1 — lifecycle funnel has 5 stages.
+		$this->assertSame( 'populated', $current['reader_lifecycle_funnel']['state'] );
+		$this->assertCount( 5, $current['reader_lifecycle_funnel']['stages'] );
+
+		// Section 2 — per-journey funnels.
+		$this->assertSame( 'populated', $current['anonymous_to_registered_funnel']['state'] );
+		$this->assertCount( 3, $current['anonymous_to_registered_funnel']['stages'] );
+		$this->assertSame( 'populated', $current['registered_to_subscriber_funnel']['state'] );
+		$this->assertSame( 'populated', $current['registered_to_donor_funnel']['state'] );
+
+		// 2.4 — Subscriber → Donor: visible with stages.
+		$this->assertSame( 'populated', $current['subscriber_to_donor_funnel']['state'] );
+		$this->assertSame( 'visible', $current['subscriber_to_donor_funnel']['visibility'] );
+		$this->assertNotEmpty( $current['subscriber_to_donor_funnel']['stages'] );
+
+		// Section 3 — source-mix pies: total + slices.
+		$this->assertSame( 'populated', $current['source_mix_registrations']['state'] );
+		$this->assertGreaterThan( 0, $current['source_mix_registrations']['total'] );
+		$this->assertCount( 3, $current['source_mix_registrations']['slices'] );
+		$this->assertSame( 'populated', $current['source_mix_subscribers']['state'] );
+		$this->assertSame( 'populated', $current['source_mix_donors']['state'] );
+
+		// Section 4.1 — time-to-register CDF: monotonic points.
+		$this->assertSame( 'populated', $current['time_to_register_distribution']['state'] );
+		$points      = $current['time_to_register_distribution']['points'];
+		$point_count = count( $points );
+		$this->assertNotEmpty( $points );
+		for ( $i = 1; $i < $point_count; $i++ ) {
+			$this->assertGreaterThanOrEqual(
+				$points[ $i - 1 ]['cumulative_pct'],
+				$points[ $i ]['cumulative_pct'],
+				'CDF points must be monotonically non-decreasing'
+			);
+		}
+
+		// Section 6 — weekly rates: weeks array + series keys.
+		$this->assertSame( 'populated', $current['weekly_conversion_rates']['state'] );
+		$this->assertNotEmpty( $current['weekly_conversion_rates']['weeks'] );
+		$this->assertSame( [ 'registration_rate', 'subscription_attempt_rate' ], $current['weekly_conversion_rates']['series'] );
+
+		// Section 7 — influenced scalars.
+		$this->assertSame( 'populated', $current['influenced_registration_rate_7d']['state'] );
+		$this->assertSame( 'rate', $current['influenced_registration_rate_7d']['placeholder_type'] );
+		$this->assertSame( 'populated', $current['influenced_subscription_rate_14d']['state'] );
+		$this->assertSame( 'populated', $current['influenced_donation_rate_14d']['state'] );
+		$this->assertSame( 'populated', $current['influenced_newsletter_rate_7d']['state'] );
+
+		// Sections 8.1–8.3 — opportunity counts.
+		$this->assertSame( 'populated', $current['stale_registered_count']['state'] );
+		$this->assertSame( 'count', $current['stale_registered_count']['placeholder_type'] );
+		$this->assertSame( 'populated', $current['at_risk_subscriber_count']['state'] );
+		$this->assertSame( 'populated', $current['lapsed_donor_count']['state'] );
+
+		// Section 8.4 — top pages table.
+		$this->assertSame( 'populated', $current['top_pages_no_conversion']['state'] );
+		$this->assertNotEmpty( $current['top_pages_no_conversion']['rows'] );
+		$this->assertSame( 100, $current['top_pages_no_conversion']['threshold_pageviews'] );
+	}
+
+	/**
+	 * Deferred (Phase-B) sections are 'coming_soon' in the populated variant and
+	 * carry their preserved extra keys.
+	 */
+	public function test_fixture_populated_deferred_sections_are_coming_soon() {
+		$current = Conversion_Metric::get_fixture( 'populated', false )['current'];
+
+		// 4.2 and 4.3 — time distributions (groups key).
+		$this->assertSame( 'coming_soon', $current['time_to_subscribe_distribution']['state'] );
+		$this->assertSame( [], $current['time_to_subscribe_distribution']['groups'] );
+		$this->assertSame( 'coming_soon', $current['time_to_donate_distribution']['state'] );
+		$this->assertSame( [], $current['time_to_donate_distribution']['groups'] );
+
+		// 4.4 — lag distribution (points + visibility keys).
+		$this->assertSame( 'coming_soon', $current['subscriber_to_donor_lag_distribution']['state'] );
+		$this->assertSame( [], $current['subscriber_to_donor_lag_distribution']['points'] );
+		$this->assertSame( 'hidden', $current['subscriber_to_donor_lag_distribution']['visibility'] );
+		$this->assertSame( 'insufficient_data', $current['subscriber_to_donor_lag_distribution']['visibility_reason'] );
+
+		// 5.1 — registration cohort (reference_line).
+		$this->assertSame( 'coming_soon', $current['registration_to_conversion_cohort']['state'] );
+		$this->assertSame( [], $current['registration_to_conversion_cohort']['cohorts'] );
+		$this->assertSame( 0.15, $current['registration_to_conversion_cohort']['reference_line']['value'] );
+
+		// 5.2 — subscriber retention cohort (reference_line).
+		$this->assertSame( 'coming_soon', $current['subscriber_retention_cohort']['state'] );
+		$this->assertSame( [], $current['subscriber_retention_cohort']['cohorts'] );
+		$this->assertSame( 0.70, $current['subscriber_retention_cohort']['reference_line']['value'] );
+	}
+
+	/**
+	 * Empty fixture: BQ-backed collections carry state:'empty' with empty
+	 * collections; scalars carry non-computable zeros; tab_error is false;
+	 * deferred sections stay 'coming_soon'.
+	 */
+	public function test_fixture_empty_variant() {
+		$payload = Conversion_Metric::get_fixture( 'empty', false );
+
+		$this->assertFalse( $payload['tab_error'] );
+		$current = $payload['current'];
+
+		// BQ-backed funnels → empty.
+		$this->assertSame( 'empty', $current['reader_lifecycle_funnel']['state'] );
+		$this->assertSame( [], $current['reader_lifecycle_funnel']['stages'] );
+		$this->assertSame( 'empty', $current['anonymous_to_registered_funnel']['state'] );
+		$this->assertSame( 'empty', $current['registered_to_subscriber_funnel']['state'] );
+		$this->assertSame( 'empty', $current['registered_to_donor_funnel']['state'] );
+
+		// Source-mix pies → empty.
+		$this->assertSame( 'empty', $current['source_mix_registrations']['state'] );
+		$this->assertSame( 0, $current['source_mix_registrations']['total'] );
+		$this->assertSame( [], $current['source_mix_registrations']['slices'] );
+
+		// Time-to-register → empty.
+		$this->assertSame( 'empty', $current['time_to_register_distribution']['state'] );
+		$this->assertSame( [], $current['time_to_register_distribution']['points'] );
+
+		// Influenced scalars → non-computable zeros (populated).
+		$this->assertSame( 'populated', $current['influenced_registration_rate_7d']['state'] );
+		$this->assertFalse( $current['influenced_registration_rate_7d']['computable'] );
+		$this->assertEqualsWithDelta( 0.0, $current['influenced_registration_rate_7d']['value'], 1e-9 );
+
+		// Top pages → empty.
+		$this->assertSame( 'empty', $current['top_pages_no_conversion']['state'] );
+		$this->assertSame( [], $current['top_pages_no_conversion']['rows'] );
+
+		// Deferred sections stay 'coming_soon'.
+		$this->assertSame( 'coming_soon', $current['time_to_subscribe_distribution']['state'] );
+		$this->assertSame( 'coming_soon', $current['registration_to_conversion_cohort']['state'] );
+	}
+
+	/**
+	 * Error fixture: BQ-backed metrics carry state:'error'; local-only metrics
+	 * (subscriber-to-donor funnel, opportunity counts) stay 'populated'; tab_error
+	 * is false because deferred + local metrics are non-error; deferred sections
+	 * stay 'coming_soon'.
+	 */
+	public function test_fixture_error_variant() {
+		$payload = Conversion_Metric::get_fixture( 'error', false );
+
+		// tab_error is false — snapshot and deferred metrics are non-error.
+		$this->assertFalse( $payload['tab_error'] );
+		$current = $payload['current'];
+
+		// BQ-backed metrics → error.
+		$this->assertSame( 'error', $current['reader_lifecycle_funnel']['state'] );
+		$this->assertSame( 'bigquery_proxy_http_error', $current['reader_lifecycle_funnel']['error_code'] );
+		$this->assertSame( 'error', $current['source_mix_registrations']['state'] );
+		$this->assertSame( 'error', $current['time_to_register_distribution']['state'] );
+		$this->assertSame( 'error', $current['weekly_conversion_rates']['state'] );
+		$this->assertSame( 'error', $current['influenced_registration_rate_7d']['state'] );
+		$this->assertSame( 'error', $current['top_pages_no_conversion']['state'] );
+
+		// Local-only metric (2.4) stays populated with visibility keys.
+		$this->assertSame( 'populated', $current['subscriber_to_donor_funnel']['state'] );
+		$this->assertArrayHasKey( 'visibility', $current['subscriber_to_donor_funnel'] );
+
+		// Opportunity counts stay populated.
+		$this->assertSame( 'populated', $current['stale_registered_count']['state'] );
+		$this->assertSame( 'populated', $current['at_risk_subscriber_count']['state'] );
+		$this->assertSame( 'populated', $current['lapsed_donor_count']['state'] );
+
+		// Deferred sections stay 'coming_soon'.
+		$this->assertSame( 'coming_soon', $current['time_to_subscribe_distribution']['state'] );
+		$this->assertSame( 'coming_soon', $current['registration_to_conversion_cohort']['state'] );
+	}
+
+	/**
+	 * The fixture populates `previous` when comparison is requested.
+	 */
+	public function test_fixture_compare_populates_previous() {
+		$payload = Conversion_Metric::get_fixture( 'populated', true );
+
+		$this->assertIsArray( $payload['previous'] );
+		$this->assertArrayHasKey( 'reader_lifecycle_funnel', $payload['previous'] );
+		$this->assertSame( 'populated', $payload['previous']['reader_lifecycle_funnel']['state'] );
+		$this->assertArrayHasKey( 'window', $payload['previous'] );
+	}
+
+	/**
+	 * The fixture current window contains exactly 24 keys (23 metrics + window echo),
+	 * matching the controller's expected key count.
+	 */
+	public function test_fixture_current_window_has_24_keys() {
+		$current = Conversion_Metric::get_fixture( 'populated', false )['current'];
+		$this->assertCount( 24, $current );
+	}
 }
