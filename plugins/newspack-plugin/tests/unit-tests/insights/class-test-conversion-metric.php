@@ -7,14 +7,17 @@
  * scalar scorecards carry `value` / `pending` / `computable` /
  * `placeholder_type`; the five funnels carry `pending` + ordered zeroed
  * stages (two of them visibility-gated); the three PieCharts carry zeroed
- * source slices; the four cumulative distributions carry empty point/series
- * collections (4.4 visibility-gated); the two cohorts carry empty `cohorts`
- * + a hardcoded reference line; the weekly trends carry empty `weeks` + the
- * series keys; and the opportunity table carries empty `rows` + a threshold.
+ * source slices; the weekly trends carry empty `weeks` + the series keys;
+ * and the opportunity table carries empty `rows` + a threshold.
  *
  * Phase 2A (C2–C5): four methods are now wired to BigQuery via the proxy.
  * Their old `pending: true` placeholders are replaced by state-envelope
  * tests that cover populated / empty / error paths.
+ *
+ * Phase B deferred (C20–C24): the five Phase-B sections now return
+ * `state: 'coming_soon'` with empty collections and preserved extra keys
+ * (visibility/visibility_reason for 4.4; reference_line for 5.1/5.2).
+ * Tests assert the `coming_soon` shape and absence of `pending`.
  *
  * @package Newspack\Tests\Insights
  */
@@ -149,108 +152,92 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 
 	// --- Existing Phase 1 placeholder tests ----------------------------------
 
+	// --- C20: get_time_to_subscribe_distribution --------------------------
+
 	/**
-	 * The two single-series Section 4 distributions return a pending
-	 * envelope with an empty `points` array.
-	 *
-	 * @dataProvider provide_single_series_distribution_methods
-	 * @param string $method Method on Conversion_Metric to call.
+	 * C20 coming_soon: returns state 'coming_soon' with an empty 'groups'
+	 * collection and no 'pending' key.
 	 */
-	public function test_single_series_distribution_is_empty( string $method ) {
+	public function test_time_to_subscribe_distribution_is_coming_soon() {
 		[ $start, $end ] = $this->window();
-		$result          = $this->metric->$method( $start, $end );
+		$result          = $this->metric->get_time_to_subscribe_distribution( $start, $end );
 
-		$this->assertTrue( $result['pending'] );
-		$this->assertArrayHasKey( 'points', $result );
-		$this->assertSame( [], $result['points'] );
+		$this->assertSame( 'coming_soon', $result['state'] );
+		$this->assertArrayHasKey( 'groups', $result );
+		$this->assertSame( [], $result['groups'] );
+		$this->assertArrayNotHasKey( 'pending', $result );
 	}
 
-	/**
-	 * The still-pending single-series cumulative distributions (4.4 only).
-	 * The time-to-register distribution (C5) has been wired and is tested separately below.
-	 *
-	 * @return array<string, array{0:string}>
-	 */
-	public function provide_single_series_distribution_methods(): array {
-		return [
-			'subscriber_to_donor_lag' => [ 'get_subscriber_to_donor_lag_distribution' ],
-		];
-	}
+	// --- C21: get_time_to_donate_distribution ------------------------------
 
 	/**
-	 * The two multi-series Section 4 distributions return a pending envelope
-	 * with three empty per-source series (gate / prompt / direct).
-	 *
-	 * @dataProvider provide_multi_series_distribution_methods
-	 * @param string $method Method on Conversion_Metric to call.
+	 * C21 coming_soon: returns state 'coming_soon' with an empty 'groups'
+	 * collection and no 'pending' key.
 	 */
-	public function test_multi_series_distribution_is_empty( string $method ) {
+	public function test_time_to_donate_distribution_is_coming_soon() {
 		[ $start, $end ] = $this->window();
-		$result          = $this->metric->$method( $start, $end );
+		$result          = $this->metric->get_time_to_donate_distribution( $start, $end );
 
-		$this->assertTrue( $result['pending'] );
-		$this->assertCount( 3, $result['groups'] );
-		$this->assertSame(
-			[ 'gate', 'prompt', 'direct' ],
-			array_column( $result['groups'], 'label' )
-		);
-		foreach ( $result['groups'] as $group ) {
-			$this->assertSame( [], $group['points'] );
-		}
+		$this->assertSame( 'coming_soon', $result['state'] );
+		$this->assertArrayHasKey( 'groups', $result );
+		$this->assertSame( [], $result['groups'] );
+		$this->assertArrayNotHasKey( 'pending', $result );
 	}
 
-	/**
-	 * The multi-series cumulative distributions (4.2 and 4.3).
-	 *
-	 * @return array<string, array{0:string}>
-	 */
-	public function provide_multi_series_distribution_methods(): array {
-		return [
-			'time_to_subscribe' => [ 'get_time_to_subscribe_distribution' ],
-			'time_to_donate'    => [ 'get_time_to_donate_distribution' ],
-		];
-	}
+	// --- C22: get_subscriber_to_donor_lag_distribution ---------------------
 
 	/**
-	 * The visibility-gated Section 4.4 lag distribution is hidden in Phase 1.
+	 * C22 coming_soon: returns state 'coming_soon' with an empty 'points'
+	 * collection, preserved visibility keys, and no 'pending' key.
 	 */
-	public function test_lag_distribution_is_hidden_in_phase_1() {
+	public function test_lag_distribution_is_coming_soon_with_visibility_keys() {
 		[ $start, $end ] = $this->window();
 		$result          = $this->metric->get_subscriber_to_donor_lag_distribution( $start, $end );
 
+		$this->assertSame( 'coming_soon', $result['state'] );
+		$this->assertArrayHasKey( 'points', $result );
+		$this->assertSame( [], $result['points'] );
 		$this->assertSame( 'hidden', $result['visibility'] );
 		$this->assertSame( 'insufficient_data', $result['visibility_reason'] );
+		$this->assertArrayNotHasKey( 'pending', $result );
 	}
 
-	/**
-	 * Each Section 5 cohort returns a pending envelope with empty `cohorts`
-	 * and the spec's hardcoded reference line.
-	 *
-	 * @dataProvider provide_cohort_methods
-	 * @param string $method         Method on Conversion_Metric to call.
-	 * @param float  $expected_value Expected reference-line value.
-	 */
-	public function test_cohort_returns_empty_with_reference_line( string $method, float $expected_value ) {
-		[ $start, $end ] = $this->window();
-		$result          = $this->metric->$method( $start, $end );
+	// --- C23: get_registration_to_conversion_cohort ------------------------
 
-		$this->assertTrue( $result['pending'] );
+	/**
+	 * C23 coming_soon: returns state 'coming_soon' with an empty 'cohorts'
+	 * collection, preserved reference_line (0.15), and no 'pending' key.
+	 */
+	public function test_registration_to_conversion_cohort_is_coming_soon() {
+		[ $start, $end ] = $this->window();
+		$result          = $this->metric->get_registration_to_conversion_cohort( $start, $end );
+
+		$this->assertSame( 'coming_soon', $result['state'] );
+		$this->assertArrayHasKey( 'cohorts', $result );
 		$this->assertSame( [], $result['cohorts'] );
 		$this->assertArrayHasKey( 'reference_line', $result );
-		$this->assertSame( $expected_value, $result['reference_line']['value'] );
+		$this->assertSame( 0.15, $result['reference_line']['value'] );
 		$this->assertNotSame( '', $result['reference_line']['label'] );
+		$this->assertArrayNotHasKey( 'pending', $result );
 	}
 
+	// --- C24: get_subscriber_retention_cohort ------------------------------
+
 	/**
-	 * The two Section 5 cohorts and their hardcoded reference-line values.
-	 *
-	 * @return array<string, array{0:string,1:float}>
+	 * C24 coming_soon: returns state 'coming_soon' with an empty 'cohorts'
+	 * collection, preserved reference_line (0.70), and no 'pending' key.
 	 */
-	public function provide_cohort_methods(): array {
-		return [
-			'registration_to_conversion' => [ 'get_registration_to_conversion_cohort', 0.15 ],
-			'subscriber_retention'       => [ 'get_subscriber_retention_cohort', 0.70 ],
-		];
+	public function test_subscriber_retention_cohort_is_coming_soon() {
+		[ $start, $end ] = $this->window();
+		$result          = $this->metric->get_subscriber_retention_cohort( $start, $end );
+
+		$this->assertSame( 'coming_soon', $result['state'] );
+		$this->assertArrayHasKey( 'cohorts', $result );
+		$this->assertSame( [], $result['cohorts'] );
+		$this->assertArrayHasKey( 'reference_line', $result );
+		$this->assertSame( 0.70, $result['reference_line']['value'] );
+		$this->assertNotSame( '', $result['reference_line']['label'] );
+		$this->assertArrayNotHasKey( 'pending', $result );
 	}
 
 	// C6 weekly trends — see test_weekly_conversion_rates_* tests below.

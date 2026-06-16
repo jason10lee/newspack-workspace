@@ -371,60 +371,6 @@ final class Conversion_Metric {
 		];
 	}
 
-	/**
-	 * Build the standard placeholder shape for a single scorecard metric.
-	 * Type is encoded in `placeholder_type` so React can pick the right
-	 * format token ("0" vs "0%" vs "0.0") without inferring from the field
-	 * name. Identical to {@see Prompts_Metric::placeholder()} for cross-tab
-	 * parity — this tab uses 'count', 'rate', and 'decimal' (no currency
-	 * metrics in v1).
-	 *
-	 * @param string $placeholder_type One of 'count', 'rate', 'currency', 'decimal'.
-	 * @return array{value: int|float, computable: bool, pending: bool, denominator: null, placeholder_type: string}
-	 */
-	private function placeholder( string $placeholder_type ): array {
-		return [
-			'value'            => 'decimal' === $placeholder_type ? 0.0 : 0,
-			'computable'       => false,
-			'pending'          => true,
-			'denominator'      => null,
-			'placeholder_type' => $placeholder_type,
-		];
-	}
-
-	/**
-	 * Build a single zeroed funnel stage.
-	 *
-	 * @param string $label Stage label (translated).
-	 * @return array{label: string, count: int, pct_of_top: float}
-	 */
-	private function funnel_stage( string $label ): array {
-		return [
-			'label'      => $label,
-			'count'      => 0,
-			'pct_of_top' => 0.0,
-		];
-	}
-
-	/**
-	 * Build the three empty per-source series for a Section 4 multi-series
-	 * cumulative distribution (4.2, 4.3). Each series carries an empty
-	 * `points` array; Phase 1 renders the LineChart empty state.
-	 *
-	 * @return array<int, array{label: string, points: array}>
-	 */
-	private function cumulative_groups(): array {
-		return array_map(
-			static function ( string $source ): array {
-				return [
-					'label'  => $source,
-					'points' => [],
-				];
-			},
-			self::SOURCES
-		);
-	}
-
 	// --- Section 1: The reader lifecycle --------------------------------
 
 	/**
@@ -945,31 +891,29 @@ final class Conversion_Metric {
 	 * Time-to-subscribe cumulative distribution (4.2) — three series by
 	 * source (gate / prompt / direct).
 	 *
+	 * Phase B `coming_soon` placeholder. Not yet wired to BigQuery.
+	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, groups: array<int, array{label: string, points: array}>}
+	 * @return array{state: string, groups: array}
 	 */
 	public function get_time_to_subscribe_distribution( DateTimeInterface $start, DateTimeInterface $end ): array {
 		unset( $start, $end );
-		return [
-			'pending' => true,
-			'groups'  => $this->cumulative_groups(),
-		];
+		return $this->coming_soon_collection( 'groups' );
 	}
 
 	/**
 	 * Time-to-donate cumulative distribution (4.3) — three series by source.
 	 *
+	 * Phase B `coming_soon` placeholder. Not yet wired to BigQuery.
+	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, groups: array<int, array{label: string, points: array}>}
+	 * @return array{state: string, groups: array}
 	 */
 	public function get_time_to_donate_distribution( DateTimeInterface $start, DateTimeInterface $end ): array {
 		unset( $start, $end );
-		return [
-			'pending' => true,
-			'groups'  => $this->cumulative_groups(),
-		];
+		return $this->coming_soon_collection( 'groups' );
 	}
 
 	/**
@@ -977,21 +921,22 @@ final class Conversion_Metric {
 	 * visibility-gated.
 	 *
 	 * Local-only (Woo-only): does NOT belong in the BQ catalog. Gated at 50
-	 * cross-converters. Phase 1 returns `visibility: 'hidden'`
-	 * unconditionally; Phase 2 computes it from the live cohort size.
+	 * cross-converters. Phase B `coming_soon` placeholder; preserves the
+	 * `visibility` / `visibility_reason` keys React reads unconditionally.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, points: array, visibility: string, visibility_reason: string|null}
+	 * @return array{state: string, points: array, visibility: string, visibility_reason: string|null}
 	 */
 	public function get_subscriber_to_donor_lag_distribution( DateTimeInterface $start, DateTimeInterface $end ): array {
 		unset( $start, $end );
-		return [
-			'pending'           => true,
-			'points'            => [],
-			'visibility'        => 'hidden',
-			'visibility_reason' => 'insufficient_data',
-		];
+		return array_merge(
+			$this->coming_soon_collection( 'points' ),
+			[
+				'visibility'        => 'hidden',
+				'visibility_reason' => 'insufficient_data',
+			]
+		);
 	}
 
 	// --- Section 5: Cohort retention ------------------------------------
@@ -1001,44 +946,49 @@ final class Conversion_Metric {
 	/**
 	 * Registration → conversion cohort retention (5.1). Snapshot — ignores
 	 * the window. The reference line (15% at 6 months) is hardcoded per the
-	 * spec in Phase 1; Phase 2 makes it publisher-configurable.
+	 * spec; Phase B `coming_soon` placeholder preserves the `reference_line`
+	 * key React reads unconditionally.
 	 *
 	 * @param DateTimeInterface $start Window start (ignored — snapshot).
 	 * @param DateTimeInterface $end   Window end (ignored — snapshot).
-	 * @return array{pending: bool, cohorts: array, reference_line: array{value: float, label: string}}
+	 * @return array{state: string, cohorts: array, reference_line: array{value: float, label: string}}
 	 */
 	public function get_registration_to_conversion_cohort( DateTimeInterface $start, DateTimeInterface $end ): array {
 		unset( $start, $end );
-		return [
-			'pending'        => true,
-			'cohorts'        => [],
-			'reference_line' => [
-				'value' => 0.15,
-				'label' => __( '15% at 6 months', 'newspack-plugin' ),
-			],
-		];
+		return array_merge(
+			$this->coming_soon_collection( 'cohorts' ),
+			[
+				'reference_line' => [
+					'value' => 0.15,
+					'label' => __( '15% at 6 months', 'newspack-plugin' ),
+				],
+			]
+		);
 	}
 
 	/**
 	 * Subscriber retention cohort (5.2). Snapshot — ignores the window.
-	 * Reference line (70% at 12 months) hardcoded in Phase 1.
+	 * Reference line (70% at 12 months) hardcoded per the spec.
 	 *
-	 * Local-only (Woo-only): does NOT belong in the BQ catalog.
+	 * Local-only (Woo-only): does NOT belong in the BQ catalog. Phase B
+	 * `coming_soon` placeholder preserves the `reference_line` key React
+	 * reads unconditionally.
 	 *
 	 * @param DateTimeInterface $start Window start (ignored — snapshot).
 	 * @param DateTimeInterface $end   Window end (ignored — snapshot).
-	 * @return array{pending: bool, cohorts: array, reference_line: array{value: float, label: string}}
+	 * @return array{state: string, cohorts: array, reference_line: array{value: float, label: string}}
 	 */
 	public function get_subscriber_retention_cohort( DateTimeInterface $start, DateTimeInterface $end ): array {
 		unset( $start, $end );
-		return [
-			'pending'        => true,
-			'cohorts'        => [],
-			'reference_line' => [
-				'value' => 0.70,
-				'label' => __( '70% at 12 months', 'newspack-plugin' ),
-			],
-		];
+		return array_merge(
+			$this->coming_soon_collection( 'cohorts' ),
+			[
+				'reference_line' => [
+					'value' => 0.70,
+					'label' => __( '70% at 12 months', 'newspack-plugin' ),
+				],
+			]
+		);
 	}
 
 	// --- Section 6: Conversion rate trends ------------------------------
