@@ -38,6 +38,6 @@ export const scalarToMetricCardProps = ( props: ScalarCardProps ) => {
 		value: current.value,
 		format: formatFor( current ),
 		previousValue: previous?.computable ? previous.value : null,
-		pending: current.pending,
+		pending: current.state === 'coming_soon',
 	};
 };

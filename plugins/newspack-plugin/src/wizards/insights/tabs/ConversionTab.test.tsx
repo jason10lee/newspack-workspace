@@ -1,0 +1,105 @@
+/**
+ * Tab-level tests for ConversionTab (NPPD-1609, Phase 2).
+ *
+ * Confirms the tab renders under the state-envelope: the section
+ * structure renders on success, loading + error states are exercised,
+ * and the hook contract matches the cache-envelope shape.
+ */
+
+/**
+ * External dependencies
+ */
+import { render, screen } from '@testing-library/react';
+
+/**
+ * Internal dependencies
+ */
+import ConversionTab from './ConversionTab';
+import useConversionData from '../hooks/useConversionData';
+import type { ConversionResponse } from '../api/conversion';
+import { makeConversionWindow } from './conversion/fixtures';
+import type { DateRange } from '../state/useDateRange';
+
+jest.mock( '../hooks/useConversionData' );
+
+// `@wordpress/icons` ships pre-built SVG element trees created against its own
+// bundled React copy; under the test runner's React they trip React's
+// "element from an older version of React" guard. The icons are decorative
+// here (no assertion depends on them), so stub the module.
+jest.mock( '@wordpress/icons', () => ( {
+	__esModule: true,
+	Icon: () => null,
+	info: 'info',
+	closeSmall: 'closeSmall',
+	chevronUp: 'chevronUp',
+	chevronDown: 'chevronDown',
+	caution: 'caution',
+} ) );
+
+const mockHook = useConversionData as jest.Mock;
+const range = { start: '2026-05-09', end: '2026-06-08', preset: 'last-30' } as unknown as DateRange;
+
+const makeResponse = (): ConversionResponse => ( {
+	tab_error: false,
+	current: makeConversionWindow(),
+	previous: null,
+} );
+
+const mockSuccess = () =>
+	mockHook.mockReturnValue( {
+		status: 'success',
+		error: null,
+		refetch: () => {},
+		data: makeResponse(),
+		computedAt: '2026-06-16T00:00:00Z',
+		source: 'bigquery',
+		cooldownUntil: null,
+	} );
+
+describe( 'ConversionTab', () => {
+	afterEach( () => {
+		mockHook.mockReset();
+	} );
+
+	it( 'renders the eight section headings on success', () => {
+		mockSuccess();
+		render( <ConversionTab range={ range } previousRange={ null } /> );
+
+		expect( screen.getByText( 'The reader lifecycle' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Per-journey conversion funnels' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Where conversions come from' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'How long conversions take' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Cohort retention' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Conversion rate trends' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Cross-tab influenced attribution' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Opportunity buckets' ) ).toBeInTheDocument();
+	} );
+
+	it( 'renders the loading state', () => {
+		mockHook.mockReturnValue( {
+			status: 'loading',
+			data: null,
+			error: null,
+			refetch: () => {},
+			computedAt: null,
+			source: null,
+			cooldownUntil: null,
+		} );
+		render( <ConversionTab range={ range } previousRange={ null } /> );
+		expect( screen.getByText( 'Loading…' ) ).toBeInTheDocument();
+	} );
+
+	it( 'renders the error state', () => {
+		mockHook.mockReturnValue( {
+			status: 'error',
+			data: null,
+			error: 'Boom',
+			refetch: () => {},
+			computedAt: null,
+			source: null,
+			cooldownUntil: null,
+		} );
+		render( <ConversionTab range={ range } previousRange={ null } /> );
+		expect( screen.getByText( 'Could not load conversion data.' ) ).toBeInTheDocument();
+	} );
+} );
