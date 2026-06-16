@@ -1,5 +1,5 @@
 /**
- * Funnel viz (NPPD) — tab-local to Gates.
+ * Funnel viz — shared across Insights tabs (Gates, Prompts, Conversion Journey).
  *
  * Multi-step conversion funnel rendered as stacked SVG trapezoids. Each
  * trapezoid's top edge is proportional to its own count and its bottom edge to
@@ -13,9 +13,6 @@
  *   - Compact: the count renders inside each trapezoid and the full
  *     names/counts/labels move to a legend below. Used when stepCount >= 5 OR
  *     width < 480px.
- *
- * Tab-local for now (only Gates consumes a funnel); promote to
- * packages/components/src/ when a second consumer arrives.
  */
 
 /**
@@ -27,8 +24,7 @@ import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 /**
  * Internal dependencies
  */
-import type { GatesFunnelStage } from '../../../api/gates';
-import { formatNumber, formatPercent } from '../../components/format';
+import { formatNumber, formatPercent } from './format';
 
 const COMPACT_MIN_STEPS = 5;
 const COMPACT_MAX_WIDTH = 480; // Below this container width, force compact mode.
@@ -41,8 +37,14 @@ const TAIL_OPACITY = 0.6;
 // faded band needs dark text. Only affects compact mode (count rendered inside).
 const DARK_TEXT_OPACITY_THRESHOLD = 0.75;
 
+export interface FunnelStage {
+	label: string;
+	count: number;
+	pct_of_top: number;
+}
+
 export interface FunnelProps {
-	stages: GatesFunnelStage[];
+	stages: FunnelStage[];
 }
 
 /** Compact when there are many steps OR the container is narrow. */
@@ -74,6 +76,10 @@ const stepHeightFor = ( stepCount: number ): number => Math.max( MIN_STEP_HEIGHT
  */
 const trapezoidPath = ( count: number, nextCount: number, topCount: number, yTop: number, yBottom: number ): string => {
 	const cx = VIEWBOX_WIDTH / 2;
+	// Clamp the top edge to the viewBox half-width too (not just the bottom):
+	// funnel stages are independent aggregates, so a later stage can exceed the
+	// top stage (data drift). Without this the trapezoid would flare past the
+	// viewBox edge — the opposite of the "only ever narrows" invariant below.
 	const halfTop = Math.min( VIEWBOX_WIDTH / 2, ( count / topCount ) * ( VIEWBOX_WIDTH / 2 ) );
 	const halfBottom = Math.min( halfTop, ( nextCount / topCount ) * ( VIEWBOX_WIDTH / 2 ) );
 	return [
@@ -86,7 +92,7 @@ const trapezoidPath = ( count: number, nextCount: number, topCount: number, yTop
 };
 
 interface StepView {
-	stage: GatesFunnelStage;
+	stage: FunnelStage;
 	index: number;
 	opacity: number;
 	pctOfTop: number;
@@ -94,7 +100,7 @@ interface StepView {
 }
 
 /** Build the per-step view model shared by both layouts. */
-const buildSteps = ( stages: GatesFunnelStage[], topCount: number ): StepView[] =>
+const buildSteps = ( stages: FunnelStage[], topCount: number ): StepView[] =>
 	stages.map( ( stage, index ) => {
 		const prevCount = index > 0 ? stages[ index - 1 ].count : 0;
 		return {

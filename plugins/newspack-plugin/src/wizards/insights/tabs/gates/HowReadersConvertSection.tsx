@@ -20,7 +20,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { GatesWindow } from '../../api/gates';
 import SectionHeading from '../components/SectionHeading';
-import Funnel from './viz/Funnel';
+import Funnel from '../components/Funnel';
 import DistributionTable from './viz/DistributionTable';
 import SectionState from './SectionState';
 
