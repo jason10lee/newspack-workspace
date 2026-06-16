@@ -841,6 +841,15 @@ final class Conversion_Metric {
 			];
 		}
 
+		// Guard every row is an array before the typed usort callback + reads
+		// below (parity with the other collection methods; a malformed non-array
+		// row would otherwise TypeError in the callback).
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				return $this->malformed_collection( 'points' );
+			}
+		}
+
 		// Sort by day ascending.
 		usort(
 			$rows,

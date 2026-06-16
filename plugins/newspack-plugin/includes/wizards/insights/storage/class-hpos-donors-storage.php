@@ -70,11 +70,17 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 	/**
 	 * Format a DateTime for SQL.
 	 *
+	 * Normalizes to UTC: window bounds arrive in site timezone (the REST
+	 * controller builds them with wp_timezone()), but they are compared against
+	 * `date_created_gmt` / `_schedule_*` columns stored in UTC. Matches
+	 * {@see HPOS_Storage::fmt()} so windowed donor queries don't skew on
+	 * non-UTC sites.
+	 *
 	 * @param DateTimeInterface $dt DateTime.
-	 * @return string Y-m-d H:i:s.
+	 * @return string Y-m-d H:i:s (UTC).
 	 */
 	private function fmt( DateTimeInterface $dt ): string {
-		return $dt->format( 'Y-m-d H:i:s' );
+		return gmdate( 'Y-m-d H:i:s', $dt->getTimestamp() );
 	}
 
 	/**

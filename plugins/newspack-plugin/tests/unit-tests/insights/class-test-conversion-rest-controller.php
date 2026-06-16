@@ -339,8 +339,12 @@ class Test_Conversion_REST_Controller extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'current', $payload );
 		$this->assertArrayHasKey( 'previous', $payload );
 
-		// The controller fixture branch hardcodes SOURCE_LOCAL for the cache envelope.
-		$this->assertSame( Cache::SOURCE_LOCAL, 'local' ); // SOURCE_LOCAL = 'local'.
+		// The fixture payload is the `data` the controller wraps in a SOURCE_LOCAL
+		// cache envelope; assert the shape the wrapper depends on. The envelope
+		// itself can't be asserted here because NEWSPACK_INSIGHTS_FIXTURE_MODE is
+		// not resettable per-test.
+		$this->assertIsArray( $payload['current'] );
+		$this->assertArrayHasKey( 'reader_lifecycle_funnel', $payload['current'] );
 	}
 
 	/**

@@ -600,6 +600,26 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( [], $result['points'] );
 	}
 
+	/**
+	 * A malformed (non-array) row yields the malformed-collection shape rather
+	 * than a TypeError in the typed usort callback.
+	 */
+	public function test_time_to_register_returns_malformed_on_non_array_row() {
+		$rows            = [
+			[
+				'days'        => 0,
+				'conversions' => 5,
+			],
+			'not-an-array',
+		];
+		$metric          = new Conversion_Metric( $this->proxy_returning( $rows ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_time_to_register_distribution( $start, $end );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( [], $result['points'] );
+	}
+
 	// --- Phase 2A wired method tests (C6–C9) --------------------------------
 
 	// --- C6: get_weekly_conversion_rates -----------------------------------
