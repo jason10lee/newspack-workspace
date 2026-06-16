@@ -63,6 +63,24 @@ class Editor_Bootstrap {
 		// rendering mode) with the package's email defaults. Re-assert the canonical
 		// definition at a later priority so Newspack's registration stays authoritative.
 		add_action( 'init', [ \Newspack_Newsletters::class, 'register_cpt' ], 11 );
+
+		// Inject per-newsletter theme colors at render time. ThemeController applies
+		// this filter with no post argument, so resolve the render post from
+		// Renderer_Controller first (set during render_wc), falling back to the
+		// global $post only when not actively rendering.
+		add_filter(
+			'woocommerce_email_editor_theme_json',
+			function ( $theme ) {
+				$post = Renderer_Controller::get_rendering_post();
+				if ( ! $post ) {
+					$post = get_post();
+				}
+				if ( $post && \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT === $post->post_type ) {
+					$theme->merge( new \WP_Theme_JSON( Theme_Json_Builder::build( $post ), 'default' ) );
+				}
+				return $theme;
+			}
+		);
 	}
 
 	/**
