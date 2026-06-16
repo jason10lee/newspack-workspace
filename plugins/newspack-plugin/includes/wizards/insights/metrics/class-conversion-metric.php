@@ -58,7 +58,7 @@ use Newspack\Insights\Subscribers_Metric;
 use Newspack\Insights\Woo_Order_Resolver;
 
 /**
- * Tab 3 placeholder metric orchestrator.
+ * Tab 3 metric orchestrator.
  *
  * @phpstan-type ScalarMetric array{
  *   state: string,
@@ -68,13 +68,6 @@ use Newspack\Insights\Woo_Order_Resolver;
  *   placeholder_type: string,
  *   error_code?: string,
  *   error_message?: string,
- * }
- * @phpstan-type PlaceholderMetric array{
- *   value: int|float,
- *   computable: bool,
- *   pending: bool,
- *   denominator: int|null,
- *   placeholder_type: string,
  * }
  */
 final class Conversion_Metric {
@@ -350,24 +343,6 @@ final class Conversion_Metric {
 		];
 		$this->paid_attempt_cache[ $cache_key ] = $result;
 		return $result;
-	}
-
-	/**
-	 * Placeholder for a scalar metric in a Phase B "coming soon" section.
-	 *
-	 * Returns a lightweight sentinel that the React layer can detect and render
-	 * as a "coming soon" treatment instead of an error or empty state. Phase B
-	 * tasks (C20–C24) will replace the call sites of this helper with real
-	 * proxy dispatches.
-	 *
-	 * @param string $placeholder_type One of 'count', 'rate', 'currency', 'decimal'.
-	 * @return array
-	 */
-	private function coming_soon( string $placeholder_type ): array {
-		return [
-			'state'            => 'coming_soon',
-			'placeholder_type' => $placeholder_type,
-		];
 	}
 
 	/**
