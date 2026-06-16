@@ -1,3 +1,73 @@
+## newspack [6.42.8](https://github.com/Automattic/newspack-workspace/compare/newspack@6.42.7...newspack@6.42.8) (2026-06-15)
+
+
+### Bug Fixes
+
+* **content-gate:** cascade taxonomy content rules to child terms (NPPD-1670, [#283](https://github.com/Automattic/newspack-workspace/issues/283)) ([12dcbab](https://github.com/Automattic/newspack-workspace/commit/12dcbab5bcba286100ca8d6f8373b912451d829a))
+
+## newspack [6.42.7](https://github.com/Automattic/newspack-workspace/compare/newspack@6.42.6...newspack@6.42.7) (2026-06-11)
+
+
+### Bug Fixes
+
+* **co-authors-plus:** dedup count_user_posts for linked guest authors ([#149](https://github.com/Automattic/newspack-workspace/issues/149)) ([3e577bf](https://github.com/Automattic/newspack-workspace/commit/3e577bff6b1a92277d42a8afb3085e803f8b1503))
+
+## newspack [6.42.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.42.5...newspack@6.42.6) (2026-06-09)
+
+
+### Bug Fixes
+
+* **access-control:** make email domain matching case-insensitive ([#255](https://github.com/Automattic/newspack-workspace/issues/255)) ([c410158](https://github.com/Automattic/newspack-workspace/commit/c4101587227801514f4e078652876677e5bde7b8))
+
+## newspack [6.42.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.42.4...newspack@6.42.5) (2026-06-09)
+
+
+### Bug Fixes
+
+* **access-control:** populate GA4 group metadata for anonymous readers ([#254](https://github.com/Automattic/newspack-workspace/issues/254)) ([b7adf8f](https://github.com/Automattic/newspack-workspace/commit/b7adf8f0ecc3fbe8660e0c2125c419331d0dc8c5))
+
+## newspack [6.42.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.42.3...newspack@6.42.4) (2026-06-04)
+
+
+### Bug Fixes
+
+* **integrations:** skip unconfigured + dedupe health-check alerts ([#207](https://github.com/Automattic/newspack-workspace/issues/207)) ([63eebb9](https://github.com/Automattic/newspack-workspace/commit/63eebb9a30b54f3c265db4be3584e69218239441))
+
+## newspack [6.42.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.42.2...newspack@6.42.3) (2026-06-04)
+
+
+### Bug Fixes
+
+* **jetpack:** disable Newsletter (subscriptions) module ([#208](https://github.com/Automattic/newspack-workspace/issues/208)) ([7d56e9d](https://github.com/Automattic/newspack-workspace/commit/7d56e9d92988bf95640fb6924b7a9eb1c66c71d0))
+
+## newspack [6.42.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.42.1...newspack@6.42.2) (2026-06-03)
+
+
+### Bug Fixes
+
+* **group-subscription:** update params; avoid secondary My Account redirect ([#151](https://github.com/Automattic/newspack-workspace/issues/151)) ([c5f6249](https://github.com/Automattic/newspack-workspace/commit/c5f6249ac76a717ff0def63081f45d490c560b19))
+
+## newspack [6.42.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.42.0...newspack@6.42.1) (2026-06-03)
+
+
+### Bug Fixes
+
+* add contrasting colour to the my account mobile menu button ([#164](https://github.com/Automattic/newspack-workspace/issues/164)) ([94b765c](https://github.com/Automattic/newspack-workspace/commit/94b765ca602aad63df2b12edd15c3208ed3d1e70))
+
+# newspack [6.42.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.41.3...newspack@6.42.0) (2026-06-01)
+
+
+### Bug Fixes
+
+* prevent content-gate editor.scss styles from getting chunked into the common.css file ([#4716](https://github.com/Automattic/newspack-plugin/issues/4716)) ([4d4c557](https://github.com/Automattic/newspack-plugin/commit/4d4c5572fb32a73b54c76e916273acc695f00163))
+
+# [6.42.0](https://github.com/Automattic/newspack-plugin/compare/v6.41.3...v6.42.0) (2026-06-01)
+
+
+### Features
+
+* **wc-subscriptions:** recover switch proration when no amount paid ([#4745](https://github.com/Automattic/newspack-plugin/issues/4745)) ([c21009d](https://github.com/Automattic/newspack-plugin/commit/c21009d310a6385800c0ac44514565d048abf87c))
+
 ## [6.41.3](https://github.com/Automattic/newspack-plugin/compare/v6.41.2...v6.41.3) (2026-05-25)
 
 
