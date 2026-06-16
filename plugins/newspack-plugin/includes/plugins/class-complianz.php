@@ -23,6 +23,16 @@ defined( 'ABSPATH' ) || exit;
  */
 class Complianz {
 	/**
+	 * Server variables that may carry the visitor country code resolved at the
+	 * hosting edge, in priority order. `GEOIP_COUNTRY_CODE` is the server-level
+	 * GeoIP value set on WordPress.com / Atomic (WPCloud); the remaining two are
+	 * common Cloudflare / proxy fallbacks.
+	 *
+	 * @var string[]
+	 */
+	const EDGE_COUNTRY_HEADERS = [ 'GEOIP_COUNTRY_CODE', 'HTTP_CF_IPCOUNTRY', 'HTTP_X_COUNTRY_CODE' ];
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function init() {
@@ -30,6 +40,126 @@ class Complianz {
 		add_filter( 'cmplz_option_enable_cookie_blocker', [ __CLASS__, 'block_before_consent' ] );
 		add_filter( 'cmplz_consenttype', [ __CLASS__, 'force_optin_consenttype' ], 10, 2 );
 		add_filter( 'newspack_pixel_script_markup', [ __CLASS__, 'pixel_handling_for_complianz' ] );
+		// Complianz Premium registers its GeoIP filters on plugins_loaded:9, so swap them afterwards.
+		add_action( 'plugins_loaded', [ __CLASS__, 'maybe_use_edge_geolocation' ], 11 );
+	}
+
+	/**
+	 * Get the visitor country code resolved by the hosting edge, if any.
+	 *
+	 * On Atomic (WPCloud) and behind Cloudflare the visitor's country is already
+	 * resolved at the edge and passed to PHP in a request header, so Complianz's
+	 * own per-visitor MaxMind lookup is redundant work.
+	 *
+	 * @return string Two-letter uppercase ISO country code, or '' if unavailable.
+	 */
+	public static function get_edge_country_code() {
+		foreach ( self::EDGE_COUNTRY_HEADERS as $header ) {
+			if ( empty( $_SERVER[ $header ] ) ) {
+				continue;
+			}
+			$country_code = strtoupper( sanitize_text_field( wp_unslash( $_SERVER[ $header ] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			// Edge GeoIP uses XX/T1 (and similar) for unknown/anonymized origins; treat those as no data.
+			if ( preg_match( '/^[A-Z]{2}$/', $country_code ) && 'XX' !== $country_code && 'T1' !== $country_code ) {
+				return $country_code;
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Replace Complianz Premium's per-visitor MaxMind GeoIP lookup with the
+	 * country code already resolved by the hosting edge.
+	 *
+	 * The Complianz banner and consent-tracking REST endpoints are deliberately
+	 * uncached, so on high-traffic sites every visitor triggers a MaxMind database
+	 * read (reader init + region + consent-type lookups) on each request. When the
+	 * edge already supplies the country, that lookup is wasted; this maps the edge
+	 * country onto Complianz's region/consent-type using its own pure helpers,
+	 * preserving behaviour while skipping the database work.
+	 *
+	 * @return void
+	 */
+	public static function maybe_use_edge_geolocation() {
+		// Only relevant when Complianz Premium's GeoIP is active (i.e. doing MaxMind lookups).
+		if ( ! function_exists( 'cmplz_geoip_enabled' ) || ! cmplz_geoip_enabled() ) {
+			return;
+		}
+		// Only when this request actually carries an edge-resolved country.
+		if ( '' === self::get_edge_country_code() ) {
+			return;
+		}
+		/**
+		 * Filters whether to use the hosting edge's country code in place of
+		 * Complianz's own MaxMind GeoIP lookup. Allows opting out per site.
+		 *
+		 * @param bool $use_edge_geolocation Whether to use edge geolocation. Default true.
+		 */
+		if ( ! apply_filters( 'newspack_complianz_use_edge_geolocation', true ) ) {
+			return;
+		}
+
+		remove_filter( 'cmplz_user_region', 'cmplz_user_region', 20 );
+		remove_filter( 'cmplz_user_consenttype', 'cmplz_user_consenttype', 10 );
+		add_filter( 'cmplz_user_region', [ __CLASS__, 'edge_user_region' ], 20 );
+		add_filter( 'cmplz_user_consenttype', [ __CLASS__, 'edge_user_consenttype' ], 10 );
+	}
+
+	/**
+	 * Resolve the Complianz region from the edge-supplied country code.
+	 *
+	 * Mirrors Complianz Premium's own `cmplz_user_region` filter, but derives the
+	 * country from the edge instead of a MaxMind lookup. The manual
+	 * `?cmplz_user_region=` override (used for previews and region redirects) is
+	 * preserved.
+	 *
+	 * @param string $region Region resolved so far (the site default).
+	 * @return string
+	 */
+	public static function edge_user_region( $region ) {
+		$country_code = self::get_edge_country_code();
+		if ( '' !== $country_code ) {
+			// cmplz_get_region_for_country() is a pure config lookup (no database read).
+			$user_region = cmplz_get_region_for_country( $country_code );
+			if ( is_string( $user_region ) && in_array( $user_region, cmplz_get_regions(), true ) ) {
+				$region = $user_region;
+			} elseif ( function_exists( 'cmplz_select_region_outside_supported_regions' ) ) {
+				$region = cmplz_select_region_outside_supported_regions( $user_region );
+			}
+		}
+
+		// Preserve Complianz's manual region override.
+		if ( isset( $_GET['cmplz_user_region'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$region = sanitize_title( wp_unslash( $_GET['cmplz_user_region'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			if ( ! cmplz_has_region( $region ) && function_exists( 'cmplz_select_region_outside_supported_regions' ) ) {
+				$region = cmplz_select_region_outside_supported_regions( $region );
+			}
+		}
+
+		return $region;
+	}
+
+	/**
+	 * Resolve the Complianz consent type from the edge-supplied country code.
+	 *
+	 * Mirrors Complianz Premium's own `cmplz_user_consenttype` filter, deriving the
+	 * country from the edge instead of a MaxMind lookup.
+	 *
+	 * @param string $consenttype Consent type resolved so far (the site default).
+	 * @return string
+	 */
+	public static function edge_user_consenttype( $consenttype ) {
+		$country_code = self::get_edge_country_code();
+		if ( '' !== $country_code ) {
+			// cmplz_get_consenttype_for_country() is a pure config lookup (no database read).
+			$user_consenttype = cmplz_get_consenttype_for_country( $country_code );
+			if ( in_array( $user_consenttype, cmplz_get_used_consenttypes(), true ) ) {
+				$consenttype = $user_consenttype;
+			} else {
+				$consenttype = 'other';
+			}
+		}
+		return $consenttype;
 	}
 
 	/**

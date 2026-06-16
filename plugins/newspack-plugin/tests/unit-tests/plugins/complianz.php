@@ -21,6 +21,35 @@ class Newspack_Test_Complianz extends WP_UnitTestCase {
 	public static $cookie_blocker_active = false;
 
 	/**
+	 * Mock controlling whether Complianz Premium GeoIP is enabled.
+	 *
+	 * @var bool
+	 */
+	public static $geoip_enabled = false;
+
+	/**
+	 * Mock map of country code => Complianz region, used by the cmplz_get_region_for_country mock.
+	 *
+	 * @var array<string,string>
+	 */
+	public static $region_map = [
+		'US' => 'us',
+		'NL' => 'eu',
+		'DE' => 'eu',
+	];
+
+	/**
+	 * Mock map of country code => Complianz consent type, used by the cmplz_get_consenttype_for_country mock.
+	 *
+	 * @var array<string,string>
+	 */
+	public static $consenttype_map = [
+		'US' => 'optout',
+		'NL' => 'optin',
+		'DE' => 'optin',
+	];
+
+	/**
 	 * Reset privacy options before each test.
 	 */
 	public function setUp(): void {
@@ -28,13 +57,78 @@ class Newspack_Test_Complianz extends WP_UnitTestCase {
 		update_option( Privacy_Section::OPTION_PREFIX . 'block_before_consent', false );
 		update_option( Privacy_Section::OPTION_PREFIX . 'block_ads_before_consent', false );
 
+		// Clear any geolocation request state between tests.
+		foreach ( Complianz::EDGE_COUNTRY_HEADERS as $header ) {
+			unset( $_SERVER[ $header ] );
+		}
+		unset( $_GET['cmplz_user_region'] );
+
 		// Simulate Complianz cookie blocker settings.
 		if ( ! function_exists( 'cmplz_can_run_cookie_blocker' ) ) {
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound 
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
 			function cmplz_can_run_cookie_blocker() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
 				return Newspack_Test_Complianz::$cookie_blocker_active; // phpcs:ignore Squiz.Classes.SelfMemberReference.NotUsed
 			}
 		}
+
+		// Mock Complianz's pure region/consent-type helpers (no MaxMind lookup involved).
+		if ( ! function_exists( 'cmplz_get_region_for_country' ) ) {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
+			function cmplz_get_region_for_country( $country_code ) { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
+				return Newspack_Test_Complianz::$region_map[ $country_code ] ?? false; // phpcs:ignore Squiz.Classes.SelfMemberReference.NotUsed
+			}
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
+			function cmplz_get_consenttype_for_country( $country_code ) { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
+				return Newspack_Test_Complianz::$consenttype_map[ $country_code ] ?? 'other'; // phpcs:ignore Squiz.Classes.SelfMemberReference.NotUsed
+			}
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
+			function cmplz_get_regions() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
+				return [ 'us', 'eu' ];
+			}
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
+			function cmplz_get_used_consenttypes() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
+				return [ 'optin', 'optout' ];
+			}
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
+			function cmplz_has_region( $code ) { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
+				return in_array( $code, [ 'us', 'eu' ], true );
+			}
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
+			function cmplz_geoip_enabled() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
+				return Newspack_Test_Complianz::$geoip_enabled; // phpcs:ignore Squiz.Classes.SelfMemberReference.NotUsed
+			}
+			// Stand-ins for Complianz Premium's own GeoIP filter callbacks, so the
+			// swap performed by maybe_use_edge_geolocation() can be asserted.
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
+			function cmplz_user_region( $region ) { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
+				return $region;
+			}
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
+			function cmplz_user_consenttype( $consenttype ) { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
+				return $consenttype;
+			}
+		}
+	}
+
+	/**
+	 * Reset GeoIP mock state after each test.
+	 */
+	public function tearDown(): void {
+		self::$geoip_enabled = false;
+		remove_filter( 'cmplz_user_region', 'cmplz_user_region', 20 );
+		remove_filter( 'cmplz_user_consenttype', 'cmplz_user_consenttype', 10 );
+		remove_filter( 'cmplz_user_region', [ Complianz::class, 'edge_user_region' ], 20 );
+		remove_filter( 'cmplz_user_consenttype', [ Complianz::class, 'edge_user_consenttype' ], 10 );
+		remove_all_filters( 'newspack_complianz_use_edge_geolocation' );
+		parent::tearDown();
+	}
+
+	/**
+	 * Simulate Complianz Premium having registered its GeoIP-backed filters.
+	 */
+	private function register_premium_geoip_filters() {
+		add_filter( 'cmplz_user_region', 'cmplz_user_region', 20 );
+		add_filter( 'cmplz_user_consenttype', 'cmplz_user_consenttype', 10 );
 	}
 
 	// -------------------------------------------------------------------------
@@ -214,5 +308,189 @@ class Newspack_Test_Complianz extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'type="text/plain"', $result );
 		$this->assertStringContainsString( 'data-category="marketing"', $result );
 		self::$cookie_blocker_active = false;
+	}
+
+	// -------------------------------------------------------------------------
+	// get_edge_country_code
+	// -------------------------------------------------------------------------
+
+	/**
+	 * No country headers present returns an empty string.
+	 */
+	public function test_edge_country_empty_when_no_header() {
+		$this->assertSame( '', Complianz::get_edge_country_code() );
+	}
+
+	/**
+	 * The server-level GeoIP header is read and upper-cased.
+	 */
+	public function test_edge_country_reads_geoip_header() {
+		$_SERVER['GEOIP_COUNTRY_CODE'] = 'nl';
+		$this->assertSame( 'NL', Complianz::get_edge_country_code() );
+	}
+
+	/**
+	 * GEOIP_COUNTRY_CODE takes priority over the Cloudflare header.
+	 */
+	public function test_edge_country_geoip_takes_priority() {
+		$_SERVER['GEOIP_COUNTRY_CODE'] = 'US';
+		$_SERVER['HTTP_CF_IPCOUNTRY']  = 'DE';
+		$this->assertSame( 'US', Complianz::get_edge_country_code() );
+	}
+
+	/**
+	 * Falls back to the Cloudflare header when the server-level one is absent.
+	 */
+	public function test_edge_country_falls_back_to_cloudflare() {
+		$_SERVER['HTTP_CF_IPCOUNTRY'] = 'de';
+		$this->assertSame( 'DE', Complianz::get_edge_country_code() );
+	}
+
+	/**
+	 * Unknown/anonymized edge values (XX, T1) and malformed values are rejected.
+	 *
+	 * @dataProvider data_invalid_edge_country_values
+	 * @param string $value Raw header value.
+	 */
+	public function test_edge_country_rejects_invalid_values( $value ) {
+		$_SERVER['GEOIP_COUNTRY_CODE'] = $value;
+		$this->assertSame( '', Complianz::get_edge_country_code() );
+	}
+
+	/**
+	 * Invalid edge country header values.
+	 *
+	 * @return array<string,array{string}>
+	 */
+	public function data_invalid_edge_country_values() {
+		return [
+			'unknown XX'    => [ 'XX' ],
+			'cloudflare T1' => [ 'T1' ],
+			'three letters' => [ 'USA' ],
+			'numeric'       => [ '12' ],
+			'empty'         => [ '' ],
+		];
+	}
+
+	/**
+	 * A rejected value in the first header falls through to a valid later header.
+	 */
+	public function test_edge_country_skips_invalid_and_uses_next_header() {
+		$_SERVER['GEOIP_COUNTRY_CODE'] = 'XX';
+		$_SERVER['HTTP_CF_IPCOUNTRY']  = 'NL';
+		$this->assertSame( 'NL', Complianz::get_edge_country_code() );
+	}
+
+	// -------------------------------------------------------------------------
+	// edge_user_region / edge_user_consenttype
+	// -------------------------------------------------------------------------
+
+	/**
+	 * The edge country is mapped to its supported region.
+	 */
+	public function test_edge_region_uses_country_when_supported() {
+		$_SERVER['GEOIP_COUNTRY_CODE'] = 'NL';
+		$this->assertSame( 'eu', Complianz::edge_user_region( 'us' ) );
+	}
+
+	/**
+	 * A country mapping to an unsupported region leaves the default region intact
+	 * (Complianz's outside-region fallback is unavailable in the test environment).
+	 */
+	public function test_edge_region_keeps_default_for_unsupported_country() {
+		// 'FR' is not in the mock region map, so cmplz_get_region_for_country returns false.
+		$_SERVER['GEOIP_COUNTRY_CODE'] = 'FR';
+		$this->assertSame( 'us', Complianz::edge_user_region( 'us' ) );
+	}
+
+	/**
+	 * The manual ?cmplz_user_region= override wins over the edge country.
+	 */
+	public function test_edge_region_manual_override_wins() {
+		$_SERVER['GEOIP_COUNTRY_CODE'] = 'NL';
+		$_GET['cmplz_user_region']     = 'us';
+		$this->assertSame( 'us', Complianz::edge_user_region( 'eu' ) );
+	}
+
+	/**
+	 * The edge country is mapped to its consent type when that type is in use.
+	 */
+	public function test_edge_consenttype_uses_country_when_in_use() {
+		$_SERVER['GEOIP_COUNTRY_CODE'] = 'NL';
+		$this->assertSame( 'optin', Complianz::edge_user_consenttype( 'optout' ) );
+	}
+
+	/**
+	 * A country whose consent type is not configured falls back to 'other'.
+	 */
+	public function test_edge_consenttype_falls_back_to_other() {
+		// 'FR' is not mapped, so cmplz_get_consenttype_for_country returns 'other'.
+		$_SERVER['GEOIP_COUNTRY_CODE'] = 'FR';
+		$this->assertSame( 'other', Complianz::edge_user_consenttype( 'optin' ) );
+	}
+
+	// -------------------------------------------------------------------------
+	// maybe_use_edge_geolocation (filter swap wiring)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * When GeoIP is on and the edge supplies a country, Complianz's GeoIP filters
+	 * are replaced with the Newspack edge-based ones.
+	 */
+	public function test_swaps_filters_when_geoip_on_and_edge_country_present() {
+		self::$geoip_enabled           = true;
+		$_SERVER['GEOIP_COUNTRY_CODE'] = 'NL';
+		$this->register_premium_geoip_filters();
+
+		Complianz::maybe_use_edge_geolocation();
+
+		// Complianz's own GeoIP callbacks are removed.
+		$this->assertFalse( has_filter( 'cmplz_user_region', 'cmplz_user_region' ) );
+		$this->assertFalse( has_filter( 'cmplz_user_consenttype', 'cmplz_user_consenttype' ) );
+		// Newspack's edge-based callbacks take their place.
+		$this->assertSame( 20, has_filter( 'cmplz_user_region', [ Complianz::class, 'edge_user_region' ] ) );
+		$this->assertSame( 10, has_filter( 'cmplz_user_consenttype', [ Complianz::class, 'edge_user_consenttype' ] ) );
+	}
+
+	/**
+	 * The swap is skipped when GeoIP is not enabled (no MaxMind lookups happening).
+	 */
+	public function test_no_swap_when_geoip_disabled() {
+		self::$geoip_enabled           = false;
+		$_SERVER['GEOIP_COUNTRY_CODE'] = 'NL';
+		$this->register_premium_geoip_filters();
+
+		Complianz::maybe_use_edge_geolocation();
+
+		$this->assertSame( 20, has_filter( 'cmplz_user_region', 'cmplz_user_region' ) );
+		$this->assertFalse( has_filter( 'cmplz_user_region', [ Complianz::class, 'edge_user_region' ] ) );
+	}
+
+	/**
+	 * The swap is skipped when no edge country is available (nothing to substitute).
+	 */
+	public function test_no_swap_when_no_edge_country() {
+		self::$geoip_enabled = true;
+		$this->register_premium_geoip_filters();
+
+		Complianz::maybe_use_edge_geolocation();
+
+		$this->assertSame( 20, has_filter( 'cmplz_user_region', 'cmplz_user_region' ) );
+		$this->assertFalse( has_filter( 'cmplz_user_region', [ Complianz::class, 'edge_user_region' ] ) );
+	}
+
+	/**
+	 * The newspack_complianz_use_edge_geolocation filter can opt a site out.
+	 */
+	public function test_opt_out_filter_prevents_swap() {
+		self::$geoip_enabled           = true;
+		$_SERVER['GEOIP_COUNTRY_CODE'] = 'NL';
+		$this->register_premium_geoip_filters();
+		add_filter( 'newspack_complianz_use_edge_geolocation', '__return_false' );
+
+		Complianz::maybe_use_edge_geolocation();
+
+		$this->assertSame( 20, has_filter( 'cmplz_user_region', 'cmplz_user_region' ) );
+		$this->assertFalse( has_filter( 'cmplz_user_region', [ Complianz::class, 'edge_user_region' ] ) );
 	}
 }
