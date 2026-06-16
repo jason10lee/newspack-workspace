@@ -25,6 +25,8 @@ use DateTimeImmutable;
 use DateTimeZone;
 use Newspack\Insights\BigQuery_Proxy_Client;
 use Newspack\Insights\Conversion_Metric;
+use Newspack\Insights\Donors_Metric;
+use Newspack\Insights\Subscribers_Metric;
 use Newspack\Insights\Woo_Order_Resolver;
 use WP_UnitTestCase;
 
@@ -146,105 +148,6 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	}
 
 	// --- Existing Phase 1 placeholder tests ----------------------------------
-
-	/**
-	 * Every scalar scorecard returns the Phase 1 placeholder envelope: a
-	 * non-computable, pending, zero value of the documented type.
-	 *
-	 * @dataProvider provide_scalar_methods
-	 * @param string $method           Method on Conversion_Metric to call.
-	 * @param string $placeholder_type Expected `placeholder_type`.
-	 */
-	public function test_scalar_returns_placeholder_envelope( string $method, string $placeholder_type ) {
-		[ $start, $end ] = $this->window();
-		$result          = $this->metric->$method( $start, $end );
-
-		$this->assertIsArray( $result );
-		$this->assertArrayHasKey( 'value', $result );
-		$this->assertArrayHasKey( 'computable', $result );
-		$this->assertArrayHasKey( 'pending', $result );
-		$this->assertArrayHasKey( 'denominator', $result );
-		$this->assertArrayHasKey( 'placeholder_type', $result );
-
-		$this->assertTrue( $result['pending'], "$method should be pending in Phase 1" );
-		$this->assertFalse( $result['computable'], "$method should be non-computable in Phase 1" );
-		$this->assertNull( $result['denominator'] );
-		$this->assertSame( $placeholder_type, $result['placeholder_type'] );
-
-		if ( 'decimal' === $placeholder_type ) {
-			$this->assertSame( 0.0, $result['value'] );
-		} else {
-			$this->assertSame( 0, $result['value'] );
-		}
-	}
-
-	/**
-	 * The three scalar scorecards still on placeholders: three Section 8
-	 * opportunity snapshot counts. C7 (influenced_registration_rate_7d), C8
-	 * (influenced_newsletter_rate_7d), C14 (influenced_subscription_rate_14d),
-	 * and C15 (influenced_donation_rate_14d) have been wired and are tested
-	 * separately.
-	 *
-	 * @return array<string, array{0:string,1:string}>
-	 */
-	public function provide_scalar_methods(): array {
-		return [
-			// Section 8 — opportunity buckets (snapshot counts).
-			'stale_registered_count'   => [ 'get_stale_registered_count', 'count' ],
-			'at_risk_subscriber_count' => [ 'get_at_risk_subscriber_count', 'count' ],
-			'lapsed_donor_count'       => [ 'get_lapsed_donor_count', 'count' ],
-		];
-	}
-
-	/**
-	 * Every funnel returns a pending envelope with the expected number of
-	 * ordered, zeroed stages.
-	 *
-	 * @dataProvider provide_funnel_methods
-	 * @param string $method      Method on Conversion_Metric to call.
-	 * @param int    $stage_count Expected number of stages.
-	 */
-	public function test_funnel_returns_zeroed_stages( string $method, int $stage_count ) {
-		[ $start, $end ] = $this->window();
-		$result          = $this->metric->$method( $start, $end );
-
-		$this->assertTrue( $result['pending'] );
-		$this->assertCount( $stage_count, $result['stages'] );
-		foreach ( $result['stages'] as $stage ) {
-			$this->assertArrayHasKey( 'label', $stage );
-			$this->assertNotSame( '', $stage['label'] );
-			$this->assertSame( 0, $stage['count'] );
-			$this->assertSame( 0.0, $stage['pct_of_top'] );
-		}
-	}
-
-	/**
-	 * The still-pending funnel methods: two Section 2 per-journey funnels
-	 * (3/3/2) plus the visibility-gated cross-upsell funnel. The lifecycle
-	 * (C2) and anon-to-registered (C3) funnels have been wired and are tested
-	 * separately below.
-	 *
-	 * @return array<string, array{0:string,1:int}>
-	 */
-	public function provide_funnel_methods(): array {
-		return [
-			'registered_to_subscriber' => [ 'get_registered_to_subscriber_funnel', 3 ],
-			'registered_to_donor'      => [ 'get_registered_to_donor_funnel', 3 ],
-			'subscriber_to_donor'      => [ 'get_subscriber_to_donor_funnel', 2 ],
-		];
-	}
-
-	/**
-	 * The visibility-gated Section 2.4 funnel is hidden in Phase 1, with the
-	 * `insufficient_data` reason the React side reads for its empty state.
-	 */
-	public function test_cross_upsell_funnel_is_hidden_in_phase_1() {
-		[ $start, $end ] = $this->window();
-		$result          = $this->metric->get_subscriber_to_donor_funnel( $start, $end );
-
-		$this->assertSame( 'hidden', $result['visibility'] );
-		$this->assertSame( 'insufficient_data', $result['visibility_reason'] );
-	}
 
 	/**
 	 * The two single-series Section 4 distributions return a pending
@@ -1274,6 +1177,416 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertFalse( $result['computable'] );
 		$this->assertSame( 0, $result['denominator'] );
 		$this->assertSame( 0.0, $result['value'] );
+	}
+
+	// --- C10: get_registered_to_subscriber_funnel --------------------------
+
+	/**
+	 * Build a mock Subscribers_Metric that stubs count_active_non_donation_subscribers_by_customer_ids.
+	 *
+	 * @param int $return Value to return for the stub.
+	 * @return Subscribers_Metric
+	 */
+	private function subscribers_metric_returning_count( int $return ): Subscribers_Metric {
+		$mock = $this->createMock( Subscribers_Metric::class );
+		$mock->method( 'count_active_non_donation_subscribers_by_customer_ids' )->willReturn( $return );
+		return $mock;
+	}
+
+	/**
+	 * Build a mock Donors_Metric that stubs count_completed_donation_order_customers_by_customer_ids.
+	 *
+	 * @param int $return Value to return for the stub.
+	 * @return Donors_Metric
+	 */
+	private function donors_metric_returning_count( int $return ): Donors_Metric {
+		$mock = $this->createMock( Donors_Metric::class );
+		$mock->method( 'count_completed_donation_order_customers_by_customer_ids' )->willReturn( $return );
+		return $mock;
+	}
+
+	/**
+	 * C10 populated: proxy returns rows with uid + saw_subscription_surface →
+	 * three stages built with correct counts and labels.
+	 */
+	public function test_registered_to_subscriber_funnel_returns_populated_stages_on_success() {
+		$rows = [
+			[
+				'uid'                      => 1,
+				'saw_subscription_surface' => 1,
+			],
+			[
+				'uid'                      => 2,
+				'saw_subscription_surface' => 1,
+			],
+			[
+				'uid'                      => 3,
+				'saw_subscription_surface' => 0,
+			],
+			[
+				'uid'                      => 4,
+				'saw_subscription_surface' => 0,
+			],
+		];
+
+		$proxy = $this->proxy_returning( $rows );
+		$subs  = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'count_active_non_donation_subscribers_by_customer_ids' )->willReturn( 1 );
+
+		$metric          = new Conversion_Metric( $proxy, null, $subs );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_registered_to_subscriber_funnel( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertArrayNotHasKey( 'pending', $result );
+		$this->assertCount( 3, $result['stages'] );
+
+		// step_1: total rows = 4; pct_of_top = 1.0.
+		$this->assertSame( 4, $result['stages'][0]['count'] );
+		$this->assertSame( 1.0, $result['stages'][0]['pct_of_top'] );
+
+		// step_2: sum of saw_subscription_surface = 2; pct = 2/4 = 0.5.
+		$this->assertSame( 2, $result['stages'][1]['count'] );
+		$this->assertEqualsWithDelta( 0.5, $result['stages'][1]['pct_of_top'], 1e-9 );
+
+		// step_3: from mock = 1; pct = 1/4 = 0.25.
+		$this->assertSame( 1, $result['stages'][2]['count'] );
+		$this->assertEqualsWithDelta( 0.25, $result['stages'][2]['pct_of_top'], 1e-9 );
+
+		// Every stage must have a non-empty label.
+		foreach ( $result['stages'] as $stage ) {
+			$this->assertNotSame( '', $stage['label'] );
+		}
+	}
+
+	/**
+	 * C10 empty: proxy returns [] → state 'empty', empty stages.
+	 */
+	public function test_registered_to_subscriber_funnel_returns_empty_state_on_no_rows() {
+		$metric          = new Conversion_Metric( $this->proxy_returning( [] ), null, $this->createMock( Subscribers_Metric::class ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_registered_to_subscriber_funnel( $start, $end );
+
+		$this->assertSame( 'empty', $result['state'] );
+		$this->assertSame( [], $result['stages'] );
+	}
+
+	/**
+	 * C10 error: proxy returns WP_Error → state 'error'.
+	 */
+	public function test_registered_to_subscriber_funnel_returns_error_on_proxy_error() {
+		$wp_error        = new \WP_Error( 'bigquery_proxy_http_error', 'HTTP 500' );
+		$metric          = new Conversion_Metric( $this->proxy_returning( $wp_error ), null, $this->createMock( Subscribers_Metric::class ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_registered_to_subscriber_funnel( $start, $end );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_http_error', $result['error_code'] );
+		$this->assertSame( [], $result['stages'] );
+	}
+
+	/**
+	 * C10 malformed: proxy returns non-array first row → state 'error' (malformed).
+	 */
+	public function test_registered_to_subscriber_funnel_returns_error_on_malformed_rows() {
+		$metric          = new Conversion_Metric( $this->proxy_returning( [ 'not-an-array' ] ), null, $this->createMock( Subscribers_Metric::class ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_registered_to_subscriber_funnel( $start, $end );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_malformed_rows', $result['error_code'] );
+		$this->assertSame( [], $result['stages'] );
+	}
+
+	/**
+	 * C10 malformed tail row: valid first row followed by a non-array tail row →
+	 * state 'error' (malformed), matching the per-row is_array guard inside the loop.
+	 */
+	public function test_registered_to_subscriber_funnel_returns_error_on_malformed_tail_row() {
+		$valid_row = [
+			'uid'                      => 1,
+			'saw_subscription_surface' => 1,
+		];
+		$metric          = new Conversion_Metric( $this->proxy_returning( [ $valid_row, 'not-an-array' ] ), null, $this->createMock( Subscribers_Metric::class ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_registered_to_subscriber_funnel( $start, $end );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_malformed_rows', $result['error_code'] );
+		$this->assertSame( [], $result['stages'] );
+	}
+
+	// --- C11: get_registered_to_donor_funnel --------------------------------
+
+	/**
+	 * C11 populated: proxy returns rows with uid + saw_donation_surface →
+	 * three stages built with correct counts.
+	 */
+	public function test_registered_to_donor_funnel_returns_populated_stages_on_success() {
+		$rows = [
+			[
+				'uid'                  => 1,
+				'saw_donation_surface' => 1,
+			],
+			[
+				'uid'                  => 2,
+				'saw_donation_surface' => 1,
+			],
+			[
+				'uid'                  => 3,
+				'saw_donation_surface' => 1,
+			],
+			[
+				'uid'                  => 4,
+				'saw_donation_surface' => 0,
+			],
+		];
+
+		$proxy  = $this->proxy_returning( $rows );
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'count_completed_donation_order_customers_by_customer_ids' )->willReturn( 2 );
+
+		$metric          = new Conversion_Metric( $proxy, null, null, $donors );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_registered_to_donor_funnel( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertArrayNotHasKey( 'pending', $result );
+		$this->assertCount( 3, $result['stages'] );
+
+		// step_1: 4 rows; pct_of_top = 1.0.
+		$this->assertSame( 4, $result['stages'][0]['count'] );
+		$this->assertSame( 1.0, $result['stages'][0]['pct_of_top'] );
+
+		// step_2: sum of saw_donation_surface = 3; pct = 3/4 = 0.75.
+		$this->assertSame( 3, $result['stages'][1]['count'] );
+		$this->assertEqualsWithDelta( 0.75, $result['stages'][1]['pct_of_top'], 1e-9 );
+
+		// step_3: from mock = 2; pct = 2/4 = 0.5.
+		$this->assertSame( 2, $result['stages'][2]['count'] );
+		$this->assertEqualsWithDelta( 0.5, $result['stages'][2]['pct_of_top'], 1e-9 );
+
+		foreach ( $result['stages'] as $stage ) {
+			$this->assertNotSame( '', $stage['label'] );
+		}
+	}
+
+	/**
+	 * C11 empty: proxy returns [] → state 'empty', empty stages.
+	 */
+	public function test_registered_to_donor_funnel_returns_empty_state_on_no_rows() {
+		$metric          = new Conversion_Metric( $this->proxy_returning( [] ), null, null, $this->createMock( Donors_Metric::class ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_registered_to_donor_funnel( $start, $end );
+
+		$this->assertSame( 'empty', $result['state'] );
+		$this->assertSame( [], $result['stages'] );
+	}
+
+	/**
+	 * C11 error: proxy returns WP_Error → state 'error'.
+	 */
+	public function test_registered_to_donor_funnel_returns_error_on_proxy_error() {
+		$wp_error        = new \WP_Error( 'bigquery_proxy_http_error', 'HTTP 502' );
+		$metric          = new Conversion_Metric( $this->proxy_returning( $wp_error ), null, null, $this->createMock( Donors_Metric::class ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_registered_to_donor_funnel( $start, $end );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_http_error', $result['error_code'] );
+		$this->assertSame( [], $result['stages'] );
+	}
+
+	/**
+	 * C11 malformed: proxy returns non-array first row → state 'error' (malformed).
+	 */
+	public function test_registered_to_donor_funnel_returns_error_on_malformed_rows() {
+		$metric          = new Conversion_Metric( $this->proxy_returning( [ 'not-an-array' ] ), null, null, $this->createMock( Donors_Metric::class ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_registered_to_donor_funnel( $start, $end );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_malformed_rows', $result['error_code'] );
+		$this->assertSame( [], $result['stages'] );
+	}
+
+	/**
+	 * C11 malformed tail row: valid first row followed by a non-array tail row →
+	 * state 'error' (malformed), matching the per-row is_array guard inside the loop.
+	 */
+	public function test_registered_to_donor_funnel_returns_error_on_malformed_tail_row() {
+		$valid_row = [
+			'uid'                  => 1,
+			'saw_donation_surface' => 1,
+		];
+		$metric          = new Conversion_Metric( $this->proxy_returning( [ $valid_row, 'not-an-array' ] ), null, null, $this->createMock( Donors_Metric::class ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_registered_to_donor_funnel( $start, $end );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_malformed_rows', $result['error_code'] );
+		$this->assertSame( [], $result['stages'] );
+	}
+
+	// --- C16: get_at_risk_subscriber_count ----------------------------------
+
+	/**
+	 * C16 populated: Subscribers_Metric::get_at_risk_subscribers() returns
+	 * a count → populated scalar with that count.
+	 */
+	public function test_at_risk_subscriber_count_returns_populated_scalar() {
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_at_risk_subscribers' )->willReturn( 42 );
+
+		$metric          = new Conversion_Metric( null, null, $subs );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_at_risk_subscriber_count( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertArrayNotHasKey( 'pending', $result );
+		$this->assertTrue( $result['computable'] );
+		$this->assertSame( 'count', $result['placeholder_type'] );
+		$this->assertSame( 42, $result['value'] );
+		$this->assertNull( $result['denominator'] );
+	}
+
+	// --- C17: get_lapsed_donor_count ----------------------------------------
+
+	/**
+	 * C17 populated: Donors_Metric::get_lapsed_donors_in_window() returns a
+	 * count → populated scalar with that count.
+	 */
+	public function test_lapsed_donor_count_returns_populated_scalar() {
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_lapsed_donors_in_window' )->willReturn( 17 );
+
+		$metric          = new Conversion_Metric( null, null, null, $donors );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_lapsed_donor_count( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertArrayNotHasKey( 'pending', $result );
+		$this->assertTrue( $result['computable'] );
+		$this->assertSame( 'count', $result['placeholder_type'] );
+		$this->assertSame( 17, $result['value'] );
+		$this->assertNull( $result['denominator'] );
+	}
+
+	// --- C18: get_stale_registered_count ------------------------------------
+
+	/**
+	 * C18 populated: Subscribers_Metric::get_stale_registered_users() returns
+	 * a count → populated scalar with that count.
+	 */
+	public function test_stale_registered_count_returns_populated_scalar() {
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_stale_registered_users' )->willReturn( 123 );
+
+		$metric          = new Conversion_Metric( null, null, $subs );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_stale_registered_count( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertArrayNotHasKey( 'pending', $result );
+		$this->assertTrue( $result['computable'] );
+		$this->assertSame( 'count', $result['placeholder_type'] );
+		$this->assertSame( 123, $result['value'] );
+		$this->assertNull( $result['denominator'] );
+	}
+
+	// --- C19: get_subscriber_to_donor_funnel --------------------------------
+
+	/**
+	 * C19 visible: both active_subs and active_donors ≥ 50 → state 'populated',
+	 * visibility 'visible', two stages with correct counts.
+	 */
+	public function test_subscriber_to_donor_funnel_returns_visible_populated_result() {
+		$subscriber_ids = range( 1, 60 ); // 60 subscriber IDs.
+
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_active_non_donation_subscriber_customer_ids' )->willReturn( $subscriber_ids );
+
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_active_donors' )->willReturn( 55 );
+		$donors->method( 'get_subscriber_donors_in_window' )->willReturn( 12 );
+
+		$metric          = new Conversion_Metric( null, null, $subs, $donors );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_subscriber_to_donor_funnel( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertArrayNotHasKey( 'pending', $result );
+		$this->assertSame( 'visible', $result['visibility'] );
+		$this->assertCount( 2, $result['stages'] );
+
+		// step_1: active_subs = 60; pct_of_top = 1.0.
+		$this->assertSame( 60, $result['stages'][0]['count'] );
+		$this->assertSame( 1.0, $result['stages'][0]['pct_of_top'] );
+
+		// step_2: subscriber donors = 12; pct = 12/60 = 0.2.
+		$this->assertSame( 12, $result['stages'][1]['count'] );
+		$this->assertEqualsWithDelta( 0.2, $result['stages'][1]['pct_of_top'], 1e-9 );
+
+		foreach ( $result['stages'] as $stage ) {
+			$this->assertNotSame( '', $stage['label'] );
+		}
+	}
+
+	/**
+	 * C19 hidden (below active_subs threshold): active_subs < 50 → visibility
+	 * 'hidden' with 'insufficient_data' reason.
+	 */
+	public function test_subscriber_to_donor_funnel_is_hidden_when_active_subs_below_threshold() {
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_active_non_donation_subscriber_customer_ids' )->willReturn( range( 1, 30 ) ); // 30 < 50.
+
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_active_donors' )->willReturn( 80 ); // ≥ 50, but subs below.
+
+		$metric          = new Conversion_Metric( null, null, $subs, $donors );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_subscriber_to_donor_funnel( $start, $end );
+
+		$this->assertSame( 'hidden', $result['visibility'] );
+		$this->assertSame( 'insufficient_data', $result['visibility_reason'] );
+	}
+
+	/**
+	 * C19 hidden (below active_donors threshold): active_donors < 50 → visibility
+	 * 'hidden' with 'insufficient_data' reason.
+	 */
+	public function test_subscriber_to_donor_funnel_is_hidden_when_active_donors_below_threshold() {
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_active_non_donation_subscriber_customer_ids' )->willReturn( range( 1, 70 ) ); // 70 ≥ 50.
+
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_active_donors' )->willReturn( 20 ); // 20 < 50.
+
+		$metric          = new Conversion_Metric( null, null, $subs, $donors );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_subscriber_to_donor_funnel( $start, $end );
+
+		$this->assertSame( 'hidden', $result['visibility'] );
+		$this->assertSame( 'insufficient_data', $result['visibility_reason'] );
+	}
+
+	/**
+	 * C19 hidden (exactly at threshold on both sides — boundary): active_subs = 49
+	 * or active_donors = 49 → hidden.
+	 */
+	public function test_subscriber_to_donor_funnel_is_hidden_at_boundary_of_49() {
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_active_non_donation_subscriber_customer_ids' )->willReturn( range( 1, 49 ) ); // exactly 49.
+
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_active_donors' )->willReturn( 49 ); // exactly 49.
+
+		$metric          = new Conversion_Metric( null, null, $subs, $donors );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_subscriber_to_donor_funnel( $start, $end );
+
+		$this->assertSame( 'hidden', $result['visibility'] );
+		$this->assertSame( 'insufficient_data', $result['visibility_reason'] );
 	}
 
 	// --- C9: get_top_pages_no_conversion -----------------------------------

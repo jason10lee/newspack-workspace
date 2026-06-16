@@ -51,6 +51,8 @@ defined( 'ABSPATH' ) || exit;
 
 use DateTimeInterface;
 use Newspack\Insights\BigQuery_Proxy_Client;
+use Newspack\Insights\Donors_Metric;
+use Newspack\Insights\Subscribers_Metric;
 use Newspack\Insights\Woo_Order_Resolver;
 
 /**
@@ -119,17 +121,47 @@ final class Conversion_Metric {
 	private array $paid_attempt_cache = [];
 
 	/**
+	 * Subscribers_Metric collaborator for Section 8 opportunity counts and
+	 * the Registered → Subscriber / Subscriber → Donor funnels.
+	 *
+	 * @var Subscribers_Metric
+	 */
+	private Subscribers_Metric $subscribers_metric;
+
+	/**
+	 * Donors_Metric collaborator for Section 8 lapsed-donor count and the
+	 * Registered → Donor / Subscriber → Donor funnels.
+	 *
+	 * @var Donors_Metric
+	 */
+	private Donors_Metric $donors_metric;
+
+	/**
+	 * Minimum cohort size required to show the Subscriber → Donor funnel
+	 * (active subscribers AND active donors must both meet this threshold).
+	 *
+	 * @var int
+	 */
+	const MIN_COHORT_FOR_SUB_TO_DONOR = 50;
+
+	/**
 	 * Constructor. Optionally inject collaborators (used in tests).
 	 *
-	 * @param BigQuery_Proxy_Client|null $proxy        Injected proxy client, or null to lazy-resolve.
-	 * @param Woo_Order_Resolver|null    $woo_resolver Injected Woo resolver, or null to lazy-create.
+	 * @param BigQuery_Proxy_Client|null $proxy              Injected proxy client, or null to lazy-resolve.
+	 * @param Woo_Order_Resolver|null    $woo_resolver       Injected Woo resolver, or null to lazy-create.
+	 * @param Subscribers_Metric|null    $subscribers_metric Injected Subscribers_Metric, or null to lazy-create.
+	 * @param Donors_Metric|null         $donors_metric      Injected Donors_Metric, or null to lazy-create.
 	 */
 	public function __construct(
 		?BigQuery_Proxy_Client $proxy = null,
-		?Woo_Order_Resolver $woo_resolver = null
+		?Woo_Order_Resolver $woo_resolver = null,
+		?Subscribers_Metric $subscribers_metric = null,
+		?Donors_Metric $donors_metric = null
 	) {
-		$this->proxy        = $proxy ?? new BigQuery_Proxy_Client();
-		$this->woo_resolver = $woo_resolver ?? new Woo_Order_Resolver();
+		$this->proxy              = $proxy ?? new BigQuery_Proxy_Client();
+		$this->woo_resolver       = $woo_resolver ?? new Woo_Order_Resolver();
+		$this->subscribers_metric = $subscribers_metric ?? new Subscribers_Metric();
+		$this->donors_metric      = $donors_metric ?? new Donors_Metric();
 	}
 
 	/**
@@ -504,68 +536,171 @@ final class Conversion_Metric {
 	}
 
 	/**
-	 * Registered → Subscriber funnel (2.2) — three stages, non-donation
-	 * subscriptions only.
+	 * Registered → Subscriber funnel (C10 / 2.2) — three stages, non-donation
+	 * subscriptions only. Dispatches
+	 * `conversion_journey_funnel_registered_to_subscriber`; the hub returns
+	 * rows `{ uid, saw_subscription_surface }`. Step 3 count is the number of
+	 * those UIDs who currently hold an active non-donation subscription,
+	 * resolved via {@see Subscribers_Metric::count_active_non_donation_subscribers_by_customer_ids()}.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, stages: array<int, array{label: string, count: int, pct_of_top: float}>}
+	 * @return array{state: string, stages: array<int, array{label: string, count: int, pct_of_top: float}>}
 	 */
 	public function get_registered_to_subscriber_funnel( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
+		$rows = $this->proxy->query( 'conversion_journey_funnel_registered_to_subscriber', $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $this->error_collection( 'stages', $rows );
+		}
+		if ( ! is_array( $rows ) || ( ! empty( $rows ) && ! is_array( $rows[0] ) ) ) {
+			return $this->malformed_collection( 'stages' );
+		}
+		if ( empty( $rows ) ) {
+			return [
+				'state'  => 'empty',
+				'stages' => [],
+			];
+		}
+		$step_1 = count( $rows );
+		$step_2 = 0;
+		$uids   = [];
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				return $this->malformed_collection( 'stages' );
+			}
+			$step_2 += (int) ( $row['saw_subscription_surface'] ?? 0 );
+			$uids[]  = (int) ( $row['uid'] ?? 0 );
+		}
+		$step_3 = $this->subscribers_metric->count_active_non_donation_subscribers_by_customer_ids( $uids );
+		$safe   = $step_1 > 0 ? $step_1 : 1;
 		return [
-			'pending' => true,
-			'stages'  => [
-				$this->funnel_stage( __( 'Registered', 'newspack-plugin' ) ),
-				$this->funnel_stage( __( 'Saw a subscription-intent surface', 'newspack-plugin' ) ),
-				$this->funnel_stage( __( 'Became subscriber', 'newspack-plugin' ) ),
+			'state'  => 'populated',
+			'stages' => [
+				[
+					'label'      => __( 'Registered', 'newspack-plugin' ),
+					'count'      => $step_1,
+					'pct_of_top' => (float) ( $step_1 / $safe ),
+				],
+				[
+					'label'      => __( 'Saw a subscription-intent surface', 'newspack-plugin' ),
+					'count'      => $step_2,
+					'pct_of_top' => (float) ( $step_2 / $safe ),
+				],
+				[
+					'label'      => __( 'Became subscriber', 'newspack-plugin' ),
+					'count'      => $step_3,
+					'pct_of_top' => (float) ( $step_3 / $safe ),
+				],
 			],
 		];
 	}
 
 	/**
-	 * Registered → Donor funnel (2.3) — three stages.
+	 * Registered → Donor funnel (C11 / 2.3) — three stages. Dispatches
+	 * `conversion_journey_funnel_registered_to_donor`; the hub returns rows
+	 * `{ uid, saw_donation_surface }`. Step 3 count is the number of those
+	 * UIDs who have at least one completed donation order, resolved via
+	 * {@see Donors_Metric::count_completed_donation_order_customers_by_customer_ids()}.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, stages: array<int, array{label: string, count: int, pct_of_top: float}>}
+	 * @return array{state: string, stages: array<int, array{label: string, count: int, pct_of_top: float}>}
 	 */
 	public function get_registered_to_donor_funnel( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
+		$rows = $this->proxy->query( 'conversion_journey_funnel_registered_to_donor', $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $this->error_collection( 'stages', $rows );
+		}
+		if ( ! is_array( $rows ) || ( ! empty( $rows ) && ! is_array( $rows[0] ) ) ) {
+			return $this->malformed_collection( 'stages' );
+		}
+		if ( empty( $rows ) ) {
+			return [
+				'state'  => 'empty',
+				'stages' => [],
+			];
+		}
+		$step_1 = count( $rows );
+		$step_2 = 0;
+		$uids   = [];
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				return $this->malformed_collection( 'stages' );
+			}
+			$step_2 += (int) ( $row['saw_donation_surface'] ?? 0 );
+			$uids[]  = (int) ( $row['uid'] ?? 0 );
+		}
+		$step_3 = $this->donors_metric->count_completed_donation_order_customers_by_customer_ids( $uids );
+		$safe   = $step_1 > 0 ? $step_1 : 1;
 		return [
-			'pending' => true,
-			'stages'  => [
-				$this->funnel_stage( __( 'Registered', 'newspack-plugin' ) ),
-				$this->funnel_stage( __( 'Saw a donation-intent surface', 'newspack-plugin' ) ),
-				$this->funnel_stage( __( 'Became donor', 'newspack-plugin' ) ),
+			'state'  => 'populated',
+			'stages' => [
+				[
+					'label'      => __( 'Registered', 'newspack-plugin' ),
+					'count'      => $step_1,
+					'pct_of_top' => (float) ( $step_1 / $safe ),
+				],
+				[
+					'label'      => __( 'Saw a donation-intent surface', 'newspack-plugin' ),
+					'count'      => $step_2,
+					'pct_of_top' => (float) ( $step_2 / $safe ),
+				],
+				[
+					'label'      => __( 'Became donor', 'newspack-plugin' ),
+					'count'      => $step_3,
+					'pct_of_top' => (float) ( $step_3 / $safe ),
+				],
 			],
 		];
 	}
 
 	/**
-	 * Subscriber → Donor cross-upsell funnel (2.4) — two stages,
+	 * Subscriber → Donor cross-upsell funnel (C19 / 2.4) — two stages,
 	 * visibility-gated.
 	 *
 	 * Local-only (Woo-only): does NOT belong in the BQ catalog. Gated on
-	 * 50 active subscribers AND 50 active donors. Phase 1 returns
-	 * `visibility: 'hidden'` unconditionally (no real cohort sizes yet);
-	 * Phase 2 computes visibility from the live cohort counts. The React
-	 * side renders the empty-state note when hidden.
+	 * {@see MIN_COHORT_FOR_SUB_TO_DONOR} (50) active subscribers AND 50 active
+	 * donors. When either cohort falls below the threshold the funnel returns
+	 * `visibility: 'hidden'` so React renders the insufficient-data note.
+	 * When both cohorts meet the threshold, step_2 is resolved from
+	 * {@see Donors_Metric::get_subscriber_donors_in_window()}.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, stages: array<int, array{label: string, count: int, pct_of_top: float}>, visibility: string, visibility_reason: string|null}
+	 * @return array{state: string, stages: array<int, array{label: string, count: int, pct_of_top: float}>, visibility: string, visibility_reason: string|null}
 	 */
 	public function get_subscriber_to_donor_funnel( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
+		$subscriber_ids = $this->subscribers_metric->get_active_non_donation_subscriber_customer_ids();
+		$active_subs    = count( $subscriber_ids );
+		$active_donors  = $this->donors_metric->get_active_donors();
+
+		if ( $active_subs < self::MIN_COHORT_FOR_SUB_TO_DONOR || $active_donors < self::MIN_COHORT_FOR_SUB_TO_DONOR ) {
+			return [
+				'state'             => 'populated',
+				'stages'            => [],
+				'visibility'        => 'hidden',
+				'visibility_reason' => 'insufficient_data',
+			];
+		}
+
+		$step_2 = $this->donors_metric->get_subscriber_donors_in_window( $subscriber_ids, $start, $end );
+		$safe   = $active_subs > 0 ? $active_subs : 1;
 		return [
-			'pending'           => true,
+			'state'             => 'populated',
 			'stages'            => [
-				$this->funnel_stage( __( 'Active subscriber', 'newspack-plugin' ) ),
-				$this->funnel_stage( __( 'Also donor', 'newspack-plugin' ) ),
+				[
+					'label'      => __( 'Active subscriber', 'newspack-plugin' ),
+					'count'      => $active_subs,
+					'pct_of_top' => 1.0,
+				],
+				[
+					'label'      => __( 'Also donor', 'newspack-plugin' ),
+					'count'      => $step_2,
+					'pct_of_top' => (float) ( $step_2 / $safe ),
+				],
 			],
-			'visibility'        => 'hidden',
-			'visibility_reason' => 'insufficient_data',
+			'visibility'        => 'visible',
+			'visibility_reason' => null,
 		];
 	}
 
@@ -1102,10 +1237,11 @@ final class Conversion_Metric {
 	// should reuse that orchestrator method rather than re-implement.
 
 	/**
-	 * Stale registered readers (8.1). Snapshot — ignores the window.
+	 * Stale registered readers (C18 / 8.1). Snapshot — ignores the window.
 	 *
-	 * Local-only: the count itself is local (Woo plus a recently-active UID
-	 * set sourced from BQ). Does NOT belong in the BQ catalog.
+	 * Local-only: count of registered readers with no active non-donation
+	 * subscription and no completed donation in the trailing 365 days,
+	 * delegated to {@see Subscribers_Metric::get_stale_registered_users()}.
 	 *
 	 * @param DateTimeInterface $start Window start (ignored — snapshot).
 	 * @param DateTimeInterface $end   Window end (ignored — snapshot).
@@ -1113,13 +1249,15 @@ final class Conversion_Metric {
 	 */
 	public function get_stale_registered_count( DateTimeInterface $start, DateTimeInterface $end ): array {
 		unset( $start, $end );
-		return $this->placeholder( 'count' );
+		return $this->populated_scalar( $this->subscribers_metric->get_stale_registered_users(), true, null, 'count' );
 	}
 
 	/**
-	 * At-risk subscribers (8.2). Snapshot — ignores the window.
+	 * At-risk subscribers (C16 / 8.2). Snapshot — ignores the window.
 	 *
-	 * Local-only (Woo-only): does NOT belong in the BQ catalog.
+	 * Local-only (Woo-only): count of active non-donation subscriptions with
+	 * a scheduled payment retry, delegated to
+	 * {@see Subscribers_Metric::get_at_risk_subscribers()}.
 	 *
 	 * @param DateTimeInterface $start Window start (ignored — snapshot).
 	 * @param DateTimeInterface $end   Window end (ignored — snapshot).
@@ -1127,23 +1265,20 @@ final class Conversion_Metric {
 	 */
 	public function get_at_risk_subscriber_count( DateTimeInterface $start, DateTimeInterface $end ): array {
 		unset( $start, $end );
-		return $this->placeholder( 'count' );
+		return $this->populated_scalar( $this->subscribers_metric->get_at_risk_subscribers(), true, null, 'count' );
 	}
 
 	/**
-	 * Lapsed donors (8.3). Snapshot — ignores the window. Same definition
-	 * as Tab 7's Lapsed Donors.
+	 * Lapsed donors (C17 / 8.3). Windowed. Same definition as Tab 7's Lapsed
+	 * Donors, delegated to
+	 * {@see Donors_Metric::get_lapsed_donors_in_window()}.
 	 *
-	 * Local-only (Woo-only): does NOT belong in the BQ catalog. Phase 2
-	 * should reuse the Tab 7 orchestrator method instead of re-implementing.
-	 *
-	 * @param DateTimeInterface $start Window start (ignored — snapshot).
-	 * @param DateTimeInterface $end   Window end (ignored — snapshot).
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
 	public function get_lapsed_donor_count( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder( 'count' );
+		return $this->populated_scalar( $this->donors_metric->get_lapsed_donors_in_window( $start, $end ), true, null, 'count' );
 	}
 
 	/**
