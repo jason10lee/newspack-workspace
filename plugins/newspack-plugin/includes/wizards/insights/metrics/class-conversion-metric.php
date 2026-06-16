@@ -2,19 +2,21 @@
 /**
  * Newspack Insights — Conversion Journey Metric orchestrator (NPPD-1609, Phase 2A).
  *
- * Tab 3 (Conversion Journey) metric orchestrator. C2–C9 are now wired to
- * live BigQuery queries via the proxy: lifecycle funnel (C2), anon-to-
- * registered funnel (C3), source-mix registrations (C4), time-to-register
- * distribution (C5), weekly conversion rates (C6), influenced registration 7d
- * (C7), influenced newsletter 7d (C8), and top pages (C9). Remaining
- * placeholders are the Woo-join metrics (C10–C15) and deferred Phase B
- * sections (C20–C24).
+ * Tab 3 (Conversion Journey) metric orchestrator. Phase A is complete: every
+ * metric is wired to live data — BigQuery via the proxy (lifecycle + anon→
+ * registered funnels, source-mix registrations, time-to-register, weekly rates,
+ * influenced registration/newsletter, top pages), BigQuery + Woo 30-min join
+ * (registered→subscriber/donor funnels, source-mix subscribers/donors,
+ * influenced subscription/donation), and pure-Woo via the Subscribers/Donors
+ * storage layer (subscriber→donor funnel, at-risk/lapsed/stale opportunity
+ * counts). The five Phase-B sections — time-to-subscribe/donate (4.2/4.3),
+ * subscriber→donor lag (4.4), and the two cohorts (5.1/5.2) — return
+ * `state: 'coming_soon'` until Phase B lands.
  *
- * Mirrors {@see Prompts_Metric} (Tab 5) one-for-one: same placeholder
- * shape for scalars, same `pending` + ordered-collection shape for viz,
- * same per-method window signature. Conversion Journey is the widest
- * Insights tab (eight sections, 23 metrics) but the per-metric envelope is
- * identical to the per-surface tabs.
+ * Mirrors {@see Prompts_Metric} (Tab 5): same `state`-envelope shape for
+ * scalars, same ordered-collection shape for viz, same per-method window
+ * signature. Conversion Journey is the widest Insights tab (eight sections,
+ * 23 metrics) but the per-metric envelope is identical to the per-surface tabs.
  *
  * Method-signature contract: every method takes the current window
  * (`$start`, `$end`) for parity with the other tabs. The previous-window
