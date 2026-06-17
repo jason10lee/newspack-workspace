@@ -1157,4 +1157,180 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'bigquery_proxy_malformed_rows', $result['error_code'] );
 		$this->assertSame( [], $result['rows'] );
 	}
+
+	// --- Per-intent capability gate (NPPD-1720) -------------------------
+
+	/**
+	 * Build a Prompts_Metric whose capability detector reads the given fixture
+	 * prompts instead of newspack-popups (not loaded in this suite). Mirrors the
+	 * proxy injection seam.
+	 *
+	 * @param array $prompts List of popup arrays (each with a 'content' key).
+	 * @return Prompts_Metric
+	 */
+	protected function make_metric_with_prompts( array $prompts ): Prompts_Metric {
+		return new Prompts_Metric(
+			$this->createMock( BigQuery_Proxy_Client::class ),
+			null,
+			function () use ( $prompts ) {
+				return $prompts;
+			}
+		);
+	}
+
+	/**
+	 * A fixture popup whose content serializes the given blocks.
+	 *
+	 * @param string[] $block_names Fully-qualified block names, e.g. 'newspack-blocks/donate'.
+	 * @return array{content:string}
+	 */
+	protected function prompt_with_blocks( array $block_names ): array {
+		$content = '';
+		foreach ( $block_names as $block_name ) {
+			$content .= sprintf( "<!-- wp:%1\$s -->\n<!-- /wp:%1\$s -->\n", $block_name );
+		}
+		return [ 'content' => $content ];
+	}
+
+	/**
+	 * Zero active prompts → every gated metric is not capable.
+	 */
+	public function test_capability_flags_all_false_when_no_active_prompts() {
+		$flags = $this->make_metric_with_prompts( [] )->get_capability_flags();
+
+		$this->assertCount( 13, $flags );
+		foreach ( $flags as $capable ) {
+			$this->assertFalse( $capable );
+		}
+	}
+
+	/**
+	 * Informational-only prompts (no conversion block) → not capable. This is the
+	 * Richland Source "sponsor note" / Palo Alto hand-rolled-CTA case.
+	 */
+	public function test_capability_flags_all_false_for_informational_only_prompts() {
+		$prompts = [
+			$this->prompt_with_blocks( [ 'core/paragraph', 'core/buttons', 'core/button' ] ),
+			$this->prompt_with_blocks( [ 'newspack-blocks/homepage-articles' ] ),
+		];
+		$flags = $this->make_metric_with_prompts( $prompts )->get_capability_flags();
+
+		foreach ( $flags as $capable ) {
+			$this->assertFalse( $capable );
+		}
+	}
+
+	/**
+	 * Newsletter-only prompt → newsletter + form-submission-rate capable, every
+	 * other intent not capable. Richland Source's actual setup.
+	 */
+	public function test_capability_flags_newsletter_only() {
+		$prompts = [ $this->prompt_with_blocks( [ 'newspack-newsletters/subscribe' ] ) ];
+		$flags   = $this->make_metric_with_prompts( $prompts )->get_capability_flags();
+
+		$this->assertTrue( $flags['newsletter_signup_conversion_direct'] );
+		$this->assertTrue( $flags['newsletter_signup_conversion_influenced_7d'] );
+		// Form submission rate is capable when ANY watched block is present.
+		$this->assertTrue( $flags['form_submission_rate'] );
+
+		$this->assertFalse( $flags['registration_conversion_direct'] );
+		$this->assertFalse( $flags['donation_conversion_direct'] );
+		$this->assertFalse( $flags['donation_revenue_direct'] );
+		$this->assertFalse( $flags['subscription_conversion_direct'] );
+		$this->assertFalse( $flags['subscription_revenue_direct'] );
+	}
+
+	/**
+	 * Newsletter + donation across two prompts → both intents capable, the other
+	 * two not.
+	 */
+	public function test_capability_flags_mixed_newsletter_and_donation() {
+		$prompts = [
+			$this->prompt_with_blocks( [ 'newspack-newsletters/subscribe' ] ),
+			$this->prompt_with_blocks( [ 'newspack-blocks/donate' ] ),
+		];
+		$flags = $this->make_metric_with_prompts( $prompts )->get_capability_flags();
+
+		$this->assertTrue( $flags['newsletter_signup_conversion_direct'] );
+		$this->assertTrue( $flags['donation_conversion_direct'] );
+		$this->assertTrue( $flags['donation_revenue_influenced_14d'] );
+		$this->assertTrue( $flags['form_submission_rate'] );
+
+		$this->assertFalse( $flags['registration_conversion_direct'] );
+		$this->assertFalse( $flags['subscription_conversion_direct'] );
+	}
+
+	/**
+	 * A single prompt carrying BOTH a donate and a subscribe block registers both
+	 * capabilities — newspack-popups' `action_type` would collapse this to
+	 * 'undefined', which is exactly why the gate reads raw block presence.
+	 */
+	public function test_capability_flags_multi_block_single_prompt() {
+		$prompts = [
+			$this->prompt_with_blocks( [ 'newspack-blocks/donate', 'newspack-newsletters/subscribe' ] ),
+		];
+		$flags = $this->make_metric_with_prompts( $prompts )->get_capability_flags();
+
+		$this->assertTrue( $flags['donation_conversion_direct'] );
+		$this->assertTrue( $flags['newsletter_signup_conversion_direct'] );
+
+		$this->assertFalse( $flags['registration_conversion_direct'] );
+		$this->assertFalse( $flags['subscription_conversion_direct'] );
+	}
+
+	/**
+	 * checkout-button is detected though it's NOT in newspack-popups' stock
+	 * watched-blocks map — the gate adds it so membership prompts (Lookout) drive
+	 * the subscription intent rather than reading as informational.
+	 */
+	public function test_capability_flags_detects_checkout_button() {
+		$prompts = [ $this->prompt_with_blocks( [ 'newspack-blocks/checkout-button' ] ) ];
+		$flags   = $this->make_metric_with_prompts( $prompts )->get_capability_flags();
+
+		$this->assertTrue( $flags['subscription_conversion_direct'] );
+		$this->assertTrue( $flags['subscription_revenue_direct'] );
+		$this->assertTrue( $flags['form_submission_rate'] );
+
+		$this->assertFalse( $flags['donation_conversion_direct'] );
+		$this->assertFalse( $flags['registration_conversion_direct'] );
+	}
+
+	/**
+	 * All four blocks present somewhere in active prompts → every gated metric is
+	 * capable.
+	 */
+	public function test_capability_flags_all_true_when_all_blocks_present() {
+		$prompts = [
+			$this->prompt_with_blocks(
+				[
+					'newspack/reader-registration',
+					'newspack-blocks/donate',
+					'newspack-newsletters/subscribe',
+					'newspack-blocks/checkout-button',
+				]
+			),
+		];
+		$flags = $this->make_metric_with_prompts( $prompts )->get_capability_flags();
+
+		$this->assertCount( 13, $flags );
+		foreach ( $flags as $capable ) {
+			$this->assertTrue( $capable );
+		}
+	}
+
+	/**
+	 * With no injected provider and newspack-popups unavailable, the detector
+	 * can't inspect prompts and must fail open (all capable) rather than gate
+	 * every conversion card on a misconfiguration.
+	 */
+	public function test_capability_flags_fail_open_when_popups_unavailable() {
+		$this->assertFalse( class_exists( '\Newspack_Popups_Model' ), 'newspack-popups should not be loaded in this suite' );
+
+		$metric = new Prompts_Metric( $this->createMock( BigQuery_Proxy_Client::class ) );
+		$flags  = $metric->get_capability_flags();
+
+		foreach ( $flags as $capable ) {
+			$this->assertTrue( $capable );
+		}
+	}
 }

@@ -79,6 +79,49 @@ final class Prompts_Metric {
 	];
 
 	/**
+	 * Conversion blocks scanned by the per-intent capability gate (NPPD-1720),
+	 * keyed by capability. A prompt is "capable" of an intent when any active
+	 * prompt contains the matching block. Mirrors the three blocks newspack-popups
+	 * watches in `Newspack_Popups_Data_Api::get_popup_metadata()` plus
+	 * `newspack-blocks/checkout-button`, which that map omits — without it Lookout's
+	 * membership prompts would read as informational.
+	 *
+	 * @var array<string, string>
+	 */
+	private const WATCHED_BLOCKS = [
+		'registration' => 'newspack/reader-registration',
+		'donation'     => 'newspack-blocks/donate',
+		'newsletter'   => 'newspack-newsletters/subscribe',
+		'checkout'     => 'newspack-blocks/checkout-button',
+	];
+
+	/**
+	 * Maps each conversion-tied scalar metric to the capability that gates it
+	 * (NPPD-1720). `form_submission_rate` is a generic form-bearing rate, so it is
+	 * capable when *any* watched block is present ('any'); every other metric gates
+	 * on its specific block. Non-conversion metrics (exposure, CTR, dismissal, the
+	 * funnel, the tables) are absent here — they carry no `has_capability` flag and
+	 * always render as long as there are prompts at all.
+	 *
+	 * @var array<string, string>
+	 */
+	private const METRIC_CAPABILITY = [
+		'form_submission_rate'                       => 'any',
+		'registration_conversion_direct'             => 'registration',
+		'registration_conversion_influenced_7d'      => 'registration',
+		'newsletter_signup_conversion_direct'        => 'newsletter',
+		'newsletter_signup_conversion_influenced_7d' => 'newsletter',
+		'donation_conversion_direct'                 => 'donation',
+		'donation_conversion_influenced_14d'         => 'donation',
+		'subscription_conversion_direct'             => 'checkout',
+		'subscription_conversion_influenced_14d'     => 'checkout',
+		'donation_revenue_direct'                    => 'donation',
+		'donation_revenue_influenced_14d'            => 'donation',
+		'subscription_revenue_direct'                => 'checkout',
+		'subscription_revenue_influenced_14d'        => 'checkout',
+	];
+
+	/**
 	 * Proxy client used to dispatch catalog queries to the hub.
 	 *
 	 * @var BigQuery_Proxy_Client
@@ -104,17 +147,41 @@ final class Prompts_Metric {
 	private array $paid_attempt_cache = [];
 
 	/**
+	 * Per-request memoization for the prompt-capability scan (NPPD-1720). Null
+	 * until the first `compute_prompt_capabilities()` call; thereafter the four
+	 * capability booleans are reused across both windows and all 13 gated metrics
+	 * so the active-prompt enumeration runs at most once per request.
+	 *
+	 * @var array<string, bool>|null
+	 */
+	private ?array $prompt_capabilities = null;
+
+	/**
+	 * Active-prompt provider (test seam, NPPD-1720). When null, capabilities are
+	 * read from `\Newspack_Popups_Model::retrieve_popups()`. Tests inject a
+	 * callable returning fixture popup arrays so the detector can be exercised
+	 * without loading newspack-popups. Mirrors the proxy / Woo-resolver DI below.
+	 *
+	 * @var callable|null
+	 */
+	private $prompt_provider;
+
+	/**
 	 * Constructor. Optionally inject collaborators (used in tests).
 	 *
-	 * @param BigQuery_Proxy_Client|null $proxy        Injected proxy client, or null to lazy-resolve.
-	 * @param Woo_Order_Resolver|null    $woo_resolver Injected Woo resolver, or null to lazy-create.
+	 * @param BigQuery_Proxy_Client|null $proxy           Injected proxy client, or null to lazy-resolve.
+	 * @param Woo_Order_Resolver|null    $woo_resolver    Injected Woo resolver, or null to lazy-create.
+	 * @param callable|null              $prompt_provider Injected active-prompt provider (test seam),
+	 *                                                    or null to read from Newspack_Popups_Model.
 	 */
 	public function __construct(
 		?BigQuery_Proxy_Client $proxy = null,
-		?Woo_Order_Resolver $woo_resolver = null
+		?Woo_Order_Resolver $woo_resolver = null,
+		?callable $prompt_provider = null
 	) {
-		$this->proxy        = $proxy ?? new BigQuery_Proxy_Client();
-		$this->woo_resolver = $woo_resolver ?? new Woo_Order_Resolver();
+		$this->proxy           = $proxy ?? new BigQuery_Proxy_Client();
+		$this->woo_resolver    = $woo_resolver ?? new Woo_Order_Resolver();
+		$this->prompt_provider = $prompt_provider;
 	}
 
 	/**
@@ -203,6 +270,92 @@ final class Prompts_Metric {
 			$rows_key,
 			new \WP_Error( 'bigquery_proxy_malformed_rows', __( 'The query returned an unexpected shape.', 'newspack-plugin' ) )
 		);
+	}
+
+	/**
+	 * Detect which conversion intents the publisher's active prompts can drive
+	 * (NPPD-1720). Enumerates published prompts and tests each for the four
+	 * watched conversion blocks; an intent is "capable" once any prompt carries
+	 * its block. Result is memoized per request.
+	 *
+	 * Uses raw block presence via `has_block()` rather than newspack-popups'
+	 * `action_type`, which collapses a multi-block prompt to 'undefined' (see the
+	 * `@TODO: How to handle prompts with more than one block?` in
+	 * `class-newspack-popups-data-api.php`); a prompt with both a donate and a
+	 * subscribe block must register as capable of both.
+	 *
+	 * "Active" = `post_status = 'publish'`, matching `retrieve_popups()`'s default.
+	 * No `frequency` filter is applied: an audit of real publishers found no
+	 * published prompts left in `frequency = 'never'` test mode, so it would add
+	 * complexity without changing results.
+	 *
+	 * Fails open: if newspack-popups isn't active the prompts can't be inspected,
+	 * so every intent is assumed capable rather than falsely gating every
+	 * conversion card on a misconfiguration.
+	 *
+	 * @return array<string, bool> Capability keyed by 'registration'|'donation'|'newsletter'|'checkout'.
+	 */
+	private function compute_prompt_capabilities(): array {
+		if ( null !== $this->prompt_capabilities ) {
+			return $this->prompt_capabilities;
+		}
+
+		// Fail open when prompts can't be inspected (popups plugin inactive and no
+		// injected provider): assume every intent is possible rather than falsely
+		// gating every conversion card on a misconfiguration.
+		if ( null === $this->prompt_provider && ! class_exists( '\Newspack_Popups_Model' ) ) {
+			$this->prompt_capabilities = array_fill_keys( array_keys( self::WATCHED_BLOCKS ), true );
+			return $this->prompt_capabilities;
+		}
+
+		$prompts = null !== $this->prompt_provider
+			? ( $this->prompt_provider )()
+			: \Newspack_Popups_Model::retrieve_popups();
+
+		$capabilities = array_fill_keys( array_keys( self::WATCHED_BLOCKS ), false );
+		// Blocks still to look for; entries drop out as soon as one is found so
+		// later prompts skip the already-satisfied checks.
+		$remaining = self::WATCHED_BLOCKS;
+
+		foreach ( $prompts as $popup ) {
+			if ( empty( $remaining ) ) {
+				break; // Every capability satisfied — stop scanning prompts.
+			}
+			$content = $popup['content'] ?? '';
+			if ( '' === $content ) {
+				continue;
+			}
+			foreach ( $remaining as $capability => $block_name ) {
+				if ( \has_block( $block_name, $content ) ) {
+					$capabilities[ $capability ] = true;
+					unset( $remaining[ $capability ] );
+				}
+			}
+		}
+
+		$this->prompt_capabilities = $capabilities;
+		return $capabilities;
+	}
+
+	/**
+	 * Per-metric capability flags for the Prompts envelope (NPPD-1720). Maps each
+	 * of the 13 conversion-tied scalar keys to a boolean the REST controller
+	 * stamps onto the metric. `form_submission_rate` is capable when any watched
+	 * block is present; every other metric gates on its specific block.
+	 *
+	 * @return array<string, bool> Metric key => has_capability.
+	 */
+	public function get_capability_flags(): array {
+		$capabilities = $this->compute_prompt_capabilities();
+		$any_capable  = (bool) array_filter( $capabilities );
+
+		$flags = [];
+		foreach ( self::METRIC_CAPABILITY as $metric_key => $capability ) {
+			$flags[ $metric_key ] = 'any' === $capability
+				? $any_capable
+				: ( $capabilities[ $capability ] ?? false );
+		}
+		return $flags;
 	}
 
 	/**
