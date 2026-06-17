@@ -18,7 +18,7 @@ import { __ } from '@wordpress/i18n';
  */
 import MetricNote from '../../components/MetricNote';
 import type { MetricPayload } from '../../components/metrics';
-import BarChart from '../../audience/viz/BarChart';
+import BarChart from '../../components/BarChart';
 
 export interface TakeawayCardProps {
 	/** Card title, rendered even in the empty / failure states. */
