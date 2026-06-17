@@ -132,9 +132,13 @@ export default function Conditions( { vocab, value, publishedAt, isNew, onChange
 
 	const setOne = ( id: string, v: boolean | number | null ) => onChange( { ...value, [ id ]: v } );
 
+	// Boolean (toggle) conditions always render last, below the richer datetime
+	// controls. Array.sort is stable, so order within each group is preserved.
+	const ordered = [ ...vocab ].sort( ( a, b ) => ( 'boolean' === a.field_type ? 1 : 0 ) - ( 'boolean' === b.field_type ? 1 : 0 ) );
+
 	return (
 		<VStack spacing={ 4 }>
-			{ vocab.map( matcher => {
+			{ ordered.map( matcher => {
 				if ( 'datetime' === matcher.field_type ) {
 					const ts = typeof value[ matcher.id ] === 'number' ? ( value[ matcher.id ] as number ) : null;
 					return (
