@@ -53,11 +53,15 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 				'value'            => $zero_value( $type ),
 				'computable'       => false,
 				'denominator'      => null,
+				'numerator'        => null,
 				'placeholder_type' => $type,
 				'error_code'       => 'bigquery_proxy_http_error',
 				'error_message'    => 'HTTP 500',
 			];
 		}
+		// Scalar section-total metadata (NPPD-1694) — zero in the all-error window.
+		$current['paywall_attempts_total']    = 0;
+		$current['paywall_conversions_total'] = 0;
 		$collections = [
 			'conversion_funnel'      => 'stages',
 			'exposures_distribution' => 'buckets',
@@ -87,9 +91,13 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 				'value'            => $zero_value( $type ),
 				'computable'       => false,
 				'denominator'      => 'rate' === $type ? 0 : null,
+				'numerator'        => 'rate' === $type ? 0 : null,
 				'placeholder_type' => $type,
 			];
 		}
+		// Zero attempts → the Paid section renders its no_opportunity empty state.
+		$current['paywall_attempts_total']    = 0;
+		$current['paywall_conversions_total'] = 0;
 		$current['conversion_funnel']      = [
 			'state'  => 'empty',
 			'stages' => [],
@@ -110,12 +118,13 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 	}
 
 	// --- Populated variant (default). ---
-	$scalar = static function ( $value, $denominator, string $type ) {
+	$scalar = static function ( $value, $denominator, string $type, $numerator = null ) {
 		return [
 			'state'            => 'populated',
 			'value'            => $value,
 			'computable'       => true,
 			'denominator'      => $denominator,
+			'numerator'        => $numerator,
 			'placeholder_type' => $type,
 		];
 	};
@@ -131,11 +140,16 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 			// Section 2 — Free reader conversion.
 			'regwall_conversion_direct'          => $scalar( round( 0.071 * $f, 3 ), null, 'rate' ),
 			'regwall_conversion_influenced_7d'   => $scalar( round( 0.123 * $f, 3 ), null, 'rate' ),
-			// Section 3 — Paid reader conversion.
-			'paywall_conversion_direct'          => $scalar( round( 0.021 * $f, 3 ), null, 'rate' ),
-			'paywall_conversion_influenced_14d'  => $scalar( round( 0.038 * $f, 3 ), null, 'rate' ),
+			// Section 3 — Paid reader conversion. Paywall rate cards carry both
+			// numerator (matched Woo orders) and denominator (attempts) so fixture
+			// mode exercises the NPPD-1694 count fallback.
+			'paywall_conversion_direct'          => $scalar( round( 0.021 * $f, 3 ), (int) round( 320 * $f ), 'rate', (int) round( 7 * $f ) ),
+			'paywall_conversion_influenced_14d'  => $scalar( round( 0.038 * $f, 3 ), (int) round( 290 * $f ), 'rate', (int) round( 11 * $f ) ),
 			'total_paywall_revenue_direct'       => $scalar( round( 4180.5 * $f, 2 ), (int) round( 47 * $f ), 'currency' ),
 			'avg_revenue_per_paywall_conversion' => $scalar( round( 88.95 * $f, 2 ), (int) round( 47 * $f ), 'currency' ),
+			// Section 3 empty-state totals (NPPD-1694).
+			'paywall_attempts_total'             => (int) round( 320 * $f ),
+			'paywall_conversions_total'          => (int) round( 11 * $f ),
 			// Section 4 — How readers convert. Funnel uses Richland Source's shape
 			// so both drop-off deltas exceed 20% and render in the error color.
 			'conversion_funnel'                  => [

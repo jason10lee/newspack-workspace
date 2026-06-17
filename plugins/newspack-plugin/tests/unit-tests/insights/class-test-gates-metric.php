@@ -659,4 +659,131 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 		$this->assertCount( 1, $result['rows'] );
 		$this->assertStringContainsString( '999999', $result['rows'][0]['gate_name'] ); // Generic fallback.
 	}
+
+	// --- NPPD-1694: envelope additions for the empty-state pattern ----------
+
+	/**
+	 * A paywall rate scorecard surfaces both numerator (matched Woo orders) and
+	 * denominator (attempts) so the card can render "0 of N".
+	 */
+	public function test_paywall_rate_surfaces_numerator_and_denominator() {
+		$bq_rows = array_map(
+			static function ( $i ) {
+				return [
+					'user_pseudo_id' => (string) $i,
+					'session_id'     => 's' . $i,
+					'attempt_ts'     => (string) ( 1000000000000000 + $i ),
+				];
+			},
+			range( 1, 17 )
+		);
+
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( $bq_rows );
+
+		$resolver = $this->createMock( Woo_Order_Resolver::class );
+		$resolver->method( 'count_completed_orders' )->willReturn( 0 ); // 0 of 17 attempts converted.
+
+		$metric = new Gates_Metric( $proxy, $resolver );
+		$result = $metric->get_paywall_conversion_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertSame( 0, $result['numerator'] );
+		$this->assertSame( 17, $result['denominator'] );
+		$this->assertTrue( $result['computable'] );
+	}
+
+	/**
+	 * No paywall attempts → numerator and denominator are both an explicit 0 (not
+	 * null), so the card distinguishes "no attempts" (—) from "0 of N".
+	 */
+	public function test_paywall_rate_zero_attempts_sets_zero_counts() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( [] );
+
+		$metric = new Gates_Metric( $proxy );
+		$result = $metric->get_paywall_conversion_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertSame( 0, $result['numerator'] );
+		$this->assertSame( 0, $result['denominator'] );
+		$this->assertFalse( $result['computable'] );
+	}
+
+	/**
+	 * The error scalar carries a null numerator alongside the null denominator.
+	 */
+	public function test_error_scalar_includes_null_numerator() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( new \WP_Error( 'bigquery_query_failed', 'BQ down' ) );
+
+		$metric = new Gates_Metric( $proxy );
+		$result = $metric->get_paywall_conversion_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertArrayHasKey( 'numerator', $result );
+		$this->assertNull( $result['numerator'] );
+	}
+
+	/**
+	 * Paid section totals: attempts come from the Direct denominator; conversions
+	 * are the inclusive max across Direct and Influenced numerators.
+	 */
+	public function test_paywall_section_totals_normal_data() {
+		$totals = Gates_Metric::paywall_section_totals(
+			[
+				'denominator' => 17,
+				'numerator'   => 2,
+			],
+			[
+				'denominator' => 290,
+				'numerator'   => 5,
+			]
+		);
+
+		$this->assertSame( 17, $totals['paywall_attempts_total'] );
+		// max( direct 2, influenced 5 ) — don't hide Influenced-only conversions.
+		$this->assertSame( 5, $totals['paywall_conversions_total'] );
+	}
+
+	/**
+	 * Paid section totals: attempts > 0 but zero conversions in either attribution
+	 * → the section's no_conversions trigger.
+	 */
+	public function test_paywall_section_totals_zero_conversions() {
+		$totals = Gates_Metric::paywall_section_totals(
+			[
+				'denominator' => 17,
+				'numerator'   => 0,
+			],
+			[
+				'denominator' => 290,
+				'numerator'   => 0,
+			]
+		);
+
+		$this->assertSame( 17, $totals['paywall_attempts_total'] );
+		$this->assertSame( 0, $totals['paywall_conversions_total'] );
+	}
+
+	/**
+	 * Paid section totals: zero attempts → no_opportunity. Missing/null keys
+	 * coerce to 0 rather than warning (e.g. an error scalar with null numerator).
+	 */
+	public function test_paywall_section_totals_zero_attempts_and_missing_keys() {
+		$zero = Gates_Metric::paywall_section_totals(
+			[
+				'denominator' => 0,
+				'numerator'   => 0,
+			],
+			[
+				'denominator' => 0,
+				'numerator'   => 0,
+			]
+		);
+		$this->assertSame( 0, $zero['paywall_attempts_total'] );
+		$this->assertSame( 0, $zero['paywall_conversions_total'] );
+
+		$missing = Gates_Metric::paywall_section_totals( [], [] );
+		$this->assertSame( 0, $missing['paywall_attempts_total'] );
+		$this->assertSame( 0, $missing['paywall_conversions_total'] );
+	}
 }
