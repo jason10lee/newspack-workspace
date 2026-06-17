@@ -3,7 +3,10 @@
  *
  * Three side-by-side source-mix PieCharts (registrations, subscribers,
  * donors), each split gate / prompt / direct with the window total at the
- * donut center. Phase 1 renders the empty state per pie.
+ * donut center.
+ *
+ * Phase 2: each pie's rendering is gated on the metric's `state` envelope
+ * (populated / empty / error / coming_soon).
  */
 
 /**
@@ -18,7 +21,8 @@ import type { ConversionSourceMixData } from '../../api/conversion';
 import SectionHeading from '../components/SectionHeading';
 import { formatNumber } from '../components/format';
 import { sourceLabel } from './labels';
-import PieChart from './viz/PieChart';
+import PieChart from '../components/PieChart';
+import SectionState from './SectionState';
 
 export interface WhereConversionsComeFromSectionProps {
 	current: {
@@ -37,11 +41,13 @@ interface SourcePieProps {
 const SourcePie = ( { title, data, emptyMessage }: SourcePieProps ) => (
 	<div className="newspack-insights__conversion-pie-cell">
 		<h3 className="newspack-insights__conversion-subheading">{ title }</h3>
-		<PieChart
-			segments={ data.slices.map( slice => ( { label: sourceLabel( slice.source ), value: slice.count } ) ) }
-			centerLabel={ formatNumber( data.total ) }
-			emptyMessage={ emptyMessage }
-		/>
+		<SectionState state={ data.state } emptyMessage={ emptyMessage }>
+			<PieChart
+				segments={ data.slices.map( slice => ( { label: sourceLabel( slice.source ), value: slice.count } ) ) }
+				centerLabel={ formatNumber( data.total ) }
+				emptyMessage={ emptyMessage }
+			/>
+		</SectionState>
 	</div>
 );
 

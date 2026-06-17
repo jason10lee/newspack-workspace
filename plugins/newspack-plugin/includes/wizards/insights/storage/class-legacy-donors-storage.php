@@ -66,11 +66,17 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 	/**
 	 * Format a DateTime for SQL.
 	 *
+	 * Normalizes to UTC: window bounds arrive in site timezone (the REST
+	 * controller builds them with wp_timezone()), but they are compared against
+	 * `post_date_gmt` / `_schedule_*` columns stored in UTC. Matches
+	 * {@see Legacy_Storage::fmt()} so windowed donor queries don't skew on
+	 * non-UTC sites.
+	 *
 	 * @param DateTimeInterface $dt DateTime.
-	 * @return string Y-m-d H:i:s.
+	 * @return string Y-m-d H:i:s (UTC).
 	 */
 	private function fmt( DateTimeInterface $dt ): string {
-		return $dt->format( 'Y-m-d H:i:s' );
+		return gmdate( 'Y-m-d H:i:s', $dt->getTimestamp() );
 	}
 
 	/**
@@ -612,6 +618,77 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 			'computable'  => true,
 			'denominator' => $denominator,
 		];
+	}
+
+	// -------------------------------------------------------------------------
+	// Conversion Journey (Tab 3) storage methods.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @param int[]             $subscriber_ids Customer IDs (active non-donation subscribers).
+	 * @param DateTimeInterface $start          Inclusive window start.
+	 * @param DateTimeInterface $end            Inclusive window end.
+	 * @return int
+	 */
+	public function get_subscriber_donors_in_window( array $subscriber_ids, DateTimeInterface $start, DateTimeInterface $end ): int {
+		if ( empty( $subscriber_ids ) ) {
+			return 0;
+		}
+
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+		$ids       = $this->id_list( $subscriber_ids );
+
+		// Mirrors HPOS variant: donation shop_orders in window for the
+		// subscriber customer list. wc_order_product_lookup is cross-backend.
+		$sql = $wpdb->prepare(
+			"SELECT COUNT(DISTINCT CAST(cust.meta_value AS UNSIGNED))
+			FROM {$prefix}posts p
+			JOIN {$prefix}postmeta cust
+				ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
+			JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = p.ID
+			WHERE p.post_type = 'shop_order'
+			  AND p.post_status IN ('wc-completed', 'wc-processing')
+			  AND p.post_date_gmt BETWEEN %s AND %s
+			  AND opl.product_id IN ($donations)
+			  AND CAST(cust.meta_value AS UNSIGNED) IN ($ids)",
+			$this->fmt( $start ),
+			$this->fmt( $end )
+		);
+
+		return (int) $wpdb->get_var( $sql );
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @param int[] $customer_ids Customer IDs to check.
+	 * @return int
+	 */
+	public function count_completed_donation_order_customers_by_customer_ids( array $customer_ids ): int {
+		if ( empty( $customer_ids ) ) {
+			return 0;
+		}
+
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+		$ids       = $this->id_list( $customer_ids );
+
+		$sql = "SELECT COUNT(DISTINCT CAST(cust.meta_value AS UNSIGNED))
+			FROM {$prefix}posts p
+			JOIN {$prefix}postmeta cust
+				ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
+			JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = p.ID
+			WHERE p.post_type = 'shop_order'
+			  AND p.post_status IN ('wc-completed', 'wc-processing')
+			  AND opl.product_id IN ($donations)
+			  AND CAST(cust.meta_value AS UNSIGNED) IN ($ids)";
+
+		return (int) $wpdb->get_var( $sql );
 	}
 
 	/**

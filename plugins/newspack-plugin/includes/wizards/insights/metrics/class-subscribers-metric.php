@@ -372,6 +372,73 @@ class Subscribers_Metric {
 		);
 	}
 
+	// -------------------------------------------------------------------------
+	// Conversion Journey (Tab 3) metric wrappers.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Count of active non-donation subscriptions with a scheduled payment retry.
+	 * Point-in-time snapshot; cached TTL_DEFAULT (30 min).
+	 *
+	 * @return int
+	 */
+	public function get_at_risk_subscribers(): int {
+		return (int) $this->cached(
+			'at_risk_subscribers',
+			[],
+			self::TTL_DEFAULT,
+			function () {
+				return $this->storage->get_at_risk_subscribers();
+			}
+		);
+	}
+
+	/**
+	 * DISTINCT customer_ids with at least one active non-donation subscription.
+	 * Point-in-time snapshot; cached TTL_DEFAULT (30 min).
+	 *
+	 * @return int[]
+	 */
+	public function get_active_non_donation_subscriber_customer_ids(): array {
+		return (array) $this->cached(
+			'active_non_donation_subscriber_customer_ids',
+			[],
+			self::TTL_DEFAULT,
+			function () {
+				return $this->storage->get_active_non_donation_subscriber_customer_ids();
+			}
+		);
+	}
+
+	/**
+	 * COUNT(DISTINCT customer_id) among the given list who have an active
+	 * non-donation subscription. List-param — NOT cached (result varies per call).
+	 *
+	 * @param int[] $customer_ids Customer IDs to check.
+	 * @return int
+	 */
+	public function count_active_non_donation_subscribers_by_customer_ids( array $customer_ids ): int {
+		return $this->storage->count_active_non_donation_subscribers_by_customer_ids( $customer_ids );
+	}
+
+	/**
+	 * Count of registered readers with no active non-donation subscription and
+	 * no completed donation in the trailing 365 days. Phase-A approximation.
+	 * Point-in-time snapshot; cached TTL_DEFAULT (30 min).
+	 *
+	 * @return int
+	 */
+	public function get_stale_registered_users(): int {
+		return (int) $this->cached(
+			'stale_registered_users',
+			[],
+			self::TTL_DEFAULT,
+			function () {
+				return $this->storage->get_stale_registered_users();
+			}
+		);
+	}
+
 	/**
 	 * Flush ALL Tab 6 metric caches. Use after a manual data correction
 	 * or from the future NPPD-1605 invalidation system; not wired to any
