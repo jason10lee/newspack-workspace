@@ -12,7 +12,7 @@ import { render, screen } from '@testing-library/react';
 /**
  * Internal dependencies
  */
-import Funnel, { isCompactMode, stepOpacity, dropFromPrevious } from './Funnel';
+import Funnel, { isCompactMode, stepOpacity, dropFromPrevious, computeDisplayHalfWidths } from './Funnel';
 
 const stage = ( label: string, count: number, pctOfTop: number ) => ( { label, count, pct_of_top: pctOfTop } );
 
@@ -27,6 +27,40 @@ describe( 'Funnel helpers', () => {
 		} );
 		it( 'is compact when the container is narrower than 480px', () => {
 			expect( isCompactMode( 3, 479 ) ).toBe( true );
+		} );
+	} );
+
+	describe( 'computeDisplayHalfWidths', () => {
+		// Chart half-width 160; MIN_HALF_WIDTH 48 (30%); MAX_TAPER_HALF_WIDTH 56 (35%).
+		it( 'keeps the top level at full half-width', () => {
+			const halves = computeDisplayHalfWidths( [ stage( 'a', 1000, 1 ), stage( 'b', 500, 0.5 ) ], 1000 );
+			expect( halves[ 0 ] ).toBe( 160 );
+		} );
+		it( 'renders a moderate drop proportionally when within the clamps', () => {
+			// 800/1000 → 128, between the min floor and the max-taper bound.
+			const halves = computeDisplayHalfWidths( [ stage( 'a', 1000, 1 ), stage( 'b', 800, 0.8 ) ], 1000 );
+			expect( halves[ 1 ] ).toBeCloseTo( 128, 5 );
+		} );
+		it( 'caps a steep drop at the max taper from the level above', () => {
+			// 200/1000 raw → 32, but capped to 160 − 56 = 104.
+			const halves = computeDisplayHalfWidths( [ stage( 'a', 1000, 1 ), stage( 'b', 200, 0.2 ) ], 1000 );
+			expect( halves[ 1 ] ).toBe( 104 );
+		} );
+		it( 'floors a tiny level at the minimum segment width', () => {
+			// 1000 → 100 → 1: level 2 would be ~0 raw; floored at MIN_HALF_WIDTH 48.
+			const halves = computeDisplayHalfWidths( [ stage( 'a', 1000, 1 ), stage( 'b', 100, 0.1 ), stage( 'c', 1, 0.001 ) ], 1000 );
+			expect( halves[ 2 ] ).toBe( 48 );
+			expect( halves.every( h => h >= 48 ) ).toBe( true );
+		} );
+		it( 'never flares: each level is at most the level above', () => {
+			// A later stage exceeding an earlier one (data drift) must not widen.
+			const halves = computeDisplayHalfWidths( [ stage( 'a', 500, 1 ), stage( 'b', 2000, 4 ) ], 500 );
+			for ( let i = 1; i < halves.length; i++ ) {
+				expect( halves[ i ] ).toBeLessThanOrEqual( halves[ i - 1 ] );
+			}
+		} );
+		it( 'returns zeros when the top count is non-positive', () => {
+			expect( computeDisplayHalfWidths( [ stage( 'a', 0, 0 ), stage( 'b', 0, 0 ) ], 0 ) ).toEqual( [ 0, 0 ] );
 		} );
 	} );
 
