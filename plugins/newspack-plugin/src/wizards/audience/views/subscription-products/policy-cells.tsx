@@ -15,12 +15,13 @@ import classnames from 'classnames';
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
+import { useState } from '@wordpress/element';
 import { Icon, check } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
-import { Badge } from '../../../../../packages/components/src';
+import { Badge, Popover } from '../../../../../packages/components/src';
 
 /**
  * Format a number as a currency amount using the store currency.
@@ -57,32 +58,47 @@ export function PolicyChips( { policy }: { policy: SubscriptionPolicyResolution 
 }
 
 /**
- * Build the multi-line tooltip text for a multi-cycle price schedule. Cycle 1 is
- * the purchase; later cycles are renewals.
+ * Human label for a segment's starting cycle. Cycle 1 is the purchase; later
+ * cycles are renewals.
  */
-function buildScheduleText( schedule: SubscriptionPolicySegment[], currency: SubscriptionProductsCurrency ): string {
-	return schedule
-		.map( seg => {
-			const when =
-				seg.from_cycle === 1
-					? __( 'At purchase', 'newspack-plugin' )
-					: sprintf(
-							/* translators: %d: renewal number. */
-							__( 'From renewal %d', 'newspack-plugin' ),
-							seg.from_cycle - 1
-					  );
-			const price = formatAmount( seg.amount, currency );
-			return seg.rule_label ? `${ when }: ${ price } — ${ seg.rule_label }` : `${ when }: ${ price }`;
-		} )
-		.join( '\n' );
+function cycleLabel( fromCycle: number ): string {
+	return fromCycle === 1
+		? __( 'At purchase', 'newspack-plugin' )
+		: sprintf(
+				/* translators: %d: renewal number. */
+				__( 'From renewal %d', 'newspack-plugin' ),
+				fromCycle - 1
+		  );
+}
+
+/**
+ * The per-cycle price trajectory, rendered as a compact list for the schedule popover.
+ */
+function ScheduleList( { schedule, currency }: { schedule: SubscriptionPolicySegment[]; currency: SubscriptionProductsCurrency } ) {
+	return (
+		<ul className="newspack-subscription-products__schedule">
+			{ schedule.map( seg => (
+				<li key={ seg.from_cycle } className="newspack-subscription-products__schedule-row">
+					<span className="newspack-subscription-products__schedule-when">{ cycleLabel( seg.from_cycle ) }</span>
+					<span className="newspack-subscription-products__schedule-price">
+						<strong>{ formatAmount( seg.amount, currency ) }</strong>
+						{ seg.rule_label && <span className="newspack-subscription-products__schedule-rule">{ seg.rule_label }</span> }
+					</span>
+				</li>
+			) ) }
+		</ul>
+	);
 }
 
 /**
  * Renders the base price and, when rules change it, the resulting effective price.
- * A multi-cycle schedule (the price changes across renewals) gets a hover tooltip
- * with the full per-cycle trajectory + winning rule, since it can't fit the column.
+ * A multi-cycle schedule (the price changes across renewals) reveals the full
+ * per-cycle trajectory + winning rule in a Popover on hover/focus/click — it can't
+ * fit the column.
  */
 export function EffectivePrice( { policy, currency }: { policy: SubscriptionPolicyResolution; currency: SubscriptionProductsCurrency } ) {
+	const [ showSchedule, setShowSchedule ] = useState( false );
+
 	if ( ! policy || policy.base_price === null || policy.base_price === undefined ) {
 		return <span className="newspack-subscription-products__muted">&mdash;</span>;
 	}
@@ -98,26 +114,43 @@ export function EffectivePrice( { policy, currency }: { policy: SubscriptionPoli
 		return <strong>{ baseLabel }</strong>;
 	}
 
-	const wrapperClass = classnames( 'newspack-subscription-products__effective-price', {
-		'has-schedule': hasSchedule,
-	} );
-	const tooltip = hasSchedule ? { title: buildScheduleText( schedule, currency ) } : {};
-
-	// A schedule that starts at the base price but changes later: show the value
-	// with the tooltip, no strikethrough (the purchase price equals the base).
-	if ( ! changed ) {
-		return (
-			<strong className={ wrapperClass } { ...tooltip }>
-				{ effectiveLabel }
-			</strong>
-		);
-	}
-
-	return (
-		<span className={ wrapperClass } { ...tooltip }>
+	const value = changed ? (
+		<span className="newspack-subscription-products__effective-price">
 			<span className="newspack-subscription-products__base-price">{ baseLabel }</span>
 			<span aria-hidden="true"> → </span>
 			<strong className="newspack-subscription-products__effective-price-value">{ effectiveLabel }</strong>
 		</span>
+	) : (
+		<strong>{ effectiveLabel }</strong>
+	);
+
+	// A single-segment change has no trajectory to reveal.
+	if ( ! hasSchedule ) {
+		return value;
+	}
+
+	return (
+		<button
+			type="button"
+			className="newspack-subscription-products__effective-price-trigger"
+			aria-expanded={ showSchedule }
+			onMouseEnter={ () => setShowSchedule( true ) }
+			onMouseLeave={ () => setShowSchedule( false ) }
+			onFocus={ () => setShowSchedule( true ) }
+			onBlur={ () => setShowSchedule( false ) }
+			onClick={ () => setShowSchedule( prev => ! prev ) }
+		>
+			{ value }
+			{ showSchedule && (
+				<Popover
+					className="newspack-subscription-products__schedule-popover"
+					position="top center"
+					focusOnMount={ false }
+					onClose={ () => setShowSchedule( false ) }
+				>
+					<ScheduleList schedule={ schedule } currency={ currency } />
+				</Popover>
+			) }
+		</button>
 	);
 }
