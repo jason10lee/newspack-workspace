@@ -41,12 +41,12 @@ const DARK_TEXT_OPACITY_THRESHOLD = 0.75;
 const HALF_WIDTH = VIEWBOX_WIDTH / 2;
 // Width clamping: the funnel is a rough relative-size viz, not an exact one. No
 // segment is narrower than MIN_SEGMENT_WIDTH_RATIO of the chart width (avoids
-// razor-thin bands), and no single segment narrows by more than MAX_TAPER_RATIO
-// of the chart width top-to-bottom (avoids dramatic cliffs). Tunable.
-const MIN_SEGMENT_WIDTH_RATIO = 0.3;
-const MAX_TAPER_RATIO = 0.35;
+// razor-thin bands). The max per-segment taper is not fixed — it's computed
+// per-funnel from the step count (see computeDisplayHalfWidths) so funnels of
+// any length descend evenly across all their segments rather than cliff-diving
+// to the floor in one step.
+const MIN_SEGMENT_WIDTH_RATIO = 0.2;
 const MIN_HALF_WIDTH = ( MIN_SEGMENT_WIDTH_RATIO * VIEWBOX_WIDTH ) / 2;
-const MAX_TAPER_HALF_WIDTH = ( MAX_TAPER_RATIO * VIEWBOX_WIDTH ) / 2;
 
 export interface FunnelStage {
 	label: string;
@@ -88,14 +88,18 @@ const stepHeightFor = ( stepCount: number ): number => Math.max( MIN_STEP_HEIGHT
  *   - at most the level above it (the funnel only ever narrows, never flares —
  *     even on anomalous data where a later stage exceeds an earlier one),
  *   - at least MIN_HALF_WIDTH (no razor-thin band), and
- *   - no more than MAX_TAPER_HALF_WIDTH narrower than the level above it (no
- *     dramatic single-segment cliff).
+ *   - no more than the per-funnel max taper (HALF_WIDTH / stepCount) narrower
+ *     than the level above it — so an N-step funnel descends across all N
+ *     segments (≈ HALF_WIDTH / N at the bottom) instead of cliff-diving to the
+ *     floor in one step. A 2-step funnel may narrow up to half the chart per
+ *     step, a 3-step a third, a 5-step a fifth, etc.
  * Counts/percentages shown in the labels are unaffected — only widths are clamped.
  */
 export const computeDisplayHalfWidths = ( stages: FunnelStage[], topCount: number ): number[] => {
 	if ( topCount <= 0 ) {
 		return stages.map( () => 0 );
 	}
+	const maxTaperHalfWidth = HALF_WIDTH / stages.length;
 	const halves: number[] = [];
 	stages.forEach( ( stage, index ) => {
 		const raw = Math.min( HALF_WIDTH, ( stage.count / topCount ) * HALF_WIDTH );
@@ -104,7 +108,7 @@ export const computeDisplayHalfWidths = ( stages: FunnelStage[], topCount: numbe
 			return;
 		}
 		const prev = halves[ index - 1 ];
-		const lower = Math.max( MIN_HALF_WIDTH, prev - MAX_TAPER_HALF_WIDTH );
+		const lower = Math.max( MIN_HALF_WIDTH, prev - maxTaperHalfWidth );
 		// Clamp raw into [lower, prev]: never wider than the level above, never
 		// below the min floor or beyond the max taper from the level above.
 		halves.push( Math.min( prev, Math.max( lower, raw ) ) );

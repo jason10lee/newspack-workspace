@@ -31,26 +31,37 @@ describe( 'Funnel helpers', () => {
 	} );
 
 	describe( 'computeDisplayHalfWidths', () => {
-		// Chart half-width 160; MIN_HALF_WIDTH 48 (30%); MAX_TAPER_HALF_WIDTH 56 (35%).
+		// Chart half-width 160; MIN_HALF_WIDTH 32 (20%). Max taper is per-funnel:
+		// HALF_WIDTH / stepCount (80 for 2 steps, ~53 for 3, 32 for 5).
 		it( 'keeps the top level at full half-width', () => {
 			const halves = computeDisplayHalfWidths( [ stage( 'a', 1000, 1 ), stage( 'b', 500, 0.5 ) ], 1000 );
 			expect( halves[ 0 ] ).toBe( 160 );
 		} );
 		it( 'renders a moderate drop proportionally when within the clamps', () => {
-			// 800/1000 → 128, between the min floor and the max-taper bound.
-			const halves = computeDisplayHalfWidths( [ stage( 'a', 1000, 1 ), stage( 'b', 800, 0.8 ) ], 1000 );
-			expect( halves[ 1 ] ).toBeCloseTo( 128, 5 );
+			// 2-step taper bound is 160 − 80 = 80; 900/1000 → 144 sits above it, so it passes through.
+			const halves = computeDisplayHalfWidths( [ stage( 'a', 1000, 1 ), stage( 'b', 900, 0.9 ) ], 1000 );
+			expect( halves[ 1 ] ).toBeCloseTo( 144, 5 );
 		} );
-		it( 'caps a steep drop at the max taper from the level above', () => {
-			// 200/1000 raw → 32, but capped to 160 − 56 = 104.
+		it( 'caps a steep drop at the per-funnel max taper from the level above', () => {
+			// 2-step funnel → taper 160/2 = 80. 200/1000 raw → 32, but capped to 160 − 80 = 80.
 			const halves = computeDisplayHalfWidths( [ stage( 'a', 1000, 1 ), stage( 'b', 200, 0.2 ) ], 1000 );
-			expect( halves[ 1 ] ).toBe( 104 );
+			expect( halves[ 1 ] ).toBe( 80 );
+		} );
+		it( 'scales the taper to the step count so each funnel descends evenly', () => {
+			// 3-step funnel → taper 160/3. Steep tail steps 160 → ~106.7 → ~53.3.
+			const halves = computeDisplayHalfWidths( [ stage( 'a', 1000, 1 ), stage( 'b', 1, 0.001 ), stage( 'c', 1, 0.001 ) ], 1000 );
+			expect( halves[ 1 ] ).toBeCloseTo( 160 - 160 / 3, 5 );
+			expect( halves[ 2 ] ).toBeCloseTo( 160 - ( 2 * 160 ) / 3, 5 );
 		} );
 		it( 'floors a tiny level at the minimum segment width', () => {
-			// 1000 → 100 → 1: level 2 would be ~0 raw; floored at MIN_HALF_WIDTH 48.
-			const halves = computeDisplayHalfWidths( [ stage( 'a', 1000, 1 ), stage( 'b', 100, 0.1 ), stage( 'c', 1, 0.001 ) ], 1000 );
-			expect( halves[ 2 ] ).toBe( 48 );
-			expect( halves.every( h => h >= 48 ) ).toBe( true );
+			// 5-step funnel → taper 160/5 = 32. Steep tail walks 160 → 128 → 96 → 64 → 32,
+			// bottoming out at MIN_HALF_WIDTH 32 rather than the ~0 raw widths.
+			const halves = computeDisplayHalfWidths(
+				[ stage( 'a', 1000, 1 ), stage( 'b', 100, 0.1 ), stage( 'c', 10, 0.01 ), stage( 'd', 1, 0.001 ), stage( 'e', 1, 0.001 ) ],
+				1000
+			);
+			expect( halves[ 4 ] ).toBe( 32 );
+			expect( halves.every( h => h >= 32 ) ).toBe( true );
 		} );
 		it( 'never flares: each level is at most the level above', () => {
 			// A later stage exceeding an earlier one (data drift) must not widen.
