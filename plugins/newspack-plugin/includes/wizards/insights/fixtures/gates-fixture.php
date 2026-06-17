@@ -236,6 +236,34 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 		];
 	};
 
+	// --- Paid-section empty-state smoke variants (NPPD-1694). ---
+	if ( 'paid_no_conversions' === $variant ) {
+		// 17 paywall attempts, zero conversions → the section's `no_conversions`
+		// empty state with {N} = 17 (Richland Source's live scenario).
+		$current                              = $build( 1.0 );
+		$current['paywall_attempts_total']    = 17;
+		$current['paywall_conversions_total'] = 0;
+		return [
+			'tab_error' => false,
+			'current'   => $current,
+			'previous'  => null,
+		];
+	}
+	if ( 'paid_zero_cards' === $variant ) {
+		// Section has data (Influenced converted) so the grid renders, but the
+		// Direct cards are zero → exercises the per-card count fallback:
+		// "0 of 320" (rate), "0 conversions" (currency total), "—" (currency avg).
+		$current                                       = $build( 1.0 );
+		$current['paywall_conversion_direct']          = $scalar( 0.0, 320, 'rate', 0 );
+		$current['total_paywall_revenue_direct']       = $scalar( 0.0, 0, 'currency' );
+		$current['avg_revenue_per_paywall_conversion'] = $scalar( 0.0, 0, 'currency' );
+		return [
+			'tab_error' => false,
+			'current'   => $current,
+			'previous'  => null,
+		];
+	}
+
 	return [
 		'tab_error' => false,
 		'current'   => $build( 1.0 ),
