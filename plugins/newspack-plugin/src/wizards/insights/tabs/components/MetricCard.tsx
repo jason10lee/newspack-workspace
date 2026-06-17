@@ -299,9 +299,7 @@ const MetricCard = ( props: MetricCardProps ) => {
 			{ /* The not-capable nudge replaces the formula description (NPPD-1720): the
 			     description explains how the metric is computed, which is moot when there's
 			     structurally nothing to compute, and would just double the text block. */ }
-			{ description && ! notCapableMessage && (
-				<div className="newspack-insights__metric-card-description">{ description }</div>
-			) }
+			{ description && ! notCapableMessage && <div className="newspack-insights__metric-card-description">{ description }</div> }
 		</Card>
 	);
 };

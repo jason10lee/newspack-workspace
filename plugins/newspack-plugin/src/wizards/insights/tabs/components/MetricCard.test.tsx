@@ -203,13 +203,7 @@ describe( 'MetricCard notCapableMessage (NPPD-1720)', () => {
 	it( 'hides the formula description (the nudge replaces it)', () => {
 		const description = 'Completed donations ÷ donation-intent prompt impressions';
 		render(
-			<MetricCard
-				label="Donation Conversion (Direct)"
-				value={ 0 }
-				format="percent"
-				description={ description }
-				notCapableMessage={ NUDGE }
-			/>
+			<MetricCard label="Donation Conversion (Direct)" value={ 0 } format="percent" description={ description } notCapableMessage={ NUDGE } />
 		);
 		expect( screen.getByText( NUDGE ) ).toBeInTheDocument();
 		expect( screen.queryByText( description ) ).not.toBeInTheDocument();
