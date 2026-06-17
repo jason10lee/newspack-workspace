@@ -37,6 +37,17 @@ class Complianz {
 	const EDGE_COUNTRY_HEADERS = [ 'GEOIP_COUNTRY_CODE' ];
 
 	/**
+	 * Memoized edge country code for the current request. `null` before it is
+	 * first resolved; afterwards the resolved value (a country code, or '' when
+	 * the edge supplied nothing usable). The edge value is fixed per request, and
+	 * this is read several times on the uncached banner/track endpoints, so it is
+	 * resolved once.
+	 *
+	 * @var string|null
+	 */
+	private static $edge_country_code = null;
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function init() {
@@ -58,6 +69,10 @@ class Complianz {
 	 * @return string Two-letter uppercase ISO country code, or '' if unavailable.
 	 */
 	public static function get_edge_country_code() {
+		if ( null !== self::$edge_country_code ) {
+			return self::$edge_country_code;
+		}
+		self::$edge_country_code = '';
 		/**
 		 * Filters the server variables consulted for the edge-resolved visitor
 		 * country code, in priority order. Only add variables guaranteed to be
@@ -71,13 +86,16 @@ class Complianz {
 			if ( empty( $_SERVER[ $header ] ) ) {
 				continue;
 			}
-			$country_code = strtoupper( sanitize_text_field( wp_unslash( $_SERVER[ $header ] ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			// Edge GeoIP uses XX/T1 (and similar) for unknown/anonymized origins; treat those as no data.
+			$country_code = strtoupper( sanitize_text_field( wp_unslash( $_SERVER[ $header ] ) ) );
+			// Reject the common unknown/anonymized edge sentinels (XX, T1). Any other
+			// two-letter value that is not a real region maps to nothing downstream and
+			// falls back to the site default, so an unrecognised code still fails safe.
 			if ( preg_match( '/^[A-Z]{2}$/', $country_code ) && 'XX' !== $country_code && 'T1' !== $country_code ) {
-				return $country_code;
+				self::$edge_country_code = $country_code;
+				break;
 			}
 		}
-		return '';
+		return self::$edge_country_code;
 	}
 
 	/**
@@ -85,11 +103,11 @@ class Complianz {
 	 * country code already resolved by the hosting edge.
 	 *
 	 * The Complianz banner and consent-tracking REST endpoints are deliberately
-	 * uncached, so on high-traffic sites every visitor triggers a MaxMind database
-	 * read (reader init + region + consent-type lookups) on each request. When the
-	 * edge already supplies the country, that lookup is wasted; this maps the edge
-	 * country onto Complianz's region/consent-type using its own pure helpers,
-	 * preserving behaviour while skipping the database work.
+	 * uncached, so on high-traffic sites every visitor triggers a MaxMind GeoIP
+	 * lookup on each request. When the edge already supplies the country, that
+	 * lookup is wasted; this maps the edge country onto Complianz's
+	 * region/consent-type using its own pure helpers, preserving behaviour while
+	 * skipping the database work.
 	 *
 	 * @return void
 	 */
@@ -112,10 +130,15 @@ class Complianz {
 			return;
 		}
 
-		remove_filter( 'cmplz_user_region', 'cmplz_user_region', 20 );
-		remove_filter( 'cmplz_user_consenttype', 'cmplz_user_consenttype', 10 );
-		add_filter( 'cmplz_user_region', [ __CLASS__, 'edge_user_region' ], 20 );
-		add_filter( 'cmplz_user_consenttype', [ __CLASS__, 'edge_user_consenttype' ], 10 );
+		// Only take over a filter we actually removed. If Complianz ever renames or
+		// re-prioritizes its GeoIP callbacks, remove_filter() no-ops and we leave its
+		// native behaviour in place rather than running both filters in parallel.
+		if ( remove_filter( 'cmplz_user_region', 'cmplz_user_region', 20 ) ) {
+			add_filter( 'cmplz_user_region', [ __CLASS__, 'edge_user_region' ], 20 );
+		}
+		if ( remove_filter( 'cmplz_user_consenttype', 'cmplz_user_consenttype', 10 ) ) {
+			add_filter( 'cmplz_user_consenttype', [ __CLASS__, 'edge_user_consenttype' ], 10 );
+		}
 	}
 
 	/**
@@ -145,7 +168,9 @@ class Complianz {
 			}
 		}
 
-		// Preserve Complianz's manual region override.
+		// Preserve Complianz's manual region override. This mirrors Complianz's own
+		// region-redirect/preview mechanism, which is public and nonceless by design;
+		// the value only selects a consent regime and is sanitized below.
 		if ( isset( $_GET['cmplz_user_region'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$region = sanitize_title( wp_unslash( $_GET['cmplz_user_region'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			if ( ! cmplz_has_region( $region ) && function_exists( 'cmplz_select_region_outside_supported_regions' ) ) {
@@ -160,7 +185,10 @@ class Complianz {
 	 * Resolve the Complianz consent type from the edge-supplied country code.
 	 *
 	 * Mirrors Complianz Premium's own `cmplz_user_consenttype` filter, deriving the
-	 * country from the edge instead of a MaxMind lookup.
+	 * country from the edge instead of a MaxMind lookup. `cmplz_get_consenttype_for_country()`
+	 * itself re-applies the `cmplz_user_region` filter (so the region is re-resolved
+	 * from the edge, intentionally and without recursion) and fires Complianz's own
+	 * `cmplz_consenttype` filter, so `force_optin_consenttype()` still runs.
 	 *
 	 * @param string $consenttype Consent type resolved so far (the site default).
 	 * @return string
