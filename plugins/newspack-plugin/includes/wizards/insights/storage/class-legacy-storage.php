@@ -26,8 +26,8 @@
  * on both backends. Subscription-side queries here use them for the
  * same reason as in {@see HPOS_Storage}: production data confirms
  * `{prefix}wc_order_product_lookup` only ever holds shop_order rows
- * (Block Club Chicago: 39,461 shop_order / 0 shop_subscription;
- * Richland Source: 13,279 / 0).
+ * (a large metro newsroom: ~40,000 shop_order / 0 shop_subscription;
+ * a mid-size local publisher: ~13,000 / 0).
  *
  * @package Newspack
  */
