@@ -1,10 +1,17 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
 .newspack-pricing-rules {
 	&__muted {
-		color: #757575;
+		color: wp-colors.$gray-700;
 	}
 
+	// Catalog impact panel sits above the full-width DataViews. Padded 24px to
+	// align its content with the DataViews controls below (matching the
+	// subscription-products chip bar); margin-bottom leaves a clean gap after the
+	// Newspack DataViews wrapper's full-width margin-top: -16px pull-up resolves.
 	&__impact {
 		margin-bottom: 24px;
+		padding: 0 24px;
 
 		&--loading {
 			display: flex;
@@ -27,7 +34,19 @@
 		td {
 			padding: 8px 12px;
 			text-align: left;
-			border-bottom: 1px solid #e0e0e0;
+			border-bottom: 1px solid wp-colors.$gray-300;
+		}
+
+		// Flush the outer columns with the 24px panel padding so the table aligns
+		// with the headline and the DataViews controls.
+		th:first-child,
+		td:first-child {
+			padding-left: 0;
+		}
+
+		th:last-child,
+		td:last-child {
+			padding-right: 0;
 		}
 
 		th {
