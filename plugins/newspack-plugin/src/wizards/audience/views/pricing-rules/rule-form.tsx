@@ -20,6 +20,7 @@ import {
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
+import { trash } from '@wordpress/icons';
 
 /**
  * Internal dependencies
@@ -226,6 +227,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 									<FlexBlock>
 										<TextControl
 											label={ __( 'From cycle #', 'newspack-plugin' ) }
+											hideLabelFromVision={ i > 0 }
 											type="number"
 											min={ 1 }
 											value={ step.at }
@@ -236,6 +238,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 									<FlexBlock>
 										<SelectControl
 											label={ __( 'Pricing', 'newspack-plugin' ) }
+											hideLabelFromVision={ i > 0 }
 											value={ step.calc_type }
 											options={ vocab.calc_types.map( c => ( { label: c.label, value: c.value } ) ) }
 											onChange={ v => updateStep( i, 'calc_type', v ) }
@@ -245,6 +248,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 									<FlexBlock>
 										<TextControl
 											label={ __( 'Value', 'newspack-plugin' ) }
+											hideLabelFromVision={ i > 0 }
 											type="number"
 											value={ step.value }
 											onChange={ v => updateStep( i, 'value', v ) }
@@ -254,14 +258,20 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 									<FlexBlock>
 										<TextControl
 											label={ __( 'Name shown to reader', 'newspack-plugin' ) }
+											hideLabelFromVision={ i > 0 }
 											value={ step.label }
 											onChange={ v => updateStep( i, 'label', v ) }
 											__next40pxDefaultSize
 										/>
 									</FlexBlock>
-									<Button isDestructive variant="tertiary" disabled={ steps.length <= 1 } onClick={ () => removeStep( i ) }>
-										{ __( 'Remove', 'newspack-plugin' ) }
-									</Button>
+									<Button
+										icon={ trash }
+										isDestructive
+										variant="tertiary"
+										disabled={ steps.length <= 1 }
+										onClick={ () => removeStep( i ) }
+										label={ __( 'Remove step', 'newspack-plugin' ) }
+									/>
 								</HStack>
 							) ) }
 							<div>
