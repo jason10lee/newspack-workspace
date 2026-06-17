@@ -422,6 +422,22 @@
 		margin-left: auto;
 	}
 
+	// Reference line (dashed horizontal target) and its floating label — used
+	// by Section 5 cohort targets in the Conversion Journey tab.
+	&__line-reference {
+		stroke: wp-colors.$gray-400;
+		stroke-width: 1;
+		stroke-dasharray: 4 3;
+		vector-effect: non-scaling-stroke;
+	}
+
+	&__line-reference-label {
+		display: block;
+		margin-top: 4px;
+		font-size: 12px;
+		color: wp-colors.$gray-600;
+	}
+
 	// Legend below a multi-series line chart.
 	&__line-legend {
 		display: flex;

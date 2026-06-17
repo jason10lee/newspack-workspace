@@ -147,22 +147,6 @@
 		fill: wp-colors.$gray-900;
 	}
 
-	// LineChart reference target line + floating label — extends the shared
-	// line chrome (Section 5 cohort targets).
-	&__line-reference {
-		stroke: wp-colors.$gray-400;
-		stroke-width: 1;
-		stroke-dasharray: 4 3;
-		vector-effect: non-scaling-stroke;
-	}
-
-	&__line-reference-label {
-		display: block;
-		margin-top: 4px;
-		font-size: 12px;
-		color: wp-colors.$gray-600;
-	}
-
 	// "See more" / "See less" toggle under the row-capped top-pages table.
 	&__conversion-table-more {
 		align-self: flex-start;
