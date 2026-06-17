@@ -70,10 +70,10 @@ class Test_Posts_Inserter_Rest_Fields extends WP_UnitTestCase {
 		register_post_type(
 			self::UI_ONLY_CPT,
 			[
-				'public'              => false,
-				'publicly_queryable'  => false,
-				'show_ui'             => true,
-				'show_in_rest'        => true,
+				'public'             => false,
+				'publicly_queryable' => false,
+				'show_ui'            => true,
+				'show_in_rest'       => true,
 			]
 		);
 	}
