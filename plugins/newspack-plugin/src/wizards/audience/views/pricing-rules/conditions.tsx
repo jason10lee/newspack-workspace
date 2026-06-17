@@ -1,7 +1,7 @@
 /**
  * Eligibility conditions editor. Renders each condition matcher from the REST
- * vocab by its `field_type`: boolean → toggle; datetime → a None / Rule publish
- * date / Custom selector (the "subscriptions started on/after" cohort gate,
+ * vocab by its `field_type`: boolean → toggle; datetime → an Anytime / Rule
+ * publish date / Custom selector (the "subscriptions started on/after" cohort gate,
  * defaulting to the rule's publish date). New matchers the engine registers appear
  * automatically — no change here.
  */
@@ -31,7 +31,7 @@ type DateMode = 'none' | 'publish' | 'custom';
 const PUBLISH_TOLERANCE = 120;
 
 /**
- * The cohort-gate datetime control: None / Rule publish date / Custom. The stored
+ * The cohort-gate datetime control: Anytime / Rule publish date / Custom. The stored
  * value stays a plain UTC timestamp (or null); "Rule publish date" resolves to the
  * rule's publish timestamp — or, for a brand-new rule, now.
  */
@@ -96,7 +96,7 @@ function DatetimeCondition( {
 				help={ matcher.help }
 				value={ mode }
 				options={ [
-					{ label: __( 'None', 'newspack-plugin' ), value: 'none' },
+					{ label: __( 'Anytime', 'newspack-plugin' ), value: 'none' },
 					{ label: __( 'Rule publish date', 'newspack-plugin' ), value: 'publish' },
 					{ label: __( 'Custom', 'newspack-plugin' ), value: 'custom' },
 				] }
