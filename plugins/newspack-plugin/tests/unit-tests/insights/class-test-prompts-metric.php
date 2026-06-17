@@ -1206,7 +1206,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 
 	/**
 	 * Informational-only prompts (no conversion block) → not capable. This is the
-	 * Richland Source "sponsor note" / Palo Alto hand-rolled-CTA case.
+	 * sponsor-note / hand-rolled-CTA case.
 	 */
 	public function test_capability_flags_all_false_for_informational_only_prompts() {
 		$prompts = [
@@ -1222,7 +1222,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 
 	/**
 	 * Newsletter-only prompt → newsletter + form-submission-rate capable, every
-	 * other intent not capable. Richland Source's actual setup.
+	 * other intent not capable. The common newsletter-only setup.
 	 */
 	public function test_capability_flags_newsletter_only() {
 		$prompts = [ $this->prompt_with_blocks( [ 'newspack-newsletters/subscribe' ] ) ];
@@ -1280,8 +1280,8 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 
 	/**
 	 * Checkout-button is detected though it's NOT in newspack-popups' stock
-	 * watched-blocks map — the gate adds it so membership prompts (Lookout) drive
-	 * the subscription intent rather than reading as informational.
+	 * watched-blocks map — the gate adds it so checkout-button membership prompts
+	 * drive the subscription intent rather than reading as informational.
 	 */
 	public function test_capability_flags_detects_checkout_button() {
 		$prompts = [ $this->prompt_with_blocks( [ 'newspack-blocks/checkout-button' ] ) ];

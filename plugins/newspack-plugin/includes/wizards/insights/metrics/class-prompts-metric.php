@@ -83,8 +83,8 @@ final class Prompts_Metric {
 	 * keyed by capability. A prompt is "capable" of an intent when any active
 	 * prompt contains the matching block. Mirrors the three blocks newspack-popups
 	 * watches in `Newspack_Popups_Data_Api::get_popup_metadata()` plus
-	 * `newspack-blocks/checkout-button`, which that map omits — without it Lookout's
-	 * membership prompts would read as informational.
+	 * `newspack-blocks/checkout-button`, which that map omits — without it,
+	 * checkout-button membership prompts would read as informational.
 	 *
 	 * @var array<string, string>
 	 */

@@ -28,8 +28,8 @@ export const NOT_CAPABLE_COPY = {
 		'We don’t detect a newsletter signup block in your active prompts. Add a Newsletter Subscribe block to a prompt to start tracking newsletter conversions.',
 		'newspack-plugin'
 	),
-	// Explicitly addresses the hand-rolled-CTA case (e.g. Palo Alto's button/link
-	// donation prompt that carries no Donate block).
+	// Explicitly addresses the hand-rolled-CTA case (a button/link donation prompt
+	// that carries no Donate block).
 	donation: __(
 		'We don’t detect a donation block in your active prompts. If you’re driving donations with a custom button or link, switch to the Donate block to start tracking conversions.',
 		'newspack-plugin'

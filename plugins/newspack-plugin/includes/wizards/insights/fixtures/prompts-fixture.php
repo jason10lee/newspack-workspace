@@ -385,7 +385,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 	};
 
 	// --- Not-capable variant (NPPD-1720): per-intent capability gate. ---
-	// Mirrors Richland Source — newsletter prompts only, so newsletter signup and
+	// Mirrors a newsletter-only publisher — newsletter signup and
 	// the generic form-submission rate stay capable (real values) while
 	// registration / donation / subscription have no block and render the
 	// structural "not capable" em-dash + nudge. Demonstrates that the gate is
