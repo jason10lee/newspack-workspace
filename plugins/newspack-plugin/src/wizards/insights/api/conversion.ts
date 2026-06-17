@@ -1,14 +1,21 @@
 /**
- * Conversion Journey API client (NPPD-1609, Phase 1).
+ * Conversion Journey API client (NPPD-1609, Phase 2).
  *
  * Thin wrapper around `@wordpress/api-fetch` for the single Tab 3
  * endpoint: `GET /newspack-insights/v1/conversion`. Type definitions
  * mirror the PHP response shape assembled by `Conversion_REST_Controller`.
  *
- * Phase 1: every metric carries `pending: true` and a zero / empty value.
- * Phase 2 keeps the same shape but flips `pending` to false and surfaces
- * real BQ values; the React layer reads `pending` and the `tab_pending`
- * banner flag rather than knowing which phase produced a payload.
+ * Phase 2: every metric carries an explicit `state`:
+ *   - 'populated'   — query succeeded with data.
+ *   - 'empty'       — query succeeded, no rows in window.
+ *   - 'error'       — query failed (with `error_code` / `error_message`).
+ *   - 'coming_soon' — Phase B deferred metric; React renders a placeholder.
+ *
+ * The `tab_error` flag is true only when every section in the current window
+ * is in the error state. React renders a tab-level error banner when set.
+ *
+ * Response is wrapped in the shared `CachedEnvelope` shape:
+ *   `{ data: ConversionResponse, cache: { source, computed_at, cooldown_until } }`.
  *
  * Mirrors `api/prompts.ts` (Tab 5). Conversion Journey is the widest tab
  * (eight sections, 23 metrics): a marquee lifecycle funnel, four per-
@@ -23,6 +30,11 @@
 import apiFetch from '@wordpress/api-fetch';
 
 /**
+ * Internal dependencies
+ */
+import { type CachedEnvelope } from '../state/insightsCache';
+
+/**
  * The kind of placeholder a scalar metric renders. Encoded server-side so
  * the React format layer doesn't have to guess from the field name. Tab 3
  * uses 'count', 'rate', and 'decimal' (no currency metrics in v1); the full
@@ -31,19 +43,33 @@ import apiFetch from '@wordpress/api-fetch';
 export type ConversionPlaceholderType = 'count' | 'rate' | 'currency' | 'decimal';
 
 /**
- * Visibility gate for Sections 2.4 and 4.4. Hidden in Phase 1; Phase 2
- * computes it from the live cohort sizes.
+ * Visibility gate for Sections 2.4 and 4.4. Hidden when cohort size is
+ * below threshold; visible when the live cohort sizes meet the threshold.
  */
 export type ConversionVisibility = 'hidden' | 'visible';
 export type ConversionVisibilityReason = 'insufficient_data' | null;
 
 /**
- * Standard scorecard metric payload (Sections 7 and 8.1–8.3).
+ * Collection metrics report all four states; scalars use
+ * 'error' | 'populated' (an absent value is a non-computable zero,
+ * not an 'empty' state).
  */
-export interface ConversionScalarMetric {
+export type ConversionMetricState = 'error' | 'empty' | 'populated' | 'coming_soon';
+
+/** Fields present on any metric in the error state. */
+export interface ConversionErrorFields {
+	error_code?: string;
+	error_message?: string;
+}
+
+/**
+ * Standard scorecard metric payload (Sections 7 and 8.1–8.3).
+ * `state` is 'error' | 'populated' | 'coming_soon' (scalars have no 'empty' state).
+ */
+export interface ConversionScalarMetric extends ConversionErrorFields {
+	state: 'error' | 'populated' | 'coming_soon';
 	value: number;
 	computable: boolean;
-	pending: boolean;
 	denominator: number | null;
 	placeholder_type: ConversionPlaceholderType;
 }
@@ -56,8 +82,8 @@ export interface ConversionFunnelStage {
 	pct_of_top: number;
 }
 
-export interface ConversionFunnelData {
-	pending: boolean;
+export interface ConversionFunnelData extends ConversionErrorFields {
+	state: ConversionMetricState;
 	stages: ConversionFunnelStage[];
 }
 
@@ -78,8 +104,8 @@ export interface ConversionSourceSlice {
 	pct: number;
 }
 
-export interface ConversionSourceMixData {
-	pending: boolean;
+export interface ConversionSourceMixData extends ConversionErrorFields {
+	state: ConversionMetricState;
 	total: number;
 	slices: ConversionSourceSlice[];
 }
@@ -94,8 +120,8 @@ export interface ConversionCumulativePoint {
 /**
  * Single-series cumulative distribution (Section 4.1).
  */
-export interface ConversionCumulativeSingle {
-	pending: boolean;
+export interface ConversionCumulativeSingle extends ConversionErrorFields {
+	state: ConversionMetricState;
 	points: ConversionCumulativePoint[];
 }
 
@@ -115,8 +141,8 @@ export interface ConversionCumulativeGroup {
 /**
  * Multi-series cumulative distribution (Sections 4.2, 4.3).
  */
-export interface ConversionCumulativeMulti {
-	pending: boolean;
+export interface ConversionCumulativeMulti extends ConversionErrorFields {
+	state: ConversionMetricState;
 	groups: ConversionCumulativeGroup[];
 }
 
@@ -137,8 +163,8 @@ export interface ConversionCohortSeries {
 	points: ConversionCohortPoint[];
 }
 
-export interface ConversionCohortData {
-	pending: boolean;
+export interface ConversionCohortData extends ConversionErrorFields {
+	state: ConversionMetricState;
 	cohorts: ConversionCohortSeries[];
 	reference_line: ConversionReferenceLine;
 }
@@ -147,12 +173,12 @@ export interface ConversionCohortData {
 
 export interface ConversionWeekPoint {
 	week: string;
-	registration_rate: number;
+	registration_conversion_rate: number;
 	subscription_attempt_rate: number;
 }
 
-export interface ConversionWeeklyTrendsData {
-	pending: boolean;
+export interface ConversionWeeklyTrendsData extends ConversionErrorFields {
+	state: ConversionMetricState;
 	weeks: ConversionWeekPoint[];
 	series: string[];
 }
@@ -168,8 +194,8 @@ export interface ConversionTopPageRow {
 	conversion_rate: number;
 }
 
-export interface ConversionTopPagesTable {
-	pending: boolean;
+export interface ConversionTopPagesTable extends ConversionErrorFields {
+	state: ConversionMetricState;
 	rows: ConversionTopPageRow[];
 	threshold_pageviews: number;
 }
@@ -213,10 +239,10 @@ export interface ConversionWindow {
 
 export interface ConversionResponse {
 	/**
-	 * True while Tab 3 is in the Phase 1 placeholder phase. React uses this
-	 * to render the top-of-tab banner.
+	 * True only when every section in the current window is in the error
+	 * state. React renders a tab-level error banner when set.
 	 */
-	tab_pending: boolean;
+	tab_error: boolean;
 	current: ConversionWindow;
 	previous: ConversionWindow | null;
 }
@@ -230,10 +256,7 @@ export interface ConversionQuery {
 
 const ENDPOINT = '/newspack-insights/v1/conversion';
 
-/**
- * Fetch Tab 3 data for the given window pair.
- */
-export const fetchConversionData = async ( query: ConversionQuery ): Promise< ConversionResponse > => {
+const queryString = ( query: ConversionQuery ): string => {
 	const params = new URLSearchParams();
 	params.set( 'start', query.start );
 	params.set( 'end', query.end );
@@ -241,8 +264,20 @@ export const fetchConversionData = async ( query: ConversionQuery ): Promise< Co
 		params.set( 'compare_start', query.compare_start );
 		params.set( 'compare_end', query.compare_end );
 	}
-	return apiFetch< ConversionResponse >( {
-		path: `${ ENDPOINT }?${ params.toString() }`,
+	return params.toString();
+};
+
+/**
+ * Fetch Tab 3 data for the given window pair.
+ */
+export const fetchConversionData = async ( query: ConversionQuery ): Promise< CachedEnvelope< ConversionResponse > > =>
+	apiFetch< CachedEnvelope< ConversionResponse > >( {
+		path: `${ ENDPOINT }?${ queryString( query ) }`,
 		method: 'GET',
 	} );
-};
+
+export const refreshConversionData = async ( query: ConversionQuery ): Promise< CachedEnvelope< ConversionResponse > > =>
+	apiFetch< CachedEnvelope< ConversionResponse > >( {
+		path: `${ ENDPOINT }/refresh?${ queryString( query ) }`,
+		method: 'POST',
+	} );

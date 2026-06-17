@@ -38,6 +38,32 @@ export interface MetricCardOverlay {
 	dimensions?: string[];
 }
 
+/**
+ * Count-fallback inputs for zero scorecards (NPPD-1694). When a rate or
+ * currency card would otherwise render a bare `0%` / `$0.00`, these drive a
+ * count-based hero that conveys the real signal instead (`0 of 17`,
+ * `0 conversions`, or the `—` null glyph with an explanatory secondary line).
+ *
+ * Keyed on two counts, regardless of card `format`:
+ *   - `denominator` — the "opportunity" count (paywall attempts / regwall impressions)
+ *   - `numerator`   — the conversions count (for currency cards, the conversions companion)
+ *
+ * The decision is driven by these counts, NOT by `value`: a real $0 alongside N
+ * conversions still reads as data, while 0 conversions out of N attempts reads
+ * as an honest zero. `currencyRole` distinguishes the two currency behaviors
+ * (ticket: a total card shows `0 conversions`; an average card shows `—` with a
+ * "No conversions…" secondary). It is ignored for `format='percent'`.
+ */
+export interface MetricCardZeroFallback {
+	numerator?: number;
+	denominator?: number;
+	currencyRole?: 'total' | 'average';
+	/** Plural noun for the "No … in this window" line, e.g. "paywall attempts". */
+	attemptsLabel: string;
+	/** Plural noun for the conversions line, e.g. "conversions". */
+	conversionsLabel?: string;
+}
+
 export interface MetricCardProps {
 	label: string;
 	value?: number;
@@ -63,6 +89,8 @@ export interface MetricCardProps {
 	 * "$1.2M"). Overrides the title the currency formatter derives on its own.
 	 */
 	valueTitle?: string;
+	/** Count-fallback for zero rate/currency scorecards (NPPD-1694). */
+	zeroFallback?: MetricCardZeroFallback;
 }
 
 // Currency is handled by the caller (it needs both display + title from one
@@ -80,6 +108,13 @@ const formatValue = ( v: number, fmt: MetricFormat ): string => {
 	}
 };
 
+// Em-dash null glyph (U+2014). Matches the "Not applicable" treatment in the
+// Performance by gate table (PerformanceByGateSection's `NotApplicable`): same
+// glyph + same `aria-label`, so a null scorecard and a null table cell read as
+// one design system. The table's span is unstyled (inherits cell context); the
+// card renders it in the value region's own type scale.
+const EM_DASH = '—';
+
 const MetricCard = ( props: MetricCardProps ) => {
 	const {
 		label,
@@ -94,6 +129,7 @@ const MetricCard = ( props: MetricCardProps ) => {
 		error,
 		notConfigured,
 		valueTitle,
+		zeroFallback,
 	} = props;
 
 	// Shared graceful-failure state (missing dimension / not configured / error).
@@ -109,7 +145,54 @@ const MetricCard = ( props: MetricCardProps ) => {
 		);
 	}
 
-	const hasComparison = ! pending && typeof previousValue === 'number';
+	// --- Zero-state count fallback (NPPD-1694) -----------------------------
+	// Resolve a count-based hero/secondary before the normal value+delta path.
+	// Driven by the conversions (numerator) and opportunity (denominator) counts
+	// on `zeroFallback`, never by `value`. `undefined === 0` is false, so a card
+	// passing partial counts simply falls through to the normal render.
+	let fallbackHero: string | null = null;
+	let fallbackSecondary: string | null = null;
+	if ( zeroFallback && ( format === 'percent' || format === 'currency' ) ) {
+		const { numerator, denominator, currencyRole, attemptsLabel, conversionsLabel } = zeroFallback;
+		const conversionsNoun = conversionsLabel ?? __( 'conversions', 'newspack-plugin' );
+		const noneInWindow = ( pluralNoun: string ) =>
+			sprintf(
+				/* translators: %s is a plural noun, e.g. "paywall attempts". */
+				__( 'No %s in this window', 'newspack-plugin' ),
+				pluralNoun
+			);
+		if ( denominator === 0 ) {
+			// Nothing happened at all → em-dash + "No <attempts> in this window".
+			fallbackHero = EM_DASH;
+			fallbackSecondary = noneInWindow( attemptsLabel );
+		} else if ( numerator === 0 && typeof denominator === 'number' && denominator > 0 ) {
+			if ( format === 'percent' ) {
+				// "0 of 17" — word "of", no "%" suffix and no "(0%)" parenthetical.
+				fallbackHero = sprintf(
+					/* translators: 1: numerator (always 0 here), 2: denominator. */
+					__( '%1$s of %2$s', 'newspack-plugin' ),
+					formatNumber( numerator ),
+					formatNumber( denominator )
+				);
+			} else if ( currencyRole === 'total' ) {
+				// Currency total → "0 conversions", symmetric with the rate card.
+				fallbackHero = sprintf(
+					/* translators: 1: conversions count (0 here), 2: plural "conversions". */
+					__( '%1$s %2$s', 'newspack-plugin' ),
+					formatNumber( numerator ),
+					conversionsNoun
+				);
+			} else {
+				// Currency average → em-dash + "No conversions in this window".
+				fallbackHero = EM_DASH;
+				fallbackSecondary = noneInWindow( conversionsNoun );
+			}
+		}
+	}
+
+	// Suppress the period-over-period delta whenever a fallback hero is shown — a
+	// "↓ 100%" against a real prior value would misread an honest zero.
+	const hasComparison = ! pending && ! fallbackHero && typeof previousValue === 'number';
 	// `delta` is null only when there's no comparison or previous is 0 (no ratio).
 	const delta = hasComparison ? formatDelta( value, previousValue as number ) : null;
 	const tone = hasComparison ? deltaTone( value, previousValue as number, lowerIsBetter ) : 'neutral';
@@ -147,14 +230,42 @@ const MetricCard = ( props: MetricCardProps ) => {
 	// as an override and still falls back to the formatter-derived full value.
 	const valueTooltip = valueTitle || currency?.title || undefined;
 
+	// Hero content: a count-fallback string, the em-dash null glyph (matched to
+	// the Performance by gate table's null cell — same glyph + aria-label), or
+	// the normal formatted value (optionally with a full-value tooltip).
+	let heroContent: React.ReactNode;
+	if ( fallbackHero === EM_DASH ) {
+		heroContent = (
+			<span className="newspack-insights__metric-card-na" aria-label={ __( 'Not applicable', 'newspack-plugin' ) }>
+				{ EM_DASH }
+			</span>
+		);
+	} else if ( fallbackHero !== null ) {
+		// A count-fallback phrase ("0 of 17", "0 conversions") — flagged so the
+		// value region can render it smaller than the 44px number scale.
+		heroContent = fallbackHero;
+	} else if ( valueTooltip ) {
+		heroContent = <span title={ valueTooltip }>{ valueText }</span>;
+	} else {
+		heroContent = valueText;
+	}
+
 	return (
 		<Card __experimentalCoreCard className="newspack-insights__metric-card">
 			<div className="newspack-insights__metric-card-label">{ label }</div>
 			<div className="newspack-insights__metric-card-body">
-				<div className="newspack-insights__metric-card-value">
-					{ valueTooltip ? <span title={ valueTooltip }>{ valueText }</span> : valueText }
+				<div
+					className={
+						fallbackHero !== null && fallbackHero !== EM_DASH
+							? 'newspack-insights__metric-card-value newspack-insights__metric-card-value--count'
+							: 'newspack-insights__metric-card-value'
+					}
+				>
+					{ heroContent }
 				</div>
-				{ secondary && <div className="newspack-insights__metric-card-secondary">{ secondary }</div> }
+				{ ( fallbackSecondary ?? secondary ) && (
+					<div className="newspack-insights__metric-card-secondary">{ fallbackSecondary ?? secondary }</div>
+				) }
 				{ magnitude !== null && (
 					<div
 						className={ `newspack-insights__metric-card-delta newspack-insights__metric-card-delta--${ tone }` }

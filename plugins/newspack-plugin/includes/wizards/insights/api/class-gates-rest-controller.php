@@ -300,10 +300,12 @@ class Gates_REST_Controller extends WP_REST_Controller {
 	 */
 	private static function is_window_all_error( array $window ): bool {
 		foreach ( $window as $key => $value ) {
-			if ( 'window' === $key ) {
+			// Skip the date metadata and the scalar section-total fields
+			// (e.g. `paywall_attempts_total`, NPPD-1694) — neither is a metric.
+			if ( 'window' === $key || ! is_array( $value ) ) {
 				continue;
 			}
-			if ( ! is_array( $value ) || ! isset( $value['state'] ) || 'error' !== $value['state'] ) {
+			if ( ! isset( $value['state'] ) || 'error' !== $value['state'] ) {
 				return false;
 			}
 		}
@@ -319,30 +321,39 @@ class Gates_REST_Controller extends WP_REST_Controller {
 	 * @return array
 	 */
 	private function build_window( Gates_Metric $metric, DateTimeImmutable $start, DateTimeImmutable $end ): array {
-		return [
-			'window'                             => [
-				'start' => $start->format( 'Y-m-d' ),
-				'end'   => $end->format( 'Y-m-d' ),
+		// Captured for the Paid-section totals below (NPPD-1694) — derived from
+		// these scalars, not re-queried.
+		$paywall_direct     = $metric->get_paywall_conversion_direct( $start, $end );
+		$paywall_influenced = $metric->get_paywall_conversion_influenced_14d( $start, $end );
+
+		return array_merge(
+			[
+				'window'                             => [
+					'start' => $start->format( 'Y-m-d' ),
+					'end'   => $end->format( 'Y-m-d' ),
+				],
+				// Section 1.
+				'total_gate_impressions'             => $metric->get_total_gate_impressions( $start, $end ),
+				'unique_readers_reached'             => $metric->get_unique_readers_reached( $start, $end ),
+				'avg_exposures_per_reader'           => $metric->get_avg_exposures_per_reader( $start, $end ),
+				'sessions_with_gate'                 => $metric->get_sessions_with_gate( $start, $end ),
+				// Section 2.
+				'regwall_conversion_direct'          => $metric->get_regwall_conversion_direct( $start, $end ),
+				'regwall_conversion_influenced_7d'   => $metric->get_regwall_conversion_influenced_7d( $start, $end ),
+				// Section 3.
+				'paywall_conversion_direct'          => $paywall_direct,
+				'paywall_conversion_influenced_14d'  => $paywall_influenced,
+				'total_paywall_revenue_direct'       => $metric->get_total_paywall_revenue_direct( $start, $end ),
+				'avg_revenue_per_paywall_conversion' => $metric->get_avg_revenue_per_paywall_conversion( $start, $end ),
+				// Section 4.
+				'conversion_funnel'                  => $metric->get_conversion_funnel( $start, $end ),
+				'exposures_distribution'             => $metric->get_exposures_distribution( $start, $end ),
+				// Section 5.
+				'performance_by_gate'                => $metric->get_performance_by_gate( $start, $end ),
 			],
-			// Section 1.
-			'total_gate_impressions'             => $metric->get_total_gate_impressions( $start, $end ),
-			'unique_readers_reached'             => $metric->get_unique_readers_reached( $start, $end ),
-			'avg_exposures_per_reader'           => $metric->get_avg_exposures_per_reader( $start, $end ),
-			'sessions_with_gate'                 => $metric->get_sessions_with_gate( $start, $end ),
-			// Section 2.
-			'regwall_conversion_direct'          => $metric->get_regwall_conversion_direct( $start, $end ),
-			'regwall_conversion_influenced_7d'   => $metric->get_regwall_conversion_influenced_7d( $start, $end ),
-			// Section 3.
-			'paywall_conversion_direct'          => $metric->get_paywall_conversion_direct( $start, $end ),
-			'paywall_conversion_influenced_14d'  => $metric->get_paywall_conversion_influenced_14d( $start, $end ),
-			'total_paywall_revenue_direct'       => $metric->get_total_paywall_revenue_direct( $start, $end ),
-			'avg_revenue_per_paywall_conversion' => $metric->get_avg_revenue_per_paywall_conversion( $start, $end ),
-			// Section 4.
-			'conversion_funnel'                  => $metric->get_conversion_funnel( $start, $end ),
-			'exposures_distribution'             => $metric->get_exposures_distribution( $start, $end ),
-			// Section 5.
-			'performance_by_gate'                => $metric->get_performance_by_gate( $start, $end ),
-		];
+			// Section 3 empty-state totals (NPPD-1694).
+			Gates_Metric::paywall_section_totals( $paywall_direct, $paywall_influenced )
+		);
 	}
 
 	/**

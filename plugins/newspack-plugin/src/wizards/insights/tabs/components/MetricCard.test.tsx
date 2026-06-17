@@ -41,3 +41,120 @@ describe( 'MetricCard value tooltip', () => {
 		expect( value ).not.toHaveAttribute( 'title' );
 	} );
 } );
+
+describe( 'MetricCard zeroFallback (NPPD-1694)', () => {
+	const PAYWALL = { attemptsLabel: 'paywall attempts', conversionsLabel: 'conversions' };
+
+	describe( 'rate card (format="percent")', () => {
+		it( 'renders "0 of N" (count, no % suffix) when numerator is 0 and denominator > 0', () => {
+			render(
+				<MetricCard
+					label="Paywall conversion (Direct)"
+					value={ 0 }
+					format="percent"
+					zeroFallback={ { numerator: 0, denominator: 17, ...PAYWALL } }
+				/>
+			);
+			expect( screen.getByText( '0 of 17' ) ).toBeInTheDocument();
+			// No percentage anywhere — neither a bare "0%" nor a "(0%)" parenthetical.
+			expect( screen.queryByText( /%/ ) ).not.toBeInTheDocument();
+		} );
+
+		it( 'localizes a large denominator in the count format', () => {
+			render( <MetricCard label="Rate" value={ 0 } format="percent" zeroFallback={ { numerator: 0, denominator: 1234567, ...PAYWALL } } /> );
+			expect( screen.getByText( '0 of 1,234,567' ) ).toBeInTheDocument();
+		} );
+
+		it( 'renders the em-dash + "No paywall attempts in this window" when denominator is 0', () => {
+			render( <MetricCard label="Rate" value={ 0 } format="percent" zeroFallback={ { numerator: 0, denominator: 0, ...PAYWALL } } /> );
+			expect( screen.getByLabelText( 'Not applicable' ) ).toHaveTextContent( '—' );
+			expect( screen.getByText( 'No paywall attempts in this window' ) ).toBeInTheDocument();
+		} );
+
+		it( 'falls through to the normal percentage when numerator and denominator are both positive', () => {
+			render( <MetricCard label="Rate" value={ 0.5 } format="percent" zeroFallback={ { numerator: 3, denominator: 17, ...PAYWALL } } /> );
+			expect( screen.queryByText( /0 of/ ) ).not.toBeInTheDocument();
+			expect( screen.queryByLabelText( 'Not applicable' ) ).not.toBeInTheDocument();
+		} );
+	} );
+
+	describe( 'currency total card (currencyRole="total")', () => {
+		it( 'renders "0 conversions" when conversions are 0 and attempts > 0', () => {
+			render(
+				<MetricCard
+					label="Total paywall revenue (Direct)"
+					value={ 0 }
+					format="currency"
+					zeroFallback={ { numerator: 0, denominator: 17, currencyRole: 'total', ...PAYWALL } }
+				/>
+			);
+			expect( screen.getByText( '0 conversions' ) ).toBeInTheDocument();
+			expect( screen.queryByText( '$0.00' ) ).not.toBeInTheDocument();
+		} );
+
+		it( 'renders the em-dash + "No paywall attempts in this window" when attempts are 0', () => {
+			render(
+				<MetricCard
+					label="Total"
+					value={ 0 }
+					format="currency"
+					zeroFallback={ { numerator: 0, denominator: 0, currencyRole: 'total', ...PAYWALL } }
+				/>
+			);
+			expect( screen.getByLabelText( 'Not applicable' ) ).toHaveTextContent( '—' );
+			expect( screen.getByText( 'No paywall attempts in this window' ) ).toBeInTheDocument();
+		} );
+	} );
+
+	describe( 'currency average card (currencyRole="average")', () => {
+		it( 'renders the em-dash + "No conversions in this window" when conversions are 0 but attempts > 0', () => {
+			render(
+				<MetricCard
+					label="Avg revenue per paywall conversion"
+					value={ 0 }
+					format="currency"
+					zeroFallback={ { numerator: 0, denominator: 17, currencyRole: 'average', ...PAYWALL } }
+				/>
+			);
+			expect( screen.getByLabelText( 'Not applicable' ) ).toHaveTextContent( '—' );
+			expect( screen.getByText( 'No conversions in this window' ) ).toBeInTheDocument();
+		} );
+
+		it( 'renders "No paywall attempts in this window" when attempts are 0', () => {
+			render(
+				<MetricCard
+					label="Avg"
+					value={ 0 }
+					format="currency"
+					zeroFallback={ { numerator: 0, denominator: 0, currencyRole: 'average', ...PAYWALL } }
+				/>
+			);
+			expect( screen.getByText( 'No paywall attempts in this window' ) ).toBeInTheDocument();
+		} );
+	} );
+
+	it( 'renders a custom plural opportunity label', () => {
+		render(
+			<MetricCard
+				label="Regwall conversion"
+				value={ 0 }
+				format="percent"
+				zeroFallback={ { numerator: 0, denominator: 0, attemptsLabel: 'registration gate impressions' } }
+			/>
+		);
+		expect( screen.getByText( 'No registration gate impressions in this window' ) ).toBeInTheDocument();
+	} );
+
+	it( 'suppresses the comparison delta when a fallback hero is shown', () => {
+		const { container } = render(
+			<MetricCard
+				label="Rate"
+				value={ 0 }
+				previousValue={ 0.4 }
+				format="percent"
+				zeroFallback={ { numerator: 0, denominator: 17, ...PAYWALL } }
+			/>
+		);
+		expect( container.querySelector( '.newspack-insights__metric-card-delta' ) ).toBeNull();
+	} );
+} );
