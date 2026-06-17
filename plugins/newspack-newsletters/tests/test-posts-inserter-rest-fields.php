@@ -44,6 +44,15 @@ class Test_Posts_Inserter_Rest_Fields extends WP_UnitTestCase {
 	const UI_ONLY_CPT = 'nppm2756_ui_only';
 
 	/**
+	 * A viewable + show_ui CPT that is NOT exposed to REST. The inserter reads
+	 * `/wp/v2/types`, which only lists `show_in_rest` types, so it never offers
+	 * this — isolating the `show_in_rest` half of the filter.
+	 *
+	 * @var string
+	 */
+	const NO_REST_CPT = 'nppm2756_no_rest';
+
+	/**
 	 * Register the helper post types before the suite runs.
 	 */
 	public static function set_up_before_class() {
@@ -76,6 +85,15 @@ class Test_Posts_Inserter_Rest_Fields extends WP_UnitTestCase {
 				'show_in_rest'       => true,
 			]
 		);
+
+		register_post_type(
+			self::NO_REST_CPT,
+			[
+				'public'       => true,
+				'show_ui'      => true,
+				'show_in_rest' => false,
+			]
+		);
 	}
 
 	/**
@@ -85,6 +103,7 @@ class Test_Posts_Inserter_Rest_Fields extends WP_UnitTestCase {
 		unregister_post_type( self::VIEWABLE_CPT );
 		unregister_post_type( self::HIDDEN_CPT );
 		unregister_post_type( self::UI_ONLY_CPT );
+		unregister_post_type( self::NO_REST_CPT );
 		parent::tear_down_after_class();
 	}
 
@@ -130,9 +149,10 @@ class Test_Posts_Inserter_Rest_Fields extends WP_UnitTestCase {
 
 	/**
 	 * The field must NOT register for post types the inserter never offers.
-	 * Two distinct exclusion gates, asserted separately so each stays
+	 * Three distinct exclusion gates, asserted separately so each stays
 	 * load-bearing: HIDDEN_CPT pins `show_ui`, UI_ONLY_CPT pins
-	 * `is_post_type_viewable` (show_ui true but not viewable).
+	 * `is_post_type_viewable` (show_ui true but not viewable), NO_REST_CPT pins
+	 * `show_in_rest` (viewable + show_ui but not REST-exposed).
 	 */
 	public function test_featured_media_info_skips_hidden_post_types() {
 		Newspack_Newsletters_Editor::add_newspack_extra_info();
@@ -141,6 +161,7 @@ class Test_Posts_Inserter_Rest_Fields extends WP_UnitTestCase {
 
 		$this->assertNotContains( self::HIDDEN_CPT, $types, 'no show_ui → excluded' );
 		$this->assertNotContains( self::UI_ONLY_CPT, $types, 'show_ui but not viewable → excluded' );
+		$this->assertNotContains( self::NO_REST_CPT, $types, 'viewable + show_ui but not REST-exposed → excluded' );
 	}
 
 	/**
