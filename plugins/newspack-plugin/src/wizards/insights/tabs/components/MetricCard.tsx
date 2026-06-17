@@ -241,6 +241,8 @@ const MetricCard = ( props: MetricCardProps ) => {
 			</span>
 		);
 	} else if ( fallbackHero !== null ) {
+		// A count-fallback phrase ("0 of 17", "0 conversions") — flagged so the
+		// value region can render it smaller than the 44px number scale.
 		heroContent = fallbackHero;
 	} else if ( valueTooltip ) {
 		heroContent = <span title={ valueTooltip }>{ valueText }</span>;
@@ -252,7 +254,15 @@ const MetricCard = ( props: MetricCardProps ) => {
 		<Card __experimentalCoreCard className="newspack-insights__metric-card">
 			<div className="newspack-insights__metric-card-label">{ label }</div>
 			<div className="newspack-insights__metric-card-body">
-				<div className="newspack-insights__metric-card-value">{ heroContent }</div>
+				<div
+					className={
+						fallbackHero !== null && fallbackHero !== EM_DASH
+							? 'newspack-insights__metric-card-value newspack-insights__metric-card-value--count'
+							: 'newspack-insights__metric-card-value'
+					}
+				>
+					{ heroContent }
+				</div>
 				{ ( fallbackSecondary ?? secondary ) && (
 					<div className="newspack-insights__metric-card-secondary">{ fallbackSecondary ?? secondary }</div>
 				) }
