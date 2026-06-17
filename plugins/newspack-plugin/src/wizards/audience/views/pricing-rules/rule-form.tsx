@@ -27,6 +27,7 @@ import { trash } from '@wordpress/icons';
  */
 import { Grid, SectionHeader, Divider } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import ScopeTargets from './scope-targets';
 
 const API_PATH = '/wc-dynamic-pricing/v1/rules';
 
@@ -69,6 +70,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 		] );
 	const removeStep = ( i: number ) => setSteps( prev => prev.filter( ( _, idx ) => idx !== i ) );
 	const [ scopeType, setScopeType ] = useState( rule?.scope_type ?? vocab.scopes[ 0 ]?.id ?? 'all_products' );
+	const [ scopeIds, setScopeIds ] = useState< number[] >( rule?.scope_ids ?? [] );
 	const [ priority, setPriority ] = useState( String( rule?.priority ?? 100 ) );
 	const [ composeMode, setComposeMode ] = useState( rule?.compose_mode ?? 'min' );
 	const [ publicize, setPublicize ] = useState( Boolean( rule?.publicize ) );
@@ -86,6 +88,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 			title,
 			status,
 			scope_type: scopeType,
+			scope_ids: scopeIds,
 			priority: Number( priority ) || 0,
 			compose_mode: composeMode,
 			publicize,
@@ -137,6 +140,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 		title,
 		status,
 		scopeType,
+		scopeIds,
 		priority,
 		composeMode,
 		publicize,
@@ -320,14 +324,14 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 						label={ __( 'Scope', 'newspack-plugin' ) }
 						value={ scopeType }
 						options={ vocab.scopes.map( s => ( { label: s.label, value: s.id } ) ) }
-						onChange={ setScopeType }
+						onChange={ st => {
+							setScopeType( st );
+							// Category and product ids are different namespaces — clear on switch.
+							setScopeIds( [] );
+						} }
 						__next40pxDefaultSize
 					/>
-					{ rule && rule.scope_ids.length > 0 && (
-						<p className="description">
-							{ __( 'Targets:', 'newspack-plugin' ) } { rule.scope_ids.join( ', ' ) }
-						</p>
-					) }
+					<ScopeTargets scopeType={ scopeType } value={ scopeIds } onChange={ setScopeIds } />
 				</VStack>
 			</Grid>
 
