@@ -70,3 +70,33 @@ interface Window {
 		engine_active: boolean;
 	};
 }
+
+interface ImpactSegment {
+	from_cycle: number;
+	amount: number;
+	rule_id: string;
+	rule_title: string;
+	rule_edit_link: string;
+	changed: boolean;
+}
+
+interface CatalogImpactRow {
+	product_id: number;
+	name: string;
+	edit_link: string;
+	regular: number;
+	adjusted: number;
+	is_subscription: boolean;
+	changed: boolean;
+	segments: ImpactSegment[];
+}
+
+interface CatalogImpactResponse {
+	supported: boolean;
+	total_matching: number;
+	count_limited: boolean;
+	preview_limited: boolean;
+	sample_count: number;
+	currency: PricingRulesCurrency;
+	sample: CatalogImpactRow[];
+}

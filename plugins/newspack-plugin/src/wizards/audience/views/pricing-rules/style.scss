@@ -2,4 +2,36 @@
 	&__muted {
 		color: #757575;
 	}
+
+	&__impact {
+		margin-bottom: 24px;
+
+		&--loading {
+			display: flex;
+			justify-content: center;
+			padding: 24px;
+		}
+	}
+
+	&__impact-title {
+		margin: 0 0 4px;
+		font-size: 16px;
+	}
+
+	&__impact-table {
+		width: 100%;
+		border-collapse: collapse;
+		margin-top: 12px;
+
+		th,
+		td {
+			padding: 8px 12px;
+			text-align: left;
+			border-bottom: 1px solid #e0e0e0;
+		}
+
+		th {
+			font-weight: 600;
+		}
+	}
 }
