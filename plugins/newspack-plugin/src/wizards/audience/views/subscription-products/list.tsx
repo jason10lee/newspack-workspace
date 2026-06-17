@@ -2,9 +2,9 @@
  * Subscription Products list view using DataViews.
  *
  * Layer 1 columns (name, type, price + period, active subscriptions, category, status)
- * are built from live WooCommerce Subscriptions data. Layer 2 columns (applied policies
- * + effective price) come from the PHP policy-resolution seam and currently render mock
- * data; see Subscription_Policy_Resolver.
+ * are built from live WooCommerce Subscriptions data. Layer 2 columns (applied rules
+ * + effective price) come from the PHP policy-resolution seam, which reads the live
+ * pricing-rule engine; see Subscription_Policy_Resolver.
  */
 
 /**
@@ -319,7 +319,7 @@ export default function SubscriptionProductsList() {
 			},
 			{
 				id: 'policies',
-				label: __( 'Applied policies', 'newspack-plugin' ),
+				label: __( 'Applied rules', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.policy?.policies?.map( p => p.label ).join( ', ' ) || '',
 				render: ( { item } ) => <PolicyChips policy={ item.policy } />,
 				enableSorting: false,

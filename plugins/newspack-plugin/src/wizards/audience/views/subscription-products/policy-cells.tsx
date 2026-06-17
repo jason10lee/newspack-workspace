@@ -2,8 +2,8 @@
  * RSM Layer 2 cell renderers: applied-policy chips and base → effective price.
  *
  * These read only the `policy` field of a product row, which comes from the PHP
- * integration seam (Subscription_Policy_Resolver). When that seam swaps from mock
- * data to the real policy-engine read API, these components need no change.
+ * integration seam (Subscription_Policy_Resolver) — now backed by the live
+ * pricing-rule engine. The chips list the applied rules with the winner flagged.
  */
 
 /**
@@ -35,7 +35,7 @@ export function formatAmount( amount: number, currency: SubscriptionProductsCurr
  */
 export function PolicyChips( { policy }: { policy: SubscriptionPolicyResolution } ) {
 	if ( ! policy?.policies?.length ) {
-		return <span className="newspack-subscription-products__muted">{ __( 'No policies', 'newspack-plugin' ) }</span>;
+		return <span className="newspack-subscription-products__muted">{ __( 'No rules', 'newspack-plugin' ) }</span>;
 	}
 
 	return (

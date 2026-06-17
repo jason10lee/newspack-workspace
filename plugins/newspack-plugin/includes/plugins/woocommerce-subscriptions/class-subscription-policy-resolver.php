@@ -16,31 +16,26 @@ defined( 'ABSPATH' ) || exit;
  * INTEGRATION SEAM (RSM Layer 2)
  * ============================================================================
  * This class is the SINGLE boundary between the Subscription Products UI and the
- * pricing-policy engine. Today it returns deterministic MOCK data so the UX can be
- * evaluated before the policy engine is merged.
+ * standalone pricing-rule engine (woocommerce-dynamic-pricing). get_resolution()
+ * reads the live engine: it composes all active rules over the product's purchase
+ * cycle for the effective price, and lists the matching rules with the winner
+ * flagged. When the engine plugin is inactive it reports the base price with no
+ * rules.
  *
- * To wire it to the real policy engine read API:
- *   1. Replace the body of {@see Subscription_Policy_Resolver::get_resolution()}
- *      with a call to the engine, OR hook the
- *      `newspack_subscription_policy_resolution` filter from the engine.
- *   2. Keep the returned array shape IDENTICAL (see the docblock on resolve()).
- *      The DataViews UI consumes only that shape, so no front-end change is needed.
- *
- * Nothing else in the codebase should call the policy engine directly — route every
- * read through resolve() so the swap is a one-file change.
+ * The returned array shape is the contract the DataViews UI consumes; keep it
+ * stable. Nothing else should call the engine for this read directly — route it
+ * through resolve() (and the `newspack_subscription_policy_resolution` filter).
  * ============================================================================
  */
 class Subscription_Policy_Resolver {
 
 	/**
-	 * Whether the resolver is backed by real engine data.
-	 *
-	 * Flipped to true once get_resolution() is wired to the engine. The UI surfaces
-	 * this so reviewers can tell mock data from live data.
+	 * Whether the resolver returns mock data. Now that get_resolution() reads the
+	 * live engine, this is always false; the UI's mock-data notice never shows.
 	 *
 	 * @var bool
 	 */
-	const IS_MOCK = true;
+	const IS_MOCK = false;
 
 	/**
 	 * Resolve the policy stack and effective price for a product (and optional cycle context).
@@ -87,14 +82,14 @@ class Subscription_Policy_Resolver {
 	}
 
 	/**
-	 * Produce the resolution payload.
+	 * Produce the resolution payload by reading the live pricing-rule engine.
 	 *
-	 * MOCK IMPLEMENTATION — replace this body with the policy-engine read call.
-	 * The mock is deterministic per product so the table is stable across reloads,
-	 * and it deliberately exercises every boundary case the UI must handle:
-	 *   - no policies applied (effective price === base price)
-	 *   - a single winning policy
-	 *   - multiple overlapping policies with one winner
+	 * Composes all active rules over the product's purchase (acquisition) cycle for
+	 * the effective price, and lists the matching rules with the winner flagged —
+	 * the same engine the storefront uses, so the table matches what buyers see.
+	 * Without the engine (plugin inactive), an invalid product, or an
+	 * engine-excluded product (e.g. donations), it reports the base price and no
+	 * rules.
 	 *
 	 * @param int   $product_id The product/variation ID.
 	 * @param array $context    The resolution context.
@@ -102,55 +97,95 @@ class Subscription_Policy_Resolver {
 	 * @return array Resolution payload (see resolve()).
 	 */
 	private static function get_resolution( $product_id, $context ) {
-		$base_price = isset( $context['base_price'] ) ? (float) $context['base_price'] : 0.0;
-		$currency   = isset( $context['currency'] ) ? $context['currency'] : get_woocommerce_currency();
-		$cycle      = isset( $context['cycle'] ) ? $context['cycle'] : 'month';
+		$currency = isset( $context['currency'] ) ? $context['currency'] : get_woocommerce_currency();
+		$cycle    = isset( $context['cycle'] ) ? $context['cycle'] : 'month';
+		$base     = isset( $context['base_price'] ) ? (float) $context['base_price'] : 0.0;
 
-		// Deterministic bucket so each product always resolves the same way in the mock.
-		$bucket = $product_id % 4;
+		$product = function_exists( 'wc_get_product' ) ? wc_get_product( (int) $product_id ) : null;
+		$engine  = class_exists( '\Automattic\WooCommerce\DynamicPricing\Pricing_Engine' )
+			? \Automattic\WooCommerce\DynamicPricing\Pricing_Engine::instance()
+			: null;
 
-		switch ( $bucket ) {
-			case 1:
-				// Single winning promo.
-				$policies = [
-					self::policy( 'promo-spring', 'promo', __( 'Spring promo', 'newspack-plugin' ), true, __( '−20% for 3 cycles', 'newspack-plugin' ) ),
-				];
-				$factor   = 0.8;
-				break;
-			case 2:
-				// Two overlapping policies; winback wins over season.
-				$policies = [
-					self::policy( 'season-summer', 'season', __( 'Summer rate', 'newspack-plugin' ), false, __( '−10%', 'newspack-plugin' ) ),
-					self::policy( 'winback-30', 'winback', __( 'Win-back', 'newspack-plugin' ), true, __( '−30% first cycle', 'newspack-plugin' ) ),
-				];
-				$factor   = 0.7;
-				break;
-			case 3:
-				// Three overlapping policies; loyalty wins.
-				$policies = [
-					self::policy( 'promo-flash', 'promo', __( 'Flash sale', 'newspack-plugin' ), false, __( '−15%', 'newspack-plugin' ) ),
-					self::policy( 'season-holiday', 'season', __( 'Holiday rate', 'newspack-plugin' ), false, __( '−5%', 'newspack-plugin' ) ),
-					self::policy( 'loyalty-2yr', 'loyalty', __( 'Loyalty (2yr+)', 'newspack-plugin' ), true, __( '−25%', 'newspack-plugin' ) ),
-				];
-				$factor   = 0.75;
-				break;
-			default:
-				// No policies — effective price equals base price.
-				$policies = [];
-				$factor   = 1.0;
-				break;
+		// No engine / invalid product / engine-excluded product (e.g. donations the
+		// engine never prices) → base price, no rules, rather than a fabricated one.
+		if ( ! $engine || ! $product instanceof \WC_Product || $engine->is_excluded( $product ) ) {
+			return self::build( $base, $base, $currency, $cycle, [] );
 		}
 
-		$effective_price = round( $base_price * $factor, wc_get_price_decimals() );
+		// Acquisition (purchase) cycle, composed across all active rules — the same
+		// basis as the rule editor's impact-preview "resulting price".
+		$ctx = new \Automattic\WooCommerce\DynamicPricing\Pricing_Context(
+			'subscription_products',
+			$product,
+			null,
+			$base,
+			[ 'completed_cycles' => 1 ],
+			null,
+			\Automattic\WooCommerce\DynamicPricing\Pricing_Context::INTENT_ACQUISITION,
+			false
+		);
 
+		$decision   = $engine->resolve( $ctx );
+		$effective  = $decision ? (float) $decision->amount : $base;
+		$winning_id = ( $decision && $decision->rule_id ) ? (string) $decision->rule_id : '';
+
+		$repository = $engine->repository();
+		$matching   = $repository ? $repository->for_context( $ctx ) : [];
+
+		$rules = [];
+		foreach ( $matching as $rule ) {
+			$rule_id = (string) $rule->id;
+			$rules[] = self::policy(
+				$rule_id,
+				(string) $rule->strategy_id,
+				get_the_title( (int) $rule_id ),
+				'' !== $winning_id && $rule_id === $winning_id,
+				self::strategy_label( (string) $rule->strategy_id )
+			);
+		}
+
+		return self::build( $base, $effective, $currency, $cycle, $rules );
+	}
+
+	/**
+	 * Assemble a resolution payload in the shape resolve() documents.
+	 *
+	 * @param float  $base_price      The unmodified base price.
+	 * @param float  $effective_price The composed price after rules.
+	 * @param string $currency        ISO currency code.
+	 * @param string $cycle           Billing period slug.
+	 * @param array  $rules           Applied-rule entries (see policy()).
+	 *
+	 * @return array The resolution payload.
+	 */
+	private static function build( $base_price, $effective_price, $currency, $cycle, $rules ) {
+		$decimals = function_exists( 'wc_get_price_decimals' ) ? wc_get_price_decimals() : 2;
 		return [
 			'is_mock'         => self::IS_MOCK,
 			'base_price'      => $base_price,
-			'effective_price' => $effective_price,
+			'effective_price' => round( (float) $effective_price, $decimals ),
 			'currency'        => $currency,
 			'cycle'           => $cycle,
-			'policies'        => $policies,
+			'policies'        => $rules,
 		];
+	}
+
+	/**
+	 * Short, human pricing-model label for a rule's strategy (shown in the chip tooltip).
+	 *
+	 * @param string $strategy_id The rule's strategy id.
+	 *
+	 * @return string Human label.
+	 */
+	private static function strategy_label( $strategy_id ) {
+		switch ( $strategy_id ) {
+			case 'simple_price':
+				return __( 'Flat adjustment', 'newspack-plugin' );
+			case 'stepped_by_cycle':
+				return __( 'Price schedule', 'newspack-plugin' );
+			default:
+				return (string) $strategy_id;
+		}
 	}
 
 	/**
