@@ -1279,7 +1279,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * checkout-button is detected though it's NOT in newspack-popups' stock
+	 * Checkout-button is detected though it's NOT in newspack-popups' stock
 	 * watched-blocks map — the gate adds it so membership prompts (Lookout) drive
 	 * the subscription intent rather than reading as informational.
 	 */
