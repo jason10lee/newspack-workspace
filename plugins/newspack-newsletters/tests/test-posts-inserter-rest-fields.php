@@ -26,8 +26,9 @@ class Test_Posts_Inserter_Rest_Fields extends WP_UnitTestCase {
 	const VIEWABLE_CPT = 'nppm2756_event';
 
 	/**
-	 * A hidden CPT (no show_ui) the inserter never offers — fields must NOT
-	 * be registered for it.
+	 * A viewable + REST-exposed CPT that is NOT UI-visible (no show_ui). The
+	 * inserter never offers it — isolating the `show_ui` half of the filter
+	 * (viewable + show_in_rest both pass, only show_ui fails).
 	 *
 	 * @var string
 	 */
@@ -70,7 +71,7 @@ class Test_Posts_Inserter_Rest_Fields extends WP_UnitTestCase {
 		register_post_type(
 			self::HIDDEN_CPT,
 			[
-				'public'       => false,
+				'public'       => true,
 				'show_ui'      => false,
 				'show_in_rest' => true,
 			]
