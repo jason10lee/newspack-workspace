@@ -3,20 +3,15 @@
  *
  * These read only the `policy` field of a product row, which comes from the PHP
  * integration seam (Subscription_Policy_Resolver) — now backed by the live
- * pricing-rule engine. The chips list the applied rules with the winner flagged.
+ * pricing-rule engine. The chips list every applied rule (the per-cycle winner is
+ * shown in the effective-price schedule).
  */
-
-/**
- * External dependencies
- */
-import classnames from 'classnames';
 
 /**
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { useState } from '@wordpress/element';
-import { Icon, check } from '@wordpress/icons';
 
 /**
  * Internal dependencies
@@ -31,8 +26,9 @@ export function formatAmount( amount: number, currency: SubscriptionProductsCurr
 }
 
 /**
- * Renders the applied pricing policies as chips, visually distinguishing the
- * winning policy (the one that sets the effective price).
+ * Renders the applied pricing rules as chips. Every rule that applies to the
+ * product is shown with the success label — different rules can win at different
+ * cycles (see the effective-price schedule), so the column doesn't single one out.
  */
 export function PolicyChips( { policy }: { policy: SubscriptionPolicyResolution } ) {
 	if ( ! policy?.policies?.length ) {
@@ -42,15 +38,8 @@ export function PolicyChips( { policy }: { policy: SubscriptionPolicyResolution 
 	return (
 		<div className="newspack-subscription-products__policy-chips">
 			{ policy.policies.map( p => (
-				<span
-					key={ p.id }
-					className={ classnames( 'newspack-subscription-products__policy-chip', `is-${ p.type }`, {
-						'is-winning': p.is_winning,
-					} ) }
-					title={ `${ p.label } — ${ p.adjustment_label }` }
-				>
-					{ p.is_winning && <Icon icon={ check } size={ 16 } /> }
-					<Badge level={ p.is_winning ? 'success' : 'default' } text={ p.label } />
+				<span key={ p.id } className="newspack-subscription-products__policy-chip" title={ `${ p.label } — ${ p.adjustment_label }` }>
+					<Badge level="success" text={ p.label } />
 				</span>
 			) ) }
 		</div>
@@ -66,7 +55,7 @@ function cycleLabel( fromCycle: number ): string {
 		? __( 'At purchase', 'newspack-plugin' )
 		: sprintf(
 				/* translators: %d: renewal number. */
-				__( 'From renewal %d', 'newspack-plugin' ),
+				__( 'Renewal %d', 'newspack-plugin' ),
 				fromCycle - 1
 		  );
 }
@@ -82,7 +71,6 @@ function ScheduleList( { schedule, currency }: { schedule: SubscriptionPolicySeg
 					<span className="newspack-subscription-products__schedule-when">{ cycleLabel( seg.from_cycle ) }</span>
 					<span className="newspack-subscription-products__schedule-price">
 						<strong>{ formatAmount( seg.amount, currency ) }</strong>
-						{ seg.rule_label && <span className="newspack-subscription-products__schedule-rule">{ seg.rule_label }</span> }
 					</span>
 				</li>
 			) ) }
@@ -144,7 +132,7 @@ export function EffectivePrice( { policy, currency }: { policy: SubscriptionPoli
 			{ showSchedule && (
 				<Popover
 					className="newspack-subscription-products__schedule-popover"
-					position="top center"
+					position="bottom left"
 					focusOnMount={ false }
 					onClose={ () => setShowSchedule( false ) }
 				>

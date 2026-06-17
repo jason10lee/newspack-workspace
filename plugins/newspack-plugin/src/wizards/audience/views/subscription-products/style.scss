@@ -42,7 +42,7 @@
 				position: absolute;
 				left: -8px;
 				top: 50%;
-				transform: translateY( -50% );
+				transform: translateY(-50%);
 				height: 20px;
 				border-left: 1px solid wp-colors.$gray-300;
 			}
@@ -107,7 +107,7 @@
 		gap: 4px;
 	}
 
-	// Layer 2: applied-policy chips.
+	// Layer 2: applied-rule chips — every applicable rule shown with the success label.
 	&__policy-chips {
 		display: flex;
 		flex-wrap: wrap;
@@ -118,24 +118,6 @@
 	&__policy-chip {
 		display: inline-flex;
 		align-items: center;
-		gap: 2px;
-
-		// The winning policy sets the effective price — make it stand out.
-		&.is-winning {
-			.newspack-badge {
-				font-weight: 600;
-				box-shadow: 0 0 0 1px wp-colors.$gray-900;
-			}
-
-			svg {
-				fill: wp-colors.$alert-green;
-			}
-		}
-
-		// Non-winning policies are de-emphasized.
-		&:not(.is-winning) .newspack-badge {
-			opacity: 0.7;
-		}
 	}
 
 	// Layer 2: base → effective price.
@@ -173,11 +155,13 @@
 		padding: 4px;
 		min-width: 200px;
 		list-style: none;
+		display: flex;
+		flex-direction: column;
 	}
 
 	&__schedule-row {
 		display: flex;
-		align-items: baseline;
+		align-items: center;
 		justify-content: space-between;
 		gap: 16px;
 		padding: 4px 0;
@@ -230,4 +214,3 @@
 		margin: 0;
 	}
 }
-
