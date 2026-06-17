@@ -254,6 +254,7 @@ const Funnel = ( { stages }: FunnelProps ) => {
 						y={ step.index * stepHeight + stepHeight / 2 }
 						textAnchor="middle"
 						dominantBaseline="central"
+						style={ { '--band-opacity': step.opacity } as React.CSSProperties }
 					>
 						{ formatNumber( step.stage.count ) }
 					</text>

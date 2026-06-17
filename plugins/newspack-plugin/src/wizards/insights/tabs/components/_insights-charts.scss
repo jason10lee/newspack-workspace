@@ -531,10 +531,15 @@
 		}
 
 		// In-band count (compact mode): white on the darker top bands, dark on the
-		// faded tail bands — see DARK_TEXT_OPACITY_THRESHOLD in Funnel.tsx. A
-		// contrasting stroke "halo" (painted under the fill) keeps the number
-		// legible wherever it sits: over the colored band and over any white page
-		// background it overflows onto when a segment is narrower than the number.
+		// faded tail bands — see DARK_TEXT_OPACITY_THRESHOLD in Funnel.tsx. The
+		// stroke "halo" (painted under the fill) is the band's *apparent* color:
+		// primary-500 flattened over the white card at the band's own opacity
+		// (passed in as the inline --band-opacity). Because it's opaque and equal
+		// to what the band shows, it disappears inside the segment and only
+		// appears — as the band's color against the white page — where the number
+		// overflows a segment narrower than itself. (A translucent same-color halo
+		// can't do this: painted over the band, its alpha stacks and every halo
+		// drifts toward the full-opacity top color.)
 		&-count-text {
 			font-size: 16px;
 			font-weight: 600;
@@ -542,15 +547,14 @@
 			paint-order: stroke;
 			stroke-width: 3px;
 			stroke-linejoin: round;
+			stroke: color-mix( in srgb, colors.$primary-500 calc( var( --band-opacity ) * 100% ), #fff );
 
 			&.is-on-dark {
 				fill: #fff;
-				stroke: wp-colors.$gray-900;
 			}
 
 			&.is-on-light {
 				fill: wp-colors.$gray-900;
-				stroke: #fff;
 			}
 		}
 
