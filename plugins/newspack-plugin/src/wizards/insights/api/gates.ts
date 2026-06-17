@@ -45,6 +45,13 @@ export interface GatesScalarMetric extends GatesErrorFields {
 	value: number;
 	computable: boolean;
 	denominator: number | null;
+	/**
+	 * Numerator behind a rate (NPPD-1694). A number (possibly 0) only on rate
+	 * scorecards whose count is computed locally — the paywall Woo join. Null
+	 * elsewhere, including the precomputed-rate regwall cards and currency cards
+	 * (whose conversions count rides on `denominator`).
+	 */
+	numerator: number | null;
 	placeholder_type: GatesPlaceholderType;
 }
 
@@ -105,6 +112,11 @@ export interface GatesWindow {
 	paywall_conversion_influenced_14d: GatesScalarMetric;
 	total_paywall_revenue_direct: GatesScalarMetric;
 	avg_revenue_per_paywall_conversion: GatesScalarMetric;
+	// Section 3 empty-state totals (NPPD-1694): drive the Paid section's
+	// no_opportunity / no_conversions / normal decision. Derived server-side from
+	// the scalars above — no extra query.
+	paywall_attempts_total: number;
+	paywall_conversions_total: number;
 	// Section 4 — How readers convert.
 	conversion_funnel: GatesFunnelData;
 	exposures_distribution: GatesDistributionData;
@@ -138,6 +150,16 @@ const queryString = ( query: GatesQuery ): string => {
 	if ( query.compare_start && query.compare_end ) {
 		params.set( 'compare_start', query.compare_start );
 		params.set( 'compare_end', query.compare_end );
+	}
+	// Forward the `_fixture_state` URL param so fixture mode's render variants
+	// (empty / error / paid_no_conversions / paid_zero_cards) are reachable from
+	// the UI for smoke testing. A no-op in production: the server ignores it
+	// unless NEWSPACK_INSIGHTS_FIXTURE_MODE is enabled.
+	if ( typeof window !== 'undefined' ) {
+		const fixtureState = new URLSearchParams( window.location.search ).get( '_fixture_state' );
+		if ( fixtureState ) {
+			params.set( '_fixture_state', fixtureState );
+		}
 	}
 	return params.toString();
 };

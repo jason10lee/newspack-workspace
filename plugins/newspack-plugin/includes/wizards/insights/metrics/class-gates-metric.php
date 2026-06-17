@@ -34,6 +34,7 @@ use Newspack\Insights\Woo_Order_Resolver;
  *   value: int|float,
  *   computable: bool,
  *   denominator: int|null,
+ *   numerator: int|null,
  *   placeholder_type: string,
  *   error_code?: string,
  *   error_message?: string,
@@ -119,6 +120,7 @@ final class Gates_Metric {
 			'value'            => 'decimal' === $placeholder_type ? 0.0 : 0,
 			'computable'       => false,
 			'denominator'      => null,
+			'numerator'        => null,
 			'placeholder_type' => $placeholder_type,
 			'error_code'       => $error->get_error_code(),
 			'error_message'    => $error->get_error_message(),
@@ -134,14 +136,20 @@ final class Gates_Metric {
 	 * @param bool      $computable       Whether the value is a real computed figure.
 	 * @param int|null  $denominator      Optional denominator.
 	 * @param string    $placeholder_type One of 'count', 'rate', 'currency', 'decimal'.
+	 * @param int|null  $numerator        Optional numerator (NPPD-1694). Surfaced only
+	 *                                    for rate scorecards whose underlying count is
+	 *                                    computed locally (the paywall Woo join); null
+	 *                                    everywhere the count isn't available, e.g. the
+	 *                                    precomputed-rate regwall cards.
 	 * @return array
 	 */
-	private function populated_scalar( $value, bool $computable, ?int $denominator, string $placeholder_type ): array {
+	private function populated_scalar( $value, bool $computable, ?int $denominator, string $placeholder_type, ?int $numerator = null ): array {
 		return [
 			'state'            => 'populated',
 			'value'            => $value,
 			'computable'       => $computable,
 			'denominator'      => $denominator,
+			'numerator'        => $numerator,
 			'placeholder_type' => $placeholder_type,
 		];
 	}
@@ -243,12 +251,16 @@ final class Gates_Metric {
 			return $this->error_scalar( 'rate', $rows );
 		}
 		if ( ! is_array( $rows ) || empty( $rows ) ) {
-			// No paywall attempts in the window → a real 0% rate.
-			return $this->populated_scalar( 0.0, false, 0, 'rate' );
+			// No paywall attempts in the window → a real 0% rate. Numerator and
+			// denominator are both an explicit 0 so the card's count fallback can
+			// tell "no attempts" (denominator 0) from "0 of N" (NPPD-1694).
+			return $this->populated_scalar( 0.0, false, 0, 'rate', 0 );
 		}
 		$denominator = count( $rows );
 		$numerator   = $this->woo_resolver->count_completed_orders( $rows );
-		return $this->populated_scalar( $denominator > 0 ? $numerator / $denominator : 0.0, true, $denominator, 'rate' );
+		// Surface the numerator (matched Woo orders) alongside the denominator so
+		// the card can render "0 of {denominator}" when no attempt converted.
+		return $this->populated_scalar( $denominator > 0 ? $numerator / $denominator : 0.0, true, $denominator, 'rate', $numerator );
 	}
 
 	/**
@@ -424,6 +436,33 @@ final class Gates_Metric {
 			$conversions,
 			'currency'
 		);
+	}
+
+	/**
+	 * Paid-section totals for the empty-state gate (NPPD-1694).
+	 *
+	 * Pure derivation from already-computed scalars — no extra query. The
+	 * section component reads these to choose between the normal scorecard
+	 * render and an `<EmptyMetricSection>`:
+	 *   - `paywall_attempts_total` = the Direct rate denominator (sessions with a
+	 *     paywall impression; this is the {N} in the "no conversions" copy).
+	 *   - `paywall_conversions_total` = the most inclusive conversion count across
+	 *     attributions (max of Direct and Influenced numerators), so a section
+	 *     with Influenced-only conversions still renders its scorecards rather
+	 *     than hiding real data behind a "no conversions" empty state.
+	 *
+	 * @param array $direct     The `paywall_conversion_direct` scalar payload.
+	 * @param array $influenced The `paywall_conversion_influenced_14d` scalar payload.
+	 * @return array{paywall_attempts_total:int, paywall_conversions_total:int}
+	 */
+	public static function paywall_section_totals( array $direct, array $influenced ): array {
+		return [
+			'paywall_attempts_total'    => (int) ( $direct['denominator'] ?? 0 ),
+			'paywall_conversions_total' => max(
+				(int) ( $direct['numerator'] ?? 0 ),
+				(int) ( $influenced['numerator'] ?? 0 )
+			),
+		];
 	}
 
 	// --- Section 4: How readers convert ---------------------------------
