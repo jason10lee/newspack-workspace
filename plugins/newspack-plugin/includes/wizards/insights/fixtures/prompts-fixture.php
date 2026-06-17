@@ -9,6 +9,9 @@
  *     12,400 / 2,800 / 320 shape so both drop-off deltas are visible.
  *   - 'empty'    — every section reports the empty state (succeeded, no rows).
  *   - 'error'    — every section reports the error state (tab banner shows).
+ *   - 'not_capable' — populated data, but registration / donation / subscription
+ *     metrics are marked has_capability:false (NPPD-1720) so their cards render
+ *     the structural "not capable" treatment; newsletter stays capable.
  *
  * Returns a closure so the single required file can build any variant. Never
  * enable fixture mode in production.
@@ -381,9 +384,41 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 		];
 	};
 
+	// --- Not-capable variant (NPPD-1720): per-intent capability gate. ---
+	// Mirrors Richland Source — newsletter prompts only, so newsletter signup and
+	// the generic form-submission rate stay capable (real values) while
+	// registration / donation / subscription have no block and render the
+	// structural "not capable" em-dash + nudge. Demonstrates that the gate is
+	// per-intent, not tab-wide. In production these flags are stamped by the REST
+	// controller; fixture mode bypasses it, so set them here.
+	$capability_by_metric = 'not_capable' === $variant ? [
+		'form_submission_rate'                       => true,
+		'registration_conversion_direct'             => false,
+		'registration_conversion_influenced_7d'      => false,
+		'newsletter_signup_conversion_direct'        => true,
+		'newsletter_signup_conversion_influenced_7d' => true,
+		'donation_conversion_direct'                 => false,
+		'donation_conversion_influenced_14d'         => false,
+		'subscription_conversion_direct'             => false,
+		'subscription_conversion_influenced_14d'     => false,
+		'donation_revenue_direct'                    => false,
+		'donation_revenue_influenced_14d'            => false,
+		'subscription_revenue_direct'                => false,
+		'subscription_revenue_influenced_14d'        => false,
+	] : [];
+
+	$apply_capabilities = static function ( array $win ) use ( $capability_by_metric ) {
+		foreach ( $capability_by_metric as $key => $has_capability ) {
+			if ( isset( $win[ $key ] ) && is_array( $win[ $key ] ) ) {
+				$win[ $key ]['has_capability'] = $has_capability;
+			}
+		}
+		return $win;
+	};
+
 	return [
 		'tab_error' => false,
-		'current'   => $build( 1.0, $window ),
-		'previous'  => $compare ? $build( 0.9, $prev_window ) : null,
+		'current'   => $apply_capabilities( $build( 1.0, $window ) ),
+		'previous'  => $compare ? $apply_capabilities( $build( 0.9, $prev_window ) ) : null,
 	];
 };

@@ -211,6 +211,16 @@ const queryString = ( query: PromptsQuery ): string => {
 		params.set( 'compare_start', query.compare_start );
 		params.set( 'compare_end', query.compare_end );
 	}
+	// Forward the `_fixture_state` URL param so fixture mode's render variants
+	// (empty / error / not_capable) are reachable from the UI for smoke testing.
+	// A no-op in production: the server ignores it unless
+	// NEWSPACK_INSIGHTS_FIXTURE_MODE is enabled. Mirrors api/gates.ts.
+	if ( typeof window !== 'undefined' ) {
+		const fixtureState = new URLSearchParams( window.location.search ).get( '_fixture_state' );
+		if ( fixtureState ) {
+			params.set( '_fixture_state', fixtureState );
+		}
+	}
 	return params.toString();
 };
 
