@@ -7,7 +7,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useState, useEffect } from '@wordpress/element';
+import { useState, useEffect, useCallback } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import { Spinner } from '@wordpress/components';
 
@@ -42,6 +42,11 @@ export default function RuleEdit( { match }: { match: { params: { id?: string } 
 			.finally( () => setIsLoading( false ) );
 	}, [ id, isNew, history ] );
 
+	// Memoized so it keeps a stable identity across the wizard's re-renders —
+	// otherwise RuleForm's submit (and its setHeaderData effect) recreate every
+	// render and loop on the header store. (Matches product-edit.tsx.)
+	const onDone = useCallback( () => history.push( '/' ), [ history ] );
+
 	if ( isLoading || ! vocab ) {
 		return (
 			<div style={ { display: 'flex', justifyContent: 'center', padding: '48px' } }>
@@ -53,5 +58,5 @@ export default function RuleEdit( { match }: { match: { params: { id?: string } 
 		return <p>{ __( 'Rule not found.', 'newspack-plugin' ) }</p>;
 	}
 
-	return <RuleForm isNew={ isNew } rule={ rule } vocab={ vocab } onDone={ () => history.push( '/' ) } />;
+	return <RuleForm isNew={ isNew } rule={ rule } vocab={ vocab } onDone={ onDone } />;
 }
