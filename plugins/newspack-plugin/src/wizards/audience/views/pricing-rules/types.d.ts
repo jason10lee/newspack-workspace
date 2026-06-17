@@ -35,6 +35,7 @@ interface PricingRuleRow {
 	active_from: number | null;
 	active_until: number | null;
 	active_state: 'active' | 'scheduled' | 'ended';
+	published_at: number | null;
 	target_conversion_pct: number | null;
 	max_cancellation_pct: number | null;
 	is_stepped: boolean;

@@ -411,7 +411,13 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 					) }
 				/>
 				<VStack spacing={ 4 }>
-					<Conditions vocab={ vocab.conditions } value={ conditions } onChange={ setConditions } />
+					<Conditions
+						vocab={ vocab.conditions }
+						value={ conditions }
+						publishedAt={ rule?.published_at ?? null }
+						isNew={ isNew }
+						onChange={ setConditions }
+					/>
 				</VStack>
 			</Grid>
 
