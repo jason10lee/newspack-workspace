@@ -179,7 +179,13 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 								onChange={ setCalcType }
 								__next40pxDefaultSize
 							/>
-							<TextControl label={ __( 'Value', 'newspack-plugin' ) } type="number" value={ value } onChange={ setValue } __next40pxDefaultSize />
+							<TextControl
+								label={ __( 'Value', 'newspack-plugin' ) }
+								type="number"
+								value={ value }
+								onChange={ setValue }
+								__next40pxDefaultSize
+							/>
 							<TextControl
 								label={ __( 'Apply for first N cycles (0 = unlimited)', 'newspack-plugin' ) }
 								type="number"
@@ -223,7 +229,13 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 					description={ __( 'Priority and how it composes with other rules.', 'newspack-plugin' ) }
 				/>
 				<VStack spacing={ 4 }>
-					<TextControl label={ __( 'Priority', 'newspack-plugin' ) } type="number" value={ priority } onChange={ setPriority } __next40pxDefaultSize />
+					<TextControl
+						label={ __( 'Priority', 'newspack-plugin' ) }
+						type="number"
+						value={ priority }
+						onChange={ setPriority }
+						__next40pxDefaultSize
+					/>
 					<SelectControl
 						label={ __( 'When multiple rules match', 'newspack-plugin' ) }
 						value={ composeMode }
@@ -251,7 +263,13 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 					description={ __( 'Declare at least one so you can measure the deal.', 'newspack-plugin' ) }
 				/>
 				<VStack spacing={ 4 }>
-					<TextControl label={ __( 'Target conversion (%)', 'newspack-plugin' ) } type="number" value={ target } onChange={ setTarget } __next40pxDefaultSize />
+					<TextControl
+						label={ __( 'Target conversion (%)', 'newspack-plugin' ) }
+						type="number"
+						value={ target }
+						onChange={ setTarget }
+						__next40pxDefaultSize
+					/>
 					<TextControl
 						label={ __( 'Acceptable cancellation at deal end (%)', 'newspack-plugin' ) }
 						type="number"
