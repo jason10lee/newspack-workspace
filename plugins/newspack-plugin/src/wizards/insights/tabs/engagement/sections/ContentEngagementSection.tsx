@@ -36,7 +36,7 @@ const ContentEngagementSection = ( { current }: SectionProps ) => (
 				<h3 className="newspack-insights__chart-card-title">{ __( 'Most-Engaged Articles', 'newspack-plugin' ) }</h3>
 				<MetricTable
 					payload={ current.most_read_articles }
-					emptyMessage={ __( 'No page engagement data in this timeframe.', 'newspack-plugin' ) }
+					emptyMessage={ __( 'No article engagement data in this timeframe.', 'newspack-plugin' ) }
 					columns={ [
 						ARTICLE_COL,
 						{ key: 'unique_readers', label: __( 'Readers', 'newspack-plugin' ), format: 'number', align: 'right' },

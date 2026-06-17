@@ -39,14 +39,18 @@ const TOP_PAGES_COLUMNS: SortableColumn< ConversionTopPageRow >[] = [
 		key: 'page_title',
 		label: __( 'Article', 'newspack-plugin' ),
 		numeric: false,
-		render: row =>
-			row.page_url ? (
+		render: row => {
+			// Reject non-http(s) schemes (e.g. javascript:) before rendering — the row
+			// originates in BigQuery and is trusted, but cheap defense-in-depth.
+			const safe = typeof row.page_url === 'string' && /^https?:\/\//i.test( row.page_url );
+			return safe ? (
 				<a href={ row.page_url } target="_blank" rel="noreferrer">
 					{ row.page_title }
 				</a>
 			) : (
 				row.page_title
-			),
+			);
+		},
 		sortValue: row => row.page_title,
 	},
 	{
@@ -81,7 +85,7 @@ const OpportunityBucketsSection = ( { current }: OpportunityBucketsSectionProps 
 			id="newspack-insights-conversion-opportunity-heading"
 			title={ __( 'Opportunity buckets', 'newspack-plugin' ) }
 			description={ __(
-				'Where the funnel has slack. These are diagnostic counts and underperforming pages — readers and content that could move with attention.',
+				'Where the funnel has slack. These are diagnostic counts and underperforming articles — readers and content that could move with attention.',
 				'newspack-plugin'
 			) }
 		/>
@@ -113,9 +117,9 @@ const OpportunityBucketsSection = ( { current }: OpportunityBucketsSectionProps 
 			<SectionState
 				state={ current.top_pages_no_conversion.state }
 				emptyMessage={ sprintf(
-					/* translators: %s: minimum pageview count for a page to qualify (formatted). */
+					/* translators: %s: minimum pageview count for an article to qualify (formatted). */
 					__(
-						'No qualifying pages yet. Pages with at least %s pageviews and a measurable conversion rate will appear here.',
+						'No qualifying articles yet. Articles with at least %s pageviews and a measurable conversion rate will appear here.',
 						'newspack-plugin'
 					),
 					formatNumber( current.top_pages_no_conversion.threshold_pageviews )
@@ -139,7 +143,7 @@ const OpportunityBucketsSection = ( { current }: OpportunityBucketsSectionProps 
 			</SectionState>
 			<p className="newspack-insights__conversion-top-pages-note">
 				{ __(
-					'These pages get traffic but don’t drive registrations. Consider adding a gate or prompt where engagement is high but conversion is low.',
+					'These articles get traffic but don’t drive registrations. Consider adding a gate or prompt where engagement is high but conversion is low.',
 					'newspack-plugin'
 				) }
 			</p>

@@ -31,7 +31,7 @@ const ContentPerformanceSection = ( { current }: SectionProps ) => (
 				<h3 className="newspack-insights__chart-card-title">{ __( 'Top Articles', 'newspack-plugin' ) }</h3>
 				<MetricTable
 					payload={ current.top_pages }
-					emptyMessage={ __( 'No page data in this timeframe.', 'newspack-plugin' ) }
+					emptyMessage={ __( 'No article data in this timeframe.', 'newspack-plugin' ) }
 					columns={ [
 						{ key: 'page_title', label: __( 'Article', 'newspack-plugin' ) },
 						{ key: 'unique_readers', label: __( 'Readers', 'newspack-plugin' ), format: 'number', align: 'right' },
