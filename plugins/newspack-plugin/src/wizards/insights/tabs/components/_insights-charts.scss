@@ -531,18 +531,26 @@
 		}
 
 		// In-band count (compact mode): white on the darker top bands, dark on the
-		// faded tail bands — see DARK_TEXT_OPACITY_THRESHOLD in Funnel.tsx.
+		// faded tail bands — see DARK_TEXT_OPACITY_THRESHOLD in Funnel.tsx. A
+		// contrasting stroke "halo" (painted under the fill) keeps the number
+		// legible wherever it sits: over the colored band and over any white page
+		// background it overflows onto when a segment is narrower than the number.
 		&-count-text {
 			font-size: 16px;
 			font-weight: 600;
 			font-variant-numeric: tabular-nums;
+			paint-order: stroke;
+			stroke-width: 3px;
+			stroke-linejoin: round;
 
 			&.is-on-dark {
 				fill: #fff;
+				stroke: wp-colors.$gray-900;
 			}
 
 			&.is-on-light {
 				fill: wp-colors.$gray-900;
+				stroke: #fff;
 			}
 		}
 
