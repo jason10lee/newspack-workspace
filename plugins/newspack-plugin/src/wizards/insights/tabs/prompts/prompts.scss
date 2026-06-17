@@ -4,8 +4,9 @@
  * Tab 5-specific layout only. The shared Insights chrome (sections,
  * metric cards, table base + wrap, tab loading/error) lives in
  * `tabs/components/sections.scss` and is loaded by the wizard's main
- * `style.scss`. Sortable-table styles live here; funnel styles are now
- * in `tabs/components/_insights-charts.scss` (shared across tabs).
+ * `style.scss`. The funnel and sortable-table component styles now live in
+ * `tabs/components/_insights-charts.scss` (shared across tabs); only the
+ * tab-local section/grid layout remains here.
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;

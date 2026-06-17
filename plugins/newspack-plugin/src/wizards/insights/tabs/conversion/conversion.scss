@@ -8,8 +8,8 @@
  * tooltip, chart-empty) lives in `tabs/components/_insights-charts.scss` and
  * is pulled in below — this tab's PieChart and LineChart reuse those classes.
  *
- * Sortable-table and per-section grid styles are tab-local. Funnel, PieChart,
- * LineChart, and SortableTable styles live in
+ * Only the per-section grid/layout styles are tab-local. The funnel and
+ * sortable-table component styles join the pie/line chrome in
  * `tabs/components/_insights-charts.scss` (shared across tabs).
  */
 
