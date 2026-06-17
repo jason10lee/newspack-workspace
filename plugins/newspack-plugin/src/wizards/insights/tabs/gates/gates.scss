@@ -55,21 +55,6 @@
 		color: colors.$error-600;
 	}
 
-	// Distribution viz — tab-local. Reuses the shared table chrome.
-	&__distribution {
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-
-		&-caption {
-			margin: 0;
-			font-size: 13px;
-			font-weight: 400;
-			line-height: 1.5;
-			color: wp-colors.$gray-700;
-		}
-	}
-
 	// Empty state row inside the Performance by gate table.
 	&__gates-performance-empty {
 		padding: 32px 20px;

@@ -461,6 +461,23 @@
 		gap: 6px;
 	}
 
+	// Distribution viz — shared across Gates (Tab 4) and Prompts (Tab 5).
+	// Wraps the canonical table chrome (`__table-wrap` / `__table`) and pins
+	// an optional caption below the table.
+	&__distribution {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+
+		&-caption {
+			margin: 0;
+			font-size: 13px;
+			font-weight: 400;
+			line-height: 1.5;
+			color: wp-colors.$gray-700;
+		}
+	}
+
 	// Funnel viz — shared across Gates, Prompts, and Conversion Journey tabs.
 	// Stacked SVG trapezoids in a single anchor color (primary-500) fading to
 	// 0.6 opacity at the tail. Side-label mode puts the step name/count/deltas
