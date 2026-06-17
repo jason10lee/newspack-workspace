@@ -91,6 +91,14 @@ export interface MetricCardProps {
 	valueTitle?: string;
 	/** Count-fallback for zero rate/currency scorecards (NPPD-1694). */
 	zeroFallback?: MetricCardZeroFallback;
+	/**
+	 * Structural "not capable" copy (NPPD-1720). When set, the metric can't be
+	 * measured at all because no active prompt contains the block it tracks; the
+	 * card renders the em-dash hero with this string as the secondary line and a
+	 * block-scoped nudge. Takes precedence over `zeroFallback` (structural beats
+	 * window-bound). Absent for capable metrics and every non-Prompts caller.
+	 */
+	notCapableMessage?: string;
 }
 
 // Currency is handled by the caller (it needs both display + title from one
@@ -130,6 +138,7 @@ const MetricCard = ( props: MetricCardProps ) => {
 		notConfigured,
 		valueTitle,
 		zeroFallback,
+		notCapableMessage,
 	} = props;
 
 	// Shared graceful-failure state (missing dimension / not configured / error).
@@ -152,7 +161,14 @@ const MetricCard = ( props: MetricCardProps ) => {
 	// passing partial counts simply falls through to the normal render.
 	let fallbackHero: string | null = null;
 	let fallbackSecondary: string | null = null;
-	if ( zeroFallback && ( format === 'percent' || format === 'currency' ) ) {
+	if ( notCapableMessage ) {
+		// Structural "not capable" (NPPD-1720): no active prompt carries the block
+		// this metric measures. Em-dash hero + the block-scoped nudge as the
+		// secondary line. Checked before `zeroFallback` so a structural gap (which
+		// no date range can fill) wins over a window-bound zero count.
+		fallbackHero = EM_DASH;
+		fallbackSecondary = notCapableMessage;
+	} else if ( zeroFallback && ( format === 'percent' || format === 'currency' ) ) {
 		const { numerator, denominator, currencyRole, attemptsLabel, conversionsLabel } = zeroFallback;
 		const conversionsNoun = conversionsLabel ?? __( 'conversions', 'newspack-plugin' );
 		const noneInWindow = ( pluralNoun: string ) =>
@@ -280,7 +296,10 @@ const MetricCard = ( props: MetricCardProps ) => {
 					</div>
 				) }
 			</div>
-			{ description && <div className="newspack-insights__metric-card-description">{ description }</div> }
+			{ /* The not-capable nudge replaces the formula description (NPPD-1720): the
+			     description explains how the metric is computed, which is moot when there's
+			     structurally nothing to compute, and would just double the text block. */ }
+			{ description && ! notCapableMessage && <div className="newspack-insights__metric-card-description">{ description }</div> }
 		</Card>
 	);
 };

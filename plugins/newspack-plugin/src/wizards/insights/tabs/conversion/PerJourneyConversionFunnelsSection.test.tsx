@@ -1,9 +1,7 @@
 /**
- * Render smoke test for PerJourneyConversionFunnelsSection (Section 2),
- * including the visibility-gated 2.4 cross-upsell funnel.
+ * Tests for PerJourneyConversionFunnelsSection (Section 2).
  *
- * NOTE: `.test.tsx` is not collected by CI (testMatch matches only `.js` /
- * `.jsx`, NPPD-1683) — written to the sibling convention.
+ * Covers section structure, 2.4 visibility gate, and state-driven rendering.
  */
 
 /**
@@ -22,11 +20,18 @@ describe( 'PerJourneyConversionFunnelsSection', () => {
 		render( <PerJourneyConversionFunnelsSection current={ makeConversionWindow() } /> );
 		expect( screen.getByRole( 'heading', { name: 'Per-journey conversion funnels' } ) ).toBeInTheDocument();
 		expect( screen.getByRole( 'heading', { name: 'Anonymous → Registered' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'heading', { name: 'Registered → Subscriber' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'heading', { name: 'Registered → Donor' } ) ).toBeInTheDocument();
 		expect( screen.getByRole( 'heading', { name: 'Subscriber → Donor (cross-upsell)' } ) ).toBeInTheDocument();
 	} );
 
-	it( 'shows the cross-upsell empty-state note when 2.4 is hidden', () => {
+	it( 'shows the cross-upsell gated note when 2.4 visibility is hidden', () => {
 		render( <PerJourneyConversionFunnelsSection current={ makeConversionWindow( { crossUpsellVisibility: 'hidden' } ) } /> );
 		expect( screen.getByText( /Cross-upsell view appears when both subscription and donation programs/ ) ).toBeInTheDocument();
+	} );
+
+	it( 'shows the funnel when 2.4 visibility is visible and state is populated', () => {
+		render( <PerJourneyConversionFunnelsSection current={ makeConversionWindow( { crossUpsellVisibility: 'visible' } ) } /> );
+		expect( screen.queryByText( /Cross-upsell view appears/ ) ).not.toBeInTheDocument();
 	} );
 } );

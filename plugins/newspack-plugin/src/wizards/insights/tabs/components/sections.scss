@@ -81,6 +81,20 @@
 		gap: 16px;
 	}
 
+	// The Prompts conversion sections carry longer scorecard titles (e.g.
+	// "Registration Conversion (Influenced, 7d)") that wrap to three lines, while
+	// the default label reserves two — so cards with a 3-line title push their
+	// hero value/em-dash down and the row reads as staggered. Reserve a third line
+	// in just these sections so every hero aligns; exposure/engagement titles fit
+	// in two lines and keep the tighter default.
+	&__section--free-reader,
+	&__section--paid-reader,
+	&__section--revenue {
+		.newspack-insights__metric-card-label {
+			min-height: calc(12px * 1.4 * 3);
+		}
+	}
+
 	// Card chrome (white background, gray-200 border, 4px radius) is
 	// provided by the newspack Card component (rendered via
 	// `__experimentalCoreCard`, which delegates to WP Core's <Card>).

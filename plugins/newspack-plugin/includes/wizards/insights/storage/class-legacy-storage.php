@@ -68,6 +68,13 @@ class Legacy_Storage implements Storage_Interface {
 	/**
 	 * Build a SQL-safe `IN (...)` list from integer IDs. Empty -> `0`.
 	 *
+	 * Note (M2): when no donation product IDs are configured, `NOT IN (0)`
+	 * treats ALL subscriptions / orders as non-donation — matching sibling
+	 * behavior — so subscriber counts may include donation activity on
+	 * misconfigured sites (no donation products defined). This is intentional
+	 * and consistent with how the rest of the storage layer handles an empty
+	 * donation-product set.
+	 *
 	 * @param int[] $ids List of integer IDs.
 	 * @return string Comma-separated integers (or `0`), unparenthesized.
 	 */
@@ -826,6 +833,169 @@ class Legacy_Storage implements Storage_Interface {
 			return $variation_name;
 		}
 		return __( 'Variation', 'newspack-plugin' );
+	}
+
+	// -------------------------------------------------------------------------
+	// Conversion Journey (Tab 3) storage methods.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_at_risk_subscribers(): int {
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+
+		// Active non-donation subscriptions with a non-empty _schedule_payment_retry.
+		// Uses posts/postmeta with the same join shape as the sibling HPOS method.
+		$sql = "SELECT COUNT(DISTINCT p.ID)
+			FROM {$prefix}posts p
+			JOIN {$prefix}postmeta retry
+				ON retry.post_id = p.ID AND retry.meta_key = '_schedule_payment_retry'
+			JOIN {$prefix}woocommerce_order_items oi
+				ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
+			JOIN {$prefix}woocommerce_order_itemmeta oim
+				ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+			WHERE p.post_type = 'shop_subscription'
+			  AND p.post_status = 'wc-active'
+			  AND oim.meta_value NOT IN ($donations)
+			  AND retry.meta_value != ''";
+
+		return (int) $wpdb->get_var( $sql );
+	}
+
+	/**
+	 * {@inheritDoc}
+	 */
+	public function get_active_non_donation_subscriber_customer_ids(): array {
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+
+		$sql = "SELECT DISTINCT cust.meta_value
+			FROM {$prefix}posts p
+			JOIN {$prefix}postmeta cust
+				ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
+			JOIN {$prefix}woocommerce_order_items oi
+				ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
+			JOIN {$prefix}woocommerce_order_itemmeta oim
+				ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+			WHERE p.post_type = 'shop_subscription'
+			  AND p.post_status = 'wc-active'
+			  AND oim.meta_value NOT IN ($donations)";
+
+		$rows = $wpdb->get_col( $sql );
+		return array_map( 'intval', (array) $rows );
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @param int[] $customer_ids Customer IDs to check.
+	 * @return int
+	 */
+	public function count_active_non_donation_subscribers_by_customer_ids( array $customer_ids ): int {
+		if ( empty( $customer_ids ) ) {
+			return 0;
+		}
+
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+		$ids       = $this->id_list( $customer_ids );
+
+		$sql = "SELECT COUNT(DISTINCT cust.meta_value)
+			FROM {$prefix}posts p
+			JOIN {$prefix}postmeta cust
+				ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
+			JOIN {$prefix}woocommerce_order_items oi
+				ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
+			JOIN {$prefix}woocommerce_order_itemmeta oim
+				ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+			WHERE p.post_type = 'shop_subscription'
+			  AND p.post_status = 'wc-active'
+			  AND oim.meta_value NOT IN ($donations)
+			  AND CAST(cust.meta_value AS UNSIGNED) IN ($ids)";
+
+		return (int) $wpdb->get_var( $sql );
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @return int
+	 */
+	public function get_stale_registered_users(): int {
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+
+		// Mirrors HPOS_Storage::get_stale_registered_users(). Base population and
+		// exclusion logic are identical — the only difference is using
+		// posts/postmeta for donation orders instead of wc_orders/wc_orders_meta,
+		// and wc_order_product_lookup (cross-backend) for the product filter.
+		// See the HPOS variant for the full Phase-A approximation rationale.
+		//
+		// Phase-A approximation (M1): hardcodes 'subscriber'/'customer' as reader
+		// roles and 'administrator'/'editor' as restricted roles — does NOT honor
+		// the filterable newspack_reader_user_roles / newspack_reader_restricted_roles
+		// hooks, so sites with custom reader roles may see a slightly off count
+		// (acceptable upper-bound for Phase A; adjust in a later iteration).
+		$sql = "SELECT COUNT(DISTINCT u.ID)
+			FROM {$prefix}users u
+			WHERE (
+				EXISTS (
+					SELECT 1 FROM {$prefix}usermeta um
+					WHERE um.user_id = u.ID
+					  AND um.meta_key = 'np_reader'
+					  AND um.meta_value != ''
+				)
+				OR EXISTS (
+					SELECT 1 FROM {$prefix}usermeta um2
+					WHERE um2.user_id = u.ID
+					  AND um2.meta_key = '{$prefix}capabilities'
+					  AND (
+						um2.meta_value LIKE '%\"subscriber\"%'
+						OR um2.meta_value LIKE '%\"customer\"%'
+					  )
+				)
+			)
+			AND NOT EXISTS (
+				SELECT 1 FROM {$prefix}usermeta um3
+				WHERE um3.user_id = u.ID
+				  AND um3.meta_key = '{$prefix}capabilities'
+				  AND (
+					um3.meta_value LIKE '%\"administrator\"%'
+					OR um3.meta_value LIKE '%\"editor\"%'
+				  )
+			)
+			AND u.ID NOT IN (
+				SELECT DISTINCT CAST(cust.meta_value AS UNSIGNED)
+				FROM {$prefix}posts p
+				JOIN {$prefix}postmeta cust
+					ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
+				JOIN {$prefix}woocommerce_order_items oi
+					ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
+				JOIN {$prefix}woocommerce_order_itemmeta oim
+					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+				WHERE p.post_type = 'shop_subscription'
+				  AND p.post_status = 'wc-active'
+				  AND oim.meta_value NOT IN ($donations)
+			)
+			AND u.ID NOT IN (
+				SELECT DISTINCT CAST(cust2.meta_value AS UNSIGNED)
+				FROM {$prefix}posts p2
+				JOIN {$prefix}postmeta cust2
+					ON cust2.post_id = p2.ID AND cust2.meta_key = '_customer_user'
+				JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = p2.ID
+				WHERE p2.post_type = 'shop_order'
+				  AND p2.post_status IN ('wc-completed', 'wc-processing')
+				  AND p2.post_date_gmt >= DATE_SUB(NOW(), INTERVAL 365 DAY)
+				  AND opl.product_id IN ($donations)
+			)";
+
+		return (int) $wpdb->get_var( $sql );
 	}
 
 	/**

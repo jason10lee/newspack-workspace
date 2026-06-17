@@ -4,6 +4,10 @@
  * Four influenced-rate scorecards centralized from the Gates and Prompts
  * tabs. This is the only Conversion Journey section with comparison
  * deltas, so it threads the `previous` window into each MetricCard.
+ *
+ * Phase 2: scalar metrics use `state` ('error' | 'populated' | 'coming_soon').
+ * The `scalarToMetricCardProps` helper maps `coming_soon` to `pending: true`
+ * on the MetricCard, which renders the placeholder treatment.
  */
 
 /**
