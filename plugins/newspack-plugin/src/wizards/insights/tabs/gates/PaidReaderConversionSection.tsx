@@ -46,12 +46,14 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 	const attempts = current.paywall_attempts_total;
 	const conversions = current.paywall_conversions_total;
 
-	// The section totals are derived from the Direct scalar's denominator/numerator,
-	// which are null when that query errors — coercing both totals to 0. A zero total
-	// is only a *genuine* empty state when the Direct metric actually computed;
-	// otherwise we fall through to the scorecards so each card surfaces its own error
-	// treatment rather than a misleading "no paywall attempts" empty state.
-	const dataKnown = current.paywall_conversion_direct.state !== 'error';
+	// The section totals are derived from the Direct denominator and the Direct/
+	// Influenced numerators, all of which are null when their query errors —
+	// coercing the totals to 0. A zero total is only a *genuine* empty state when
+	// both source metrics actually computed; if either errored we fall through to
+	// the scorecards so each card surfaces its own error treatment rather than a
+	// misleading "no paywall attempts" / "no conversions" empty state. (Direct and
+	// Influenced are separate queries and can fail independently.)
+	const dataKnown = current.paywall_conversion_direct.state !== 'error' && current.paywall_conversion_influenced_14d.state !== 'error';
 
 	// Empty states (NPPD-1694). Order matters: no opportunity before no conversions.
 	if ( dataKnown && attempts === 0 ) {

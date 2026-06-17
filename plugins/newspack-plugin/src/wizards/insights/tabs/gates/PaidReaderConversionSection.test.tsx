@@ -94,8 +94,28 @@ describe( 'PaidReaderConversionSection empty states', () => {
 		const { container } = render( <PaidReaderConversionSection current={ current } previous={ null } /> );
 
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
-		expect( screen.queryByText( /No paywall attempts in this window/ ) ).not.toBeInTheDocument();
+		expect( container ).not.toHaveTextContent( 'No paywall attempts in this window' );
 		expect( screen.getByText( 'Paywall Conversion (Direct)' ) ).toBeInTheDocument();
+	} );
+
+	it( 'does NOT show an empty state when the Influenced scalar errored — renders the scorecards instead', () => {
+		// Direct computes a genuine 0 conversions while Influenced errors independently
+		// (its null numerator coerces to 0 in paywall_section_totals). The section must
+		// not render the no_conversions empty state and hide the errored Influenced card.
+		const current = makeWindow( {
+			paywall_attempts_total: 17,
+			paywall_conversions_total: 0,
+			paywall_conversion_direct: scalar( { value: 0, numerator: 0, denominator: 17 } ),
+			paywall_conversion_influenced_14d: scalar( { state: 'error', computable: false, error_message: 'BQ down' } ),
+		} );
+		const { container } = render( <PaidReaderConversionSection current={ current } previous={ null } /> );
+
+		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
+		// Assert on the container, not `screen`: the Notice's speak() leaves the
+		// no_conversions copy in a global live-region from an earlier test.
+		expect( container ).not.toHaveTextContent( 'No paywall conversions in this window' );
+		// Scorecards render; the errored Influenced card shows the shared error note.
+		expect( screen.getByText( 'Paywall Conversion (Influenced, 14d)' ) ).toBeInTheDocument();
 	} );
 
 	it( 'applies the per-card count fallback inside a normal section render', () => {

@@ -34,6 +34,7 @@ use Newspack\Insights\Woo_Order_Resolver;
  *   value: int|float,
  *   computable: bool,
  *   denominator: int|null,
+ *   numerator: int|null,
  *   placeholder_type: string,
  *   error_code?: string,
  *   error_message?: string,
