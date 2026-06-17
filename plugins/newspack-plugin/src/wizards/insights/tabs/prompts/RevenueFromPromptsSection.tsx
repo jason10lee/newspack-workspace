@@ -18,6 +18,7 @@ import { __ } from '@wordpress/i18n';
 import type { PromptsWindow } from '../../api/prompts';
 import MetricCard from '../components/MetricCard';
 import SectionHeading from '../components/SectionHeading';
+import { NOT_CAPABLE_COPY } from './notCapableCopy';
 import { scalarToMetricCardProps } from './scalarToCard';
 
 export interface RevenueFromPromptsSectionProps {
@@ -45,6 +46,7 @@ const RevenueFromPromptsSection = ( { current, previous }: RevenueFromPromptsSec
 					),
 					current: current.donation_revenue_direct,
 					previous: previous?.donation_revenue_direct,
+					notCapableMessage: NOT_CAPABLE_COPY.donation,
 				} ) }
 			/>
 			<MetricCard
@@ -56,6 +58,7 @@ const RevenueFromPromptsSection = ( { current, previous }: RevenueFromPromptsSec
 					),
 					current: current.donation_revenue_influenced_14d,
 					previous: previous?.donation_revenue_influenced_14d,
+					notCapableMessage: NOT_CAPABLE_COPY.donation,
 				} ) }
 			/>
 			<MetricCard
@@ -67,6 +70,7 @@ const RevenueFromPromptsSection = ( { current, previous }: RevenueFromPromptsSec
 					),
 					current: current.subscription_revenue_direct,
 					previous: previous?.subscription_revenue_direct,
+					notCapableMessage: NOT_CAPABLE_COPY.checkout,
 				} ) }
 			/>
 			<MetricCard
@@ -78,6 +82,7 @@ const RevenueFromPromptsSection = ( { current, previous }: RevenueFromPromptsSec
 					),
 					current: current.subscription_revenue_influenced_14d,
 					previous: previous?.subscription_revenue_influenced_14d,
+					notCapableMessage: NOT_CAPABLE_COPY.checkout,
 				} ) }
 			/>
 		</div>

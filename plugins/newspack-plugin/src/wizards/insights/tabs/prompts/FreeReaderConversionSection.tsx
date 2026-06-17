@@ -17,6 +17,7 @@ import { __ } from '@wordpress/i18n';
 import type { PromptsWindow } from '../../api/prompts';
 import MetricCard from '../components/MetricCard';
 import SectionHeading from '../components/SectionHeading';
+import { NOT_CAPABLE_COPY } from './notCapableCopy';
 import { scalarToMetricCardProps } from './scalarToCard';
 
 export interface FreeReaderConversionSectionProps {
@@ -44,6 +45,7 @@ const FreeReaderConversionSection = ( { current, previous }: FreeReaderConversio
 					),
 					current: current.registration_conversion_direct,
 					previous: previous?.registration_conversion_direct,
+					notCapableMessage: NOT_CAPABLE_COPY.registration,
 				} ) }
 			/>
 			<MetricCard
@@ -55,6 +57,7 @@ const FreeReaderConversionSection = ( { current, previous }: FreeReaderConversio
 					),
 					current: current.registration_conversion_influenced_7d,
 					previous: previous?.registration_conversion_influenced_7d,
+					notCapableMessage: NOT_CAPABLE_COPY.registration,
 				} ) }
 			/>
 			<MetricCard
@@ -66,6 +69,7 @@ const FreeReaderConversionSection = ( { current, previous }: FreeReaderConversio
 					),
 					current: current.newsletter_signup_conversion_direct,
 					previous: previous?.newsletter_signup_conversion_direct,
+					notCapableMessage: NOT_CAPABLE_COPY.newsletter,
 				} ) }
 			/>
 			<MetricCard
@@ -77,6 +81,7 @@ const FreeReaderConversionSection = ( { current, previous }: FreeReaderConversio
 					),
 					current: current.newsletter_signup_conversion_influenced_7d,
 					previous: previous?.newsletter_signup_conversion_influenced_7d,
+					notCapableMessage: NOT_CAPABLE_COPY.newsletter,
 				} ) }
 			/>
 		</div>

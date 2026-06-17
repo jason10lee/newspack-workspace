@@ -1157,4 +1157,233 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'bigquery_proxy_malformed_rows', $result['error_code'] );
 		$this->assertSame( [], $result['rows'] );
 	}
+
+	// --- Per-intent capability gate (NPPD-1720) -------------------------
+
+	/**
+	 * Build a Prompts_Metric whose capability detector reads the given fixture
+	 * prompts instead of newspack-popups (not loaded in this suite). Mirrors the
+	 * proxy injection seam.
+	 *
+	 * @param string[] $prompts List of prompt `post_content` strings.
+	 * @return Prompts_Metric
+	 */
+	protected function make_metric_with_prompts( array $prompts ): Prompts_Metric {
+		return new Prompts_Metric(
+			$this->createMock( BigQuery_Proxy_Client::class ),
+			null,
+			function () use ( $prompts ) {
+				return $prompts;
+			}
+		);
+	}
+
+	/**
+	 * Serialized prompt `post_content` containing the given blocks.
+	 *
+	 * @param string[] $block_names Fully-qualified block names, e.g. 'newspack-blocks/donate'.
+	 * @return string
+	 */
+	protected function prompt_with_blocks( array $block_names ): string {
+		$content = '';
+		foreach ( $block_names as $block_name ) {
+			$content .= sprintf( "<!-- wp:%1\$s -->\n<!-- /wp:%1\$s -->\n", $block_name );
+		}
+		return $content;
+	}
+
+	/**
+	 * Zero active prompts → every gated metric is not capable.
+	 */
+	public function test_capability_flags_all_false_when_no_active_prompts() {
+		$flags = $this->make_metric_with_prompts( [] )->get_capability_flags();
+
+		$this->assertCount( 13, $flags );
+		foreach ( $flags as $capable ) {
+			$this->assertFalse( $capable );
+		}
+	}
+
+	/**
+	 * Informational-only prompts (no conversion block) → not capable. This is the
+	 * sponsor-note / hand-rolled-CTA case.
+	 */
+	public function test_capability_flags_all_false_for_informational_only_prompts() {
+		$prompts = [
+			$this->prompt_with_blocks( [ 'core/paragraph', 'core/buttons', 'core/button' ] ),
+			$this->prompt_with_blocks( [ 'newspack-blocks/homepage-articles' ] ),
+		];
+		$flags = $this->make_metric_with_prompts( $prompts )->get_capability_flags();
+
+		foreach ( $flags as $capable ) {
+			$this->assertFalse( $capable );
+		}
+	}
+
+	/**
+	 * Newsletter-only prompt → newsletter + form-submission-rate capable, every
+	 * other intent not capable. The common newsletter-only setup.
+	 */
+	public function test_capability_flags_newsletter_only() {
+		$prompts = [ $this->prompt_with_blocks( [ 'newspack-newsletters/subscribe' ] ) ];
+		$flags   = $this->make_metric_with_prompts( $prompts )->get_capability_flags();
+
+		$this->assertTrue( $flags['newsletter_signup_conversion_direct'] );
+		$this->assertTrue( $flags['newsletter_signup_conversion_influenced_7d'] );
+		// Form submission rate is capable when ANY watched block is present.
+		$this->assertTrue( $flags['form_submission_rate'] );
+
+		$this->assertFalse( $flags['registration_conversion_direct'] );
+		$this->assertFalse( $flags['donation_conversion_direct'] );
+		$this->assertFalse( $flags['donation_revenue_direct'] );
+		$this->assertFalse( $flags['subscription_conversion_direct'] );
+		$this->assertFalse( $flags['subscription_revenue_direct'] );
+	}
+
+	/**
+	 * Newsletter + donation across two prompts → both intents capable, the other
+	 * two not.
+	 */
+	public function test_capability_flags_mixed_newsletter_and_donation() {
+		$prompts = [
+			$this->prompt_with_blocks( [ 'newspack-newsletters/subscribe' ] ),
+			$this->prompt_with_blocks( [ 'newspack-blocks/donate' ] ),
+		];
+		$flags = $this->make_metric_with_prompts( $prompts )->get_capability_flags();
+
+		$this->assertTrue( $flags['newsletter_signup_conversion_direct'] );
+		$this->assertTrue( $flags['donation_conversion_direct'] );
+		$this->assertTrue( $flags['donation_revenue_influenced_14d'] );
+		$this->assertTrue( $flags['form_submission_rate'] );
+
+		$this->assertFalse( $flags['registration_conversion_direct'] );
+		$this->assertFalse( $flags['subscription_conversion_direct'] );
+	}
+
+	/**
+	 * A single prompt carrying BOTH a donate and a subscribe block registers both
+	 * capabilities — newspack-popups' `action_type` would collapse this to
+	 * 'undefined', which is exactly why the gate reads raw block presence.
+	 */
+	public function test_capability_flags_multi_block_single_prompt() {
+		$prompts = [
+			$this->prompt_with_blocks( [ 'newspack-blocks/donate', 'newspack-newsletters/subscribe' ] ),
+		];
+		$flags = $this->make_metric_with_prompts( $prompts )->get_capability_flags();
+
+		$this->assertTrue( $flags['donation_conversion_direct'] );
+		$this->assertTrue( $flags['newsletter_signup_conversion_direct'] );
+
+		$this->assertFalse( $flags['registration_conversion_direct'] );
+		$this->assertFalse( $flags['subscription_conversion_direct'] );
+	}
+
+	/**
+	 * Checkout-button is detected though it's NOT in newspack-popups' stock
+	 * watched-blocks map — the gate adds it so checkout-button membership prompts
+	 * drive the subscription intent rather than reading as informational.
+	 */
+	public function test_capability_flags_detects_checkout_button() {
+		$prompts = [ $this->prompt_with_blocks( [ 'newspack-blocks/checkout-button' ] ) ];
+		$flags   = $this->make_metric_with_prompts( $prompts )->get_capability_flags();
+
+		$this->assertTrue( $flags['subscription_conversion_direct'] );
+		$this->assertTrue( $flags['subscription_revenue_direct'] );
+		// Checkout-button is a click-through, not an inline form, so it does NOT make
+		// the form-submission rate capable (matches the form-bearing nudge copy).
+		$this->assertFalse( $flags['form_submission_rate'] );
+
+		$this->assertFalse( $flags['donation_conversion_direct'] );
+		$this->assertFalse( $flags['registration_conversion_direct'] );
+	}
+
+	/**
+	 * Form submission rate is form-bearing: capable when a registration, donation,
+	 * or newsletter block is present, but not for checkout-button alone.
+	 */
+	public function test_form_submission_rate_is_form_bearing() {
+		$this->assertTrue(
+			$this->make_metric_with_prompts( [ $this->prompt_with_blocks( [ 'newspack-blocks/donate' ] ) ] )
+				->get_capability_flags()['form_submission_rate']
+		);
+		$this->assertFalse(
+			$this->make_metric_with_prompts( [ $this->prompt_with_blocks( [ 'newspack-blocks/checkout-button' ] ) ] )
+				->get_capability_flags()['form_submission_rate']
+		);
+	}
+
+	/**
+	 * All four blocks present somewhere in active prompts → every gated metric is
+	 * capable.
+	 */
+	public function test_capability_flags_all_true_when_all_blocks_present() {
+		$prompts = [
+			$this->prompt_with_blocks(
+				[
+					'newspack/reader-registration',
+					'newspack-blocks/donate',
+					'newspack-newsletters/subscribe',
+					'newspack-blocks/checkout-button',
+				]
+			),
+		];
+		$flags = $this->make_metric_with_prompts( $prompts )->get_capability_flags();
+
+		$this->assertCount( 13, $flags );
+		foreach ( $flags as $capable ) {
+			$this->assertTrue( $capable );
+		}
+	}
+
+	/**
+	 * With no injected provider and the prompt CPT not registered (newspack-popups
+	 * inactive), the detector can't inspect prompts and must fail open (all capable)
+	 * rather than gate every conversion card on a misconfiguration.
+	 */
+	public function test_capability_flags_fail_open_when_popups_unavailable() {
+		$this->assertFalse( post_type_exists( 'newspack_popups_cpt' ), 'prompt CPT should be unregistered in this suite' );
+
+		$metric = new Prompts_Metric( $this->createMock( BigQuery_Proxy_Client::class ) );
+		$flags  = $metric->get_capability_flags();
+
+		foreach ( $flags as $capable ) {
+			$this->assertTrue( $capable );
+		}
+	}
+
+	/**
+	 * The real read path (no injected provider): with the prompt CPT registered,
+	 * the detector enumerates published prompts via get_posts() and reads their
+	 * block content, excluding drafts. Guards against a has_block miss on real
+	 * stored content and pins the publish-only filter.
+	 */
+	public function test_capability_flags_read_published_prompts_via_get_posts() {
+		register_post_type( 'newspack_popups_cpt', [ 'public' => false ] );
+
+		self::factory()->post->create(
+			[
+				'post_type'    => 'newspack_popups_cpt',
+				'post_status'  => 'publish',
+				// Block nested inside a group — the common "wrapped" case — still detected.
+				'post_content' => "<!-- wp:group -->\n<!-- wp:newspack-blocks/donate /-->\n<!-- /wp:group -->",
+			]
+		);
+		self::factory()->post->create(
+			[
+				'post_type'    => 'newspack_popups_cpt',
+				'post_status'  => 'draft',
+				'post_content' => '<!-- wp:newspack/reader-registration /-->',
+			]
+		);
+
+		$flags = ( new Prompts_Metric( $this->createMock( BigQuery_Proxy_Client::class ) ) )->get_capability_flags();
+
+		// Published donation prompt → donation capable (read via get_posts, nested block found).
+		$this->assertTrue( $flags['donation_conversion_direct'] );
+		// Registration block lives only on a draft → publish-only filter excludes it.
+		$this->assertFalse( $flags['registration_conversion_direct'] );
+		$this->assertFalse( $flags['subscription_conversion_direct'] );
+
+		unregister_post_type( 'newspack_popups_cpt' );
+	}
 }
