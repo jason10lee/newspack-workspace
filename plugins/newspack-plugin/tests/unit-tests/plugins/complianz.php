@@ -58,7 +58,7 @@ class Newspack_Test_Complianz extends WP_UnitTestCase {
 		update_option( Privacy_Section::OPTION_PREFIX . 'block_ads_before_consent', false );
 
 		// Clear any geolocation request state between tests.
-		foreach ( Complianz::EDGE_COUNTRY_HEADERS as $header ) {
+		foreach ( [ 'GEOIP_COUNTRY_CODE', 'HTTP_CF_IPCOUNTRY', 'HTTP_X_COUNTRY_CODE' ] as $header ) {
 			unset( $_SERVER[ $header ] );
 		}
 		unset( $_GET['cmplz_user_region'] );
@@ -120,6 +120,7 @@ class Newspack_Test_Complianz extends WP_UnitTestCase {
 		remove_filter( 'cmplz_user_region', [ Complianz::class, 'edge_user_region' ], 20 );
 		remove_filter( 'cmplz_user_consenttype', [ Complianz::class, 'edge_user_consenttype' ], 10 );
 		remove_all_filters( 'newspack_complianz_use_edge_geolocation' );
+		remove_all_filters( 'newspack_complianz_edge_country_headers' );
 		parent::tearDown();
 	}
 
@@ -330,20 +331,34 @@ class Newspack_Test_Complianz extends WP_UnitTestCase {
 	}
 
 	/**
-	 * GEOIP_COUNTRY_CODE takes priority over the Cloudflare header.
+	 * Only the trusted GEOIP_COUNTRY_CODE is read by default; client-suppliable
+	 * headers (Cloudflare, generic) are ignored so the country cannot be spoofed.
 	 */
-	public function test_edge_country_geoip_takes_priority() {
-		$_SERVER['GEOIP_COUNTRY_CODE'] = 'US';
+	public function test_edge_country_ignores_untrusted_headers_by_default() {
 		$_SERVER['HTTP_CF_IPCOUNTRY']  = 'DE';
+		$_SERVER['HTTP_X_COUNTRY_CODE'] = 'NL';
+		$this->assertSame( '', Complianz::get_edge_country_code() );
+
+		// With the trusted header present, the untrusted ones are still ignored.
+		$_SERVER['GEOIP_COUNTRY_CODE'] = 'US';
 		$this->assertSame( 'US', Complianz::get_edge_country_code() );
 	}
 
 	/**
-	 * Falls back to the Cloudflare header when the server-level one is absent.
+	 * The newspack_complianz_edge_country_headers filter can add a trusted header,
+	 * and the list is consulted in priority order, skipping invalid values.
 	 */
-	public function test_edge_country_falls_back_to_cloudflare() {
-		$_SERVER['HTTP_CF_IPCOUNTRY'] = 'de';
-		$this->assertSame( 'DE', Complianz::get_edge_country_code() );
+	public function test_edge_country_filter_can_add_trusted_header() {
+		add_filter(
+			'newspack_complianz_edge_country_headers',
+			function () {
+				return [ 'GEOIP_COUNTRY_CODE', 'HTTP_CF_IPCOUNTRY' ];
+			}
+		);
+		// First header invalid -> falls through to the next trusted header.
+		$_SERVER['GEOIP_COUNTRY_CODE'] = 'XX';
+		$_SERVER['HTTP_CF_IPCOUNTRY']  = 'nl';
+		$this->assertSame( 'NL', Complianz::get_edge_country_code() );
 	}
 
 	/**
@@ -370,15 +385,6 @@ class Newspack_Test_Complianz extends WP_UnitTestCase {
 			'numeric'       => [ '12' ],
 			'empty'         => [ '' ],
 		];
-	}
-
-	/**
-	 * A rejected value in the first header falls through to a valid later header.
-	 */
-	public function test_edge_country_skips_invalid_and_uses_next_header() {
-		$_SERVER['GEOIP_COUNTRY_CODE'] = 'XX';
-		$_SERVER['HTTP_CF_IPCOUNTRY']  = 'NL';
-		$this->assertSame( 'NL', Complianz::get_edge_country_code() );
 	}
 
 	// -------------------------------------------------------------------------

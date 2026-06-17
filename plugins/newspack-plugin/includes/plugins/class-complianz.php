@@ -23,14 +23,18 @@ defined( 'ABSPATH' ) || exit;
  */
 class Complianz {
 	/**
-	 * Server variables that may carry the visitor country code resolved at the
-	 * hosting edge, in priority order. `GEOIP_COUNTRY_CODE` is the server-level
-	 * GeoIP value set on WordPress.com / Atomic (WPCloud); the remaining two are
-	 * common Cloudflare / proxy fallbacks.
+	 * Default server variable carrying the visitor country code resolved at the
+	 * hosting edge. `GEOIP_COUNTRY_CODE` is the server-level GeoIP value set on
+	 * WordPress.com / Atomic (WPCloud); it is a non-HTTP server variable, so a
+	 * client cannot spoof it by sending a request header. Other infrastructure
+	 * (e.g. Cloudflare's `HTTP_CF_IPCOUNTRY`) can be added via the
+	 * `newspack_complianz_edge_country_headers` filter, but only variables that
+	 * are guaranteed to be injected by trusted infrastructure should be trusted,
+	 * since the value selects which cookie-consent regime a visitor is shown.
 	 *
 	 * @var string[]
 	 */
-	const EDGE_COUNTRY_HEADERS = [ 'GEOIP_COUNTRY_CODE', 'HTTP_CF_IPCOUNTRY', 'HTTP_X_COUNTRY_CODE' ];
+	const EDGE_COUNTRY_HEADERS = [ 'GEOIP_COUNTRY_CODE' ];
 
 	/**
 	 * Initialize hooks and filters.
@@ -54,7 +58,16 @@ class Complianz {
 	 * @return string Two-letter uppercase ISO country code, or '' if unavailable.
 	 */
 	public static function get_edge_country_code() {
-		foreach ( self::EDGE_COUNTRY_HEADERS as $header ) {
+		/**
+		 * Filters the server variables consulted for the edge-resolved visitor
+		 * country code, in priority order. Only add variables guaranteed to be
+		 * injected by trusted infrastructure (not client-supplied) -- the value
+		 * selects which cookie-consent regime a visitor is shown.
+		 *
+		 * @param string[] $headers Server variable names, highest priority first.
+		 */
+		$headers = apply_filters( 'newspack_complianz_edge_country_headers', self::EDGE_COUNTRY_HEADERS );
+		foreach ( (array) $headers as $header ) {
 			if ( empty( $_SERVER[ $header ] ) ) {
 				continue;
 			}
@@ -117,6 +130,10 @@ class Complianz {
 	 * @return string
 	 */
 	public static function edge_user_region( $region ) {
+		// Fail safe: if Complianz's helpers are unavailable, leave the region untouched.
+		if ( ! function_exists( 'cmplz_get_region_for_country' ) || ! function_exists( 'cmplz_get_regions' ) ) {
+			return $region;
+		}
 		$country_code = self::get_edge_country_code();
 		if ( '' !== $country_code ) {
 			// cmplz_get_region_for_country() is a pure config lookup (no database read).
@@ -149,6 +166,10 @@ class Complianz {
 	 * @return string
 	 */
 	public static function edge_user_consenttype( $consenttype ) {
+		// Fail safe: if Complianz's helpers are unavailable, leave the consent type untouched.
+		if ( ! function_exists( 'cmplz_get_consenttype_for_country' ) || ! function_exists( 'cmplz_get_used_consenttypes' ) ) {
+			return $consenttype;
+		}
 		$country_code = self::get_edge_country_code();
 		if ( '' !== $country_code ) {
 			// cmplz_get_consenttype_for_country() is a pure config lookup (no database read).
