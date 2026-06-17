@@ -46,5 +46,20 @@ export function gateMatchesPost( contentRules, postType, termsByTax, postId, mat
 	if ( nonSpecific.length === 0 ) {
 		return false;
 	}
-	return matchMode === 'any' ? nonSpecific.some( ruleMatches ) : nonSpecific.every( ruleMatches );
+
+	// Exclusions are always-applied carve-outs: excluded content is never gated,
+	// regardless of match mode. ruleMatches() returns false for an exclusion when
+	// the post IS in the excluded set, so any such rule carves the post out.
+	const exclusions = nonSpecific.filter( rule => rule.exclusion );
+	if ( exclusions.some( rule => ! ruleMatches( rule ) ) ) {
+		return false;
+	}
+
+	// The match mode only combines inclusion rules. With no inclusion rules, the
+	// gate applies to everything that isn't carved out.
+	const inclusions = nonSpecific.filter( rule => ! rule.exclusion );
+	if ( inclusions.length === 0 ) {
+		return true;
+	}
+	return matchMode === 'any' ? inclusions.some( ruleMatches ) : inclusions.every( ruleMatches );
 }

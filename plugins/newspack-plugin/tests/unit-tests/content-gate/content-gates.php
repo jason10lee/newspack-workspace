@@ -2291,6 +2291,55 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Exclusion rules are always-applied carve-outs: in 'any' (OR) mode a post that
+	 * matches an inclusion rule is still NOT gated when an exclusion rule covers it.
+	 * Without this, OR mode would gate the very content the publisher excluded.
+	 */
+	public function test_exclusion_rule_carves_out_under_or() {
+		$free_cat = self::factory()->category->create( [ 'name' => 'Free' ] );
+
+		// A post that matches the inclusion rule (post_types) and is not excluded.
+		$gated_post = self::factory()->post->create();
+		$this->post_ids[] = $gated_post;
+
+		// A post that matches the inclusion rule but is carved out by the exclusion.
+		$carved_post = self::factory()->post->create();
+		wp_set_post_terms( $carved_post, [ $free_cat ], 'category' );
+		$this->post_ids[] = $carved_post;
+
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Carve-out Gate' ] );
+		$this->gate_ids[] = $gate_id;
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'               => 'Carve-out Gate',
+				'priority'            => 0,
+				'content_rules'       => [
+					[
+						'slug'  => 'post_types',
+						'value' => [ 'post' ],
+					],
+					[
+						'slug'      => 'category',
+						'value'     => [ $free_cat ],
+						'exclusion' => true,
+					],
+				],
+				'content_rules_match' => 'any',
+				'registration'        => [ 'active' => true ],
+			]
+		);
+
+		$this->reset_restriction_cache();
+		$gated = wp_list_pluck( Content_Restriction_Control::get_post_gates( $gated_post ), 'id' );
+		$this->assertContains( $gate_id, $gated, 'OR should gate a post matching the inclusion rule' );
+
+		$this->reset_restriction_cache();
+		$carved = wp_list_pluck( Content_Restriction_Control::get_post_gates( $carved_post ), 'id' );
+		$this->assertNotContains( $gate_id, $carved, 'An excluded post is carved out under OR even though it matches the inclusion rule' );
+	}
+
+	/**
 	 * A gate's match mode persists and defaults to 'all'.
 	 */
 	public function test_content_rules_match_persistence() {

@@ -185,10 +185,15 @@ class Content_Restriction_Control {
 				continue;
 			}
 
-			// Combine non-specific rules with the gate's match mode (default AND).
+			// Exclusion rules are always-applied carve-outs: content matching an
+			// exclusion is never gated, regardless of the match mode. The match mode
+			// (default AND) only governs how inclusion rules combine. A gate with no
+			// inclusion rules applies to everything that isn't carved out.
 			$match                 = 'any' === ( $gate['content_rules_match'] ?? 'all' ) ? 'any' : 'all';
 			$has_non_specific_rule = false;
-			$any_matched           = false;
+			$has_inclusion_rule    = false;
+			$inclusion_satisfied   = 'all' === $match; // AND starts satisfied; OR needs a hit.
+			$is_excluded           = false;
 			foreach ( $content_rules as $content_rule ) {
 				if ( 'specific_posts' === $content_rule['slug'] ) {
 					// Override-only; already evaluated above.
@@ -196,13 +201,26 @@ class Content_Restriction_Control {
 				}
 				$has_non_specific_rule = true;
 				$matches               = self::rule_matches_post( $content_rule, $post_id );
+				$is_exclusion          = isset( $content_rule['exclusion'] ) && $content_rule['exclusion'];
+
+				if ( $is_exclusion ) {
+					// rule_matches_post() returns false for an exclusion when the post
+					// IS in the excluded set; such a post is carved out entirely.
+					if ( ! $matches ) {
+						$is_excluded = true;
+						break;
+					}
+					continue; // A non-applying exclusion neither gates nor carves out.
+				}
+
+				// Inclusion rule: fold into the AND/OR combination.
+				$has_inclusion_rule = true;
 				if ( 'all' === $match ) {
 					if ( ! $matches ) {
-						continue 2; // One miss disqualifies the gate.
+						$inclusion_satisfied = false;
 					}
 				} elseif ( $matches ) {
-					$any_matched = true;
-					break; // One hit is enough.
+					$inclusion_satisfied = true;
 				}
 			}
 
@@ -212,8 +230,13 @@ class Content_Restriction_Control {
 				continue;
 			}
 
-			// OR mode with no matching rule: gate does not apply.
-			if ( 'any' === $match && ! $any_matched ) {
+			// Carved out by an exclusion rule — never gated, regardless of match mode.
+			if ( $is_excluded ) {
+				continue;
+			}
+
+			// With inclusion rules present, the post must satisfy their combination.
+			if ( $has_inclusion_rule && ! $inclusion_satisfied ) {
 				continue;
 			}
 
