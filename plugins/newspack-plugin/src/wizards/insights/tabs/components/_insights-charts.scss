@@ -220,6 +220,13 @@
 		stroke-width: 8;
 	}
 
+	// Center label text inside the donut (e.g. the window total — NPPD-1609).
+	&__pie-center {
+		font-size: 6px;
+		font-weight: 600;
+		fill: wp-colors.$gray-900;
+	}
+
 	// Bottom slot: legend anchored to the card bottom, left-aligned, full width.
 	&__pie-legend {
 		list-style: none;

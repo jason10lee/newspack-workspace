@@ -140,13 +140,6 @@
 		color: wp-colors.$gray-700;
 	}
 
-	// PieChart center label (the window total) — extends the shared pie chrome.
-	&__pie-center {
-		font-size: 6px;
-		font-weight: 600;
-		fill: wp-colors.$gray-900;
-	}
-
 	// "See more" / "See less" toggle under the row-capped top-pages table.
 	&__conversion-table-more {
 		align-self: flex-start;
