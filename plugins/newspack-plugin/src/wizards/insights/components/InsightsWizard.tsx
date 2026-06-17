@@ -59,6 +59,7 @@ export interface InsightsBootConfig {
 	defaultComparison: boolean;
 	timezone: string;
 	settingsUrl: string;
+	adminUrl?: string;
 }
 
 export interface InsightsWizardProps {

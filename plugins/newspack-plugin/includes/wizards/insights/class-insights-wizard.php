@@ -361,6 +361,7 @@ class Insights_Wizard extends Wizard {
 			'defaultComparison' => false,
 			'timezone'          => wp_timezone_string(),
 			'settingsUrl'       => admin_url( 'admin.php?page=newspack-settings' ),
+			'adminUrl'          => admin_url(),
 		];
 	}
 }

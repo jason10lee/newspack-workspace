@@ -37,21 +37,17 @@ const TOP_PAGES_ROW_LIMIT = 25;
 const TOP_PAGES_COLUMNS: SortableColumn< ConversionTopPageRow >[] = [
 	{
 		key: 'page_title',
-		label: __( 'Page title', 'newspack-plugin' ),
+		label: __( 'Article', 'newspack-plugin' ),
 		numeric: false,
-		render: row => row.page_title,
+		render: row =>
+			row.page_url ? (
+				<a href={ row.page_url } target="_blank" rel="noreferrer">
+					{ row.page_title }
+				</a>
+			) : (
+				row.page_title
+			),
 		sortValue: row => row.page_title,
-	},
-	{
-		key: 'page_url',
-		label: __( 'Page URL', 'newspack-plugin' ),
-		numeric: false,
-		render: row => (
-			<a href={ row.page_url } target="_blank" rel="noreferrer">
-				{ row.page_url }
-			</a>
-		),
-		sortValue: row => row.page_url,
 	},
 	{
 		key: 'pageviews',
@@ -113,7 +109,7 @@ const OpportunityBucketsSection = ( { current }: OpportunityBucketsSectionProps 
 			/>
 		</div>
 		<div className="newspack-insights__conversion-top-pages">
-			<h3 className="newspack-insights__conversion-subheading">{ __( 'Top pages that don’t convert', 'newspack-plugin' ) }</h3>
+			<h3 className="newspack-insights__conversion-subheading">{ __( 'Top articles that don’t convert', 'newspack-plugin' ) }</h3>
 			<SectionState
 				state={ current.top_pages_no_conversion.state }
 				emptyMessage={ sprintf(

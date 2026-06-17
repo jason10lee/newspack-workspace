@@ -31,6 +31,7 @@ import { Fragment } from '@wordpress/element';
 import type { BillingModel, DonorsTierRow, DonorsTierVariationRow } from '../../api/donors';
 import SectionEmpty from '../components/SectionEmpty';
 import SectionHeading from '../components/SectionHeading';
+import { getPostEditUrl } from '../components/adminLinks';
 import { formatCurrency, formatNumber } from '../components/format';
 
 export interface PerformanceSectionProps {
@@ -115,7 +116,9 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 						{ rows.map( row => (
 							<Fragment key={ row.product_id }>
 								<tr>
-									<td>{ row.name }</td>
+									<td>
+										<a href={ getPostEditUrl( row.product_id ) }>{ row.name }</a>
+									</td>
 									{ renderRowCells( row ) }
 								</tr>
 								{ row.is_parent &&
