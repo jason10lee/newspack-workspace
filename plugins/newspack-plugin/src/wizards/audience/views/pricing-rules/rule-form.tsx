@@ -28,6 +28,8 @@ import { trash } from '@wordpress/icons';
 import { Grid, SectionHeader, Divider } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import ScopeTargets from './scope-targets';
+import Conditions from './conditions';
+import { tsToLocalInput, localInputToTs } from './datetime';
 
 const API_PATH = '/wc-dynamic-pricing/v1/rules';
 
@@ -43,25 +45,6 @@ interface StepRowState {
 	calc_type: string;
 	value: string;
 	label: string;
-}
-
-// active_from/active_until are UTC unix-second timestamps in the REST contract;
-// the inputs are browser-local datetime-local strings.
-function tsToLocalInput( ts: number | null ): string {
-	if ( ! ts ) {
-		return '';
-	}
-	const d = new Date( ts * 1000 );
-	const pad = ( n: number ) => String( n ).padStart( 2, '0' );
-	return `${ d.getFullYear() }-${ pad( d.getMonth() + 1 ) }-${ pad( d.getDate() ) }T${ pad( d.getHours() ) }:${ pad( d.getMinutes() ) }`;
-}
-
-function localInputToTs( value: string ): number | null {
-	if ( ! value ) {
-		return null;
-	}
-	const ms = new Date( value ).getTime();
-	return Number.isNaN( ms ) ? null : Math.floor( ms / 1000 );
 }
 
 export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps ) {
@@ -97,6 +80,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 	const [ maxCancel, setMaxCancel ] = useState( rule?.max_cancellation_pct !== null && rule ? String( rule.max_cancellation_pct ) : '' );
 	const [ activeFrom, setActiveFrom ] = useState( tsToLocalInput( rule?.active_from ?? null ) );
 	const [ activeUntil, setActiveUntil ] = useState( tsToLocalInput( rule?.active_until ?? null ) );
+	const [ conditions, setConditions ] = useState< Record< string, boolean | number | null > >( () => ( { ...( rule?.conditions ?? {} ) } ) );
 	const [ isSaving, setIsSaving ] = useState( false );
 
 	const submit = useCallback( () => {
@@ -117,6 +101,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 			max_cancellation_pct: maxCancel === '' ? null : Number( maxCancel ),
 			active_from: localInputToTs( activeFrom ),
 			active_until: localInputToTs( activeUntil ),
+			conditions,
 		};
 		if ( isSchedule ) {
 			const cleanSteps = steps
@@ -171,6 +156,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 		maxCancel,
 		activeFrom,
 		activeUntil,
+		conditions,
 		isSchedule,
 		steps,
 		calcType,
@@ -411,6 +397,21 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 						onChange={ setPublicize }
 						__nextHasNoMarginBottom
 					/>
+				</VStack>
+			</Grid>
+
+			<Divider alignment="full-width" variant="tertiary" />
+
+			<Grid columns={ 2 } gutter={ 32 } noMargin>
+				<SectionHeader
+					title={ __( 'Eligibility', 'newspack-plugin' ) }
+					description={ __(
+						'Gate whether this rule applies to a given purchase. All set conditions must pass; empty = no restrictions.',
+						'newspack-plugin'
+					) }
+				/>
+				<VStack spacing={ 4 }>
+					<Conditions vocab={ vocab.conditions } value={ conditions } onChange={ setConditions } />
 				</VStack>
 			</Grid>
 
