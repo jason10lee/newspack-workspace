@@ -10,6 +10,13 @@ interface PricingRuleSimpleParams {
 	label: string;
 }
 
+interface PricingRuleStep {
+	at: number;
+	calc_type: string;
+	value: number;
+	label: string;
+}
+
 interface PricingRuleRow {
 	id: number;
 	deal_key: string;
@@ -33,6 +40,7 @@ interface PricingRuleRow {
 	is_stepped: boolean;
 	has_conditions: boolean;
 	simple: PricingRuleSimpleParams | null;
+	steps: PricingRuleStep[] | null;
 	edit_link: string;
 }
 

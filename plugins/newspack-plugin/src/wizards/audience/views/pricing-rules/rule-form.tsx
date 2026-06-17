@@ -12,12 +12,13 @@ import { useState, useEffect, useCallback } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import {
+	Button,
 	TextControl,
 	SelectControl,
 	ToggleControl,
-	ExternalLink,
-	Notice,
+	FlexBlock,
 	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
 } from '@wordpress/components';
 
 /**
@@ -35,6 +36,13 @@ interface RuleFormProps {
 	onDone: () => void;
 }
 
+interface StepRowState {
+	at: string;
+	calc_type: string;
+	value: string;
+	label: string;
+}
+
 export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps ) {
 	const { setHeaderData, addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
 
@@ -43,6 +51,22 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 	const [ calcType, setCalcType ] = useState( rule?.simple?.calc_type ?? vocab.calc_types[ 0 ]?.value ?? 'fixed_price' );
 	const [ value, setValue ] = useState( String( rule?.simple?.value ?? '' ) );
 	const [ cyclesLimit, setCyclesLimit ] = useState( String( rule?.simple?.cycles_limit ?? 0 ) );
+	const [ strategyId, setStrategyId ] = useState( rule?.strategy_id ?? vocab.strategies[ 0 ]?.id ?? 'simple_price' );
+	const defaultCalc = vocab.calc_types[ 0 ]?.value ?? 'fixed_price';
+	const [ steps, setSteps ] = useState< StepRowState[] >(
+		rule?.steps?.length
+			? rule.steps.map( s => ( { at: String( s.at ), calc_type: s.calc_type, value: String( s.value ), label: s.label } ) )
+			: [ { at: '1', calc_type: defaultCalc, value: '', label: '' } ]
+	);
+	const isSchedule = strategyId === 'stepped_by_cycle';
+	const updateStep = ( i: number, key: keyof StepRowState, val: string ) =>
+		setSteps( prev => prev.map( ( s, idx ) => ( idx === i ? { ...s, [ key ]: val } : s ) ) );
+	const addStep = () =>
+		setSteps( prev => [
+			...prev,
+			{ at: String( ( Number( prev[ prev.length - 1 ]?.at ) || prev.length ) + 1 ), calc_type: defaultCalc, value: '', label: '' },
+		] );
+	const removeStep = ( i: number ) => setSteps( prev => prev.filter( ( _, idx ) => idx !== i ) );
 	const [ scopeType, setScopeType ] = useState( rule?.scope_type ?? vocab.scopes[ 0 ]?.id ?? 'all_products' );
 	const [ priority, setPriority ] = useState( String( rule?.priority ?? 100 ) );
 	const [ composeMode, setComposeMode ] = useState( rule?.compose_mode ?? 'min' );
@@ -50,8 +74,6 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 	const [ target, setTarget ] = useState( rule?.target_conversion_pct !== null && rule ? String( rule.target_conversion_pct ) : '' );
 	const [ maxCancel, setMaxCancel ] = useState( rule?.max_cancellation_pct !== null && rule ? String( rule.max_cancellation_pct ) : '' );
 	const [ isSaving, setIsSaving ] = useState( false );
-
-	const isStepped = ! isNew && rule?.is_stepped;
 
 	const submit = useCallback( () => {
 		if ( ! title.trim() ) {
@@ -69,9 +91,21 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 			target_conversion_pct: target === '' ? null : Number( target ),
 			max_cancellation_pct: maxCancel === '' ? null : Number( maxCancel ),
 		};
-		// Only send `simple` params for a simple rule (create, or editing a simple rule);
-		// omitting them on a stepped rule keeps the schedule intact (PHP preserves params).
-		if ( ! isStepped ) {
+		if ( isSchedule ) {
+			const cleanSteps = steps
+				.filter( s => String( s.value ).trim() !== '' )
+				.map( s => ( { at: Number( s.at ) || 1, calc_type: s.calc_type, value: Number( s.value ) || 0, label: s.label } ) );
+			if ( ! cleanSteps.length ) {
+				addNotice( {
+					message: __( 'Add at least one schedule step with a value.', 'newspack-plugin' ),
+					type: 'error',
+					id: 'pricing-rule-steps',
+				} );
+				return;
+			}
+			body.strategy_id = 'stepped_by_cycle';
+			body.steps = cleanSteps;
+		} else {
 			body.strategy_id = 'simple_price';
 			body.simple = {
 				calc_type: calcType,
@@ -107,7 +141,8 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 		publicize,
 		target,
 		maxCancel,
-		isStepped,
+		isSchedule,
+		steps,
 		calcType,
 		value,
 		cyclesLimit,
@@ -163,13 +198,78 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 					description={ __( 'How matching products are priced.', 'newspack-plugin' ) }
 				/>
 				<VStack spacing={ 4 }>
-					{ isStepped ? (
-						<Notice status="info" isDismissible={ false }>
-							{ __( 'This is a multi-step price schedule. Edit the schedule in the advanced editor.', 'newspack-plugin' ) }{ ' ' }
-							{ rule?.edit_link && (
-								<ExternalLink href={ rule.edit_link }>{ __( 'Open advanced editor', 'newspack-plugin' ) }</ExternalLink>
-							) }
-						</Notice>
+					{ isNew ? (
+						<SelectControl
+							label={ __( 'Pricing model', 'newspack-plugin' ) }
+							value={ strategyId }
+							options={ vocab.strategies.map( s => ( { label: s.label, value: s.id } ) ) }
+							onChange={ setStrategyId }
+							__next40pxDefaultSize
+						/>
+					) : (
+						<p className="description">
+							{ __( 'Pricing model:', 'newspack-plugin' ) }{ ' ' }
+							<strong>{ vocab.strategies.find( s => s.id === strategyId )?.label ?? strategyId }</strong>
+						</p>
+					) }
+
+					{ isSchedule ? (
+						<VStack spacing={ 3 }>
+							<p className="description">
+								{ __(
+									'Each row sets the price from a cycle onward, until a later row takes over. Cycle 1 is the purchase; cycle 2 is the first renewal.',
+									'newspack-plugin'
+								) }
+							</p>
+							{ steps.map( ( step, i ) => (
+								<HStack key={ i } alignment="flex-end" spacing={ 2 }>
+									<FlexBlock>
+										<TextControl
+											label={ __( 'From cycle #', 'newspack-plugin' ) }
+											type="number"
+											min={ 1 }
+											value={ step.at }
+											onChange={ v => updateStep( i, 'at', v ) }
+											__next40pxDefaultSize
+										/>
+									</FlexBlock>
+									<FlexBlock>
+										<SelectControl
+											label={ __( 'Pricing', 'newspack-plugin' ) }
+											value={ step.calc_type }
+											options={ vocab.calc_types.map( c => ( { label: c.label, value: c.value } ) ) }
+											onChange={ v => updateStep( i, 'calc_type', v ) }
+											__next40pxDefaultSize
+										/>
+									</FlexBlock>
+									<FlexBlock>
+										<TextControl
+											label={ __( 'Value', 'newspack-plugin' ) }
+											type="number"
+											value={ step.value }
+											onChange={ v => updateStep( i, 'value', v ) }
+											__next40pxDefaultSize
+										/>
+									</FlexBlock>
+									<FlexBlock>
+										<TextControl
+											label={ __( 'Name shown to reader', 'newspack-plugin' ) }
+											value={ step.label }
+											onChange={ v => updateStep( i, 'label', v ) }
+											__next40pxDefaultSize
+										/>
+									</FlexBlock>
+									<Button isDestructive variant="tertiary" disabled={ steps.length <= 1 } onClick={ () => removeStep( i ) }>
+										{ __( 'Remove', 'newspack-plugin' ) }
+									</Button>
+								</HStack>
+							) ) }
+							<div>
+								<Button variant="secondary" onClick={ addStep }>
+									{ __( '+ Add row', 'newspack-plugin' ) }
+								</Button>
+							</div>
+						</VStack>
 					) : (
 						<>
 							<SelectControl
