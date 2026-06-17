@@ -202,7 +202,9 @@
 		max-width: 150px;
 		height: auto;
 		aspect-ratio: 1 / 1;
-		transform: rotate( -90deg );
+		// No rotate: segments already start at 12 o'clock via the component's
+		// stroke-dashoffset (CIRCUMFERENCE / 4). Rotating the <svg> here would
+		// re-offset every segment and turn the center-label text sideways.
 	}
 
 	// Donut band thickness. The chart is a stroked circle (r=16 in a 42 viewBox),
