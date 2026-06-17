@@ -158,3 +158,45 @@ describe( 'MetricCard zeroFallback (NPPD-1694)', () => {
 		expect( container.querySelector( '.newspack-insights__metric-card-delta' ) ).toBeNull();
 	} );
 } );
+
+describe( 'MetricCard notCapableMessage (NPPD-1720)', () => {
+	const NUDGE = 'No donation block detected in your active prompts.';
+
+	it( 'renders the em-dash hero + the message as the secondary line', () => {
+		render( <MetricCard label="Donation Conversion (Direct)" value={ 0 } format="percent" notCapableMessage={ NUDGE } /> );
+		expect( screen.getByLabelText( 'Not applicable' ) ).toHaveTextContent( '—' );
+		expect( screen.getByText( NUDGE ) ).toBeInTheDocument();
+	} );
+
+	it( 'does not render the metric value', () => {
+		render( <MetricCard label="Donation Conversion (Direct)" value={ 0.42 } format="percent" notCapableMessage={ NUDGE } /> );
+		expect( screen.queryByText( /%/ ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'wins over zeroFallback (structural gap beats a window-bound zero)', () => {
+		render(
+			<MetricCard
+				label="Donation Conversion (Direct)"
+				value={ 0 }
+				format="percent"
+				notCapableMessage={ NUDGE }
+				zeroFallback={ { numerator: 0, denominator: 17, attemptsLabel: 'donation prompts' } }
+			/>
+		);
+		expect( screen.getByText( NUDGE ) ).toBeInTheDocument();
+		expect( screen.queryByText( '0 of 17' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'yields to the error treatment (error wins over not-capable)', () => {
+		render( <MetricCard label="Donation Conversion (Direct)" error="boom" notCapableMessage={ NUDGE } /> );
+		expect( screen.getByText( 'Data temporarily unavailable.' ) ).toBeInTheDocument();
+		expect( screen.queryByText( NUDGE ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'suppresses the comparison delta', () => {
+		const { container } = render(
+			<MetricCard label="Donation Conversion (Direct)" value={ 0 } previousValue={ 0.4 } format="percent" notCapableMessage={ NUDGE } />
+		);
+		expect( container.querySelector( '.newspack-insights__metric-card-delta' ) ).toBeNull();
+	} );
+} );

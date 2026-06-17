@@ -32,15 +32,32 @@ export interface ScalarCardProps {
 	description: string;
 	current: PromptsScalarMetric;
 	previous?: PromptsScalarMetric | null;
+	/**
+	 * Block-scoped nudge shown when this metric isn't capable (NPPD-1720). Routed
+	 * to MetricCard's em-dash treatment only when the envelope reports
+	 * `has_capability === false`; ignored otherwise.
+	 */
+	notCapableMessage?: string;
 }
 
 export const scalarToMetricCardProps = ( props: ScalarCardProps ) => {
-	const { label, description, current, previous } = props;
+	const { label, description, current, previous, notCapableMessage } = props;
 	// A failed query renders MetricCard's shared error treatment rather than a
 	// misleading zero. The raw message stays server-side; the card shows generic
 	// copy keyed off the `error` prop.
 	if ( current.state === 'error' ) {
 		return { label, description, error: current.error_message ?? __( 'Data unavailable', 'newspack-plugin' ) };
+	}
+	// Structural "not capable" (NPPD-1720): no active prompt carries the block
+	// this metric measures, so there's nothing to compute regardless of window.
+	// Beats the normal value path; a generic fallback guarantees the em-dash
+	// treatment shows even if a call site forgot its per-metric copy.
+	if ( current.has_capability === false ) {
+		return {
+			label,
+			description,
+			notCapableMessage: notCapableMessage ?? __( 'Not measurable for your active prompts', 'newspack-plugin' ),
+		};
 	}
 	return {
 		label,
