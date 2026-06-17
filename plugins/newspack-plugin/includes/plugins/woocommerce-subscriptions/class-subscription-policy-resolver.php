@@ -109,28 +109,18 @@ class Subscription_Policy_Resolver {
 		// No engine / invalid product / engine-excluded product (e.g. donations the
 		// engine never prices) → base price, no rules, rather than a fabricated one.
 		if ( ! $engine || ! $product instanceof \WC_Product || $engine->is_excluded( $product ) ) {
-			return self::build( $base, $base, $currency, $cycle, [] );
+			return self::build( $base, $base, $currency, $cycle, [], [] );
 		}
 
-		// Acquisition (purchase) cycle, composed across all active rules — the same
-		// basis as the rule editor's impact-preview "resulting price".
-		$ctx = new \Automattic\WooCommerce\DynamicPricing\Pricing_Context(
-			'subscription_products',
-			$product,
-			null,
-			$base,
-			[ 'completed_cycles' => 1 ],
-			null,
-			\Automattic\WooCommerce\DynamicPricing\Pricing_Context::INTENT_ACQUISITION,
-			false
-		);
-
-		$decision   = $engine->resolve( $ctx );
-		$effective  = $decision ? (float) $decision->amount : $base;
-		$winning_id = ( $decision && $decision->rule_id ) ? (string) $decision->rule_id : '';
+		// Project the composed price across the subscription's cycles, attributing the
+		// winning rule to each segment — the same walk the impact preview uses. The
+		// purchase cycle (segment 0) sets the headline effective price + winning rule.
+		$schedule   = self::project_schedule( $engine, $product, $base );
+		$effective  = $schedule ? (float) $schedule[0]['amount'] : $base;
+		$winning_id = $schedule ? (string) $schedule[0]['rule_id'] : '';
 
 		$repository = $engine->repository();
-		$matching   = $repository ? $repository->for_context( $ctx ) : [];
+		$matching   = $repository ? $repository->for_context( self::context_for( $product, $base, 1 ) ) : [];
 
 		$rules = [];
 		foreach ( $matching as $rule ) {
@@ -144,7 +134,66 @@ class Subscription_Policy_Resolver {
 			);
 		}
 
-		return self::build( $base, $effective, $currency, $cycle, $rules );
+		return self::build( $base, $effective, $currency, $cycle, $rules, $schedule );
+	}
+
+	/**
+	 * Build the acquisition pricing context for a product at a given cycle.
+	 *
+	 * @param \WC_Product $product The product.
+	 * @param float       $base    The base recurring price.
+	 * @param int         $cycle   The cycle number (1 = purchase).
+	 *
+	 * @return \Automattic\WooCommerce\DynamicPricing\Pricing_Context
+	 */
+	private static function context_for( $product, $base, $cycle ) {
+		return new \Automattic\WooCommerce\DynamicPricing\Pricing_Context(
+			'subscription_products',
+			$product,
+			null,
+			(float) $base,
+			[ 'completed_cycles' => (int) $cycle ],
+			null,
+			\Automattic\WooCommerce\DynamicPricing\Pricing_Context::INTENT_ACQUISITION,
+			false
+		);
+	}
+
+	/**
+	 * Walk the engine across the projection horizon, merging equal consecutive
+	 * prices into segments and attributing the winning rule to each (the rule
+	 * winning at the segment's first cycle). Mirrors the impact preview's
+	 * projection so the Plans tooltip matches what buyers are charged over time.
+	 *
+	 * @param \Automattic\WooCommerce\DynamicPricing\Pricing_Engine $engine  The engine.
+	 * @param \WC_Product                                           $product The product.
+	 * @param float                                                 $base    The base recurring price.
+	 *
+	 * @return array<int, array{from_cycle:int, amount:float, rule_id:string, rule_label:string}>
+	 */
+	private static function project_schedule( $engine, $product, $base ) {
+		$horizon  = \Automattic\WooCommerce\DynamicPricing\Schedule_Projector::HORIZON;
+		$decimals = function_exists( 'wc_get_price_decimals' ) ? wc_get_price_decimals() : 2;
+		$segments = [];
+		$previous = null;
+
+		for ( $cycle = 1; $cycle <= $horizon; $cycle++ ) {
+			$decision = $engine->resolve( self::context_for( $product, $base, $cycle ) );
+			$amount   = round( $decision ? (float) $decision->amount : (float) $base, $decimals );
+
+			if ( null === $previous || abs( $amount - $previous ) >= 0.01 ) {
+				$rule_id    = ( $decision && $decision->rule_id ) ? (string) $decision->rule_id : '';
+				$segments[] = [
+					'from_cycle' => $cycle,
+					'amount'     => $amount,
+					'rule_id'    => $rule_id,
+					'rule_label' => '' !== $rule_id ? (string) get_the_title( (int) $rule_id ) : '',
+				];
+				$previous = $amount;
+			}
+		}
+
+		return $segments;
 	}
 
 	/**
@@ -155,10 +204,11 @@ class Subscription_Policy_Resolver {
 	 * @param string $currency        ISO currency code.
 	 * @param string $cycle           Billing period slug.
 	 * @param array  $rules           Applied-rule entries (see policy()).
+	 * @param array  $schedule        Per-cycle price trajectory (see project_schedule()).
 	 *
 	 * @return array The resolution payload.
 	 */
-	private static function build( $base_price, $effective_price, $currency, $cycle, $rules ) {
+	private static function build( $base_price, $effective_price, $currency, $cycle, $rules, $schedule = [] ) {
 		$decimals = function_exists( 'wc_get_price_decimals' ) ? wc_get_price_decimals() : 2;
 		return [
 			'is_mock'         => self::IS_MOCK,
@@ -167,6 +217,7 @@ class Subscription_Policy_Resolver {
 			'currency'        => $currency,
 			'cycle'           => $cycle,
 			'policies'        => $rules,
+			'schedule'        => $schedule,
 		];
 	}
 

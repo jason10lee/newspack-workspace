@@ -821,6 +821,7 @@ class Audience_Subscription_Products extends Wizard {
 			'currency'        => $currency_code,
 			'cycle'           => '',
 			'policies'        => [],
+			'schedule'        => [],
 		];
 	}
 

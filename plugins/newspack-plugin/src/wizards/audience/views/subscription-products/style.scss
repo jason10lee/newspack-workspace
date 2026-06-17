@@ -152,6 +152,12 @@
 		color: wp-colors.$alert-green;
 	}
 
+	// A multi-cycle price carries a hover tooltip with the full schedule — signal it.
+	&__effective-price.has-schedule {
+		cursor: help;
+		border-bottom: 1px dotted wp-colors.$gray-400;
+	}
+
 	// Edit modal.
 	&__modal {
 		min-width: 360px;

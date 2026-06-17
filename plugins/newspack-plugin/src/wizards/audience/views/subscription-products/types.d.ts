@@ -18,6 +18,17 @@ interface SubscriptionPolicy {
 }
 
 /**
+ * One segment of a product's per-cycle price trajectory (RSM Layer 2). Cycle 1 is
+ * the purchase; each segment runs from `from_cycle` until the next one takes over.
+ */
+interface SubscriptionPolicySegment {
+	from_cycle: number;
+	amount: number;
+	rule_id: string;
+	rule_label: string;
+}
+
+/**
  * Resolved policy stack + effective price for a product (RSM Layer 2).
  *
  * Returned by the PHP integration seam ({@see Subscription_Policy_Resolver}).
@@ -29,6 +40,7 @@ interface SubscriptionPolicyResolution {
 	currency: string;
 	cycle: string;
 	policies: SubscriptionPolicy[];
+	schedule: SubscriptionPolicySegment[];
 }
 
 /**

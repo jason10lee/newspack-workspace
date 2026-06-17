@@ -14,7 +14,7 @@ import classnames from 'classnames';
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { Icon, check } from '@wordpress/icons';
 
 /**
@@ -57,7 +57,30 @@ export function PolicyChips( { policy }: { policy: SubscriptionPolicyResolution 
 }
 
 /**
- * Renders the base price and, when a policy changes it, the resulting effective price.
+ * Build the multi-line tooltip text for a multi-cycle price schedule. Cycle 1 is
+ * the purchase; later cycles are renewals.
+ */
+function buildScheduleText( schedule: SubscriptionPolicySegment[], currency: SubscriptionProductsCurrency ): string {
+	return schedule
+		.map( seg => {
+			const when =
+				seg.from_cycle === 1
+					? __( 'At purchase', 'newspack-plugin' )
+					: sprintf(
+							/* translators: %d: renewal number. */
+							__( 'From renewal %d', 'newspack-plugin' ),
+							seg.from_cycle - 1
+					  );
+			const price = formatAmount( seg.amount, currency );
+			return seg.rule_label ? `${ when }: ${ price } — ${ seg.rule_label }` : `${ when }: ${ price }`;
+		} )
+		.join( '\n' );
+}
+
+/**
+ * Renders the base price and, when rules change it, the resulting effective price.
+ * A multi-cycle schedule (the price changes across renewals) gets a hover tooltip
+ * with the full per-cycle trajectory + winning rule, since it can't fit the column.
  */
 export function EffectivePrice( { policy, currency }: { policy: SubscriptionPolicyResolution; currency: SubscriptionProductsCurrency } ) {
 	if ( ! policy || policy.base_price === null || policy.base_price === undefined ) {
@@ -65,17 +88,36 @@ export function EffectivePrice( { policy, currency }: { policy: SubscriptionPoli
 	}
 
 	const baseLabel = formatAmount( policy.base_price, currency );
+	const effectiveLabel = formatAmount( policy.effective_price, currency );
+	const schedule = policy.schedule ?? [];
+	const hasSchedule = schedule.length > 1;
 	const changed = policy.effective_price !== policy.base_price;
 
-	if ( ! changed ) {
+	// Flat, unchanged price across all cycles — nothing to expand.
+	if ( ! changed && ! hasSchedule ) {
 		return <strong>{ baseLabel }</strong>;
 	}
 
+	const wrapperClass = classnames( 'newspack-subscription-products__effective-price', {
+		'has-schedule': hasSchedule,
+	} );
+	const tooltip = hasSchedule ? { title: buildScheduleText( schedule, currency ) } : {};
+
+	// A schedule that starts at the base price but changes later: show the value
+	// with the tooltip, no strikethrough (the purchase price equals the base).
+	if ( ! changed ) {
+		return (
+			<strong className={ wrapperClass } { ...tooltip }>
+				{ effectiveLabel }
+			</strong>
+		);
+	}
+
 	return (
-		<span className="newspack-subscription-products__effective-price">
+		<span className={ wrapperClass } { ...tooltip }>
 			<span className="newspack-subscription-products__base-price">{ baseLabel }</span>
 			<span aria-hidden="true"> → </span>
-			<strong className="newspack-subscription-products__effective-price-value">{ formatAmount( policy.effective_price, currency ) }</strong>
+			<strong className="newspack-subscription-products__effective-price-value">{ effectiveLabel }</strong>
 		</span>
 	);
 }
