@@ -32,7 +32,7 @@ describe( 'gateMatchesPost', () => {
 		expect( gateMatchesPost( rules, 'post', termsByTax, 1, undefined, taxonomyMap ) ).toBe( false );
 	} );
 
-	it( 'ANY: exclusion rule carves a post out even when an inclusion rule matches', () => {
+	it( 'exclusion rule carves a post out even when an inclusion rule matches (ANY and ALL)', () => {
 		const r = [
 			{ slug: 'post_types', value: [ 'post' ] },
 			{ slug: 'category', value: [ 5 ], exclusion: true },
@@ -41,5 +41,15 @@ describe( 'gateMatchesPost', () => {
 		expect( gateMatchesPost( r, 'post', { categories: [ 5 ] }, 1, 'any', taxonomyMap ) ).toBe( false );
 		// Post not in the excluded category: gated via the inclusion rule.
 		expect( gateMatchesPost( r, 'post', { categories: [] }, 1, 'any', taxonomyMap ) ).toBe( true );
+		// "Match all" is unchanged: the carve-out still applies, the non-excluded post is still gated.
+		expect( gateMatchesPost( r, 'post', { categories: [ 5 ] }, 1, 'all', taxonomyMap ) ).toBe( false );
+		expect( gateMatchesPost( r, 'post', { categories: [] }, 1, 'all', taxonomyMap ) ).toBe( true );
+	} );
+
+	it( 'exclusion-only gate applies to all content that is not carved out', () => {
+		const r = [ { slug: 'category', value: [ 5 ], exclusion: true } ];
+		// No inclusion rule: everything not in the excluded category is gated.
+		expect( gateMatchesPost( r, 'post', { categories: [] }, 1, 'any', taxonomyMap ) ).toBe( true );
+		expect( gateMatchesPost( r, 'post', { categories: [ 5 ] }, 1, 'any', taxonomyMap ) ).toBe( false );
 	} );
 } );

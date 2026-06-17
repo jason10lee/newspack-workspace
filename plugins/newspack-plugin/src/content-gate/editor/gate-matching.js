@@ -30,6 +30,11 @@ export function gateMatchesPost( contentRules, postType, termsByTax, postId, mat
 		if ( rule.slug === 'post_types' ) {
 			return isExclusion ? ! rule.value.includes( postType ) : rule.value.includes( postType );
 		}
+		if ( rule.slug === 'newsletters' ) {
+			// Mirrors the PHP matcher: a membership test against the post ID. The
+			// newsletters rule is include-only, so the exclusion flag is never set.
+			return rule.value.map( id => parseInt( id ) ).includes( parseInt( postId ) );
+		}
 		const restBase = taxonomyMap[ rule.slug ];
 		if ( ! restBase ) {
 			return false;

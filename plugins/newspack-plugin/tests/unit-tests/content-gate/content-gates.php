@@ -2337,6 +2337,16 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		$this->reset_restriction_cache();
 		$carved = wp_list_pluck( Content_Restriction_Control::get_post_gates( $carved_post ), 'id' );
 		$this->assertNotContains( $gate_id, $carved, 'An excluded post is carved out under OR even though it matches the inclusion rule' );
+
+		// "Match all" is unchanged: the exclusion still carves the post out, and a
+		// non-excluded post matching the inclusion is still gated.
+		Content_Gate::update_gate_setting( $gate_id, 'content_rules_match', 'all' );
+		$this->reset_restriction_cache();
+		$gated_all = wp_list_pluck( Content_Restriction_Control::get_post_gates( $gated_post ), 'id' );
+		$this->assertContains( $gate_id, $gated_all, 'AND should gate a post matching the inclusion rule and not excluded' );
+		$this->reset_restriction_cache();
+		$carved_all = wp_list_pluck( Content_Restriction_Control::get_post_gates( $carved_post ), 'id' );
+		$this->assertNotContains( $gate_id, $carved_all, 'An excluded post is carved out under AND too' );
 	}
 
 	/**
