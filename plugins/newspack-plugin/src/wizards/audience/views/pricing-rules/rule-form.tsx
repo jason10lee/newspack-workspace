@@ -11,7 +11,14 @@ import { __ } from '@wordpress/i18n';
 import { useState, useEffect, useCallback } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
-import { TextControl, SelectControl, ToggleControl, ExternalLink, Notice } from '@wordpress/components';
+import {
+	TextControl,
+	SelectControl,
+	ToggleControl,
+	ExternalLink,
+	Notice,
+	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+} from '@wordpress/components';
 
 /**
  * Internal dependencies
@@ -128,8 +135,8 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 		<div className="newspack-pricing-rules__form">
 			<Grid columns={ 2 } gutter={ 32 }>
 				<SectionHeader title={ __( 'Rule details', 'newspack-plugin' ) } description={ __( 'Name and status.', 'newspack-plugin' ) } />
-				<div>
-					<TextControl label={ __( 'Name', 'newspack-plugin' ) } value={ title } onChange={ setTitle } />
+				<VStack spacing={ 4 }>
+					<TextControl label={ __( 'Name', 'newspack-plugin' ) } value={ title } onChange={ setTitle } __next40pxDefaultSize />
 					{ ! isNew && rule && (
 						<p className="description">
 							{ __( 'Deal ID:', 'newspack-plugin' ) } <code>{ rule.deal_key }</code>
@@ -143,18 +150,19 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 							{ label: __( 'Draft', 'newspack-plugin' ), value: 'draft' },
 						] }
 						onChange={ setStatus }
+						__next40pxDefaultSize
 					/>
-				</div>
+				</VStack>
 			</Grid>
 
 			<Divider alignment="full-width" variant="tertiary" />
 
-			<Grid columns={ 2 } gutter={ 32 }>
+			<Grid columns={ 2 } gutter={ 32 } noMargin>
 				<SectionHeader
 					title={ __( 'Pricing model', 'newspack-plugin' ) }
 					description={ __( 'How matching products are priced.', 'newspack-plugin' ) }
 				/>
-				<div>
+				<VStack spacing={ 4 }>
 					{ isStepped ? (
 						<Notice status="info" isDismissible={ false }>
 							{ __( 'This is a multi-step price schedule. Edit the schedule in the advanced editor.', 'newspack-plugin' ) }{ ' ' }
@@ -169,50 +177,53 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 								value={ calcType }
 								options={ vocab.calc_types.map( c => ( { label: c.label, value: c.value } ) ) }
 								onChange={ setCalcType }
+								__next40pxDefaultSize
 							/>
-							<TextControl label={ __( 'Value', 'newspack-plugin' ) } type="number" value={ value } onChange={ setValue } />
+							<TextControl label={ __( 'Value', 'newspack-plugin' ) } type="number" value={ value } onChange={ setValue } __next40pxDefaultSize />
 							<TextControl
 								label={ __( 'Apply for first N cycles (0 = unlimited)', 'newspack-plugin' ) }
 								type="number"
 								value={ cyclesLimit }
 								onChange={ setCyclesLimit }
+								__next40pxDefaultSize
 							/>
 						</>
 					) }
-				</div>
+				</VStack>
 			</Grid>
 
 			<Divider alignment="full-width" variant="tertiary" />
 
-			<Grid columns={ 2 } gutter={ 32 }>
+			<Grid columns={ 2 } gutter={ 32 } noMargin>
 				<SectionHeader
 					title={ __( 'Applies to', 'newspack-plugin' ) }
 					description={ __( 'Which products this rule targets.', 'newspack-plugin' ) }
 				/>
-				<div>
+				<VStack spacing={ 4 }>
 					<SelectControl
 						label={ __( 'Scope', 'newspack-plugin' ) }
 						value={ scopeType }
 						options={ vocab.scopes.map( s => ( { label: s.label, value: s.id } ) ) }
 						onChange={ setScopeType }
+						__next40pxDefaultSize
 					/>
 					{ rule && rule.scope_ids.length > 0 && (
 						<p className="description">
 							{ __( 'Targets:', 'newspack-plugin' ) } { rule.scope_ids.join( ', ' ) }
 						</p>
 					) }
-				</div>
+				</VStack>
 			</Grid>
 
 			<Divider alignment="full-width" variant="tertiary" />
 
-			<Grid columns={ 2 } gutter={ 32 }>
+			<Grid columns={ 2 } gutter={ 32 } noMargin>
 				<SectionHeader
 					title={ __( 'Scheduling & behavior', 'newspack-plugin' ) }
 					description={ __( 'Priority and how it composes with other rules.', 'newspack-plugin' ) }
 				/>
-				<div>
-					<TextControl label={ __( 'Priority', 'newspack-plugin' ) } type="number" value={ priority } onChange={ setPriority } />
+				<VStack spacing={ 4 }>
+					<TextControl label={ __( 'Priority', 'newspack-plugin' ) } type="number" value={ priority } onChange={ setPriority } __next40pxDefaultSize />
 					<SelectControl
 						label={ __( 'When multiple rules match', 'newspack-plugin' ) }
 						value={ composeMode }
@@ -221,31 +232,34 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 							{ label: __( 'This rule only', 'newspack-plugin' ), value: 'priority_exclusive' },
 						] }
 						onChange={ setComposeMode }
+						__next40pxDefaultSize
 					/>
 					<ToggleControl
 						label={ __( 'Show pricing details to readers', 'newspack-plugin' ) }
 						checked={ publicize }
 						onChange={ setPublicize }
+						__nextHasNoMarginBottom
 					/>
-				</div>
+				</VStack>
 			</Grid>
 
 			<Divider alignment="full-width" variant="tertiary" />
 
-			<Grid columns={ 2 } gutter={ 32 }>
+			<Grid columns={ 2 } gutter={ 32 } noMargin>
 				<SectionHeader
 					title={ __( 'Success criterion', 'newspack-plugin' ) }
 					description={ __( 'Declare at least one so you can measure the deal.', 'newspack-plugin' ) }
 				/>
-				<div>
-					<TextControl label={ __( 'Target conversion (%)', 'newspack-plugin' ) } type="number" value={ target } onChange={ setTarget } />
+				<VStack spacing={ 4 }>
+					<TextControl label={ __( 'Target conversion (%)', 'newspack-plugin' ) } type="number" value={ target } onChange={ setTarget } __next40pxDefaultSize />
 					<TextControl
 						label={ __( 'Acceptable cancellation at deal end (%)', 'newspack-plugin' ) }
 						type="number"
 						value={ maxCancel }
 						onChange={ setMaxCancel }
+						__next40pxDefaultSize
 					/>
-				</div>
+				</VStack>
 			</Grid>
 		</div>
 	);
