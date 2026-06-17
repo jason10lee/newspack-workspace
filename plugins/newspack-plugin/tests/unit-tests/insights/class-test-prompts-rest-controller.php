@@ -162,6 +162,58 @@ class Test_Prompts_REST_Controller extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The per-intent capability gate (NPPD-1720) rides only on the 13
+	 * conversion-tied scalars; exposure / engagement-rate / collection metrics
+	 * never carry it. In the test env newspack-popups is absent, so the detector
+	 * fails open and every gated metric reports has_capability: true.
+	 */
+	public function test_capability_flag_rides_on_conversion_metrics_only() {
+		$response = $this->dispatch(
+			[
+				'start' => '2026-03-22',
+				'end'   => '2026-04-21',
+			]
+		);
+		$current = $response->get_data()['data']['current'];
+
+		foreach (
+			[
+				'form_submission_rate',
+				'registration_conversion_direct',
+				'registration_conversion_influenced_7d',
+				'newsletter_signup_conversion_direct',
+				'newsletter_signup_conversion_influenced_7d',
+				'donation_conversion_direct',
+				'donation_conversion_influenced_14d',
+				'subscription_conversion_direct',
+				'subscription_conversion_influenced_14d',
+				'donation_revenue_direct',
+				'donation_revenue_influenced_14d',
+				'subscription_revenue_direct',
+				'subscription_revenue_influenced_14d',
+			] as $key
+		) {
+			$this->assertArrayHasKey( 'has_capability', $current[ $key ], "Missing has_capability on $key" );
+			$this->assertTrue( $current[ $key ]['has_capability'], "Fail-open should mark $key capable when popups is absent" );
+		}
+
+		// Exposure / engagement-rate scalars and collection metrics never carry it.
+		foreach (
+			[
+				'total_prompt_impressions',
+				'unique_readers_reached',
+				'avg_prompts_per_reader',
+				'click_through_rate',
+				'dismissal_rate',
+				'conversion_funnel',
+				'performance_by_prompt',
+			] as $key
+		) {
+			$this->assertArrayNotHasKey( 'has_capability', $current[ $key ], "$key must not carry has_capability" );
+		}
+	}
+
+	/**
 	 * Comparison mode (both compare params) adds a populated `previous`
 	 * window with the same shape.
 	 */

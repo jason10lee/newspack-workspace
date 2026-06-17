@@ -50,6 +50,14 @@ export interface PromptsScalarMetric extends PromptsErrorFields {
 	computable: boolean;
 	denominator: number | null;
 	placeholder_type: PromptsPlaceholderType;
+	/**
+	 * Per-intent capability gate (NPPD-1720). Present only on the 13
+	 * conversion-tied scalars; `false` when no active prompt contains the block
+	 * this metric measures, so the card renders the structural "not capable"
+	 * treatment instead of a value. Absent === capable (matches the server's
+	 * fail-open behaviour when newspack-popups can't be inspected).
+	 */
+	has_capability?: boolean;
 }
 
 export interface PromptsFunnelStage {
