@@ -18,6 +18,7 @@ import { Spinner, Button } from '@wordpress/components';
  */
 import { DataViews, Badge, Router } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import CatalogImpact from './catalog-impact';
 
 const { useHistory } = Router;
 
@@ -177,28 +178,27 @@ export default function PricingRulesList() {
 
 	const { data: processedData, paginationInfo } = useMemo( () => filterSortAndPaginate( data, view, fields ), [ data, view, fields ] );
 
-	if ( isLoading ) {
-		return (
-			<div style={ { display: 'flex', justifyContent: 'center', padding: '48px' } }>
-				<Spinner />
-			</div>
-		);
-	}
-
 	return (
 		<div className="newspack-pricing-rules">
-			<DataViews
-				data={ processedData }
-				fields={ fields }
-				view={ view }
-				onChangeView={ setView }
-				actions={ actions }
-				paginationInfo={ paginationInfo }
-				defaultLayouts={ { table: {} } }
-				isLoading={ isLoading }
-				getItemId={ ( item: PricingRuleRow ) => String( item.id ) }
-				search
-			/>
+			<CatalogImpact />
+			{ isLoading ? (
+				<div style={ { display: 'flex', justifyContent: 'center', padding: '48px' } }>
+					<Spinner />
+				</div>
+			) : (
+				<DataViews
+					data={ processedData }
+					fields={ fields }
+					view={ view }
+					onChangeView={ setView }
+					actions={ actions }
+					paginationInfo={ paginationInfo }
+					defaultLayouts={ { table: {} } }
+					isLoading={ isLoading }
+					getItemId={ ( item: PricingRuleRow ) => String( item.id ) }
+					search
+				/>
+			) }
 		</div>
 	);
 }
