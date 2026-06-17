@@ -88,8 +88,8 @@ describe( 'Funnel helpers', () => {
 
 	describe( 'dropFromPrevious', () => {
 		it( 'computes 1 - count/prev', () => {
-			expect( dropFromPrevious( 2028, 26171 ) ).toBeCloseTo( 0.9225, 3 ); // Richland Engagement step.
-			expect( dropFromPrevious( 431, 2028 ) ).toBeCloseTo( 0.7875, 3 ); // Richland Conversion step.
+			expect( dropFromPrevious( 2000, 25000 ) ).toBeCloseTo( 0.92, 3 ); // Mid-size publisher engagement step.
+			expect( dropFromPrevious( 400, 2000 ) ).toBeCloseTo( 0.8, 3 ); // Mid-size publisher conversion step.
 		} );
 		it( 'is 0 for equal counts and 1 for a zero step', () => {
 			expect( dropFromPrevious( 500, 500 ) ).toBe( 0 );

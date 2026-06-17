@@ -343,7 +343,7 @@ $build = function ( float $f ) use ( $scalar, $breakdown, $table, $series, $star
 		'top_pages'                          => $table(
 			[
 				[
-					'page_title'     => 'Richland Source — Local news',
+					'page_title'     => 'Homepage — Local news',
 					'unique_readers' => (int) round( 38600 * $f ),
 					'pageviews'      => (int) round( 71200 * $f ),
 				],
