@@ -1,21 +1,22 @@
 <?php
 /**
- * Newspack Insights — Conversion Journey Metric orchestrator (NPPD-1609, Phase 1).
+ * Newspack Insights — Conversion Journey Metric orchestrator (NPPD-1609, Phase 2A).
  *
- * Phase 1 placeholder layer for Tab 3 (Conversion Journey). Every metric
- * returns a `pending: true` payload in the eventual real shape — zeroed
- * scalars, zeroed funnel stages, empty viz collections — so the React
- * layer can render the full tab (eight sections, all visualizations) with
- * empty states before BigQuery wiring lands in Phase 2 (NPPD-1630). No
- * storage layer, no SQL: the data is intentionally synthetic until Phase 2
- * swaps each method body to a query dispatch against the Newspack Manager
- * BQ catalog without touching signatures or the response envelope.
+ * Tab 3 (Conversion Journey) metric orchestrator. Phase A is complete: every
+ * metric is wired to live data — BigQuery via the proxy (lifecycle + anon→
+ * registered funnels, source-mix registrations, time-to-register, weekly rates,
+ * influenced registration/newsletter, top pages), BigQuery + Woo 30-min join
+ * (registered→subscriber/donor funnels, source-mix subscribers/donors,
+ * influenced subscription/donation), and pure-Woo via the Subscribers/Donors
+ * storage layer (subscriber→donor funnel, at-risk/lapsed/stale opportunity
+ * counts). The five Phase-B sections — time-to-subscribe/donate (4.2/4.3),
+ * subscriber→donor lag (4.4), and the two cohorts (5.1/5.2) — return
+ * `state: 'coming_soon'` until Phase B lands.
  *
- * Mirrors {@see Prompts_Metric} (Tab 5) one-for-one: same placeholder
- * shape for scalars, same `pending` + ordered-collection shape for viz,
- * same per-method window signature. Conversion Journey is the widest
- * Insights tab (eight sections, 23 metrics) but the per-metric envelope is
- * identical to the per-surface tabs.
+ * Mirrors {@see Prompts_Metric} (Tab 5): same `state`-envelope shape for
+ * scalars, same ordered-collection shape for viz, same per-method window
+ * signature. Conversion Journey is the widest Insights tab (eight sections,
+ * 23 metrics) but the per-metric envelope is identical to the per-surface tabs.
  *
  * Method-signature contract: every method takes the current window
  * (`$start`, `$end`) for parity with the other tabs. The previous-window
@@ -35,6 +36,14 @@
  * cohort (5.2), and the three opportunity-bucket counts (8.1–8.3). These
  * are Woo-only (or Woo-plus-a-recently-active-UID-set), computed locally.
  *
+ * Phase 2 (Phase A) note: this class now also carries the state-envelope
+ * helpers copied from {@see Prompts_Metric} — error_scalar, populated_scalar,
+ * error_collection, malformed_collection, compute_metric_from_proxy, and
+ * fetch_paid_attempts_woo_join — plus coming_soon helpers for the deferred
+ * (Phase B) sections. Wired methods report an explicit `state`
+ * ('error' | 'empty' | 'populated'), replacing the Phase 1 `pending` flag;
+ * deferred-section methods report `state: 'coming_soon'`.
+ *
  * @package Newspack
  */
 
@@ -43,16 +52,22 @@ namespace Newspack\Insights;
 defined( 'ABSPATH' ) || exit;
 
 use DateTimeInterface;
+use Newspack\Insights\BigQuery_Proxy_Client;
+use Newspack\Insights\Donors_Metric;
+use Newspack\Insights\Subscribers_Metric;
+use Newspack\Insights\Woo_Order_Resolver;
 
 /**
- * Tab 3 placeholder metric orchestrator.
+ * Tab 3 metric orchestrator.
  *
  * @phpstan-type ScalarMetric array{
+ *   state: string,
  *   value: int|float,
  *   computable: bool,
- *   pending: bool,
  *   denominator: int|null,
  *   placeholder_type: string,
+ *   error_code?: string,
+ *   error_message?: string,
  * }
  */
 final class Conversion_Metric {
@@ -76,188 +91,555 @@ final class Conversion_Metric {
 	const SOURCES = [ 'gate', 'prompt', 'direct' ];
 
 	/**
-	 * Build the standard placeholder shape for a single scorecard metric.
-	 * Type is encoded in `placeholder_type` so React can pick the right
-	 * format token ("0" vs "0%" vs "0.0") without inferring from the field
-	 * name. Identical to {@see Prompts_Metric::placeholder()} for cross-tab
-	 * parity — this tab uses 'count', 'rate', and 'decimal' (no currency
-	 * metrics in v1).
+	 * Proxy client used to dispatch catalog queries to the hub.
 	 *
-	 * @param string $placeholder_type One of 'count', 'rate', 'currency', 'decimal'.
-	 * @return array{value: int|float, computable: bool, pending: bool, denominator: null, placeholder_type: string}
+	 * @var BigQuery_Proxy_Client
 	 */
-	private function placeholder( string $placeholder_type ): array {
+	private BigQuery_Proxy_Client $proxy;
+
+	/**
+	 * Resolver used to match BQ paid-conversion attempts against Woo orders.
+	 *
+	 * @var Woo_Order_Resolver
+	 */
+	private Woo_Order_Resolver $woo_resolver;
+
+	/**
+	 * Per-request memoization for paid-conversion BQ row fetches.
+	 *
+	 * Keyed by `<query_name>|Ymd|Ymd` of (query_name, start UTC, end UTC). The
+	 * conversion-rate and revenue methods for the same intent + same window
+	 * share one round-trip to the hub.
+	 *
+	 * @var array<string, array{rows:array, conversions:int, revenue:float}|\WP_Error>
+	 */
+	private array $paid_attempt_cache = [];
+
+	/**
+	 * Subscribers_Metric collaborator for Section 8 opportunity counts and
+	 * the Registered → Subscriber / Subscriber → Donor funnels.
+	 *
+	 * @var Subscribers_Metric
+	 */
+	private Subscribers_Metric $subscribers_metric;
+
+	/**
+	 * Donors_Metric collaborator for Section 8 lapsed-donor count and the
+	 * Registered → Donor / Subscriber → Donor funnels.
+	 *
+	 * @var Donors_Metric
+	 */
+	private Donors_Metric $donors_metric;
+
+	/**
+	 * Minimum cohort size required to show the Subscriber → Donor funnel
+	 * (active subscribers AND active donors must both meet this threshold).
+	 *
+	 * @var int
+	 */
+	const MIN_COHORT_FOR_SUB_TO_DONOR = 50;
+
+	/**
+	 * Constructor. Optionally inject collaborators (used in tests).
+	 *
+	 * @param BigQuery_Proxy_Client|null $proxy              Injected proxy client, or null to lazy-resolve.
+	 * @param Woo_Order_Resolver|null    $woo_resolver       Injected Woo resolver, or null to lazy-create.
+	 * @param Subscribers_Metric|null    $subscribers_metric Injected Subscribers_Metric, or null to lazy-create.
+	 * @param Donors_Metric|null         $donors_metric      Injected Donors_Metric, or null to lazy-create.
+	 */
+	public function __construct(
+		?BigQuery_Proxy_Client $proxy = null,
+		?Woo_Order_Resolver $woo_resolver = null,
+		?Subscribers_Metric $subscribers_metric = null,
+		?Donors_Metric $donors_metric = null
+	) {
+		$this->proxy              = $proxy ?? new BigQuery_Proxy_Client();
+		$this->woo_resolver       = $woo_resolver ?? new Woo_Order_Resolver();
+		$this->subscribers_metric = $subscribers_metric ?? new Subscribers_Metric();
+		$this->donors_metric      = $donors_metric ?? new Donors_Metric();
+	}
+
+	/**
+	 * Return the canned fixture payload for the Conversion Journey tab.
+	 *
+	 * Returned by the REST controller when NEWSPACK_INSIGHTS_FIXTURE_MODE is on.
+	 * The variant selects a render path: 'populated' (default), 'empty', 'error'.
+	 *
+	 * @param string $variant One of 'populated', 'empty', 'error'.
+	 * @param bool   $compare Whether comparison was requested; when false the
+	 *                        `previous` window is null (no period-over-period deltas).
+	 * @return array Full { tab_error, current, previous } response shape.
+	 */
+	public static function get_fixture( string $variant = 'populated', bool $compare = false ): array {
+		$build = require NEWSPACK_ABSPATH . 'includes/wizards/insights/fixtures/conversion-fixture.php';
+		return $build( $variant, $compare );
+	}
+
+	/**
+	 * Error payload for a scalar scorecard metric. Carries the proxy's error
+	 * code + message so the UI can render an error treatment (without exposing
+	 * internals to the reader) instead of a misleading zero.
+	 *
+	 * @param string    $placeholder_type One of 'count', 'rate', 'currency', 'decimal'.
+	 * @param \WP_Error $error            The originating proxy error.
+	 * @return array
+	 */
+	private function error_scalar( string $placeholder_type, \WP_Error $error ): array {
 		return [
+			'state'            => 'error',
 			'value'            => 'decimal' === $placeholder_type ? 0.0 : 0,
 			'computable'       => false,
-			'pending'          => true,
 			'denominator'      => null,
+			'placeholder_type' => $placeholder_type,
+			'error_code'       => $error->get_error_code(),
+			'error_message'    => $error->get_error_message(),
+		];
+	}
+
+	/**
+	 * Populated payload for a scalar scorecard metric. A successful query that
+	 * yields no usable value is still 'populated' — it renders as a
+	 * non-computable zero ('empty' has no meaning for a single scalar).
+	 *
+	 * @param int|float $value            Metric value.
+	 * @param bool      $computable       Whether the value is a real computed figure.
+	 * @param int|null  $denominator      Optional denominator.
+	 * @param string    $placeholder_type One of 'count', 'rate', 'currency', 'decimal'.
+	 * @return array
+	 */
+	private function populated_scalar( $value, bool $computable, ?int $denominator, string $placeholder_type ): array {
+		return [
+			'state'            => 'populated',
+			'value'            => $value,
+			'computable'       => $computable,
+			'denominator'      => $denominator,
 			'placeholder_type' => $placeholder_type,
 		];
 	}
 
 	/**
-	 * Build a single zeroed funnel stage.
+	 * Error payload for a collection metric (funnel / distribution / table).
 	 *
-	 * @param string $label Stage label (translated).
-	 * @return array{label: string, count: int, pct_of_top: float}
+	 * @param string    $rows_key Key holding the (empty) collection: 'stages'|'slices'|'points'|'groups'|'cohorts'|'rows'|'weeks'.
+	 * @param \WP_Error $error    The originating proxy error.
+	 * @return array
 	 */
-	private function funnel_stage( string $label ): array {
+	private function error_collection( string $rows_key, \WP_Error $error ): array {
 		return [
-			'label'      => $label,
-			'count'      => 0,
-			'pct_of_top' => 0.0,
+			'state'         => 'error',
+			'error_code'    => $error->get_error_code(),
+			'error_message' => $error->get_error_message(),
+			$rows_key       => [],
 		];
 	}
 
 	/**
-	 * Build the three zeroed source slices for a Section 3 PieChart. Phase 1
-	 * returns all three surfaces with zero values so the PieChart renders
-	 * its legend chrome; Phase 2 fills in real counts.
+	 * Error payload for a collection whose query succeeded but returned an
+	 * unexpected (non-array) shape — a data-quality bug, not an empty window.
 	 *
-	 * @return array<int, array{source: string, count: int, pct: float}>
+	 * @param string $rows_key Key holding the (empty) collection: 'stages'|'slices'|'points'|'groups'|'cohorts'|'rows'|'weeks'.
+	 * @return array
 	 */
-	private function source_slices(): array {
-		return array_map(
-			static function ( string $source ): array {
-				return [
-					'source' => $source,
-					'count'  => 0,
-					'pct'    => 0.0,
-				];
-			},
-			self::SOURCES
+	private function malformed_collection( string $rows_key ): array {
+		return $this->error_collection(
+			$rows_key,
+			new \WP_Error( 'bigquery_proxy_malformed_rows', __( 'The query returned an unexpected shape.', 'newspack-plugin' ) )
 		);
 	}
 
 	/**
-	 * Build the three empty per-source series for a Section 4 multi-series
-	 * cumulative distribution (4.2, 4.3). Each series carries an empty
-	 * `points` array; Phase 1 renders the LineChart empty state.
+	 * Run a scalar catalog query and extract a single value from the first row.
 	 *
-	 * @return array<int, array{label: string, points: array}>
+	 * A proxy WP_Error becomes state 'error'. A successful query with no usable
+	 * value (empty rows, missing key, non-numeric, or count drift) becomes a
+	 * 'populated' non-computable zero.
+	 *
+	 * @param string            $query_name        Catalog `query_name`.
+	 * @param string            $row_key           Column to extract from the first row.
+	 * @param string            $placeholder_type  'count' | 'rate' | 'currency' | 'decimal'.
+	 * @param DateTimeInterface $start             Window start.
+	 * @param DateTimeInterface $end               Window end.
+	 * @return array
 	 */
-	private function cumulative_groups(): array {
-		return array_map(
-			static function ( string $source ): array {
-				return [
-					'label'  => $source,
-					'points' => [],
-				];
-			},
-			self::SOURCES
-		);
+	private function compute_metric_from_proxy(
+		string $query_name,
+		string $row_key,
+		string $placeholder_type,
+		DateTimeInterface $start,
+		DateTimeInterface $end
+	): array {
+		$rows = $this->proxy->query( $query_name, $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $this->error_scalar( $placeholder_type, $rows );
+		}
+		$zero = 'decimal' === $placeholder_type ? 0.0 : 0;
+		if ( empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( $row_key, $rows[0] ) ) {
+			// Query succeeded with no usable value → non-computable zero.
+			return $this->populated_scalar( $zero, false, null, $placeholder_type );
+		}
+		$value = $rows[0][ $row_key ];
+		// SAFE_DIVIDE returns NULL when the denominator is zero — a legitimate
+		// "no eligible events to compute a rate" case, not a schema regression.
+		// Same handling as the missing-key branch above: non-computable zero.
+		if ( null === $value ) {
+			return $this->populated_scalar( $zero, false, null, $placeholder_type );
+		}
+		// Non-numeric, or (for counts) a non-integer value, signals catalog/schema
+		// drift — malformed data, not an empty window. Surface it as an error so a
+		// real data-quality regression isn't masked as a benign zero.
+		if ( ! is_numeric( $value ) || ( 'count' === $placeholder_type && (float) $value !== (float) (int) $value ) ) {
+			return $this->error_scalar(
+				$placeholder_type,
+				new \WP_Error( 'bigquery_proxy_malformed_value', __( 'The query returned a non-numeric value.', 'newspack-plugin' ) )
+			);
+		}
+		return $this->populated_scalar( 'count' === $placeholder_type ? (int) $value : (float) $value, true, null, $placeholder_type );
+	}
+
+	/**
+	 * Fetch paid-conversion rows for a given query and Woo-join them.
+	 *
+	 * Returns { rows, conversions, revenue } on success or a WP_Error on proxy
+	 * failure. Used by both the conversion-rate and revenue methods for the
+	 * same intent + direction; the per-(query_name, window) memoization avoids
+	 * a redundant round-trip to the hub when both methods run in one request.
+	 *
+	 * @param string            $query_name The conversion catalog query name.
+	 * @param DateTimeInterface $start      Window start.
+	 * @param DateTimeInterface $end        Window end.
+	 * @return array{rows:array, conversions:int, revenue:float}|\WP_Error
+	 */
+	private function fetch_paid_attempts_woo_join(
+		string $query_name,
+		DateTimeInterface $start,
+		DateTimeInterface $end
+	) {
+		// Normalize both bounds to UTC Ymd so callers passing different timezone
+		// objects don't bust the cache for the same logical window. Matches the
+		// proxy client's own UTC normalization.
+		$utc       = new \DateTimeZone( 'UTC' );
+		$cache_key = $query_name . '|'
+			. \DateTimeImmutable::createFromInterface( $start )->setTimezone( $utc )->format( 'Ymd' )
+			. '|'
+			. \DateTimeImmutable::createFromInterface( $end )->setTimezone( $utc )->format( 'Ymd' );
+
+		if ( array_key_exists( $cache_key, $this->paid_attempt_cache ) ) {
+			return $this->paid_attempt_cache[ $cache_key ];
+		}
+
+		$rows = $this->proxy->query( $query_name, $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			$this->paid_attempt_cache[ $cache_key ] = $rows;
+			return $rows;
+		}
+
+		// A successful but empty response is real "no conversions", not an error:
+		// zero conversions / zero revenue, which the callers render as $0.00.
+		$rows   = is_array( $rows ) ? $rows : [];
+		$result = [
+			'rows'        => $rows,
+			'conversions' => $this->woo_resolver->count_completed_orders( $rows ),
+			'revenue'     => $this->woo_resolver->sum_completed_revenue( $rows ),
+		];
+		$this->paid_attempt_cache[ $cache_key ] = $result;
+		return $result;
+	}
+
+	/**
+	 * Placeholder for a collection metric in a Phase B "coming soon" section.
+	 *
+	 * Returns a lightweight sentinel with an empty collection keyed by
+	 * `$rows_key` (e.g. 'stages', 'slices', 'points', 'groups', 'cohorts',
+	 * 'rows') so the React layer can render a "coming soon" treatment without
+	 * needing to know which key the real payload will use.
+	 *
+	 * @param string $rows_key Key holding the empty collection, matching the
+	 *                         key the populated shape will use once wired.
+	 * @return array
+	 */
+	private function coming_soon_collection( string $rows_key ): array {
+		return [
+			'state'   => 'coming_soon',
+			$rows_key => [],
+		];
 	}
 
 	// --- Section 1: The reader lifecycle --------------------------------
 
 	/**
 	 * Reader lifecycle funnel — five nested stages from anonymous reader to
-	 * supporter. Stage shape kept stable so the React Funnel renders the
-	 * same chrome regardless of phase.
+	 * supporter. Dispatches `conversion_journey_lifecycle_funnel`; the hub
+	 * returns one row with step_1_anonymous … step_5_supporter counts.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, stages: array<int, array{label: string, count: int, pct_of_top: float}>}
+	 * @return array{state: string, stages: array<int, array{label: string, count: int, pct_of_top: float}>}
 	 */
 	public function get_reader_lifecycle_funnel( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
+		$rows = $this->proxy->query( 'conversion_journey_lifecycle_funnel', $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $this->error_collection( 'stages', $rows );
+		}
+		if ( ! is_array( $rows ) || ( ! empty( $rows ) && ! is_array( $rows[0] ) ) ) {
+			return $this->malformed_collection( 'stages' );
+		}
+		if ( empty( $rows ) ) {
+			return [
+				'state'  => 'empty',
+				'stages' => [],
+			];
+		}
+		$row  = $rows[0];
+		$top  = (int) ( $row['step_1_anonymous'] ?? 0 );
+		$safe = $top > 0 ? $top : 1; // Guard division-by-zero; pct_of_top = 0.0 when top is 0.
+		$labels = [
+			__( 'Anonymous reader', 'newspack-plugin' ),
+			__( 'Engaged reader', 'newspack-plugin' ),
+			__( 'Registered reader', 'newspack-plugin' ),
+			__( 'Newsletter subscriber', 'newspack-plugin' ),
+			__( 'Subscriber or donor', 'newspack-plugin' ),
+		];
+		$keys   = [
+			'step_1_anonymous',
+			'step_2_engaged',
+			'step_3_registered',
+			'step_4_subscriber',
+			'step_5_supporter',
+		];
+		$stages = [];
+		foreach ( $keys as $i => $key ) {
+			$count    = (int) ( $row[ $key ] ?? 0 );
+			$stages[] = [
+				'label'      => $labels[ $i ],
+				'count'      => $count,
+				'pct_of_top' => $top > 0 ? (float) ( $count / $safe ) : 0.0,
+			];
+		}
 		return [
-			'pending' => true,
-			'stages'  => [
-				$this->funnel_stage( __( 'Anonymous reader', 'newspack-plugin' ) ),
-				$this->funnel_stage( __( 'Engaged reader', 'newspack-plugin' ) ),
-				$this->funnel_stage( __( 'Registered reader', 'newspack-plugin' ) ),
-				$this->funnel_stage( __( 'Newsletter subscriber', 'newspack-plugin' ) ),
-				$this->funnel_stage( __( 'Subscriber or donor', 'newspack-plugin' ) ),
-			],
+			'state'  => 'populated',
+			'stages' => $stages,
 		];
 	}
 
 	// --- Section 2: Per-journey conversion funnels ----------------------
 
 	/**
-	 * Anonymous → Registered funnel (2.1) — three stages.
+	 * Anonymous → Registered funnel (2.1) — three stages. Dispatches
+	 * `conversion_journey_funnel_anon_to_registered`; the hub returns one row
+	 * with step_1_anonymous, step_2_saw_conversion_surface, step_3_registered.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, stages: array<int, array{label: string, count: int, pct_of_top: float}>}
+	 * @return array{state: string, stages: array<int, array{label: string, count: int, pct_of_top: float}>}
 	 */
 	public function get_anonymous_to_registered_funnel( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
+		$rows = $this->proxy->query( 'conversion_journey_funnel_anon_to_registered', $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $this->error_collection( 'stages', $rows );
+		}
+		if ( ! is_array( $rows ) || ( ! empty( $rows ) && ! is_array( $rows[0] ) ) ) {
+			return $this->malformed_collection( 'stages' );
+		}
+		if ( empty( $rows ) ) {
+			return [
+				'state'  => 'empty',
+				'stages' => [],
+			];
+		}
+		$row    = $rows[0];
+		$top    = (int) ( $row['step_1_anonymous'] ?? 0 );
+		$safe   = $top > 0 ? $top : 1;
+		$labels = [
+			__( 'Anonymous', 'newspack-plugin' ),
+			__( 'Saw a conversion surface', 'newspack-plugin' ),
+			__( 'Registered', 'newspack-plugin' ),
+		];
+		$keys   = [
+			'step_1_anonymous',
+			'step_2_saw_conversion_surface',
+			'step_3_registered',
+		];
+		$stages = [];
+		foreach ( $keys as $i => $key ) {
+			$count    = (int) ( $row[ $key ] ?? 0 );
+			$stages[] = [
+				'label'      => $labels[ $i ],
+				'count'      => $count,
+				'pct_of_top' => $top > 0 ? (float) ( $count / $safe ) : 0.0,
+			];
+		}
 		return [
-			'pending' => true,
-			'stages'  => [
-				$this->funnel_stage( __( 'Anonymous', 'newspack-plugin' ) ),
-				$this->funnel_stage( __( 'Saw a conversion surface', 'newspack-plugin' ) ),
-				$this->funnel_stage( __( 'Registered', 'newspack-plugin' ) ),
-			],
+			'state'  => 'populated',
+			'stages' => $stages,
 		];
 	}
 
 	/**
-	 * Registered → Subscriber funnel (2.2) — three stages, non-donation
-	 * subscriptions only.
+	 * Registered → Subscriber funnel (C10 / 2.2) — three stages, non-donation
+	 * subscriptions only. Dispatches
+	 * `conversion_journey_funnel_registered_to_subscriber`; the hub returns
+	 * rows `{ uid, saw_subscription_surface }`. Step 3 count is the number of
+	 * those UIDs who currently hold an active non-donation subscription,
+	 * resolved via {@see Subscribers_Metric::count_active_non_donation_subscribers_by_customer_ids()}.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, stages: array<int, array{label: string, count: int, pct_of_top: float}>}
+	 * @return array{state: string, stages: array<int, array{label: string, count: int, pct_of_top: float}>}
 	 */
 	public function get_registered_to_subscriber_funnel( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
+		$rows = $this->proxy->query( 'conversion_journey_funnel_registered_to_subscriber', $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $this->error_collection( 'stages', $rows );
+		}
+		if ( ! is_array( $rows ) || ( ! empty( $rows ) && ! is_array( $rows[0] ) ) ) {
+			return $this->malformed_collection( 'stages' );
+		}
+		if ( empty( $rows ) ) {
+			return [
+				'state'  => 'empty',
+				'stages' => [],
+			];
+		}
+		$step_1 = count( $rows );
+		$step_2 = 0;
+		$uids   = [];
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				return $this->malformed_collection( 'stages' );
+			}
+			$step_2 += (int) ( $row['saw_subscription_surface'] ?? 0 );
+			$uids[]  = (int) ( $row['uid'] ?? 0 );
+		}
+		$step_3 = $this->subscribers_metric->count_active_non_donation_subscribers_by_customer_ids( $uids );
+		$safe   = $step_1 > 0 ? $step_1 : 1;
 		return [
-			'pending' => true,
-			'stages'  => [
-				$this->funnel_stage( __( 'Registered', 'newspack-plugin' ) ),
-				$this->funnel_stage( __( 'Saw a subscription-intent surface', 'newspack-plugin' ) ),
-				$this->funnel_stage( __( 'Became subscriber', 'newspack-plugin' ) ),
+			'state'  => 'populated',
+			'stages' => [
+				[
+					'label'      => __( 'Registered', 'newspack-plugin' ),
+					'count'      => $step_1,
+					'pct_of_top' => (float) ( $step_1 / $safe ),
+				],
+				[
+					'label'      => __( 'Saw a subscription-intent surface', 'newspack-plugin' ),
+					'count'      => $step_2,
+					'pct_of_top' => (float) ( $step_2 / $safe ),
+				],
+				[
+					'label'      => __( 'Became subscriber', 'newspack-plugin' ),
+					'count'      => $step_3,
+					'pct_of_top' => (float) ( $step_3 / $safe ),
+				],
 			],
 		];
 	}
 
 	/**
-	 * Registered → Donor funnel (2.3) — three stages.
+	 * Registered → Donor funnel (C11 / 2.3) — three stages. Dispatches
+	 * `conversion_journey_funnel_registered_to_donor`; the hub returns rows
+	 * `{ uid, saw_donation_surface }`. Step 3 count is the number of those
+	 * UIDs who have at least one completed donation order, resolved via
+	 * {@see Donors_Metric::count_completed_donation_order_customers_by_customer_ids()}.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, stages: array<int, array{label: string, count: int, pct_of_top: float}>}
+	 * @return array{state: string, stages: array<int, array{label: string, count: int, pct_of_top: float}>}
 	 */
 	public function get_registered_to_donor_funnel( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
+		$rows = $this->proxy->query( 'conversion_journey_funnel_registered_to_donor', $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $this->error_collection( 'stages', $rows );
+		}
+		if ( ! is_array( $rows ) || ( ! empty( $rows ) && ! is_array( $rows[0] ) ) ) {
+			return $this->malformed_collection( 'stages' );
+		}
+		if ( empty( $rows ) ) {
+			return [
+				'state'  => 'empty',
+				'stages' => [],
+			];
+		}
+		$step_1 = count( $rows );
+		$step_2 = 0;
+		$uids   = [];
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				return $this->malformed_collection( 'stages' );
+			}
+			$step_2 += (int) ( $row['saw_donation_surface'] ?? 0 );
+			$uids[]  = (int) ( $row['uid'] ?? 0 );
+		}
+		$step_3 = $this->donors_metric->count_completed_donation_order_customers_by_customer_ids( $uids );
+		$safe   = $step_1 > 0 ? $step_1 : 1;
 		return [
-			'pending' => true,
-			'stages'  => [
-				$this->funnel_stage( __( 'Registered', 'newspack-plugin' ) ),
-				$this->funnel_stage( __( 'Saw a donation-intent surface', 'newspack-plugin' ) ),
-				$this->funnel_stage( __( 'Became donor', 'newspack-plugin' ) ),
+			'state'  => 'populated',
+			'stages' => [
+				[
+					'label'      => __( 'Registered', 'newspack-plugin' ),
+					'count'      => $step_1,
+					'pct_of_top' => (float) ( $step_1 / $safe ),
+				],
+				[
+					'label'      => __( 'Saw a donation-intent surface', 'newspack-plugin' ),
+					'count'      => $step_2,
+					'pct_of_top' => (float) ( $step_2 / $safe ),
+				],
+				[
+					'label'      => __( 'Became donor', 'newspack-plugin' ),
+					'count'      => $step_3,
+					'pct_of_top' => (float) ( $step_3 / $safe ),
+				],
 			],
 		];
 	}
 
 	/**
-	 * Subscriber → Donor cross-upsell funnel (2.4) — two stages,
+	 * Subscriber → Donor cross-upsell funnel (C19 / 2.4) — two stages,
 	 * visibility-gated.
 	 *
 	 * Local-only (Woo-only): does NOT belong in the BQ catalog. Gated on
-	 * 50 active subscribers AND 50 active donors. Phase 1 returns
-	 * `visibility: 'hidden'` unconditionally (no real cohort sizes yet);
-	 * Phase 2 computes visibility from the live cohort counts. The React
-	 * side renders the empty-state note when hidden.
+	 * {@see MIN_COHORT_FOR_SUB_TO_DONOR} (50) active subscribers AND 50 active
+	 * donors. When either cohort falls below the threshold the funnel returns
+	 * `visibility: 'hidden'` so React renders the insufficient-data note.
+	 * When both cohorts meet the threshold, step_2 is resolved from
+	 * {@see Donors_Metric::get_subscriber_donors_in_window()}.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, stages: array<int, array{label: string, count: int, pct_of_top: float}>, visibility: string, visibility_reason: string|null}
+	 * @return array{state: string, stages: array<int, array{label: string, count: int, pct_of_top: float}>, visibility: string, visibility_reason: string|null}
 	 */
 	public function get_subscriber_to_donor_funnel( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
+		$subscriber_ids = $this->subscribers_metric->get_active_non_donation_subscriber_customer_ids();
+		$active_subs    = count( $subscriber_ids );
+		$active_donors  = $this->donors_metric->get_active_donors();
+
+		if ( $active_subs < self::MIN_COHORT_FOR_SUB_TO_DONOR || $active_donors < self::MIN_COHORT_FOR_SUB_TO_DONOR ) {
+			return [
+				'state'             => 'populated',
+				'stages'            => [],
+				'visibility'        => 'hidden',
+				'visibility_reason' => 'insufficient_data',
+			];
+		}
+
+		$step_2 = $this->donors_metric->get_subscriber_donors_in_window( $subscriber_ids, $start, $end );
+		$safe   = $active_subs > 0 ? $active_subs : 1;
 		return [
-			'pending'           => true,
+			'state'             => 'populated',
 			'stages'            => [
-				$this->funnel_stage( __( 'Active subscriber', 'newspack-plugin' ) ),
-				$this->funnel_stage( __( 'Also donor', 'newspack-plugin' ) ),
+				[
+					'label'      => __( 'Active subscriber', 'newspack-plugin' ),
+					'count'      => $active_subs,
+					'pct_of_top' => 1.0,
+				],
+				[
+					'label'      => __( 'Also donor', 'newspack-plugin' ),
+					'count'      => $step_2,
+					'pct_of_top' => (float) ( $step_2 / $safe ),
+				],
 			],
-			'visibility'        => 'hidden',
-			'visibility_reason' => 'insufficient_data',
+			'visibility'        => 'visible',
+			'visibility_reason' => null,
 		];
 	}
 
@@ -265,49 +647,166 @@ final class Conversion_Metric {
 
 	/**
 	 * Source mix for new registrations (3.1) — gate / prompt / direct.
+	 * Dispatches `conversion_journey_source_mix_registrations`; the hub returns
+	 * rows of `{ source, registrations }` where source ∈ gate/prompt/direct.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, total: int, slices: array<int, array{source: string, count: int, pct: float}>}
+	 * @return array{state: string, total: int, slices: array<int, array{source: string, count: int, pct: float}>}
 	 */
 	public function get_source_mix_registrations( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
+		$rows = $this->proxy->query( 'conversion_journey_source_mix_registrations', $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $this->error_collection( 'slices', $rows );
+		}
+		if ( ! is_array( $rows ) ) {
+			return $this->malformed_collection( 'slices' );
+		}
+		if ( empty( $rows ) ) {
+			return [
+				'state'  => 'empty',
+				'total'  => 0,
+				'slices' => [],
+			];
+		}
+		$total  = 0;
+		$counts = [];
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				return $this->malformed_collection( 'slices' );
+			}
+			$source          = (string) ( $row['source'] ?? '' );
+			$count           = (int) ( $row['registrations'] ?? 0 );
+			$counts[ $source ] = $count;
+			$total          += $count;
+		}
+		$safe   = $total > 0 ? $total : 1;
+		$slices = [];
+		foreach ( $counts as $source => $count ) {
+			$slices[] = [
+				'source' => $source,
+				'count'  => $count,
+				'pct'    => (float) ( $count / $safe ),
+			];
+		}
 		return [
-			'pending' => true,
-			'total'   => 0,
-			'slices'  => $this->source_slices(),
+			'state'  => 'populated',
+			'total'  => $total,
+			'slices' => $slices,
 		];
 	}
 
 	/**
-	 * Source mix for new subscribers (3.2) — gate / prompt / direct.
+	 * Source mix for new subscribers (C12 / 3.2) — gate / prompt / direct.
+	 *
+	 * Fetches `conversion_journey_source_mix_subscribers` checkout-attempt rows
+	 * from the hub, buckets them by source (gate if `gate_post_id` is non-empty;
+	 * else prompt if `popup_id` non-empty; else direct), and Woo-joins each
+	 * non-empty bucket via {@see Woo_Order_Resolver::count_completed_orders()} to
+	 * get the actual subscriber count attributable to that surface. The
+	 * `fetch_paid_attempts_woo_join` memoized cache is shared with C14
+	 * (influenced subscription rate), which reads the same rows for its
+	 * denominator.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, total: int, slices: array<int, array{source: string, count: int, pct: float}>}
+	 * @return array{state: string, total: int, slices: array<int, array{source: string, count: int, pct: float}>}
 	 */
 	public function get_source_mix_subscribers( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return [
-			'pending' => true,
-			'total'   => 0,
-			'slices'  => $this->source_slices(),
-		];
+		return $this->compute_source_mix( 'conversion_journey_source_mix_subscribers', $start, $end );
 	}
 
 	/**
-	 * Source mix for new donors (3.3) — gate / prompt / direct.
+	 * Source mix for new donors (C13 / 3.3) — gate / prompt / direct.
+	 *
+	 * Identical logic to C12 using the `conversion_journey_source_mix_donors`
+	 * query. The memoized cache is shared with C15 (influenced donation rate),
+	 * which reads the same rows for its denominator.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, total: int, slices: array<int, array{source: string, count: int, pct: float}>}
+	 * @return array{state: string, total: int, slices: array<int, array{source: string, count: int, pct: float}>}
 	 */
 	public function get_source_mix_donors( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
+		return $this->compute_source_mix( 'conversion_journey_source_mix_donors', $start, $end );
+	}
+
+	/**
+	 * Shared source-mix computation for C12 and C13.
+	 *
+	 * Fetches attempt rows via `fetch_paid_attempts_woo_join` (memoized), buckets
+	 * by source (gate → prompt → direct), Woo-joins each bucket independently,
+	 * and builds the { state, total, slices } collection.
+	 *
+	 * @param string            $query_name Hub catalog query name.
+	 * @param DateTimeInterface $start      Window start.
+	 * @param DateTimeInterface $end        Window end.
+	 * @return array
+	 */
+	private function compute_source_mix( string $query_name, DateTimeInterface $start, DateTimeInterface $end ): array {
+		$joined = $this->fetch_paid_attempts_woo_join( $query_name, $start, $end );
+		if ( is_wp_error( $joined ) ) {
+			return $this->error_collection( 'slices', $joined );
+		}
+
+		$rows = $joined['rows'];
+
+		if ( empty( $rows ) ) {
+			return [
+				'state'  => 'empty',
+				'total'  => 0,
+				'slices' => [],
+			];
+		}
+
+		// Bucket rows by source. Each row's source is classified:
+		// gate   — gate_post_id is non-empty.
+		// prompt — gate_post_id is empty but popup_id is non-empty.
+		// direct — both are empty.
+		$buckets = [
+			'gate'   => [],
+			'prompt' => [],
+			'direct' => [],
+		];
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				return $this->malformed_collection( 'slices' );
+			}
+			if ( ! empty( $row['gate_post_id'] ) ) {
+				$buckets['gate'][] = $row;
+			} elseif ( ! empty( $row['popup_id'] ) ) {
+				$buckets['prompt'][] = $row;
+			} else {
+				$buckets['direct'][] = $row;
+			}
+		}
+
+		// For each non-empty bucket, Woo-join to get the completed-order count.
+		$counts = [];
+		$total  = 0;
+		foreach ( self::SOURCES as $source ) {
+			$count          = empty( $buckets[ $source ] )
+				? 0
+				: $this->woo_resolver->count_completed_orders( $buckets[ $source ] );
+			$counts[ $source ] = $count;
+			$total            += $count;
+		}
+
+		$safe   = $total > 0 ? $total : 1;
+		$slices = [];
+		foreach ( self::SOURCES as $source ) {
+			$count    = $counts[ $source ];
+			$slices[] = [
+				'source' => $source,
+				'count'  => $count,
+				'pct'    => (float) ( $count / $safe ),
+			];
+		}
+
 		return [
-			'pending' => true,
-			'total'   => 0,
-			'slices'  => $this->source_slices(),
+			'state'  => 'populated',
+			'total'  => $total,
+			'slices' => $slices,
 		];
 	}
 
@@ -318,16 +817,75 @@ final class Conversion_Metric {
 
 	/**
 	 * Time-to-register cumulative distribution (4.1) — single series.
+	 * Dispatches `conversion_journey_time_to_register`; the hub returns per-day
+	 * rows `{ days, conversions }`. The CDF is computed in PHP: rows are sorted
+	 * by day, a running cumulative sum / total produces `cumulative_pct`
+	 * (rounded to 4 dp) for each day.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, points: array}
+	 * @return array{state: string, points: array<int, array{day: int, cumulative_pct: float}>}
 	 */
 	public function get_time_to_register_distribution( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
+		$rows = $this->proxy->query( 'conversion_journey_time_to_register', $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $this->error_collection( 'points', $rows );
+		}
+		if ( ! is_array( $rows ) ) {
+			return $this->malformed_collection( 'points' );
+		}
+		if ( empty( $rows ) ) {
+			return [
+				'state'  => 'empty',
+				'points' => [],
+			];
+		}
+
+		// Guard every row is an array before the typed usort callback + reads
+		// below (parity with the other collection methods; a malformed non-array
+		// row would otherwise TypeError in the callback).
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				return $this->malformed_collection( 'points' );
+			}
+		}
+
+		// Sort by day ascending.
+		usort(
+			$rows,
+			static function ( array $a, array $b ): int {
+				return (int) ( $a['days'] ?? 0 ) <=> (int) ( $b['days'] ?? 0 );
+			}
+		);
+
+		// Compute total conversions.
+		$total = 0;
+		foreach ( $rows as $row ) {
+			$total += (int) ( $row['conversions'] ?? 0 );
+		}
+
+		// Guard: if all conversions are zero, treat as empty.
+		if ( $total <= 0 ) {
+			return [
+				'state'  => 'empty',
+				'points' => [],
+			];
+		}
+
+		// Build CDF: running cumulative sum / total, rounded to 4 dp.
+		$running = 0;
+		$points  = [];
+		foreach ( $rows as $row ) {
+			$running   += (int) ( $row['conversions'] ?? 0 );
+			$points[]   = [
+				'day'            => (int) ( $row['days'] ?? 0 ),
+				'cumulative_pct' => round( $running / $total, 4 ),
+			];
+		}
+
 		return [
-			'pending' => true,
-			'points'  => [],
+			'state'  => 'populated',
+			'points' => $points,
 		];
 	}
 
@@ -335,31 +893,29 @@ final class Conversion_Metric {
 	 * Time-to-subscribe cumulative distribution (4.2) — three series by
 	 * source (gate / prompt / direct).
 	 *
+	 * Phase B `coming_soon` placeholder. Not yet wired to BigQuery.
+	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, groups: array<int, array{label: string, points: array}>}
+	 * @return array{state: string, groups: array}
 	 */
 	public function get_time_to_subscribe_distribution( DateTimeInterface $start, DateTimeInterface $end ): array {
 		unset( $start, $end );
-		return [
-			'pending' => true,
-			'groups'  => $this->cumulative_groups(),
-		];
+		return $this->coming_soon_collection( 'groups' );
 	}
 
 	/**
 	 * Time-to-donate cumulative distribution (4.3) — three series by source.
 	 *
+	 * Phase B `coming_soon` placeholder. Not yet wired to BigQuery.
+	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, groups: array<int, array{label: string, points: array}>}
+	 * @return array{state: string, groups: array}
 	 */
 	public function get_time_to_donate_distribution( DateTimeInterface $start, DateTimeInterface $end ): array {
 		unset( $start, $end );
-		return [
-			'pending' => true,
-			'groups'  => $this->cumulative_groups(),
-		];
+		return $this->coming_soon_collection( 'groups' );
 	}
 
 	/**
@@ -367,21 +923,22 @@ final class Conversion_Metric {
 	 * visibility-gated.
 	 *
 	 * Local-only (Woo-only): does NOT belong in the BQ catalog. Gated at 50
-	 * cross-converters. Phase 1 returns `visibility: 'hidden'`
-	 * unconditionally; Phase 2 computes it from the live cohort size.
+	 * cross-converters. Phase B `coming_soon` placeholder; preserves the
+	 * `visibility` / `visibility_reason` keys React reads unconditionally.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, points: array, visibility: string, visibility_reason: string|null}
+	 * @return array{state: string, points: array, visibility: string, visibility_reason: string|null}
 	 */
 	public function get_subscriber_to_donor_lag_distribution( DateTimeInterface $start, DateTimeInterface $end ): array {
 		unset( $start, $end );
-		return [
-			'pending'           => true,
-			'points'            => [],
-			'visibility'        => 'hidden',
-			'visibility_reason' => 'insufficient_data',
-		];
+		return array_merge(
+			$this->coming_soon_collection( 'points' ),
+			[
+				'visibility'        => 'hidden',
+				'visibility_reason' => 'insufficient_data',
+			]
+		);
 	}
 
 	// --- Section 5: Cohort retention ------------------------------------
@@ -391,63 +948,103 @@ final class Conversion_Metric {
 	/**
 	 * Registration → conversion cohort retention (5.1). Snapshot — ignores
 	 * the window. The reference line (15% at 6 months) is hardcoded per the
-	 * spec in Phase 1; Phase 2 makes it publisher-configurable.
+	 * spec; Phase B `coming_soon` placeholder preserves the `reference_line`
+	 * key React reads unconditionally.
 	 *
 	 * @param DateTimeInterface $start Window start (ignored — snapshot).
 	 * @param DateTimeInterface $end   Window end (ignored — snapshot).
-	 * @return array{pending: bool, cohorts: array, reference_line: array{value: float, label: string}}
+	 * @return array{state: string, cohorts: array, reference_line: array{value: float, label: string}}
 	 */
 	public function get_registration_to_conversion_cohort( DateTimeInterface $start, DateTimeInterface $end ): array {
 		unset( $start, $end );
-		return [
-			'pending'        => true,
-			'cohorts'        => [],
-			'reference_line' => [
-				'value' => 0.15,
-				'label' => __( '15% at 6 months', 'newspack-plugin' ),
-			],
-		];
+		return array_merge(
+			$this->coming_soon_collection( 'cohorts' ),
+			[
+				'reference_line' => [
+					'value' => 0.15,
+					'label' => __( '15% at 6 months', 'newspack-plugin' ),
+				],
+			]
+		);
 	}
 
 	/**
 	 * Subscriber retention cohort (5.2). Snapshot — ignores the window.
-	 * Reference line (70% at 12 months) hardcoded in Phase 1.
+	 * Reference line (70% at 12 months) hardcoded per the spec.
 	 *
-	 * Local-only (Woo-only): does NOT belong in the BQ catalog.
+	 * Local-only (Woo-only): does NOT belong in the BQ catalog. Phase B
+	 * `coming_soon` placeholder preserves the `reference_line` key React
+	 * reads unconditionally.
 	 *
 	 * @param DateTimeInterface $start Window start (ignored — snapshot).
 	 * @param DateTimeInterface $end   Window end (ignored — snapshot).
-	 * @return array{pending: bool, cohorts: array, reference_line: array{value: float, label: string}}
+	 * @return array{state: string, cohorts: array, reference_line: array{value: float, label: string}}
 	 */
 	public function get_subscriber_retention_cohort( DateTimeInterface $start, DateTimeInterface $end ): array {
 		unset( $start, $end );
-		return [
-			'pending'        => true,
-			'cohorts'        => [],
-			'reference_line' => [
-				'value' => 0.70,
-				'label' => __( '70% at 12 months', 'newspack-plugin' ),
-			],
-		];
+		return array_merge(
+			$this->coming_soon_collection( 'cohorts' ),
+			[
+				'reference_line' => [
+					'value' => 0.70,
+					'label' => __( '70% at 12 months', 'newspack-plugin' ),
+				],
+			]
+		);
 	}
 
 	// --- Section 6: Conversion rate trends ------------------------------
 
 	/**
-	 * Weekly conversion rates (6) — multi-series LineChart. Phase 1 returns
-	 * an empty `weeks` array so the LineChart renders its empty state. The
-	 * `series` keys name the two tracked rates.
+	 * Weekly conversion rates (6) — multi-series LineChart. Dispatches
+	 * `conversion_journey_weekly_rates`; the hub returns per-week rows with
+	 * { week_start, registration_conversion_rate, subscription_attempt_rate }.
+	 * The `series` keys name the two tracked rates and are preserved in every
+	 * state so React can always build its legend without guarding for absence.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, weeks: array, series: string[]}
+	 * @return array{state: string, weeks: array, series: string[]}
 	 */
 	public function get_weekly_conversion_rates( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
+		$rows = $this->proxy->query( 'conversion_journey_weekly_rates', $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return array_merge(
+				$this->error_collection( 'weeks', $rows ),
+				[ 'series' => [ 'registration_rate', 'subscription_attempt_rate' ] ]
+			);
+		}
+		if ( ! is_array( $rows ) || ( ! empty( $rows ) && ! is_array( $rows[0] ) ) ) {
+			return array_merge(
+				$this->malformed_collection( 'weeks' ),
+				[ 'series' => [ 'registration_rate', 'subscription_attempt_rate' ] ]
+			);
+		}
+		if ( empty( $rows ) ) {
+			return [
+				'state'  => 'empty',
+				'weeks'  => [],
+				'series' => [ 'registration_rate', 'subscription_attempt_rate' ],
+			];
+		}
+		$weeks = [];
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				return array_merge(
+					$this->malformed_collection( 'weeks' ),
+					[ 'series' => [ 'registration_rate', 'subscription_attempt_rate' ] ]
+				);
+			}
+			$weeks[] = [
+				'week'                         => (string) ( $row['week_start'] ?? '' ),
+				'registration_conversion_rate' => (float) ( $row['registration_conversion_rate'] ?? 0.0 ),
+				'subscription_attempt_rate'    => (float) ( $row['subscription_attempt_rate'] ?? 0.0 ),
+			];
+		}
 		return [
-			'pending' => true,
-			'weeks'   => [],
-			'series'  => [ 'registration_rate', 'subscription_attempt_rate' ],
+			'state'  => 'populated',
+			'weeks'  => $weeks,
+			'series' => [ 'registration_rate', 'subscription_attempt_rate' ],
 		];
 	}
 
@@ -458,51 +1055,130 @@ final class Conversion_Metric {
 	// approach is locked in.
 
 	/**
-	 * Influenced registration rate, 7-day lookback (7.1).
+	 * Influenced registration rate, 7-day lookback (7.1). Dispatches
+	 * `conversion_journey_influenced_registration_7d`; the hub returns one row
+	 * with column `influenced_registration_rate`.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
 	public function get_influenced_registration_rate_7d( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder( 'rate' );
+		return $this->compute_metric_from_proxy(
+			'conversion_journey_influenced_registration_7d',
+			'influenced_registration_rate',
+			'rate',
+			$start,
+			$end
+		);
 	}
 
 	/**
-	 * Influenced subscription rate, 14-day lookback (7.2).
+	 * Influenced subscription rate, 14-day lookback (C14 / 7.2).
+	 *
+	 * Rate = (unique users who had a checkout attempt in `conversion_journey_influenced_subscription_14d`
+	 *         AND completed a Woo order) / (unique users who had any subscription attempt
+	 *         in `conversion_journey_source_mix_subscribers` AND completed a Woo order).
+	 *
+	 * Both fetches go through `fetch_paid_attempts_woo_join` so the
+	 * `source_mix_subscribers` rows are memoized and shared with C12. If EITHER
+	 * proxy call fails → error_scalar. Denominator = 0 → non-computable zero.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
 	public function get_influenced_subscription_rate_14d( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder( 'rate' );
+		return $this->compute_influenced_rate(
+			'conversion_journey_influenced_subscription_14d',
+			'conversion_journey_source_mix_subscribers',
+			$start,
+			$end
+		);
 	}
 
 	/**
-	 * Influenced donation rate, 14-day lookback (7.3).
+	 * Influenced donation rate, 14-day lookback (C15 / 7.3).
+	 *
+	 * Identical logic to C14 using the donation catalog queries.
+	 * The `source_mix_donors` fetch is memoized and shared with C13.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
 	public function get_influenced_donation_rate_14d( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder( 'rate' );
+		return $this->compute_influenced_rate(
+			'conversion_journey_influenced_donation_14d',
+			'conversion_journey_source_mix_donors',
+			$start,
+			$end
+		);
 	}
 
 	/**
-	 * Influenced newsletter signup rate, 7-day lookback (7.4).
+	 * Shared influenced-rate computation for C14 and C15.
+	 *
+	 * Fetches the influenced attempt rows (`$influenced_query`) and the full
+	 * population rows (`$population_query`) via `fetch_paid_attempts_woo_join`,
+	 * Woo-joins both via `count_unique_completed_users`, and returns the rate as
+	 * a `placeholder_type: 'rate'` scalar envelope.
+	 *
+	 * @param string            $influenced_query  Hub catalog query for influenced-subset rows.
+	 * @param string            $population_query  Hub catalog query for all-attempts rows.
+	 * @param DateTimeInterface $start             Window start.
+	 * @param DateTimeInterface $end               Window end.
+	 * @return array
+	 */
+	private function compute_influenced_rate(
+		string $influenced_query,
+		string $population_query,
+		DateTimeInterface $start,
+		DateTimeInterface $end
+	): array {
+		$influenced_joined = $this->fetch_paid_attempts_woo_join( $influenced_query, $start, $end );
+		if ( is_wp_error( $influenced_joined ) ) {
+			return $this->error_scalar( 'rate', $influenced_joined );
+		}
+
+		$population_joined = $this->fetch_paid_attempts_woo_join( $population_query, $start, $end );
+		if ( is_wp_error( $population_joined ) ) {
+			return $this->error_scalar( 'rate', $population_joined );
+		}
+
+		$numerator   = $this->woo_resolver->count_unique_completed_users( $influenced_joined['rows'] );
+		$denominator = $this->woo_resolver->count_unique_completed_users( $population_joined['rows'] );
+
+		if ( $denominator <= 0 ) {
+			// Legitimate non-computable: no converting subscribers/donors in window.
+			return $this->populated_scalar( 0.0, false, 0, 'rate' );
+		}
+
+		return $this->populated_scalar(
+			(float) ( $numerator / $denominator ),
+			true,
+			$denominator,
+			'rate'
+		);
+	}
+
+	/**
+	 * Influenced newsletter signup rate, 7-day lookback (7.4). Dispatches
+	 * `conversion_journey_influenced_newsletter_7d`; the hub returns one row
+	 * with column `influenced_newsletter_rate`.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
 	public function get_influenced_newsletter_rate_7d( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder( 'rate' );
+		return $this->compute_metric_from_proxy(
+			'conversion_journey_influenced_newsletter_7d',
+			'influenced_newsletter_rate',
+			'rate',
+			$start,
+			$end
+		);
 	}
 
 	// --- Section 8: Opportunity buckets ---------------------------------
@@ -513,10 +1189,11 @@ final class Conversion_Metric {
 	// should reuse that orchestrator method rather than re-implement.
 
 	/**
-	 * Stale registered readers (8.1). Snapshot — ignores the window.
+	 * Stale registered readers (C18 / 8.1). Snapshot — ignores the window.
 	 *
-	 * Local-only: the count itself is local (Woo plus a recently-active UID
-	 * set sourced from BQ). Does NOT belong in the BQ catalog.
+	 * Local-only: count of registered readers with no active non-donation
+	 * subscription and no completed donation in the trailing 365 days,
+	 * delegated to {@see Subscribers_Metric::get_stale_registered_users()}.
 	 *
 	 * @param DateTimeInterface $start Window start (ignored — snapshot).
 	 * @param DateTimeInterface $end   Window end (ignored — snapshot).
@@ -524,13 +1201,15 @@ final class Conversion_Metric {
 	 */
 	public function get_stale_registered_count( DateTimeInterface $start, DateTimeInterface $end ): array {
 		unset( $start, $end );
-		return $this->placeholder( 'count' );
+		return $this->populated_scalar( $this->subscribers_metric->get_stale_registered_users(), true, null, 'count' );
 	}
 
 	/**
-	 * At-risk subscribers (8.2). Snapshot — ignores the window.
+	 * At-risk subscribers (C16 / 8.2). Snapshot — ignores the window.
 	 *
-	 * Local-only (Woo-only): does NOT belong in the BQ catalog.
+	 * Local-only (Woo-only): count of active non-donation subscriptions with
+	 * a scheduled payment retry, delegated to
+	 * {@see Subscribers_Metric::get_at_risk_subscribers()}.
 	 *
 	 * @param DateTimeInterface $start Window start (ignored — snapshot).
 	 * @param DateTimeInterface $end   Window end (ignored — snapshot).
@@ -538,40 +1217,74 @@ final class Conversion_Metric {
 	 */
 	public function get_at_risk_subscriber_count( DateTimeInterface $start, DateTimeInterface $end ): array {
 		unset( $start, $end );
-		return $this->placeholder( 'count' );
+		return $this->populated_scalar( $this->subscribers_metric->get_at_risk_subscribers(), true, null, 'count' );
 	}
 
 	/**
-	 * Lapsed donors (8.3). Snapshot — ignores the window. Same definition
-	 * as Tab 7's Lapsed Donors.
-	 *
-	 * Local-only (Woo-only): does NOT belong in the BQ catalog. Phase 2
-	 * should reuse the Tab 7 orchestrator method instead of re-implementing.
-	 *
-	 * @param DateTimeInterface $start Window start (ignored — snapshot).
-	 * @param DateTimeInterface $end   Window end (ignored — snapshot).
-	 * @return array
-	 */
-	public function get_lapsed_donor_count( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder( 'count' );
-	}
-
-	/**
-	 * Top pages that don't convert (8.4) — windowed table. Phase 1 returns
-	 * an empty `rows` array so the React table renders its empty-state row.
-	 * `threshold_pageviews` is the minimum-traffic cutoff (a starting guess
-	 * per the spec; tuned in Phase 2).
+	 * Lapsed donors (C17 / 8.3). Windowed. Same definition as Tab 7's Lapsed
+	 * Donors, delegated to
+	 * {@see Donors_Metric::get_lapsed_donors_in_window()}.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, rows: array, threshold_pageviews: int}
+	 * @return array
+	 */
+	public function get_lapsed_donor_count( DateTimeInterface $start, DateTimeInterface $end ): array {
+		return $this->populated_scalar( $this->donors_metric->get_lapsed_donors_in_window( $start, $end ), true, null, 'count' );
+	}
+
+	/**
+	 * Top pages that don't convert (8.4) — windowed table. Dispatches
+	 * `conversion_journey_top_pages_no_conversion`; the hub returns rows of
+	 * { post_id, page_url, page_title, pageviews, unique_readers,
+	 * conversion_rate }. `threshold_pageviews` is the minimum-traffic cutoff
+	 * (spec starting value of 100; tunable in a future phase).
+	 *
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
+	 * @return array{state: string, rows: array, threshold_pageviews: int}
 	 */
 	public function get_top_pages_no_conversion( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
+		$rows = $this->proxy->query( 'conversion_journey_top_pages_no_conversion', $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return array_merge(
+				$this->error_collection( 'rows', $rows ),
+				[ 'threshold_pageviews' => 100 ]
+			);
+		}
+		if ( ! is_array( $rows ) || ( ! empty( $rows ) && ! is_array( $rows[0] ) ) ) {
+			return array_merge(
+				$this->malformed_collection( 'rows' ),
+				[ 'threshold_pageviews' => 100 ]
+			);
+		}
+		if ( empty( $rows ) ) {
+			return [
+				'state'               => 'empty',
+				'rows'                => [],
+				'threshold_pageviews' => 100,
+			];
+		}
+		$table_rows = [];
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				return array_merge(
+					$this->malformed_collection( 'rows' ),
+					[ 'threshold_pageviews' => 100 ]
+				);
+			}
+			$table_rows[] = [
+				'post_id'         => (int) ( $row['post_id'] ?? 0 ),
+				'page_url'        => (string) ( $row['page_url'] ?? '' ),
+				'page_title'      => (string) ( $row['page_title'] ?? '' ),
+				'pageviews'       => (int) ( $row['pageviews'] ?? 0 ),
+				'unique_readers'  => (int) ( $row['unique_readers'] ?? 0 ),
+				'conversion_rate' => (float) ( $row['conversion_rate'] ?? 0.0 ),
+			];
+		}
 		return [
-			'pending'             => true,
-			'rows'                => [],
+			'state'               => 'populated',
+			'rows'                => $table_rows,
 			'threshold_pageviews' => 100,
 		];
 	}

@@ -1,8 +1,8 @@
 /**
- * Render smoke test for OpportunityBucketsSection (Section 8): the three
- * snapshot scorecards and the 8.4 top-pages table empty-state row.
+ * Tests for OpportunityBucketsSection (Section 8).
  *
- * NOTE: `.test.tsx` is not collected by CI (NPPD-1683).
+ * Covers the three scorecards and the 8.4 top-pages table across
+ * populated / empty / error / coming_soon states.
  */
 
 /**
@@ -25,8 +25,25 @@ describe( 'OpportunityBucketsSection', () => {
 		expect( screen.getByText( 'Lapsed Donors' ) ).toBeInTheDocument();
 	} );
 
-	it( 'renders the top-pages table empty-state row', () => {
-		render( <OpportunityBucketsSection current={ makeConversionWindow() } /> );
+	it( 'renders the top-pages table empty treatment when state is empty', () => {
+		render( <OpportunityBucketsSection current={ makeConversionWindow( { topPagesState: 'empty' } ) } /> );
 		expect( screen.getByText( /No qualifying pages yet/ ) ).toBeInTheDocument();
+	} );
+
+	it( 'renders the top-pages table error treatment when state is error', () => {
+		render( <OpportunityBucketsSection current={ makeConversionWindow( { topPagesState: 'error' } ) } /> );
+		expect( screen.getByRole( 'alert' ) ).toBeInTheDocument();
+		expect( screen.getByText( /Unable to load this section/ ) ).toBeInTheDocument();
+	} );
+
+	it( 'renders the top-pages table coming_soon treatment when state is coming_soon', () => {
+		render( <OpportunityBucketsSection current={ makeConversionWindow( { topPagesState: 'coming_soon' } ) } /> );
+		expect( screen.getByText( /Coming soon/ ) ).toBeInTheDocument();
+	} );
+
+	it( 'renders the top-pages note regardless of table state', () => {
+		render( <OpportunityBucketsSection current={ makeConversionWindow() } /> );
+		// Note: the rendered string uses a right single quotation mark (U+2019) in "don't".
+		expect( screen.getByText( /These pages get traffic but don/ ) ).toBeInTheDocument();
 	} );
 } );

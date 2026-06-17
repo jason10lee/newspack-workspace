@@ -241,4 +241,66 @@ interface Storage_Interface {
 	 * @return array<int, array{cancellation_reason: string, count: int}>
 	 */
 	public function get_cancellation_reasons( DateTimeInterface $start, DateTimeInterface $end ): array;
+
+	// -------------------------------------------------------------------------
+	// Conversion Journey (Tab 3) methods — added for NPPD-1609 Phase 2B.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Count of active non-donation subscriptions (type `shop_subscription`,
+	 * status `wc-active`, product NOT IN donation IDs) that have a non-empty
+	 * `_schedule_payment_retry` meta — i.e. a payment retry is currently
+	 * scheduled. Point-in-time snapshot.
+	 *
+	 * @return int
+	 */
+	public function get_at_risk_subscribers(): int;
+
+	/**
+	 * DISTINCT customer_ids that currently have at least one active non-donation
+	 * subscription (type `shop_subscription`, status `wc-active`, product NOT IN
+	 * donation IDs). Same population as {@see get_active_non_donation_subscribers()}
+	 * but returns the ID set rather than a count.
+	 *
+	 * @return int[]
+	 */
+	public function get_active_non_donation_subscriber_customer_ids(): array;
+
+	/**
+	 * Given an explicit customer-ID list, COUNT(DISTINCT customer_id) who have
+	 * at least one active non-donation subscription right now. Empty input
+	 * returns 0 immediately (no DB round-trip).
+	 *
+	 * @param int[] $customer_ids Customer IDs to check.
+	 * @return int
+	 */
+	public function count_active_non_donation_subscribers_by_customer_ids( array $customer_ids ): int;
+
+	/**
+	 * Count of REGISTERED READERS who have no active non-donation subscription
+	 * AND no completed donation order in the trailing 365 days.
+	 *
+	 * Phase-A approximation: the base population is WordPress users bearing the
+	 * `np_reader` user meta (the canonical Reader Activation signal written at
+	 * reader registration time). Users whose `np_reader` meta is empty or absent
+	 * but who hold a 'subscriber' or 'customer' role are also included as a
+	 * non-strict fallback, mirroring
+	 * {@see \Newspack\Reader_Activation::is_user_reader()} without a filter layer.
+	 * Administrators and editors are excluded (same restricted_roles default as
+	 * the production is_user_reader() call).
+	 *
+	 * Excludes from the base population:
+	 *   - users with ≥1 active non-donation subscription today, AND
+	 *   - users with ≥1 completed donation order (product IN donation IDs,
+	 *     status wc-completed/wc-processing) in the trailing 365 days.
+	 *
+	 * The "no activity in 90 days" BQ refinement that distinguishes truly stale
+	 * readers from recently-active ones who simply haven't converted is deferred
+	 * to Phase B (requires the BQ reader-activity export). This count is
+	 * therefore an upper bound on stale readers, not an exact match for the
+	 * BigQuery definition.
+	 *
+	 * @return int
+	 */
+	public function get_stale_registered_users(): int;
 }

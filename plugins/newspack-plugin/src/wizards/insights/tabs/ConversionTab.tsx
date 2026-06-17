@@ -1,19 +1,20 @@
 /**
- * ConversionTab (NPPD-1609).
+ * ConversionTab (NPPD-1609, Phase 2).
  *
- * Tab 3 orchestrator. Mirrors the GatesTab / PromptsTab loading / error /
- * success lifecycle and composes the eight Conversion Journey sections.
+ * Tab 3 orchestrator. Mirrors the PromptsTab loading / error / success
+ * lifecycle and composes the eight Conversion Journey sections.
+ *
+ * Phase 2 chrome:
+ *   - LastUpdated + RefreshMenu threaded into the first section heading.
+ *   - CooldownNotice rendered at the top of the data area (BigQuery tab).
+ *   - Tab-level error banner driven by `tab_error` (only when every section
+ *     errored). Per-section state rendering handles individual failures.
  *
  * The date range picker affects most sections, but Section 5 (Cohort
  * retention) and the Section 8 snapshot scorecards are current-state and
  * ignore the picker. Comparison is forwarded by the wizard chrome via the
  * standard `previousRange` prop; only Section 7 (cross-tab influenced
  * attribution) renders the resulting deltas.
- *
- * Phase 1 ships the full UI with placeholder data; the top-of-tab banner
- * and the cohort-retention-freshness callout (added in a later commit)
- * are the only signals that real data is pending. `tab_pending` stays in
- * the response envelope for Phase 2.
  */
 
 /**
@@ -26,10 +27,11 @@ import { __ } from '@wordpress/i18n';
  */
 import type { DateRange } from '../state/useDateRange';
 import useConversionData from '../hooks/useConversionData';
+import LastUpdated from '../components/LastUpdated';
+import CooldownNotice from '../components/CooldownNotice';
 import TabStateView from './components/TabStateView';
+import TabErrorBanner from './components/TabErrorBanner';
 import { TAB_LOADING_MESSAGES } from './components/loading-messages';
-import ConversionPreviewBanner from './conversion/ConversionPreviewBanner';
-import CohortRetentionFreshnessCallout from './conversion/CohortRetentionFreshnessCallout';
 import ReaderLifecycleSection from './conversion/ReaderLifecycleSection';
 import PerJourneyConversionFunnelsSection from './conversion/PerJourneyConversionFunnelsSection';
 import WhereConversionsComeFromSection from './conversion/WhereConversionsComeFromSection';
@@ -59,9 +61,12 @@ const ConversionTab = ( { range, previousRange }: ConversionTabProps ) => {
 		>
 			{ data && (
 				<>
-					<ConversionPreviewBanner />
-					<CohortRetentionFreshnessCallout />
-					<ReaderLifecycleSection current={ data.current } />
+					{ data.tab_error && <TabErrorBanner /> }
+					<CooldownNotice tab="conversion" range={ range } previousRange={ previousRange } />
+					<ReaderLifecycleSection
+						current={ data.current }
+						lastUpdated={ <LastUpdated tab="conversion" range={ range } previousRange={ previousRange } /> }
+					/>
 					<PerJourneyConversionFunnelsSection current={ data.current } />
 					<WhereConversionsComeFromSection current={ data.current } />
 					<HowLongConversionsTakeSection current={ data.current } />

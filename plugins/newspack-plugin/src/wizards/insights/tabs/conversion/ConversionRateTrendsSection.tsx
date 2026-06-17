@@ -2,8 +2,10 @@
  * ConversionRateTrendsSection (NPPD-1609, Section 6).
  *
  * A single full-width multi-series weekly LineChart: registration
- * conversion rate and subscription attempt rate over the window. Phase 1
- * renders the empty state.
+ * conversion rate and subscription attempt rate over the window.
+ *
+ * Phase 2: rendering is gated on the metric's `state` envelope
+ * (populated / empty / error / coming_soon).
  */
 
 /**
@@ -16,7 +18,8 @@ import { __ } from '@wordpress/i18n';
  */
 import type { ConversionWeekPoint, ConversionWeeklyTrendsData } from '../../api/conversion';
 import SectionHeading from '../components/SectionHeading';
-import LineChart, { type LineSeries } from './viz/LineChart';
+import LineChart, { type LineSeries } from '../components/LineChart';
+import SectionState from './SectionState';
 
 export interface ConversionRateTrendsSectionProps {
 	current: {
@@ -33,7 +36,7 @@ export interface ConversionRateTrendsSectionProps {
 const SERIES_BY_KEY: Record< string, { label: string; value: ( w: ConversionWeekPoint ) => number } > = {
 	registration_rate: {
 		label: __( 'Registration rate', 'newspack-plugin' ),
-		value: w => w.registration_rate,
+		value: w => w.registration_conversion_rate,
 	},
 	subscription_attempt_rate: {
 		label: __( 'Subscription attempt rate', 'newspack-plugin' ),
@@ -63,10 +66,15 @@ const ConversionRateTrendsSection = ( { current }: ConversionRateTrendsSectionPr
 				'newspack-plugin'
 			) }
 		/>
-		<LineChart
-			series={ toTrendSeries( current.weekly_conversion_rates ) }
+		<SectionState
+			state={ current.weekly_conversion_rates.state }
 			emptyMessage={ __( 'Weekly trends will appear once the window contains at least 4 weeks of data.', 'newspack-plugin' ) }
-		/>
+		>
+			<LineChart
+				series={ toTrendSeries( current.weekly_conversion_rates ) }
+				emptyMessage={ __( 'Weekly trends will appear once the window contains at least 4 weeks of data.', 'newspack-plugin' ) }
+			/>
+		</SectionState>
 	</section>
 );
 
