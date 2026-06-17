@@ -726,9 +726,17 @@ final class Newspack_Newsletters_Editor {
 	 * Append author info to the posts REST response so we can append Coauthors, if they exist.
 	 */
 	public static function add_newspack_extra_info() {
+		// Register on every post type the Posts Inserter can offer — it mirrors
+		// the inserter's own /wp/v2/types filter (viewable + show_ui) — so featured
+		// images, author info, custom bylines and sponsor data resolve for Pages,
+		// Newsletters, Events, etc., not just `post`. Regression fix: NPPM-2756 (#1969).
+		$post_types = array_values(
+			array_filter( get_post_types( [ 'show_ui' => true ], 'names' ), 'is_post_type_viewable' )
+		);
+
 		// Add author info source.
 		register_rest_field(
-			'post',
+			$post_types,
 			'newspack_author_info',
 			[
 				'get_callback' => [ __CLASS__, 'newspack_get_author_info' ],
@@ -743,7 +751,7 @@ final class Newspack_Newsletters_Editor {
 
 		// Add custom byline info.
 		register_rest_field(
-			'post',
+			$post_types,
 			'newspack_custom_byline',
 			[
 				'get_callback' => [ __CLASS__, 'newspack_get_custom_byline' ],
@@ -759,7 +767,7 @@ final class Newspack_Newsletters_Editor {
 		// Add sponsor info.
 		if ( function_exists( '\Newspack_Sponsors\get_all_sponsors' ) ) {
 			register_rest_field(
-				'post',
+				$post_types,
 				'newspack_sponsors_info',
 				[
 					'get_callback' => [ __CLASS__, 'newspack_get_sponsors_info' ],
@@ -775,7 +783,7 @@ final class Newspack_Newsletters_Editor {
 
 		// Add featured media thumbnail URLs.
 		register_rest_field(
-			'post',
+			$post_types,
 			'featured_media_info',
 			[
 				'get_callback' => [ __CLASS__, 'newspack_get_featured_media_info' ],
