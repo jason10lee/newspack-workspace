@@ -8,10 +8,9 @@
  * tooltip, chart-empty) lives in `tabs/components/_insights-charts.scss` and
  * is pulled in below — this tab's PieChart and LineChart reuse those classes.
  *
- * Sortable-table and per-section grid styles are tab-local. Funnel styles
- * live in `tabs/components/_insights-charts.scss` (shared across tabs).
- * PieChart / LineChart / SortableTable are candidates to hoist to
- * packages/components as shared primitives in a later ticket.
+ * Sortable-table and per-section grid styles are tab-local. Funnel, PieChart,
+ * LineChart, and SortableTable styles live in
+ * `tabs/components/_insights-charts.scss` (shared across tabs).
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;

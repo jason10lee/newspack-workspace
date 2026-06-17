@@ -37,6 +37,12 @@ describe( 'DistributionTable', () => {
 		expect( screen.getByText( '30' ) ).toBeInTheDocument();
 		expect( screen.getByText( '15' ) ).toBeInTheDocument();
 		expect( screen.getByText( '5' ) ).toBeInTheDocument();
+
+		// Percents (formatPercent formats a fraction in [0,1] as "50%", "30%", etc.)
+		expect( screen.getByText( '50%' ) ).toBeInTheDocument();
+		expect( screen.getByText( '30%' ) ).toBeInTheDocument();
+		expect( screen.getByText( '15%' ) ).toBeInTheDocument();
+		expect( screen.getByText( '5%' ) ).toBeInTheDocument();
 	} );
 
 	it( 'renders the caption paragraph when caption is provided', () => {
