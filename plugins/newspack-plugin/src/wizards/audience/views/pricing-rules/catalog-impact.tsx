@@ -12,33 +12,12 @@ import { useState, useEffect } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import { Spinner } from '@wordpress/components';
 
-const API_PATH = '/wc-dynamic-pricing/v1/impact-preview';
-
-function formatPrice( amount: number, currency: PricingRulesCurrency ): string {
-	return currency.symbol + amount.toFixed( currency.decimals );
-}
-
 /**
- * The resulting-price cell: flat rules show the single adjusted price; scheduled
- * rules show each cycle's price (cycle 1 = purchase, later cycles = renewals).
+ * Internal dependencies
  */
-function describeResulting( row: CatalogImpactRow, currency: PricingRulesCurrency ): string {
-	if ( row.segments.length <= 1 ) {
-		return formatPrice( row.adjusted, currency );
-	}
-	return row.segments
-		.map( seg =>
-			seg.from_cycle === 1
-				? formatPrice( seg.amount, currency )
-				: sprintf(
-						/* translators: 1: a formatted price, 2: a billing cycle number. */
-						__( 'then %1$s from cycle %2$d', 'newspack-plugin' ),
-						formatPrice( seg.amount, currency ),
-						seg.from_cycle
-				  )
-		)
-		.join( ' · ' );
-}
+import { formatPrice, describeResulting } from './impact-format';
+
+const API_PATH = '/wc-dynamic-pricing/v1/impact-preview';
 
 export default function CatalogImpact() {
 	const [ data, setData ] = useState< CatalogImpactResponse | null >( null );
