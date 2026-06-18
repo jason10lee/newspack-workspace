@@ -17,29 +17,31 @@ import { __ } from '@wordpress/i18n';
  */
 import { Notice, Button } from '../../../../../packages/components/src';
 
-// Localized, subdirectory-safe URL to Site Kit's GA4 connection — or, when
-// Site Kit isn't installed, the Newspack → Connections page where it gets
-// installed (NPPD-1731). Built with admin_url() in the PHP boot config; falls
-// back to a relative admin path if the global isn't present.
-const SITE_KIT_URL = window.newspackInsights?.siteKitUrl || 'admin.php?page=newspack-settings';
-
 export interface ConnectBannerProps {
 	text?: string;
 }
 
-const ConnectBanner = ( { text }: ConnectBannerProps ) => (
-	<Notice
-		isWarning
-		className="newspack-insights__connect-banner"
-		noticeText={
-			<>
-				{ text || __( 'Connect Google Analytics through Site Kit to see this tab.', 'newspack-plugin' ) }{ ' ' }
-				<Button variant="link" href={ SITE_KIT_URL }>
-					{ __( 'Set up Site Kit →', 'newspack-plugin' ) }
-				</Button>
-			</>
-		}
-	/>
-);
+const ConnectBanner = ( { text }: ConnectBannerProps ) => {
+	// Localized, subdirectory-safe URL to Site Kit's GA4 connection — or, when
+	// Site Kit isn't installed, the Newspack → Connections page where it gets
+	// installed (NPPD-1731). Built with admin_url() in the PHP boot config; read
+	// at render time, with a relative-path fallback if the global isn't present.
+	const siteKitUrl = window.newspackInsights?.siteKitUrl || 'admin.php?page=newspack-settings';
+
+	return (
+		<Notice
+			isWarning
+			className="newspack-insights__connect-banner"
+			noticeText={
+				<>
+					{ text || __( 'Connect Google Analytics through Site Kit to see this tab.', 'newspack-plugin' ) }{ ' ' }
+					<Button variant="link" href={ siteKitUrl }>
+						{ __( 'Set up Site Kit →', 'newspack-plugin' ) }
+					</Button>
+				</>
+			}
+		/>
+	);
+};
 
 export default ConnectBanner;
