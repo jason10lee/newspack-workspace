@@ -200,9 +200,11 @@ final class Prompts_Metric {
 	 * Return the canned fixture payload for the Prompts tab.
 	 *
 	 * Returned by the REST controller when NEWSPACK_INSIGHTS_FIXTURE_MODE is on.
-	 * The variant selects a render path: 'populated' (default), 'empty', 'error'.
+	 * The variant selects a render path: 'populated' (default), 'empty', 'error',
+	 * 'not_capable' (NPPD-1720), 'not_computable' (NPPD-1704).
 	 *
-	 * @param string $variant One of 'populated', 'empty', 'error'.
+	 * @param string $variant One of 'populated', 'empty', 'error', 'not_capable',
+	 *                        'not_computable'.
 	 * @param bool   $compare Whether comparison was requested; when false the
 	 *                        `previous` window is null (no period-over-period deltas).
 	 * @return array Full { tab_error, current, previous } response shape.
@@ -498,8 +500,12 @@ final class Prompts_Metric {
 			return $rows;
 		}
 
-		// A successful but empty response is real "no conversions", not an error:
-		// zero conversions / zero revenue, which the callers render as $0.00.
+		// A successful but empty response is real "no attempts", not an error:
+		// zero rows / zero conversions / zero revenue. Callers treat an empty window
+		// (no in-intent prompts viewed) as non-computable — both the rate and revenue
+		// methods gate `computable` on `count( rows ) > 0` — so it renders the
+		// not-computable em-dash. A window WITH attempts but no conversions is a real
+		// 0 / $0.00 (computable).
 		$rows   = is_array( $rows ) ? $rows : [];
 		$result = [
 			'rows'        => $rows,
@@ -805,7 +811,11 @@ final class Prompts_Metric {
 		if ( is_wp_error( $joined ) ) {
 			return $this->error_scalar( 'currency', $joined );
 		}
-		return $this->populated_scalar( $joined['revenue'], true, $joined['conversions'], 'currency' );
+		// Computable only when at least one paid-intent prompt was viewed (mirrors
+		// the matching conversion-rate method's `count( rows ) > 0` gate). An empty
+		// window is "no in-intent prompts viewed", not a real $0 — so it renders the
+		// not-computable em-dash, consistent with its sibling rate card (NPPD-1704).
+		return $this->populated_scalar( $joined['revenue'], count( $joined['rows'] ) > 0, $joined['conversions'], 'currency' );
 	}
 
 	/**
@@ -820,7 +830,11 @@ final class Prompts_Metric {
 		if ( is_wp_error( $joined ) ) {
 			return $this->error_scalar( 'currency', $joined );
 		}
-		return $this->populated_scalar( $joined['revenue'], true, $joined['conversions'], 'currency' );
+		// Computable only when at least one paid-intent prompt was viewed (mirrors
+		// the matching conversion-rate method's `count( rows ) > 0` gate). An empty
+		// window is "no in-intent prompts viewed", not a real $0 — so it renders the
+		// not-computable em-dash, consistent with its sibling rate card (NPPD-1704).
+		return $this->populated_scalar( $joined['revenue'], count( $joined['rows'] ) > 0, $joined['conversions'], 'currency' );
 	}
 
 	/**
@@ -835,7 +849,11 @@ final class Prompts_Metric {
 		if ( is_wp_error( $joined ) ) {
 			return $this->error_scalar( 'currency', $joined );
 		}
-		return $this->populated_scalar( $joined['revenue'], true, $joined['conversions'], 'currency' );
+		// Computable only when at least one paid-intent prompt was viewed (mirrors
+		// the matching conversion-rate method's `count( rows ) > 0` gate). An empty
+		// window is "no in-intent prompts viewed", not a real $0 — so it renders the
+		// not-computable em-dash, consistent with its sibling rate card (NPPD-1704).
+		return $this->populated_scalar( $joined['revenue'], count( $joined['rows'] ) > 0, $joined['conversions'], 'currency' );
 	}
 
 	/**
@@ -850,7 +868,11 @@ final class Prompts_Metric {
 		if ( is_wp_error( $joined ) ) {
 			return $this->error_scalar( 'currency', $joined );
 		}
-		return $this->populated_scalar( $joined['revenue'], true, $joined['conversions'], 'currency' );
+		// Computable only when at least one paid-intent prompt was viewed (mirrors
+		// the matching conversion-rate method's `count( rows ) > 0` gate). An empty
+		// window is "no in-intent prompts viewed", not a real $0 — so it renders the
+		// not-computable em-dash, consistent with its sibling rate card (NPPD-1704).
+		return $this->populated_scalar( $joined['revenue'], count( $joined['rows'] ) > 0, $joined['conversions'], 'currency' );
 	}
 
 	// --- Section 6: How readers convert ---------------------------------
