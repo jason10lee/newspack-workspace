@@ -93,7 +93,7 @@ final class Audience_Metric {
 		}
 		return [
 			'tab_error'   => 'oauth_not_connected',
-			'banner_text' => __( 'Connect Google Analytics in Newspack → Connections to see this tab.', 'newspack-plugin' ),
+			'banner_text' => __( 'Audience metrics come from a GA4 property connected through Site Kit. Set up Site Kit to start seeing data here.', 'newspack-plugin' ),
 		];
 	}
 

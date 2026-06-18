@@ -17,10 +17,11 @@ import { __ } from '@wordpress/i18n';
  */
 import { Notice, Button } from '../../../../../packages/components/src';
 
-// Localized, subdirectory-safe URL to the Newspack settings page (where the
-// Google connection lives), built with admin_url() in the PHP boot config.
-// Falls back to a relative admin path if the global isn't present.
-const SETTINGS_URL = window.newspackInsights?.settingsUrl || 'admin.php?page=newspack-settings';
+// Localized, subdirectory-safe URL to Site Kit's GA4 connection — or, when
+// Site Kit isn't installed, the Newspack → Connections page where it gets
+// installed (NPPD-1731). Built with admin_url() in the PHP boot config; falls
+// back to a relative admin path if the global isn't present.
+const SITE_KIT_URL = window.newspackInsights?.siteKitUrl || 'admin.php?page=newspack-settings';
 
 export interface ConnectBannerProps {
 	text?: string;
@@ -32,9 +33,9 @@ const ConnectBanner = ( { text }: ConnectBannerProps ) => (
 		className="newspack-insights__connect-banner"
 		noticeText={
 			<>
-				{ text || __( 'Connect Google Analytics in Newspack → Settings → Connections to see this tab.', 'newspack-plugin' ) }{ ' ' }
-				<Button variant="link" href={ SETTINGS_URL }>
-					{ __( 'Connect Google Analytics →', 'newspack-plugin' ) }
+				{ text || __( 'Connect Google Analytics through Site Kit to see this tab.', 'newspack-plugin' ) }{ ' ' }
+				<Button variant="link" href={ SITE_KIT_URL }>
+					{ __( 'Set up Site Kit →', 'newspack-plugin' ) }
 				</Button>
 			</>
 		}
