@@ -27,7 +27,7 @@ describe( 'OpportunityBucketsSection', () => {
 
 	it( 'renders the top-pages table empty treatment when state is empty', () => {
 		render( <OpportunityBucketsSection current={ makeConversionWindow( { topPagesState: 'empty' } ) } /> );
-		expect( screen.getByText( /No qualifying pages yet/ ) ).toBeInTheDocument();
+		expect( screen.getByText( /No qualifying articles yet/ ) ).toBeInTheDocument();
 	} );
 
 	it( 'renders the top-pages table error treatment when state is error', () => {
@@ -44,6 +44,6 @@ describe( 'OpportunityBucketsSection', () => {
 	it( 'renders the top-pages note regardless of table state', () => {
 		render( <OpportunityBucketsSection current={ makeConversionWindow() } /> );
 		// Note: the rendered string uses a right single quotation mark (U+2019) in "don't".
-		expect( screen.getByText( /These pages get traffic but don/ ) ).toBeInTheDocument();
+		expect( screen.getByText( /These articles get traffic but don/ ) ).toBeInTheDocument();
 	} );
 } );

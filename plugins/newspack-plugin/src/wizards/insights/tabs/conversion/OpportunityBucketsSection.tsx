@@ -132,9 +132,9 @@ const OpportunityBucketsSection = ( { current }: OpportunityBucketsSectionProps 
 					defaultSortKey="pageviews"
 					initialRowLimit={ TOP_PAGES_ROW_LIMIT }
 					emptyMessage={ sprintf(
-						/* translators: %s: minimum pageview count for a page to qualify (formatted). */
+						/* translators: %s: minimum pageview count for an article to qualify (formatted). */
 						__(
-							'No qualifying pages yet. Pages with at least %s pageviews and a measurable conversion rate will appear here.',
+							'No qualifying articles yet. Articles with at least %s pageviews and a measurable conversion rate will appear here.',
 							'newspack-plugin'
 						),
 						formatNumber( current.top_pages_no_conversion.threshold_pageviews )
