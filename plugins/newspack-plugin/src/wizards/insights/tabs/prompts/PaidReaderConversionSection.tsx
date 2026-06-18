@@ -64,6 +64,9 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 					notComputableMessage: NOT_COMPUTABLE_COPY.donation,
 				} ) }
 			/>
+			{ /* Block-name vs intent-name asymmetry: NOT_CAPABLE keys off the block that
+			     grants capability (checkout); NOT_COMPUTABLE keys off the metric's intent
+			     (subscription). Same pattern in RevenueFromPromptsSection. */ }
 			<MetricCard
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Subscription Conversion (Direct)', 'newspack-plugin' ),
