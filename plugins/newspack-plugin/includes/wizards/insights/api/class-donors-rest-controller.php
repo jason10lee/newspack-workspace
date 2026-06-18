@@ -277,11 +277,9 @@ class Donors_REST_Controller extends WP_REST_Controller {
 			'donations_by_tier'          => $metric->get_donations_by_tier( $start, $end ),
 			// Derived empty-state signal (NPPD-1696): true when the window saw any
 			// donation activity at all. Pure derivation from values already fetched
-			// above — no extra query, no storage change — mirroring how Gates derives
-			// its section totals (NPPD-1694). Drives the WindowedSection's
-			// no_opportunity empty state on the React side; the no_opportunity /
-			// no_conversions decision itself stays in the component, not here.
-			'has_window_activity'        => 0.0 !== (float) $total_revenue || $new_donors > 0 || $lapsed_donors > 0,
+			// above — no extra query — kept in the metric class alongside the other
+			// derived signals, mirroring Gates_Metric::paywall_section_totals().
+			'has_window_activity'        => Donors_Metric::window_activity_signal( $new_donors, $lapsed_donors, $total_revenue ),
 		];
 	}
 

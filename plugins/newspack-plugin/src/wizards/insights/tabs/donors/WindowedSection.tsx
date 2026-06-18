@@ -118,6 +118,9 @@ const WindowedSection = ( { range, current, previous, activeDonors }: WindowedSe
 	// single callout (NPPD-1694 `EmptyMetricSection`). Checked first so the
 	// per-card states below only fire inside a section that has real data —
 	// mirroring Gates' "no_opportunity before everything" ordering.
+	// Edge: `has_window_activity` keys off net revenue, so a window whose only
+	// donation was later fully refunded (net 0, no new/lapsed donors) reads as
+	// "no donations" here. Accepted — this is display-only and gates nothing.
 	if ( ! current.has_window_activity ) {
 		return (
 			<EmptyMetricSection
