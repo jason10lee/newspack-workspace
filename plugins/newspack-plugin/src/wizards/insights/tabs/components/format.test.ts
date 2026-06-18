@@ -1,11 +1,7 @@
 /**
  * Tests for the tiered currency formatter (NPPD-1684).
  *
- * Named `.test.js` (not `.ts`) so the suite is actually collected: the current
- * testMatch only matches `test.js` / `test.jsx`, excluding `.ts`/`.tsx`
- * (NPPD-1683). The `./format` import still resolves to format.ts via Jest's
- * default moduleFileExtensions + the TS-aware babel transform. Expected strings
- * assume the en-US default locale used by the test environment.
+ * Expected strings assume the en-US default locale used by the test environment.
  */
 
 /**
