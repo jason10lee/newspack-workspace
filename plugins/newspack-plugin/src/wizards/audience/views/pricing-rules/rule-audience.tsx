@@ -25,8 +25,8 @@ interface RuleAudienceProps {
 }
 
 export default function RuleAudience( { scopeType, scopeIds, conditions, application, ruleId }: RuleAudienceProps ) {
-	const [ audience, setAudience ] = useState< RuleAudience | null >( null );
-	const [ loading, setLoading ] = useState( false );
+	const [ audience, setAudience ] = useState< RuleAudienceData | null >( null );
+	const [ isLoading, setIsLoading ] = useState( false );
 	const timer = useRef< ReturnType< typeof setTimeout > >();
 
 	const scopeKey = JSON.stringify( scopeIds );
@@ -36,18 +36,32 @@ export default function RuleAudience( { scopeType, scopeIds, conditions, applica
 		if ( timer.current ) {
 			clearTimeout( timer.current );
 		}
+		let cancelled = false;
 		timer.current = setTimeout( () => {
-			setLoading( true );
+			setIsLoading( true );
 			apiFetch< RuleAudienceResponse >( {
 				path: AUDIENCE_PATH,
 				method: 'POST',
 				data: { id: ruleId, scope_type: scopeType, scope_ids: scopeIds, conditions, application },
 			} )
-				.then( res => setAudience( res.audience ?? null ) )
-				.catch( () => setAudience( null ) )
-				.finally( () => setLoading( false ) );
+				.then( res => {
+					if ( ! cancelled ) {
+						setAudience( res.audience ?? null );
+					}
+				} )
+				.catch( () => {
+					if ( ! cancelled ) {
+						setAudience( null );
+					}
+				} )
+				.finally( () => {
+					if ( ! cancelled ) {
+						setIsLoading( false );
+					}
+				} );
 		}, DEBOUNCE_MS );
 		return () => {
+			cancelled = true;
 			if ( timer.current ) {
 				clearTimeout( timer.current );
 			}
@@ -63,14 +77,14 @@ export default function RuleAudience( { scopeType, scopeIds, conditions, applica
 	const caughtLabel = 'locked' === audience.application ? __( 'in cohort', 'newspack-plugin' ) : __( 'eligible at renewal', 'newspack-plugin' );
 
 	return (
-		<p className={ `newspack-pricing-rule-audience${ loading ? ' is-loading' : '' }` }>
+		<p className={ `newspack-pricing-rules__audience${ isLoading ? ' is-loading' : '' }` }>
 			{ sprintf(
 				/* translators: 1: total subscribers, 2: caught count, 3: caught label, 4: protected count. */
 				__( 'Existing subscribers in scope: %1$s — %2$s %3$s · %4$s protected', 'newspack-plugin' ),
 				total,
-				audience.caught,
+				String( audience.caught ),
 				caughtLabel,
-				audience.protected
+				String( audience.protected )
 			) }
 		</p>
 	);

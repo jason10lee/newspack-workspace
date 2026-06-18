@@ -111,7 +111,7 @@ interface CatalogImpactResponse {
 	sample: CatalogImpactRow[];
 }
 
-interface RuleAudience {
+interface RuleAudienceData {
 	supported: boolean;
 	total: number;
 	caught: number;
@@ -121,5 +121,5 @@ interface RuleAudience {
 }
 
 interface RuleAudienceResponse {
-	audience?: RuleAudience;
+	audience?: RuleAudienceData;
 }
