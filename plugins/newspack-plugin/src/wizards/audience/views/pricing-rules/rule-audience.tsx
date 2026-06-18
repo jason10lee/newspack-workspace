@@ -74,18 +74,20 @@ export default function RuleAudience( { scopeType, scopeIds, conditions, applica
 	}
 
 	const total = audience.count_limited ? `${ audience.total }+` : `${ audience.total }`;
-	const caughtLabel = 'locked' === audience.application ? __( 'in cohort', 'newspack-plugin' ) : __( 'eligible at renewal', 'newspack-plugin' );
+	const message =
+		'locked' === audience.application
+			? sprintf(
+					/* translators: %s: number of existing subscribers in scope. */
+					__( 'Existing subscribers in scope: %s — none repriced (applies to new sign-ups only).', 'newspack-plugin' ),
+					total
+			  )
+			: sprintf(
+					/* translators: 1: total subscribers, 2: count eligible at renewal, 3: count protected. */
+					__( 'Existing subscribers in scope: %1$s — %2$s eligible at renewal · %3$s protected.', 'newspack-plugin' ),
+					total,
+					String( audience.caught ),
+					String( audience.protected )
+			  );
 
-	return (
-		<p className={ `newspack-pricing-rules__audience${ isLoading ? ' is-loading' : '' }` }>
-			{ sprintf(
-				/* translators: 1: total subscribers, 2: caught count, 3: caught label, 4: protected count. */
-				__( 'Existing subscribers in scope: %1$s — %2$s %3$s · %4$s protected', 'newspack-plugin' ),
-				total,
-				String( audience.caught ),
-				caughtLabel,
-				String( audience.protected )
-			) }
-		</p>
-	);
+	return <p className={ `newspack-pricing-rules__audience${ isLoading ? ' is-loading' : '' }` }>{ message }</p>;
 }
