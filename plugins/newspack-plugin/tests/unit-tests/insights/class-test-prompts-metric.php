@@ -427,14 +427,16 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Wired revenue methods: empty BQ rows → $0.00 populated, computable=true
-	 * (the sum is a real 0), denominator 0 (zero conversions matched).
+	 * Wired revenue methods: empty BQ rows → state 'populated' but NON-computable
+	 * (NPPD-1704). An empty window means no in-intent prompts were viewed, so
+	 * revenue gates `computable` on `count( rows ) > 0` exactly like its sibling
+	 * rate method — it renders the not-computable em-dash, not a misleading $0.00.
 	 *
 	 * @dataProvider provide_paid_revenue_methods
 	 * @param string $method     Method on Prompts_Metric to call.
 	 * @param string $query_name Underlying conversion query name dispatched.
 	 */
-	public function test_paid_revenue_returns_zero_on_empty( string $method, string $query_name ) {
+	public function test_paid_revenue_returns_noncomputable_on_empty( string $method, string $query_name ) {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
 		$proxy->expects( $this->once() )
 			->method( 'query' )
@@ -450,7 +452,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 
 		$this->assertSame( 'populated', $result['state'] );
 		$this->assertSame( 0.0, $result['value'] );
-		$this->assertSame( 0, $result['denominator'] );
+		$this->assertFalse( $result['computable'] );
 		$this->assertSame( 'currency', $result['placeholder_type'] );
 	}
 
