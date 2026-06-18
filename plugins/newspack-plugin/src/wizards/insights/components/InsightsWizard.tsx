@@ -28,6 +28,7 @@ import { Wizard } from '../../../../packages/components/src';
 import ComparisonToggle from './ComparisonToggle';
 import DateRangePicker from './DateRangePicker';
 import CooldownNotice from './CooldownNotice';
+import PrintDocumentMeta from './PrintDocumentMeta';
 import TabSpinner from '../tabs/components/TabSpinner';
 import useComparisonMode from '../state/useComparisonMode';
 import useDateRange, { type DateRange } from '../state/useDateRange';
@@ -62,6 +63,8 @@ export interface InsightsBootConfig {
 	settingsUrl: string;
 	siteKitUrl: string;
 	lastUpdated: null | string;
+	/** Site title, rendered in the PDF export document header (NPPD-1661). */
+	publisherName: string;
 }
 
 export interface InsightsWizardProps {
@@ -162,16 +165,20 @@ const renderTabComponent = ( tabKey: TabKey, sectionProps: TabSectionProps ): Re
 
 interface TabSectionRenderProps extends TabSectionProps {
 	tabKey: TabKey;
+	tabLabel: string;
+	publisherName: string;
 }
 
 /**
- * Per-tab wrapper rendered by the Wizard. Carries the CooldownNotice,
- * the error boundary (keyed by tab so a chunk-load error clears when
- * the user navigates away), and the Suspense boundary for the lazy
- * tab chunk.
+ * Per-tab wrapper rendered by the Wizard. Carries the print-only document
+ * header/footer (NPPD-1661 — used by the "Download PDF" export), the
+ * CooldownNotice, the error boundary (keyed by tab so a chunk-load error
+ * clears when the user navigates away), and the Suspense boundary for the
+ * lazy tab chunk.
  */
-const TabSection = ( { tabKey, range, previousRange }: TabSectionRenderProps ) => (
+const TabSection = ( { tabKey, tabLabel, publisherName, range, previousRange }: TabSectionRenderProps ) => (
 	<>
+		<PrintDocumentMeta tabLabel={ tabLabel } publisherName={ publisherName } range={ range } previousRange={ previousRange } />
 		<CooldownNotice tab={ tabKey } range={ range } previousRange={ previousRange } />
 		<TabErrorBoundary key={ tabKey }>
 			<Suspense fallback={ <Fallback /> }>{ renderTabComponent( tabKey, { range, previousRange } ) }</Suspense>
@@ -238,7 +245,7 @@ const InsightsWizard = ( { config }: InsightsWizardProps ) => {
 		label: t.label,
 		exact: true,
 		render: TabSection,
-		props: { tabKey: t.key, range, previousRange },
+		props: { tabKey: t.key, tabLabel: t.label, range, previousRange, publisherName: config.publisherName },
 	} ) );
 
 	const renderAboveSections = () => (

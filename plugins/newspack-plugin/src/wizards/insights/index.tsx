@@ -48,6 +48,7 @@ const FALLBACK_CONFIG: InsightsBootConfig = {
 	adminUrl: '',
 	siteKitUrl: '',
 	lastUpdated: null,
+	publisherName: '',
 };
 
 const Index = () => {

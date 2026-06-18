@@ -363,6 +363,10 @@ class Insights_Wizard extends Wizard {
 			'adminUrl'          => admin_url(),
 			'settingsUrl'       => admin_url( 'admin.php?page=newspack-settings' ),
 			'siteKitUrl'        => self::get_site_kit_url(),
+			// Publisher (site) name, shown in the PDF export document header
+			// (NPPD-1661). Resolved at render time from the site's own title —
+			// never a hardcoded name.
+			'publisherName'     => get_bloginfo( 'name' ),
 		];
 	}
 
