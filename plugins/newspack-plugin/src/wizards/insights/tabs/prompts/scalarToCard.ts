@@ -54,7 +54,7 @@ export const scalarToMetricCardProps = ( props: ScalarCardProps ) => {
 	// misleading zero. The raw message stays server-side; the card shows generic
 	// copy keyed off the `error` prop.
 	if ( current.state === 'error' ) {
-		return { label, description, error: current.error_message ?? __( 'Data unavailable', 'newspack-plugin' ) };
+		return { label, description, error: current.error_message ?? __( 'Data temporarily unavailable.', 'newspack-plugin' ) };
 	}
 	// Structural "not capable" (NPPD-1720): no active prompt carries the block
 	// this metric measures, so there's nothing to compute regardless of window.
@@ -64,7 +64,7 @@ export const scalarToMetricCardProps = ( props: ScalarCardProps ) => {
 		return {
 			label,
 			description,
-			notCapableMessage: notCapableMessage ?? __( 'Not measurable for your active prompts', 'newspack-plugin' ),
+			notCapableMessage: notCapableMessage ?? __( 'Not measurable for your active prompts.', 'newspack-plugin' ),
 		};
 	}
 	// "Not computable this window" (NPPD-1704): the metric is capable (its block

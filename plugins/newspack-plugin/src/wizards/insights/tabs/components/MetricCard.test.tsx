@@ -65,10 +65,10 @@ describe( 'MetricCard zeroFallback (NPPD-1694)', () => {
 			expect( screen.getByText( '0 of 1,234,567' ) ).toBeInTheDocument();
 		} );
 
-		it( 'renders the em-dash + "No paywall attempts in this window" when denominator is 0', () => {
+		it( 'renders the em-dash + "No paywall attempts in this timeframe" when denominator is 0', () => {
 			render( <MetricCard label="Rate" value={ 0 } format="percent" zeroFallback={ { numerator: 0, denominator: 0, ...PAYWALL } } /> );
 			expect( screen.getByLabelText( 'Not applicable' ) ).toHaveTextContent( '—' );
-			expect( screen.getByText( 'No paywall attempts in this window' ) ).toBeInTheDocument();
+			expect( screen.getByText( 'No paywall attempts in this timeframe' ) ).toBeInTheDocument();
 		} );
 
 		it( 'falls through to the normal percentage when numerator and denominator are both positive', () => {
@@ -92,7 +92,7 @@ describe( 'MetricCard zeroFallback (NPPD-1694)', () => {
 			expect( screen.queryByText( '$0.00' ) ).not.toBeInTheDocument();
 		} );
 
-		it( 'renders the em-dash + "No paywall attempts in this window" when attempts are 0', () => {
+		it( 'renders the em-dash + "No paywall attempts in this timeframe" when attempts are 0', () => {
 			render(
 				<MetricCard
 					label="Total"
@@ -102,12 +102,12 @@ describe( 'MetricCard zeroFallback (NPPD-1694)', () => {
 				/>
 			);
 			expect( screen.getByLabelText( 'Not applicable' ) ).toHaveTextContent( '—' );
-			expect( screen.getByText( 'No paywall attempts in this window' ) ).toBeInTheDocument();
+			expect( screen.getByText( 'No paywall attempts in this timeframe' ) ).toBeInTheDocument();
 		} );
 	} );
 
 	describe( 'currency average card (currencyRole="average")', () => {
-		it( 'renders the em-dash + "No conversions in this window" when conversions are 0 but attempts > 0', () => {
+		it( 'renders the em-dash + "No conversions in this timeframe" when conversions are 0 but attempts > 0', () => {
 			render(
 				<MetricCard
 					label="Avg revenue per paywall conversion"
@@ -117,10 +117,10 @@ describe( 'MetricCard zeroFallback (NPPD-1694)', () => {
 				/>
 			);
 			expect( screen.getByLabelText( 'Not applicable' ) ).toHaveTextContent( '—' );
-			expect( screen.getByText( 'No conversions in this window' ) ).toBeInTheDocument();
+			expect( screen.getByText( 'No conversions in this timeframe' ) ).toBeInTheDocument();
 		} );
 
-		it( 'renders "No paywall attempts in this window" when attempts are 0', () => {
+		it( 'renders "No paywall attempts in this timeframe" when attempts are 0', () => {
 			render(
 				<MetricCard
 					label="Avg"
@@ -129,7 +129,7 @@ describe( 'MetricCard zeroFallback (NPPD-1694)', () => {
 					zeroFallback={ { numerator: 0, denominator: 0, currencyRole: 'average', ...PAYWALL } }
 				/>
 			);
-			expect( screen.getByText( 'No paywall attempts in this window' ) ).toBeInTheDocument();
+			expect( screen.getByText( 'No paywall attempts in this timeframe' ) ).toBeInTheDocument();
 		} );
 	} );
 
@@ -142,7 +142,7 @@ describe( 'MetricCard zeroFallback (NPPD-1694)', () => {
 				zeroFallback={ { numerator: 0, denominator: 0, attemptsLabel: 'registration gate impressions' } }
 			/>
 		);
-		expect( screen.getByText( 'No registration gate impressions in this window' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'No registration gate impressions in this timeframe' ) ).toBeInTheDocument();
 	} );
 
 	it( 'suppresses the comparison delta when a fallback hero is shown', () => {

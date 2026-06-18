@@ -58,7 +58,7 @@ export interface MetricCardZeroFallback {
 	numerator?: number;
 	denominator?: number;
 	currencyRole?: 'total' | 'average';
-	/** Plural noun for the "No … in this window" line, e.g. "paywall attempts". */
+	/** Plural noun for the "No … in this timeframe" line, e.g. "paywall attempts". */
 	attemptsLabel: string;
 	/** Plural noun for the conversions line, e.g. "conversions". */
 	conversionsLabel?: string;
@@ -182,7 +182,7 @@ const MetricCard = ( props: MetricCardProps ) => {
 	} else if ( notComputableMessage ) {
 		// "Not computable this window" (NPPD-1704): the metric is capable (its block
 		// exists) but the math couldn't complete — typically a zero denominator, so
-		// there were no in-intent inputs in this window. Same em-dash + secondary
+		// there were no in-intent inputs in this timeframe. Same em-dash + secondary
 		// treatment as not-capable, one slot lower: not-capable already short-
 		// circuited above (its nudge is the more actionable of the two), and this
 		// beats `zeroFallback`. A longer window or more traffic can fill this gap.
@@ -194,11 +194,11 @@ const MetricCard = ( props: MetricCardProps ) => {
 		const noneInWindow = ( pluralNoun: string ) =>
 			sprintf(
 				/* translators: %s is a plural noun, e.g. "paywall attempts". */
-				__( 'No %s in this window', 'newspack-plugin' ),
+				__( 'No %s in this timeframe', 'newspack-plugin' ),
 				pluralNoun
 			);
 		if ( denominator === 0 ) {
-			// Nothing happened at all → em-dash + "No <attempts> in this window".
+			// Nothing happened at all → em-dash + "No <attempts> in this timeframe".
 			fallbackHero = EM_DASH;
 			fallbackSecondary = noneInWindow( attemptsLabel );
 		} else if ( numerator === 0 && typeof denominator === 'number' && denominator > 0 ) {
@@ -219,7 +219,7 @@ const MetricCard = ( props: MetricCardProps ) => {
 					conversionsNoun
 				);
 			} else {
-				// Currency average → em-dash + "No conversions in this window".
+				// Currency average → em-dash + "No conversions in this timeframe".
 				fallbackHero = EM_DASH;
 				fallbackSecondary = noneInWindow( conversionsNoun );
 			}
