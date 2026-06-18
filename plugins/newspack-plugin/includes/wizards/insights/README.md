@@ -253,6 +253,38 @@ Sentence-form empty-state copy ends with a period. Generic safety-net fallbacks 
 
 This reference standardizes *structure*, not personality. Subscribers' good-zero copy is intentionally warmer ("No failed payments in this timeframe.") than Advertising's terse data notes ("No ad revenue in this timeframe.") — both are right for their context. When a tab's voice and its data shape pull toward a warmer or terser register, follow the register; conform to the patterns above, not to a single flattened tone.
 
+## Subscriber churn metric (canonical reference)
+
+Verified semantics of the Subscribers tab "Churned subscribers" count (NPPD-1724 audit + site-data verification). The query looks wrong — it inner-joins on `_schedule_cancelled` while counting expirations — but is correct; the notes below document why, so it isn't "fixed" into a regression.
+
+### What it counts
+
+Distinct customers whose last non-donation subscription reached `wc-cancelled` or `wc-expired`, attributed to the timeframe by `_schedule_cancelled`, with no remaining `wc-active` non-donation subscription. Query: `get_churned_subscribers_in_window()` in [`storage/class-hpos-storage.php`](storage/class-hpos-storage.php) (line 173), mirrored against legacy CPT storage in [`storage/class-legacy-storage.php`](storage/class-legacy-storage.php) (line 195). Non-donation only; the Donors-tab equivalent and its product-classification gap are NPPD-1736, out of scope here.
+
+### Both statuses, one bucket
+
+`wc-cancelled` and `wc-expired` count together. The dominant flow on Newspack publishers is `active → pending-cancel → expired`, not `active → cancelled`: readers cancel, ride out the paid period, then expire. Splitting the statuses separates "cancelled immediately" from "cancelled and lapsed," not voluntary from involuntary — not a distinction the metric draws. Together they mean subscribers lost in the timeframe. Transition-pattern follow-up: NPPD-1735.
+
+### `_schedule_cancelled` as the date key
+
+The schema reference implies `_schedule_cancelled` is set only on cancellation, so the inner join should drop natural expirations. It doesn't — because expirations arrive via the cancel-then-expire flow, the cancel timestamp is already set. Verified populated on 100% of expired subscriptions, none empty:
+
+| Site | Expired subs | `_schedule_cancelled` populated |
+| --- | --- | --- |
+| Richland Source | 392 | 100% |
+| Block Club Chicago | 2,542 | 100% |
+
+The field anchors the loss to when cancel was clicked, regardless of terminal status. The `!= ''` guard covers the empty edge case (removed nothing on either site). The audit's hypothesized COALESCE-onto-`_schedule_end` fix (F1) would be a no-op, so the SQL is unchanged.
+
+### Excluded
+
+| Status | Why |
+| --- | --- |
+| `wc-pending-cancel` | Cancellation scheduled but still entitled through the paid period — not yet lost. Counted when it transitions to `cancelled`/`expired`. |
+| `wc-on-hold` | Failed renewal inside the retry window — may recover. Counted only if it later reaches a terminal status. |
+
+D1 decision, confirmed against the data; counting either early overstates churn.
+
 ## Testing
 
 Jest, colocated `*.test.ts(x)` next to the source. Key spots:
