@@ -365,8 +365,11 @@ class Insights_Wizard extends Wizard {
 			'siteKitUrl'        => self::get_site_kit_url(),
 			// Publisher (site) name, shown in the PDF export document header
 			// (NPPD-1661). Resolved at render time from the site's own title —
-			// never a hardcoded name.
-			'publisherName'     => get_bloginfo( 'name' ),
+			// never a hardcoded name. Decode entities: `blogname` is stored
+			// HTML-escaped (e.g. "Ben &amp; Jerry's"), and React escapes again
+			// on render, so a raw get_bloginfo() would print the literal entity.
+			// Hand React the decoded string and let it do the single escaping.
+			'publisherName'     => wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ),
 		];
 	}
 
