@@ -15,8 +15,10 @@
  *   - 'not_computable' — populated data, but all 13 conversion-tied scalars are
  *     capable (has_capability:true) yet non-computable (state 'populated',
  *     computable:false) so their cards render the "no inputs this window"
- *     treatment (NPPD-1704); exposure / engagement scalars keep real values,
- *     proving the gate is per-metric, not tab-wide.
+ *     treatment (NPPD-1704). The other exposure/engagement scalars (impressions,
+ *     CTR, dismissal) keep real values, proving the gate is per-metric, not
+ *     tab-wide. Note form_submission_rate is an engagement-area metric that IS
+ *     gated — it's one of the 13 conversion-tied scalars.
  *
  * Returns a closure so the single required file can build any variant. Never
  * enable fixture mode in production.
@@ -423,12 +425,14 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 
 	// --- Not-computable variant (NPPD-1704): capable, but no inputs this window. ---
 	// All 13 conversion-tied scalars stay capable (has_capability:true) yet report a
-	// non-computable zero (state 'populated', computable:false) — the exact envelope
-	// the metric class emits when SAFE_DIVIDE returns NULL on a zero denominator
-	// (compute_metric_from_proxy). Exposure / engagement scalars are left untouched
-	// with their real values, so a reviewer hitting _fixture_state=not_computable
-	// sees ONLY the conversion cards em-dashed — proof the gate is per-metric, not
-	// tab-wide. Contrast not_capable (pre-query block scan); this is post-query math.
+	// non-computable zero (state 'populated', computable:false) — the envelope the
+	// metric class emits for an empty window (the 5 proxy rate metrics via SAFE_DIVIDE
+	// NULL; the 8 Woo-joined paid-conversion + revenue metrics via count(rows) === 0).
+	// The other exposure/engagement scalars (impressions, CTR, dismissal) keep their
+	// real values, so a reviewer hitting _fixture_state=not_computable sees ONLY the
+	// conversion cards em-dashed — proof the gate is per-metric, not tab-wide.
+	// (form_submission_rate is the one engagement-area metric among the 13.) Contrast
+	// not_capable (pre-query block scan); this is post-query math.
 	$conversion_metrics   = [
 		'form_submission_rate',
 		'registration_conversion_direct',
