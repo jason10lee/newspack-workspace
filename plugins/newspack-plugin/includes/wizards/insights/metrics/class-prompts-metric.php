@@ -200,9 +200,11 @@ final class Prompts_Metric {
 	 * Return the canned fixture payload for the Prompts tab.
 	 *
 	 * Returned by the REST controller when NEWSPACK_INSIGHTS_FIXTURE_MODE is on.
-	 * The variant selects a render path: 'populated' (default), 'empty', 'error'.
+	 * The variant selects a render path: 'populated' (default), 'empty', 'error',
+	 * 'not_capable' (NPPD-1720), 'not_computable' (NPPD-1704).
 	 *
-	 * @param string $variant One of 'populated', 'empty', 'error'.
+	 * @param string $variant One of 'populated', 'empty', 'error', 'not_capable',
+	 *                        'not_computable'.
 	 * @param bool   $compare Whether comparison was requested; when false the
 	 *                        `previous` window is null (no period-over-period deltas).
 	 * @return array Full { tab_error, current, previous } response shape.

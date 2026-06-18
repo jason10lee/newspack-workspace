@@ -99,6 +99,16 @@ export interface MetricCardProps {
 	 * window-bound). Absent for capable metrics and every non-Prompts caller.
 	 */
 	notCapableMessage?: string;
+	/**
+	 * "Not computable this window" copy (NPPD-1704). When set, the metric IS
+	 * capable (the block exists) but the math couldn't complete for this window —
+	 * typically a zero denominator (SAFE_DIVIDE NULL) because no in-intent prompts
+	 * were viewed. Renders the same em-dash hero + secondary line as
+	 * `notCapableMessage`, but sits one slot lower in precedence: `notCapable`
+	 * wins (its "add the block" nudge is more actionable than "wait for data"),
+	 * and this in turn beats `zeroFallback`. Absent for every non-Prompts caller.
+	 */
+	notComputableMessage?: string;
 }
 
 // Currency is handled by the caller (it needs both display + title from one
@@ -139,6 +149,7 @@ const MetricCard = ( props: MetricCardProps ) => {
 		valueTitle,
 		zeroFallback,
 		notCapableMessage,
+		notComputableMessage,
 	} = props;
 
 	// Shared graceful-failure state (missing dimension / not configured / error).
@@ -168,6 +179,15 @@ const MetricCard = ( props: MetricCardProps ) => {
 		// no date range can fill) wins over a window-bound zero count.
 		fallbackHero = EM_DASH;
 		fallbackSecondary = notCapableMessage;
+	} else if ( notComputableMessage ) {
+		// "Not computable this window" (NPPD-1704): the metric is capable (its block
+		// exists) but the math couldn't complete — typically a zero denominator, so
+		// there were no in-intent inputs in this window. Same em-dash + secondary
+		// treatment as not-capable, one slot lower: not-capable already short-
+		// circuited above (its nudge is the more actionable of the two), and this
+		// beats `zeroFallback`. A longer window or more traffic can fill this gap.
+		fallbackHero = EM_DASH;
+		fallbackSecondary = notComputableMessage;
 	} else if ( zeroFallback && ( format === 'percent' || format === 'currency' ) ) {
 		const { numerator, denominator, currencyRole, attemptsLabel, conversionsLabel } = zeroFallback;
 		const conversionsNoun = conversionsLabel ?? __( 'conversions', 'newspack-plugin' );
@@ -296,10 +316,13 @@ const MetricCard = ( props: MetricCardProps ) => {
 					</div>
 				) }
 			</div>
-			{ /* The not-capable nudge replaces the formula description (NPPD-1720): the
-			     description explains how the metric is computed, which is moot when there's
-			     structurally nothing to compute, and would just double the text block. */ }
-			{ description && ! notCapableMessage && <div className="newspack-insights__metric-card-description">{ description }</div> }
+			{ /* The not-capable / not-computable secondary line replaces the formula
+			     description (NPPD-1720, NPPD-1704): the description explains how the
+			     metric is computed, which is moot when there's nothing to compute, and
+			     would just double the text block. */ }
+			{ description && ! notCapableMessage && ! notComputableMessage && (
+				<div className="newspack-insights__metric-card-description">{ description }</div>
+			) }
 		</Card>
 	);
 };
