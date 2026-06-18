@@ -46,6 +46,16 @@ export interface AdvertisingWindow {
 	is_loading?: boolean;
 	/** Serving a stale payload while a background refresh runs. */
 	is_stale?: boolean;
+	/**
+	 * Derived empty-state signal (NPPD-1697): true when the resolved report saw
+	 * any ad activity (impressions or revenue). Present (boolean) only once the
+	 * report resolves and both volume metrics are computable — ABSENT while
+	 * `is_loading`, or when a metric errored. The ReachRevenueSection reads
+	 * `=== false` to fire its `no_opportunity` collapse, so `undefined` (loading /
+	 * error) falls through and never collapses mid-load. Matches the optional
+	 * `is_loading?` / `is_stale?` convention.
+	 */
+	has_window_activity?: boolean;
 }
 
 export interface AdvertisingResponse {

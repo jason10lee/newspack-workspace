@@ -12,7 +12,12 @@
  * Variants (via the `_fixture_state` query param — see dev-notes.md):
  *   populated       — full scorecards + tables + direct/programmatic split.
  *   not_ready       — is_report_ready false; both readiness issues present.
- *   zero            — zero-impression window: scorecards 0, tables empty.
+ *   zero            — zero-activity window: scorecards 0, tables empty
+ *                     (has_window_activity false → ReachRevenue no_opportunity).
+ *   no_revenue      — impressions running, zero revenue (ReachRevenue per-card
+ *                     no-revenue treatment on Total Revenue).
+ *   loading         — is_loading true, empty metrics (tab shows progressive
+ *                     messages; the empty-state branches must NOT render).
  *   no_viewability  — viewability scorecard as a data_unavailable overlay.
  *
  * All dates are computed at runtime so the fixture never goes stale.
@@ -69,6 +74,58 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 					'type'        => 'rate',
 					'numerator'   => 0,
 					'denominator' => 0,
+				],
+				'direct_vs_programmatic' => [
+					'rows'       => [],
+					'computable' => false,
+					'type'       => 'breakdown',
+				],
+				'top_ad_units'           => [
+					'rows'       => [],
+					'computable' => false,
+					'type'       => 'table',
+				],
+				'top_advertisers'        => [
+					'rows'       => [],
+					'computable' => false,
+					'type'       => 'table',
+				],
+			];
+		}
+
+		if ( 'no_revenue' === $window_variant ) {
+			// Impressions running, zero revenue — exercises the ReachRevenue per-card
+			// no-revenue treatment on the Total Revenue card.
+			$no_rev_impressions = (int) round( 2400000 * $scale );
+			return [
+				'total_impressions'      => [
+					'value'      => $no_rev_impressions,
+					'computable' => true,
+					'type'       => 'count',
+				],
+				'total_revenue'          => [
+					'value'      => 0.0,
+					'computable' => true,
+					'type'       => 'currency',
+				],
+				'avg_ecpm'               => [
+					'value'       => 0.0,
+					'computable'  => false,
+					'type'        => 'currency',
+					'numerator'   => 0.0,
+					'denominator' => 0,
+				],
+				'fill_rate'              => [
+					'value'       => 0.0,
+					'computable'  => false,
+					'type'        => 'rate',
+					'numerator'   => 0,
+					'denominator' => 0,
+				],
+				'viewability_rate'       => [
+					'value'      => null,
+					'computable' => false,
+					'overlay'    => [ 'type' => 'data_unavailable' ],
 				],
 				'direct_vs_programmatic' => [
 					'rows'       => [],
@@ -231,7 +288,28 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 		];
 	}
 
-	$envelope = [
+	// Loading render path: report not yet cached, background refresh scheduled.
+	// The tab shows progressive GAM messages (NPPD-1684) and the empty-state
+	// branches must NOT render — has_window_activity is deliberately absent.
+	if ( 'loading' === $variant ) {
+		return [
+			'current'  => [
+				'window'           => [
+					'start' => $start_date,
+					'end'   => $end_date,
+				],
+				'is_tab_visible'   => true,
+				'is_report_ready'  => true,
+				'readiness_issues' => [],
+				'metrics'          => [],
+				'is_loading'       => true,
+			],
+			'previous' => null,
+		];
+	}
+
+	$current_metrics = $metrics( 1.0, $variant );
+	$envelope        = [
 		'window'                      => [
 			'start' => $start_date,
 			'end'   => $end_date,
@@ -239,10 +317,14 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 		'is_tab_visible'              => true,
 		'is_report_ready'             => true,
 		'readiness_issues'            => [],
-		'metrics'                     => $metrics( 1.0, $variant ),
+		'metrics'                     => $current_metrics,
 		'data_as_of'                  => $data_as_of,
 		'has_estimated_data'          => true,
 		'estimated_window_start_date' => $est_start,
+		// Derived empty-state signal (NPPD-1697): mirrors the live read_window()
+		// derivation. `zero` → false (drives no_opportunity); populated / no_revenue
+		// → true.
+		'has_window_activity'         => ( ( $current_metrics['total_impressions']['value'] ?? 0 ) > 0 ) || ( ( $current_metrics['total_revenue']['value'] ?? 0 ) > 0 ),
 	];
 
 	$previous = null;
@@ -260,8 +342,10 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 		}
 
 		// 0.85 scale → current is higher on volume (positive deltas) while a few
-		// per-row figures land lower, exercising both delta directions.
-		$previous = [
+		// per-row figures land lower, exercising both delta directions. The prior
+		// window always uses a non-empty variant so comparison deltas render.
+		$prev_metrics = $metrics( 0.85, 'zero' === $variant ? 'populated' : $variant );
+		$previous     = [
 			'window'                      => [
 				'start' => $prior_start instanceof DateTimeImmutable ? $prior_start->format( 'Y-m-d' ) : $prior_start,
 				'end'   => $prior_end instanceof DateTimeImmutable ? $prior_end->format( 'Y-m-d' ) : $prior_end,
@@ -269,10 +353,11 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 			'is_tab_visible'              => true,
 			'is_report_ready'             => true,
 			'readiness_issues'            => [],
-			'metrics'                     => $metrics( 0.85, 'zero' === $variant ? 'populated' : $variant ),
+			'metrics'                     => $prev_metrics,
 			'data_as_of'                  => $data_as_of,
 			'has_estimated_data'          => true,
 			'estimated_window_start_date' => $est_start,
+			'has_window_activity'         => ( ( $prev_metrics['total_impressions']['value'] ?? 0 ) > 0 ) || ( ( $prev_metrics['total_revenue']['value'] ?? 0 ) > 0 ),
 		];
 	}
 
