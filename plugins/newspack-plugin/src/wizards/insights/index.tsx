@@ -44,7 +44,7 @@ const FALLBACK_CONFIG: InsightsBootConfig = {
 	} )(),
 	defaultComparison: false,
 	timezone: 'UTC',
-	settingsUrl: '',
+	siteKitUrl: '',
 	lastUpdated: null,
 };
 

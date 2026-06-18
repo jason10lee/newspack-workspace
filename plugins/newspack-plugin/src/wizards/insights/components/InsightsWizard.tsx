@@ -58,7 +58,7 @@ export interface InsightsBootConfig {
 	defaultDateRange: DateRange;
 	defaultComparison: boolean;
 	timezone: string;
-	settingsUrl: string;
+	siteKitUrl: string;
 }
 
 export interface InsightsWizardProps {
