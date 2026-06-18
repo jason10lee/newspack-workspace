@@ -89,6 +89,37 @@ describe( 'AdvertisingTab', () => {
 		expect( screen.getByText( 'Loading ad performance…' ) ).toBeInTheDocument();
 	} );
 
+	it( 'does NOT render the empty state while loading, even when has_window_activity is false (NPPD-1697 regression)', () => {
+		// The make-or-break: a still-running report must short-circuit to the
+		// progressive loading messages BEFORE the no_opportunity branch can evaluate,
+		// even though the payload would otherwise trigger it.
+		mockData( baseWindow( { is_loading: true, has_window_activity: false, metrics: {} } ) );
+		render( <AdvertisingTab range={ range } previousRange={ null } /> );
+
+		expect( screen.getByText( 'Loading ad performance…' ) ).toBeInTheDocument();
+		expect( screen.queryByText( /No ad impressions in this timeframe/ ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Reach & revenue' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'collapses the Reach & revenue section to no_opportunity on a resolved zero window', () => {
+		mockData(
+			baseWindow( {
+				has_window_activity: false,
+				metrics: {
+					total_impressions: { value: 0, computable: true, type: 'count' },
+					total_revenue: { value: 0, computable: true, type: 'currency' },
+					direct_vs_programmatic: { type: 'breakdown', computable: false, rows: [] },
+				},
+			} )
+		);
+		const { container } = render( <AdvertisingTab range={ range } previousRange={ null } /> );
+
+		expect( container.querySelector( '[data-empty-state="no_opportunity"]' ) ).toBeInTheDocument();
+		expect( container ).toHaveTextContent( 'No ad impressions in this timeframe' );
+		// The headline scorecards are gone; the other sections still render.
+		expect( screen.queryByText( 'Total Impressions' ) ).not.toBeInTheDocument();
+	} );
+
 	it( 'renders all sections with values when ready', () => {
 		mockData(
 			baseWindow( {
