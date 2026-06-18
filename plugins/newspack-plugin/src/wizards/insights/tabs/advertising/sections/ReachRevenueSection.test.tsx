@@ -58,17 +58,24 @@ describe( 'ReachRevenueSection empty states', () => {
 			total_revenue: { value: 0, computable: true, type: 'currency' },
 		} );
 		// hasWindowActivity is true here (impressions > 0) — only the revenue card changes.
-		const { container } = render( <ReachRevenueSection current={ current } previous={ metrics() } hasWindowActivity /> );
+		// Prior window has lower impressions so the impressions card has a real delta to render.
+		const previous = metrics( { total_impressions: { value: 2000000, computable: true, type: 'count' } } );
+		const { container } = render( <ReachRevenueSection current={ current } previous={ previous } hasWindowActivity /> );
 
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
 		// Real impressions count still shown — section not collapsed.
 		expect( screen.getByText( '2,400,000' ) ).toBeInTheDocument();
 		expect( screen.getByText( '2,400,000 impressions, but no revenue this timeframe' ) ).toBeInTheDocument();
+
+		const cardByLabel = ( label: string ) =>
+			Array.from( container.querySelectorAll( '.newspack-insights__metric-card-label' ) )
+				.find( el => el.textContent === label )
+				?.closest( '.newspack-insights__metric-card' );
 		// The Total Revenue card shows $0 with the period delta suppressed.
-		const revenueCard = Array.from( container.querySelectorAll( '.newspack-insights__metric-card-label' ) )
-			.find( el => el.textContent === 'Total Revenue' )
-			?.closest( '.newspack-insights__metric-card' );
-		expect( revenueCard?.querySelector( '.newspack-insights__metric-card-delta' ) ).toBeNull();
+		expect( cardByLabel( 'Total Revenue' )?.querySelector( '.newspack-insights__metric-card-delta' ) ).toBeNull();
+		// Special-casing the revenue card must NOT suppress the sibling impressions
+		// card's normal period comparison.
+		expect( cardByLabel( 'Total Impressions' )?.querySelector( '.newspack-insights__metric-card-delta' ) ).not.toBeNull();
 	} );
 
 	it( 'does NOT collapse or show no-revenue when a metric errored — the card surfaces its own error', () => {

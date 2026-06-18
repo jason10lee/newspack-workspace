@@ -278,9 +278,10 @@ class Advertising_Metric {
 	/**
 	 * Derived empty-state signal (NPPD-1697): whether a resolved window saw any
 	 * ad activity. A pure function of the two volume metrics the report already
-	 * produces — no SOAP query — mirroring {@see Donors_Metric::window_activity_signal()}
-	 * and the Subscribers equivalent. GAM has no refunds (no negative revenue) and
-	 * no transaction count, so impressions and revenue are the only signals.
+	 * produces — no SOAP query — mirroring the Donors / Subscribers empty-state
+	 * derivation (their respective `window_activity_signal()` helpers). GAM has no
+	 * refunds (no negative revenue) and no transaction count, so impressions and
+	 * revenue are the only signals.
 	 *
 	 * Set on the window only once the report has resolved AND both metrics are
 	 * computable (see {@see self::read_window()}); during loading, or when either

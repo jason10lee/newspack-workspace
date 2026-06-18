@@ -321,11 +321,16 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 		'data_as_of'                  => $data_as_of,
 		'has_estimated_data'          => true,
 		'estimated_window_start_date' => $est_start,
-		// Derived empty-state signal (NPPD-1697): mirrors the live read_window()
-		// derivation. `zero` → false (drives no_opportunity); populated / no_revenue
-		// → true.
-		'has_window_activity'         => ( ( $current_metrics['total_impressions']['value'] ?? 0 ) > 0 ) || ( ( $current_metrics['total_revenue']['value'] ?? 0 ) > 0 ),
 	];
+	// Derived empty-state signal (NPPD-1697): mirror the live read_window()
+	// derivation EXACTLY — same signal function, and set ONLY when both volume
+	// metrics are computable. Left absent otherwise, so an errored-volume-metric
+	// variant would render per-card errors rather than collapse to no_opportunity.
+	$imp = $current_metrics['total_impressions'] ?? [];
+	$rev = $current_metrics['total_revenue'] ?? [];
+	if ( ! empty( $imp['computable'] ) && ! empty( $rev['computable'] ) ) {
+		$envelope['has_window_activity'] = \Newspack\Insights\Advertising_Metric::window_activity_signal( (int) ( $imp['value'] ?? 0 ), (float) ( $rev['value'] ?? 0 ) );
+	}
 
 	$previous = null;
 	if ( $compare ) {
@@ -357,8 +362,12 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 			'data_as_of'                  => $data_as_of,
 			'has_estimated_data'          => true,
 			'estimated_window_start_date' => $est_start,
-			'has_window_activity'         => ( ( $prev_metrics['total_impressions']['value'] ?? 0 ) > 0 ) || ( ( $prev_metrics['total_revenue']['value'] ?? 0 ) > 0 ),
 		];
+		$prev_imp = $prev_metrics['total_impressions'] ?? [];
+		$prev_rev = $prev_metrics['total_revenue'] ?? [];
+		if ( ! empty( $prev_imp['computable'] ) && ! empty( $prev_rev['computable'] ) ) {
+			$previous['has_window_activity'] = \Newspack\Insights\Advertising_Metric::window_activity_signal( (int) ( $prev_imp['value'] ?? 0 ), (float) ( $prev_rev['value'] ?? 0 ) );
+		}
 	}
 
 	return [
