@@ -249,14 +249,31 @@ class Audience_REST_Controller extends WP_REST_Controller {
 		?DateTimeImmutable $compare_start,
 		?DateTimeImmutable $compare_end
 	): array {
+		// Registered readers come from the local wp_users table, not GA4/BQ, so
+		// they are computed here — outside Audience_Metric::get_all()'s GA4
+		// connection gate (NPPD-1733). Attached at a stable top-level key in both
+		// response shapes so the cards render even when the rest of the tab is a
+		// connect banner.
+		$registered_readers = [
+			'total' => Audience_Metric::registered_readers_total(),
+			'new'   => [
+				'current'  => Audience_Metric::registered_readers_new( $start->format( 'Y-m-d' ), $end->format( 'Y-m-d' ) ),
+				'previous' => ( $compare_start && $compare_end )
+					? Audience_Metric::registered_readers_new( $compare_start->format( 'Y-m-d' ), $compare_end->format( 'Y-m-d' ) )
+					: null,
+			],
+		];
+
 		$current = Audience_Metric::get_all( $start->format( 'Y-m-d' ), $end->format( 'Y-m-d' ), false );
 		if ( isset( $current['tab_error'] ) ) {
+			$current['registered_readers'] = $registered_readers;
 			return $current;
 		}
 
 		$response = [
-			'current'  => $current,
-			'previous' => null,
+			'current'            => $current,
+			'previous'           => null,
+			'registered_readers' => $registered_readers,
 		];
 		if ( $compare_start && $compare_end ) {
 			$previous             = Audience_Metric::get_all( $compare_start->format( 'Y-m-d' ), $compare_end->format( 'Y-m-d' ), false );

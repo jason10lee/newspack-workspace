@@ -22,11 +22,29 @@ import type { MetricPayload } from '../tabs/components/metrics';
 /** A window of metrics keyed by metric name, plus a `window` meta entry. */
 export type InsightsWindow = Record< string, MetricPayload >;
 
+/**
+ * Registered readers (NPPD-1733). Sourced from the local `wp_users` table, not
+ * GA4/BQ, so it sits at the top level of the response — present even when the
+ * rest of the tab is a connect banner (`tab_error`). `total` is a window-
+ * independent snapshot; `new` pairs the current window with its prior window so
+ * the card can render a period delta.
+ */
+export interface RegisteredReadersNew {
+	current: MetricPayload;
+	previous: MetricPayload | null;
+}
+
+export interface RegisteredReaders {
+	total: MetricPayload;
+	new: RegisteredReadersNew;
+}
+
 export interface AudienceResponse {
 	tab_error?: string;
 	banner_text?: string;
 	current?: InsightsWindow;
 	previous?: InsightsWindow | null;
+	registered_readers?: RegisteredReaders;
 }
 
 export interface InsightsQuery {
