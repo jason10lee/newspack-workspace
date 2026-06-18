@@ -66,7 +66,7 @@ describe( 'Subscribers WindowedSection empty states', () => {
 		const { container } = render( <WindowedSection range={ RANGE } current={ current } previous={ makeWindow() } activeSubscribers={ 128 } /> );
 
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
-		expect( screen.getByText( 'Your 128 existing subscribers are active, but no new readers converted in this timeframe.' ) ).toBeInTheDocument();
+		expect( screen.getByText( '128 active subscribers, but none new this timeframe' ) ).toBeInTheDocument();
 		// Real cards still render.
 		expect( screen.getByText( 'Churned subscribers' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Gross revenue' ) ).toBeInTheDocument();

@@ -157,10 +157,7 @@ const WindowedSection = ( { range, current, previous, activeSubscribers }: Windo
 						noNewSubscribers
 							? sprintf(
 									/* translators: %s: count of active subscribers (current state) */
-									__(
-										'Your %s existing subscribers are active, but no new readers converted in this timeframe.',
-										'newspack-plugin'
-									),
+									__( '%s active subscribers, but none new this timeframe', 'newspack-plugin' ),
 									formatNumber( activeSubscribers )
 							  )
 							: undefined
