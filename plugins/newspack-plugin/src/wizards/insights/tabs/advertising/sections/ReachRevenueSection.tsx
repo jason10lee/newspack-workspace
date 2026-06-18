@@ -67,7 +67,7 @@ const ReachRevenueSection = ( { current, previous, hasWindowActivity, lastUpdate
 				caption={ CAPTION }
 				state="no_opportunity"
 				body={ __(
-					'No ad impressions in this timeframe. Your ad server is configured, but the report shows no impressions for this timeframe. Could be a placement question, an off-season period, or a configuration issue. Try expanding the date range or checking your ad unit setup.',
+					'No ad impressions in this timeframe. Your ad server is configured, but the report shows no impressions for this timeframe. Could be a placement question, an off-season period, or a configuration issue. Worth expanding the date range or checking your ad unit setup.',
 					'newspack-plugin'
 				) }
 			/>

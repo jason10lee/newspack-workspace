@@ -142,6 +142,25 @@ const WindowedSection = ( { range, current, previous, activeSubscribers }: Windo
 	const noOrders = current.revenue_gross === 0;
 	const subscriptionOrdersLabel = __( 'subscription orders', 'newspack-plugin' );
 
+	// Rate-format good-zeros (NPPD-1698 D4 / D5): render the em-dash + a
+	// positive/neutral secondary line via MetricCard's shared em-dash treatment,
+	// not a bespoke note — so Refund rate and Failed payment recovery render
+	// identically to the other em-dashed cards.
+	//   · Refund rate: no orders → "No subscription orders…"; orders but zero
+	//     refunds (a good zero) → "No refund requests…"; otherwise the real rate.
+	//   · Failed payment recovery: no retries means no failed payments (a good
+	//     zero) → "No failed payments…". A computable 0% (retries ran, none
+	//     recovered) is a real bad zero and renders as 0%.
+	let refundEmptyMessage: string | undefined;
+	if ( ! refund.computable ) {
+		refundEmptyMessage = __( 'No subscription orders in this timeframe.', 'newspack-plugin' );
+	} else if ( refund.value === 0 ) {
+		refundEmptyMessage = __( 'No refund requests in this timeframe.', 'newspack-plugin' );
+	}
+	const retryEmptyMessage = ! retry.computable ? __( 'No failed payments in this timeframe.', 'newspack-plugin' ) : undefined;
+	const refundPrevious = previous?.refund_rate?.computable ? previous.refund_rate.value : null;
+	const retryPrevious = previous?.failed_payment_retry_rate?.computable ? previous.failed_payment_retry_rate.value : null;
+
 	return (
 		<section className="newspack-insights__section newspack-insights__section--windowed" aria-labelledby="newspack-insights-windowed-heading">
 			<SectionHeading id="newspack-insights-windowed-heading" title={ getHeading( range ) } />
@@ -188,43 +207,25 @@ const WindowedSection = ( { range, current, previous, activeSubscribers }: Windo
 					zeroFallback={ noOrders ? { denominator: 0, currencyRole: 'total', attemptsLabel: subscriptionOrdersLabel } : undefined }
 					description={ __( 'Gross minus refunds processed', 'newspack-plugin' ) }
 				/>
-				{ refund.computable ? (
-					<MetricCard
-						label={ __( 'Refund rate', 'newspack-plugin' ) }
-						value={ refund.value }
-						format="percent"
-						previousValue={ previous?.refund_rate?.computable ? previous.refund_rate.value : null }
-						lowerIsBetter
-						secondary={ ordersCohortSubtitle( refund.denominator ) }
-						description={ __( 'Refunds ÷ subscription orders', 'newspack-plugin' ) }
-					/>
-				) : (
-					<div className="newspack-insights__metric-card newspack-insights__metric-card--empty">
-						<div className="newspack-insights__metric-card-label">{ __( 'Refund rate', 'newspack-plugin' ) }</div>
-						<p className="newspack-insights__metric-card-empty-note">
-							{ __( 'No subscription orders in this timeframe.', 'newspack-plugin' ) }
-						</p>
-					</div>
-				) }
-				{ retry.computable ? (
-					<MetricCard
-						label={ __( 'Failed payment recovery', 'newspack-plugin' ) }
-						value={ retry.value }
-						format="percent"
-						previousValue={ previous?.failed_payment_retry_rate?.computable ? previous.failed_payment_retry_rate.value : null }
-						secondary={ retriesCohortSubtitle( retry.denominator ) }
-						description={ __( 'Recovered retries ÷ retry attempts', 'newspack-plugin' ) }
-					/>
-				) : (
-					<div className="newspack-insights__metric-card newspack-insights__metric-card--empty">
-						<div className="newspack-insights__metric-card-label">{ __( 'Failed payment recovery', 'newspack-plugin' ) }</div>
-						<p className="newspack-insights__metric-card-empty-note">
-							{ /* Good zero (NPPD-1726): no retries means no failed payments — frame it
-							     as the positive outcome, not a missing-data note. */ }
-							{ __( 'No failed payments in this timeframe.', 'newspack-plugin' ) }
-						</p>
-					</div>
-				) }
+				<MetricCard
+					label={ __( 'Refund rate', 'newspack-plugin' ) }
+					value={ refund.computable ? refund.value : 0 }
+					format="percent"
+					previousValue={ refundEmptyMessage ? undefined : refundPrevious }
+					lowerIsBetter
+					secondary={ refundEmptyMessage ? undefined : ordersCohortSubtitle( refund.denominator ) }
+					notComputableMessage={ refundEmptyMessage }
+					description={ __( 'Refunds ÷ subscription orders', 'newspack-plugin' ) }
+				/>
+				<MetricCard
+					label={ __( 'Failed payment recovery', 'newspack-plugin' ) }
+					value={ retry.computable ? retry.value : 0 }
+					format="percent"
+					previousValue={ retryEmptyMessage ? undefined : retryPrevious }
+					secondary={ retryEmptyMessage ? undefined : retriesCohortSubtitle( retry.denominator ) }
+					notComputableMessage={ retryEmptyMessage }
+					description={ __( 'Recovered retries ÷ retry attempts', 'newspack-plugin' ) }
+				/>
 			</div>
 		</section>
 	);

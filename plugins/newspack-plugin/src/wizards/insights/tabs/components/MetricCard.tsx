@@ -106,7 +106,9 @@ export interface MetricCardProps {
 	 * were viewed. Renders the same em-dash hero + secondary line as
 	 * `notCapableMessage`, but sits one slot lower in precedence: `notCapable`
 	 * wins (its "add the block" nudge is more actionable than "wait for data"),
-	 * and this in turn beats `zeroFallback`. Absent for every non-Prompts caller.
+	 * and this in turn beats `zeroFallback`. Originally a Prompts concept; also
+	 * used by Subscribers (NPPD-1698) to render its rate-card good-zeros (no orders
+	 * / no refunds / no failed payments) with the same em-dash + line treatment.
 	 */
 	notComputableMessage?: string;
 }

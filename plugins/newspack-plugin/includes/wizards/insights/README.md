@@ -190,6 +190,69 @@ Each tab is a lazy-loaded `.tsx` file that calls its data hook, hands the result
 
 The shell and these atoms intentionally lean on `newspack-components` (`Wizard`, `SectionHeader`, `Badge`, `Notice`, `Waiting`, imported from `packages/components/src`) and `@wordpress/components` (`Card`, `Notice`, `Button`) for design-system alignment.
 
+## Empty-state voice & tone (canonical reference)
+
+The standard every Insights tab's empty-state copy conforms to, established by the NPPD-1698 cross-tab audit. New per-tab surfaces follow it; where a tab's data shape genuinely differs, pick the closest pattern below rather than inventing a new one.
+
+### 1. Altitude — which empty primitive to use
+
+| Situation | Primitive |
+| --- | --- |
+| A *scorecard* section whose cards are one coherent story and would all read zero together | whole-section `EmptyMetricSection` (`no_opportunity` / `no_conversions` / `configuration_missing`) |
+| A single zero card inside an otherwise-populated scorecard section | per-card treatment (`zeroFallback`, or a `MetricCard` secondary line) |
+| A *collection* metric (table / funnel / chart) with no rows | `SectionEmpty` (the plain "no data" paragraph) |
+
+Gates' Paid reader conversion uses a whole-section `no_conversions` because its four cards are a single funnel — collapsing them is honest. The mixed-content `WindowedSection`s (Donors, Subscribers) and Advertising's Reach & revenue use *per-card* treatments for the same logical state, because a whole-section collapse there would hide real data in sibling cards. Both altitudes are correct for their data shape; don't force one onto the other.
+
+### 2. Vocabulary
+
+- **"timeframe"** is the term for the selected reporting period. Never "window" in reader-facing copy. ("window" stays fine for internal field/variable names, and for genuinely different concepts — e.g. the fixed *14-day attribution window* / *lookback window*, which is not the selected timeframe.)
+- **"date range"** is reserved for *imperative closers* that tell the publisher to act on the picker control ("Worth expanding the date range…"). It names the actual UI control, so the instruction is concrete. Don't use "date range" mid-sentence to refer to the period — use "timeframe".
+
+### 3. Sentence structure
+
+- **Whole-section bodies** follow a four-beat skeleton: *[what's zero] · [reassurance the feature is configured] · [plausible causes] · [closer]*. Three to four sentences.
+- **Per-card secondary lines** are a single terse, count-led clause: `{N} active donors, but none new this timeframe`. No second-person framing, no trailing period.
+- **Prompts `notCapable`** is two sentences (*[what's missing] · [what to add]*); **`notComputable`** is one. Both end with a period.
+
+### 4. `{N}` interpolation
+
+Lead with the count where it's a standing population (active donors / subscribers) or an in-window volume (impressions). Gates' mid-sentence "reached {N} readers" is the funnel-altitude exception. Always format the count through the shared `formatNumber`.
+
+### 5. Good-zero handling
+
+A "good zero" is a metric whose zero is the desired outcome. Rule, split by format:
+
+- **Rate-format good-zeros** get explicit positive/neutral copy via the em-dash treatment — e.g. Subscribers' *"No refund requests in this timeframe."* (orders but no refunds) and *"No failed payments in this timeframe."* (no retries to recover).
+- **Count-format good-zeros** rely on the native `lowerIsBetter` visual (the green down-delta) and render the real `0` with no editorial copy — e.g. Churned subscribers, Lapsed donors.
+
+A computable zero that is *not* good (e.g. a 0% recovery rate when retries did happen) renders as the real value, not a reframe.
+
+### 6. Action closers
+
+- **Diagnostic closers** use the "Worth [verb-ing] …" form ("Worth expanding the date range…").
+- **Navigational closers** ("See the per-gate breakdown below…") are used only when there's a real on-page destination, and may stand instead of a diagnostic closer.
+
+### 7. Em-dash vs value rendering
+
+- Render the **em-dash (`—`)** hero when the value carries no signal: no opportunity count (`zeroFallback` denominator 0), not capable, not computable, or a good-zero reframe.
+- Render the **real value** when the zero itself is the observation — the per-card `no_conversions` states (New donors `0`, Total Revenue `$0.00`) keep their real hero plus a secondary line.
+- Render a **text fallback** (`0 of 17`, `0 conversions`) when a zero needs companion context to read honestly.
+
+This is the existing convention — codified, not changed.
+
+### 8. Period-delta suppression
+
+Suppress the period-over-period delta on every empty/fallback hero (per-card `no_conversions`, all `zeroFallback`, `notCapable`/`notComputable`) — a "↓ 100%" against a real prior reads as a regression rather than "nothing here yet." Preserve the delta on real computed values, including `lowerIsBetter` good-zero count cards (the green delta *is* the signal).
+
+### 9. Punctuation & fallbacks
+
+Sentence-form empty-state copy ends with a period. Generic safety-net fallbacks share the per-intent voice ("Not measurable for your active prompts.", "Data temporarily unavailable.").
+
+### 10. Per-tab character is preserved, not flattened
+
+This reference standardizes *structure*, not personality. Subscribers' good-zero copy is intentionally warmer ("No failed payments in this timeframe.") than Advertising's terse data notes ("No ad revenue in this timeframe.") — both are right for their context. When a tab's voice and its data shape pull toward a warmer or terser register, follow the register; conform to the patterns above, not to a single flattened tone.
+
 ## Testing
 
 Jest, colocated `*.test.ts(x)` next to the source. Key spots:
