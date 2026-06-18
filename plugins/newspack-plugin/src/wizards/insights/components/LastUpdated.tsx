@@ -22,6 +22,7 @@ import type { DateRange } from '../state/useDateRange';
 import { insightsCache, makeSlotKey, type CacheSlot } from '../state/insightsCache';
 import { useInvokeRefresh } from '../state/refreshRegistry';
 import useCountdown from '../hooks/useCountdown';
+import { buildPdfFilename, printCurrentTab } from '../lib/pdfExport';
 
 export interface LastUpdatedProps {
 	tab: string | null;
@@ -67,7 +68,12 @@ const LastUpdated = ( { tab, range, previousRange }: LastUpdatedProps ) => {
 					dateI18n( 'M j, Y H:i:s', slot.computedAt )
 				) }
 			</span>
-			<RefreshMenu onRefresh={ () => invoke( tab ) } disabled={ slot.status === 'loading' || cooldownActive } />
+			<RefreshMenu
+				onRefresh={ () => invoke( tab ) }
+				disabled={ slot.status === 'loading' || cooldownActive }
+				onDownloadPdf={ () => printCurrentTab( buildPdfFilename( tab, range ) ) }
+				downloadDisabled={ slot.status === 'loading' }
+			/>
 		</div>
 	);
 };

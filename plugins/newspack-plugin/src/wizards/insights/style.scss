@@ -17,6 +17,7 @@
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "tabs/components/sections";
+@use "print";
 
 .newspack-insights {
 	color: wp-colors.$gray-900;

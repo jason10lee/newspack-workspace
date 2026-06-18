@@ -1,0 +1,210 @@
+/**
+ * Print stylesheet for per-tab PDF export (NPPD-1661).
+ *
+ * The "Download PDF" item in the Insights options kebab calls
+ * `window.print()`; this stylesheet is what turns the live admin view into
+ * a clean document. We chose print-CSS over html2canvas/jsPDF precisely
+ * because the charts are hand-rolled inline SVG (LineChart, PieChart,
+ * Funnel) and plain DOM (BarChart, tables, scorecards) — the browser's own
+ * print engine renders them at full vector fidelity and paginates long
+ * tables natively, with no rasterization and no added bundle weight.
+ *
+ * This file is bundled into the Insights chunk (imported by `style.scss`),
+ * which only loads on the Insights page, so the global `@media print`
+ * selectors below can safely reach WordPress admin chrome without leaking
+ * to other admin screens.
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+// The document header/footer are invisible on screen and only painted when
+// printing. Kept out of the `@media print` block so the default is "hidden"
+// everywhere else.
+.newspack-insights__print-only {
+	display: none;
+}
+
+@media print {
+	// --- Strip the WordPress admin frame -------------------------------------
+	#adminmenumain,
+	#adminmenuwrap,
+	#adminmenuback,
+	#wpadminbar,
+	#wpfooter,
+	#screen-meta,
+	#screen-meta-links,
+	.update-nag,
+	.notice,
+	.wp-header-end,
+	.newspack-wizard__header,
+	.newspack-tabbed-navigation,
+	.newspack-footer {
+		display: none !important;
+	}
+
+	// Reclaim the full page width once the admin menu is gone.
+	html.wp-toolbar {
+		padding-top: 0 !important;
+	}
+
+	#wpcontent,
+	#wpbody-content,
+	#wpbody {
+		margin: 0 !important;
+		padding: 0 !important;
+	}
+
+	body {
+		background: #fff !important;
+	}
+
+	// --- Hide Insights screen-only controls ----------------------------------
+	// The date-range picker / comparison toggle, the kebab itself, the
+	// cooldown notice, and the refetch overlay are all interactive chrome that
+	// has no place in a static export. The "Last updated" timestamp stays — it
+	// is useful provenance in a printed report.
+	.newspack-insights__header-controls,
+	.newspack-insights__refresh-menu,
+	.newspack-insights__cooldown-notice,
+	.newspack-insights__tab-refreshing,
+	.newspack-insights__sortable-table-more {
+		display: none !important;
+	}
+
+	// A dimmed tab body (mid-refresh) must print at full opacity.
+	.newspack-insights__tab-body.is-refreshing > * {
+		opacity: 1 !important;
+	}
+
+	// --- Reveal the print document chrome ------------------------------------
+	.newspack-insights__print-only {
+		display: block;
+	}
+
+	.newspack-insights__print-header {
+		margin: 0 0 24px;
+		padding-bottom: 12px;
+		border-bottom: 2px solid wp-colors.$gray-900;
+	}
+
+	.newspack-insights__print-publisher {
+		margin: 0 0 4px;
+		font-size: 13px;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: wp-colors.$gray-700;
+	}
+
+	.newspack-insights__print-title {
+		margin: 0;
+		font-size: 26px;
+		font-weight: 700;
+		line-height: 1.2;
+		color: wp-colors.$gray-900;
+	}
+
+	.newspack-insights__print-range {
+		margin: 6px 0 0;
+		font-size: 14px;
+		color: wp-colors.$gray-700;
+	}
+
+	.newspack-insights__print-compare {
+		margin: 2px 0 0;
+		font-size: 13px;
+		color: wp-colors.$gray-600;
+	}
+
+	// Footer pinned to the bottom margin of every printed page.
+	.newspack-insights__print-footer {
+		position: fixed;
+		bottom: 0;
+		left: 0;
+		right: 0;
+		padding-top: 6px;
+		border-top: 1px solid wp-colors.$gray-300;
+		background: #fff;
+		font-size: 11px;
+		color: wp-colors.$gray-600;
+		text-align: right;
+	}
+
+	// --- Colour fidelity -----------------------------------------------------
+	// Browsers drop background colours when printing by default. The BarChart
+	// fills, takeaway accent border, info callouts, legend swatches, etc. are
+	// painted via `background`, so force exact colour reproduction across the
+	// whole wizard. (SVG `fill`/`stroke` — pie + funnel — print regardless.)
+	.newspack-insights,
+	.newspack-insights * {
+		-webkit-print-color-adjust: exact !important;
+		print-color-adjust: exact !important;
+	}
+
+	// --- Page setup ----------------------------------------------------------
+	@page {
+		margin: 1.5cm;
+		// Leave room for the fixed footer so body content never collides with it.
+		margin-bottom: 2cm;
+	}
+
+	// --- Pagination: keep coherent units together ---------------------------
+	// Cards, charts, and funnels should not split across a page break.
+	.newspack-insights__metric-card,
+	.newspack-insights__chart-card,
+	.newspack-insights__takeaway-card,
+	.newspack-insights__funnel,
+	.newspack-insights__line,
+	.newspack-insights__bars,
+	.newspack-insights__pie {
+		break-inside: avoid;
+	}
+
+	// Section headings should not be orphaned at the bottom of a page.
+	.newspack-insights__section-heading,
+	.newspack-wizard__section-header {
+		break-after: avoid;
+	}
+
+	// Long tables (e.g. the Gates tab) paginate natively: repeat the header on
+	// every page and never split a row. NOTE: a row-capped table prints only
+	// its expanded rows — what's on screen — since the collapsed rows aren't in
+	// the DOM. Expand "See more" before exporting to capture the full table.
+	.newspack-insights__table thead {
+		display: table-header-group;
+	}
+
+	.newspack-insights__table tr {
+		break-inside: avoid;
+	}
+
+	// --- Watch item: Funnel (JS-driven layout) -------------------------------
+	// Funnel's side/compact layout is chosen in JS from the on-screen container
+	// width (ResizeObserver), so whatever the screen showed is what prints. Pin
+	// a deterministic max width and let the viewBox'd SVG scale within it, so
+	// the chosen layout lays out predictably on the narrower print page rather
+	// than overflowing.
+	.newspack-insights__funnel {
+		max-width: 17cm;
+	}
+
+	.newspack-insights__funnel-svg {
+		max-height: 11cm;
+	}
+
+	// --- Watch item: BarChart (percentage-height flexbox) --------------------
+	// The bars are a fixed-height flex container whose fills are sized in % of
+	// the track. Re-assert the explicit heights so the flex chain can't collapse
+	// to zero under print layout (which would blank the bars).
+	.newspack-insights__bars {
+		height: 160px !important;
+	}
+
+	.newspack-insights__takeaway-chart .newspack-insights__bars {
+		height: 60px !important;
+	}
+
+	.newspack-insights__bar-col {
+		height: 100% !important;
+	}
+}
