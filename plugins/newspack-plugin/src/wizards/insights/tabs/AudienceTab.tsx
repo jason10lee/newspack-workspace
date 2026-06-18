@@ -22,6 +22,7 @@ import ConnectBanner from './components/ConnectBanner';
 import TabStateView from './components/TabStateView';
 import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import ReachSection from './audience/sections/ReachSection';
+import RegisteredReadersSection from './audience/sections/RegisteredReadersSection';
 import CompositionSection from './audience/sections/CompositionSection';
 import TimeTrendsSection from './audience/sections/TimeTrendsSection';
 import TrafficSourcesSection from './audience/sections/TrafficSourcesSection';
@@ -42,6 +43,10 @@ const AudienceTab = ( { range, previousRange }: AudienceTabProps ) => {
 	// Fixture mode returns a `previous` window unconditionally, so gate on the
 	// toggle here rather than on the response — matches Gates/Subscribers/Donors.
 	const previous = previousRange ? data?.previous ?? null : null;
+	// Registered readers (NPPD-1733) come from local wp_users, so they render even
+	// when GA4 isn't connected — present in both the banner and the normal branch.
+	const registeredReaders = data?.registered_readers ?? null;
+	const showComparison = !! previousRange;
 
 	return (
 		<TabStateView
@@ -54,7 +59,12 @@ const AudienceTab = ( { range, previousRange }: AudienceTabProps ) => {
 		>
 			{ data &&
 				( data.tab_error || ! current ? (
-					<ConnectBanner text={ data.banner_text } />
+					<>
+						<ConnectBanner text={ data.banner_text } />
+						{ registeredReaders && (
+							<RegisteredReadersSection registeredReaders={ registeredReaders } showComparison={ showComparison } />
+						) }
+					</>
 				) : (
 					<>
 						<ReachSection
@@ -62,6 +72,9 @@ const AudienceTab = ( { range, previousRange }: AudienceTabProps ) => {
 							previous={ previous }
 							lastUpdated={ <LastUpdated tab="audience" range={ range } previousRange={ previousRange } /> }
 						/>
+						{ registeredReaders && (
+							<RegisteredReadersSection registeredReaders={ registeredReaders } showComparison={ showComparison } />
+						) }
 						<CompositionSection current={ current } previous={ previous } />
 						<TrafficSourcesSection current={ current } previous={ previous } />
 						<GeographicSection current={ current } previous={ previous } />

@@ -133,6 +133,133 @@ final class Audience_Metric {
 		return require NEWSPACK_ABSPATH . 'includes/wizards/insights/fixtures/audience-fixture.php';
 	}
 
+	/*
+	===================================================================
+	 * Registered readers (local wp_users — GA4-independent, NPPD-1733)
+	 * ===================================================================
+	 */
+
+	/**
+	 * Total registered readers — an all-time snapshot count of reader accounts in
+	 * the local wp_users table. Alone among Audience metrics this reads from
+	 * wp_users, not GA4/BigQuery, so it is computed by the REST controller outside
+	 * the GA4 connection gate and renders even when the rest of the tab cannot.
+	 *
+	 * "Reader" approximates {@see \Newspack\Reader_Activation::is_user_reader()} via
+	 * its reader-role branch rather than a raw `subscriber`-role filter: the
+	 * population is the configured reader roles (subscriber + customer by default)
+	 * minus the restricted staff roles (administrator + editor). It does not also
+	 * union readers carrying only the `np_reader` meta without a reader role — that
+	 * cohort is empty in practice, and the role branch is what stays faithful on
+	 * legacy sites where the meta was never backfilled. Close to the GA4 "known
+	 * reader" segment; avoids folding in legacy staff and missing customer-role
+	 * (WooCommerce) readers.
+	 *
+	 * @return array Scalar payload { value, computable, type } | not-computable.
+	 */
+	public static function registered_readers_total(): array {
+		return self::count_registered_readers( null, null );
+	}
+
+	/**
+	 * New registered readers whose account was created within the window, by
+	 * `user_registered`. Same scalar shape as the snapshot; the REST controller
+	 * pairs the current and prior windows so the card can render a period delta.
+	 *
+	 * @param string $start_date Inclusive window start, YYYY-MM-DD (site timezone).
+	 * @param string $end_date   Inclusive window end, YYYY-MM-DD (site timezone).
+	 * @return array Scalar payload { value, computable, type } | not-computable.
+	 */
+	public static function registered_readers_new( string $start_date, string $end_date ): array {
+		return self::count_registered_readers( $start_date, $end_date );
+	}
+
+	/**
+	 * Count reader accounts via WP_User_Query, optionally bounded to a
+	 * registration window. Parameterized end to end — WP_User_Query builds the SQL,
+	 * nothing is interpolated. Returns a not-computable payload (the NPPD-1698
+	 * em-dash treatment) when Reader Activation is unavailable or no reader roles
+	 * are configured — never a misleading 0.
+	 *
+	 * @param string|null $start_date Window start YYYY-MM-DD, or null for all-time.
+	 * @param string|null $end_date   Window end YYYY-MM-DD, or null for all-time.
+	 * @return array
+	 */
+	private static function count_registered_readers( ?string $start_date, ?string $end_date ): array {
+		if ( ! class_exists( '\Newspack\Reader_Activation' ) ) {
+			return self::registered_readers_not_computable();
+		}
+
+		$reader_roles = \Newspack\Reader_Activation::get_reader_roles();
+		if ( ! is_array( $reader_roles ) || empty( $reader_roles ) ) {
+			return self::registered_readers_not_computable();
+		}
+
+		$args = [
+			'role__in'    => $reader_roles,
+			'number'      => 1,     // Count only; never hydrate the matched users.
+			'fields'      => 'ID',
+			'count_total' => true,
+		];
+
+		// Mirror is_user_reader(): staff roles never count as readers. Same filter,
+		// so a publisher that has customized the restriction stays consistent.
+		$restricted_roles = \apply_filters( 'newspack_reader_restricted_roles', [ 'administrator', 'editor' ] );
+		if ( is_array( $restricted_roles ) && ! empty( $restricted_roles ) ) {
+			$args['role__not_in'] = $restricted_roles;
+		}
+
+		if ( null !== $start_date && null !== $end_date ) {
+			$args['date_query'] = [
+				[
+					'column'    => 'user_registered',
+					'after'     => self::window_bound_to_utc( $start_date, false ),
+					'before'    => self::window_bound_to_utc( $end_date, true ),
+					'inclusive' => true,
+				],
+			];
+		}
+
+		$query = new \WP_User_Query( $args );
+
+		return [
+			'value'      => (int) $query->get_total(),
+			'computable' => true,
+			'type'       => 'count',
+		];
+	}
+
+	/**
+	 * Convert a site-timezone calendar bound (YYYY-MM-DD) into the UTC datetime
+	 * string WP_User_Query needs to match against `user_registered`, which WP
+	 * stores in UTC. Without this a registration near local midnight would land in
+	 * the wrong window by the site's UTC offset.
+	 *
+	 * @param string $date       YYYY-MM-DD in the site timezone.
+	 * @param bool   $end_of_day Anchor at 23:59:59 (true) or 00:00:00 (false).
+	 * @return string `Y-m-d H:i:s` in UTC.
+	 */
+	private static function window_bound_to_utc( string $date, bool $end_of_day ): string {
+		$time  = $end_of_day ? ' 23:59:59' : ' 00:00:00';
+		$local = new \DateTimeImmutable( $date . $time, wp_timezone() );
+		return $local->setTimezone( new \DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
+	}
+
+	/**
+	 * Not-computable payload for the registered-reader counts — a genuine wp_users
+	 * failure (or missing Reader Activation), surfaced via the NPPD-1698 em-dash +
+	 * line treatment in the UI rather than a misleading 0.
+	 *
+	 * @return array
+	 */
+	private static function registered_readers_not_computable(): array {
+		return [
+			'value'      => null,
+			'computable' => false,
+			'type'       => 'count',
+		];
+	}
+
 	/**
 	 * Immediately-preceding window of equal length.
 	 *

@@ -471,6 +471,29 @@ $build = function ( float $f ) use ( $scalar, $breakdown, $table, $series, $star
 };
 
 return [
-	'current'  => $build( 1.0 ),
-	'previous' => $build( 0.88 ),
+	'current'            => $build( 1.0 ),
+	'previous'           => $build( 0.88 ),
+	// Registered readers (local wp_users, NPPD-1733): a window-independent total
+	// snapshot plus a windowed "new" count with its prior-window companion for the
+	// period delta. Lives at top level — not inside the windows — because it is
+	// GA4-independent and present even when the tab is a connect banner.
+	'registered_readers' => [
+		'total' => [
+			'value'      => 24680,
+			'computable' => true,
+			'type'       => 'count',
+		],
+		'new'   => [
+			'current'  => [
+				'value'      => 412,
+				'computable' => true,
+				'type'       => 'count',
+			],
+			'previous' => [
+				'value'      => 357,
+				'computable' => true,
+				'type'       => 'count',
+			],
+		],
+	],
 ];
