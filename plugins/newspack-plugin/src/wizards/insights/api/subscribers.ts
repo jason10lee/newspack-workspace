@@ -106,6 +106,14 @@ export interface SubscribersWindow {
 	failed_payment_retry_rate: SubscribersRateValue;
 	subscriptions_by_product: PerformanceRow[];
 	cancellation_reasons: CancellationReasonRow[];
+	/**
+	 * Derived empty-state signal (NPPD-1695): true when the window saw
+	 * any subscription activity (revenue, a new subscriber, or churn).
+	 * Drives the WindowedSection's whole-section `no_opportunity` empty
+	 * state. Derived server-side from values already computed — no extra
+	 * query.
+	 */
+	has_window_activity: boolean;
 }
 
 export interface SubscribersResponse {
