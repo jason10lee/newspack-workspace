@@ -76,6 +76,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 	const [ scopeIds, setScopeIds ] = useState< number[] >( rule?.scope_ids ?? [] );
 	const [ priority, setPriority ] = useState( String( rule?.priority ?? 100 ) );
 	const [ composeMode, setComposeMode ] = useState( rule?.compose_mode ?? 'min' );
+	const [ application, setApplication ] = useState( rule?.application === 'locked' ? 'locked' : 'current' );
 	const [ publicize, setPublicize ] = useState( Boolean( rule?.publicize ) );
 	const [ target, setTarget ] = useState( rule?.target_conversion_pct !== null && rule ? String( rule.target_conversion_pct ) : '' );
 	const [ maxCancel, setMaxCancel ] = useState( rule?.max_cancellation_pct !== null && rule ? String( rule.max_cancellation_pct ) : '' );
@@ -97,6 +98,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 			scope_ids: scopeIds,
 			priority: Number( priority ) || 0,
 			compose_mode: composeMode,
+			application,
 			publicize,
 			target_conversion_pct: target === '' ? null : Number( target ),
 			max_cancellation_pct: maxCancel === '' ? null : Number( maxCancel ),
@@ -152,6 +154,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 		scopeIds,
 		priority,
 		composeMode,
+		application,
 		publicize,
 		target,
 		maxCancel,
@@ -389,6 +392,16 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 						__next40pxDefaultSize
 					/>
 					<ToggleControl
+						label={ __( 'Lock pricing at purchase', 'newspack-plugin' ) }
+						help={ __(
+							'On: subscribers keep the price they bought at — the deal only applies to new sign-ups. Off: the deal applies to every matching subscriber at each renewal.',
+							'newspack-plugin'
+						) }
+						checked={ 'locked' === application }
+						onChange={ checked => setApplication( checked ? 'locked' : 'current' ) }
+						__nextHasNoMarginBottom
+					/>
+					<ToggleControl
 						label={ __( 'Show pricing details', 'newspack-plugin' ) }
 						help={ __(
 							'Tell readers about this rule wherever the product appears — its name and the regular-vs-adjusted comparison show on the product page, cart, and checkout. When off, the adjusted price applies silently.',
@@ -423,7 +436,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 						scopeType={ scopeType }
 						scopeIds={ scopeIds }
 						conditions={ conditions }
-						application={ rule?.application }
+						application={ application }
 						ruleId={ rule?.id }
 					/>
 				</VStack>
