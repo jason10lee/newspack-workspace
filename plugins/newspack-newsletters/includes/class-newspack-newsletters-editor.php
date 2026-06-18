@@ -572,6 +572,24 @@ final class Newspack_Newsletters_Editor {
 
 			wp_add_inline_style( 'newspack-newsletters', self::get_color_palette_css( '.editor-styles-wrapper' ) );
 
+			// Legacy MJML-era block-appearance styles (separator/button/social/
+			// quote/list). Skip them when the WC email renderer is active so the
+			// editor canvas reflects the WC (vanilla WP) output; MJML sites still
+			// load them, unchanged. Defaults to loading if the flag class is
+			// somehow unavailable, preserving pre-WC behavior.
+			$wc_renderer_active = class_exists( \Newspack\Newsletters\Email_Renderers\Feature_Flag::class )
+				&& \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled();
+			if ( ! $wc_renderer_active ) {
+				wp_register_style(
+					'newspack-newsletters-legacy-block-styles',
+					plugins_url( '../dist/legacyBlockStyles.css', __FILE__ ),
+					[ 'newspack-newsletters' ],
+					filemtime( NEWSPACK_NEWSLETTERS_PLUGIN_FILE . 'dist/legacyBlockStyles.css' )
+				);
+				wp_style_add_data( 'newspack-newsletters-legacy-block-styles', 'rtl', 'replace' );
+				wp_enqueue_style( 'newspack-newsletters-legacy-block-styles' );
+			}
+
 			$editor_asset = include NEWSPACK_NEWSLETTERS_PLUGIN_FILE . 'dist/editor.asset.php';
 			\wp_enqueue_script(
 				'newspack-newsletters-editor',
