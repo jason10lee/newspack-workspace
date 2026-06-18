@@ -106,6 +106,40 @@ describe( 'Subscribers WindowedSection empty states', () => {
 		expect( screen.queryByText( 'No payment retries in this timeframe.' ) ).not.toBeInTheDocument();
 	} );
 
+	it( 'GOOD ZERO: orders but zero refunds renders em-dash + "No refund requests" (NPPD-1698 D4)', () => {
+		// Orders exist (gross > 0) but no refunds → refund rate is a computable 0%,
+		// a good zero. Renders the em-dash + positive line, not a literal "0%".
+		const current = makeWindow( { refund_rate: { value: 0, computable: true, denominator: 120 } } );
+		const { container } = render( <WindowedSection range={ RANGE } current={ current } previous={ null } activeSubscribers={ 200 } /> );
+
+		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
+		expect( screen.getByText( 'No refund requests in this timeframe.' ) ).toBeInTheDocument();
+		// Distinct from the no-orders message, and the hero is the em-dash, not "0%".
+		expect( screen.queryByText( 'No subscription orders in this timeframe.' ) ).not.toBeInTheDocument();
+		expect( cardValueByLabel( container, 'Refund rate' ) ).toBe( '—' );
+	} );
+
+	it( 'D5: Refund rate and Failed payment recovery good-zeros share the em-dash treatment', () => {
+		// Churn-only window (no orders → refund not computable; no retries → failed-
+		// payment good zero): both rate cards render the shared em-dash + line, not the
+		// old bespoke empty-note markup.
+		const current = makeWindow( {
+			new_subscribers: 0,
+			churned_subscribers: 4,
+			revenue_gross: 0,
+			revenue_net: 0,
+			refund_rate: { value: 0, computable: false, denominator: 0 },
+			failed_payment_retry_rate: { value: 0, computable: false, denominator: 0 },
+		} );
+		const { container } = render( <WindowedSection range={ RANGE } current={ current } previous={ null } activeSubscribers={ 200 } /> );
+
+		expect( cardValueByLabel( container, 'Refund rate' ) ).toBe( '—' );
+		expect( cardValueByLabel( container, 'Failed payment recovery' ) ).toBe( '—' );
+		expect( screen.getByText( 'No failed payments in this timeframe.' ) ).toBeInTheDocument();
+		// The old bespoke empty-note element no longer renders for these cards.
+		expect( container.querySelectorAll( '.newspack-insights__metric-card--empty' ).length ).toBe( 0 );
+	} );
+
 	it( 'shows the currency count fallback when there were no subscription orders', () => {
 		// Churn-only window: activity is true (churn), but no completed orders →
 		// Gross and Net show "No subscription orders…" instead of $0.00.
