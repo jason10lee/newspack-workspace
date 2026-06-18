@@ -123,3 +123,7 @@ interface RuleAudienceData {
 interface RuleAudienceResponse {
 	audience?: RuleAudienceData;
 }
+
+interface RulePreviewResponse extends CatalogImpactResponse {
+	audience?: RuleAudienceData;
+}
