@@ -110,3 +110,16 @@ interface CatalogImpactResponse {
 	currency: PricingRulesCurrency;
 	sample: CatalogImpactRow[];
 }
+
+interface RuleAudience {
+	supported: boolean;
+	total: number;
+	caught: number;
+	protected: number;
+	count_limited: boolean;
+	application: 'current' | 'locked' | string;
+}
+
+interface RuleAudienceResponse {
+	audience?: RuleAudience;
+}
