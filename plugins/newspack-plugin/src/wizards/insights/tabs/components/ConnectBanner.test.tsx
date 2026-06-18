@@ -33,14 +33,9 @@ describe( 'ConnectBanner', () => {
 			<ConnectBanner text="Audience metrics come from a GA4 property connected through Site Kit. Set up Site Kit to start seeing data here." />
 		);
 
-		expect(
-			screen.getByText( /Audience metrics come from a GA4 property connected through Site Kit/ )
-		).toBeInTheDocument();
+		expect( screen.getByText( /Audience metrics come from a GA4 property connected through Site Kit/ ) ).toBeInTheDocument();
 		const cta = screen.getByRole( 'link', { name: 'Set up Site Kit →' } );
-		expect( cta ).toHaveAttribute(
-			'href',
-			'https://example.test/wp-admin/admin.php?page=googlesitekit-splash'
-		);
+		expect( cta ).toHaveAttribute( 'href', 'https://example.test/wp-admin/admin.php?page=googlesitekit-splash' );
 	} );
 
 	it( 'falls back to default Site Kit copy and a relative admin path when the global is absent', () => {
@@ -49,12 +44,7 @@ describe( 'ConnectBanner', () => {
 
 		render( <ConnectBanner /> );
 
-		expect(
-			screen.getByText( 'Connect Google Analytics through Site Kit to see this tab.' )
-		).toBeInTheDocument();
-		expect( screen.getByRole( 'link', { name: 'Set up Site Kit →' } ) ).toHaveAttribute(
-			'href',
-			'admin.php?page=newspack-settings'
-		);
+		expect( screen.getByText( 'Connect Google Analytics through Site Kit to see this tab.' ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'link', { name: 'Set up Site Kit →' } ) ).toHaveAttribute( 'href', 'admin.php?page=newspack-settings' );
 	} );
 } );
