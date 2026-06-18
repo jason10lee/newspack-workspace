@@ -25,15 +25,25 @@ import type { DateRange } from '../state/useDateRange';
 export const buildPdfFilename = ( tab: string, range: DateRange ): string => `${ tab }-${ range.start }_to_${ range.end }`;
 
 /**
+ * In-flight guard. `window.print()` blocks the main thread in most
+ * browsers, so a second invocation can't normally land mid-print — but
+ * embedded webviews don't always block, and a re-entrant call would
+ * capture the already-swapped filename as `originalTitle` and strand it.
+ * Ignore invocations until the in-flight print has restored the title.
+ */
+let printPending = false;
+
+/**
  * Trigger the browser print dialog with a temporary document title so the
  * suggested "Save as PDF" filename matches `name`. The title is restored
  * on the `afterprint` event, with a timeout fallback for browsers that
  * don't fire it reliably.
  */
 export const printCurrentTab = ( name: string ): void => {
-	if ( typeof window === 'undefined' || typeof document === 'undefined' ) {
+	if ( typeof window === 'undefined' || typeof document === 'undefined' || printPending ) {
 		return;
 	}
+	printPending = true;
 
 	const originalTitle = document.title;
 	let restored = false;
@@ -42,6 +52,7 @@ export const printCurrentTab = ( name: string ): void => {
 			return;
 		}
 		restored = true;
+		printPending = false;
 		document.title = originalTitle;
 		window.removeEventListener( 'afterprint', restore );
 	};

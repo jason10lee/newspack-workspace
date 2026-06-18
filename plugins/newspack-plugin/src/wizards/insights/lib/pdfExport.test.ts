@@ -27,6 +27,9 @@ describe( 'printCurrentTab', () => {
 	} );
 
 	afterEach( () => {
+		// Fire afterprint to clear the module-level in-flight guard so each
+		// test starts fresh (a no-op if the test already restored).
+		window.dispatchEvent( new Event( 'afterprint' ) );
 		printSpy.mockRestore();
 		jest.useRealTimers();
 	} );
@@ -54,5 +57,12 @@ describe( 'printCurrentTab', () => {
 		expect( document.title ).toBe( 'audience-2026-05-20_to_2026-06-18' );
 		jest.runAllTimers();
 		expect( document.title ).toBe( originalTitle );
+	} );
+
+	it( 'ignores a re-entrant call while a print is pending', () => {
+		printCurrentTab( 'audience-first' );
+		printCurrentTab( 'audience-second' ); // should be ignored — print still pending
+		expect( printSpy ).toHaveBeenCalledTimes( 1 );
+		expect( document.title ).toBe( 'audience-first' );
 	} );
 } );
