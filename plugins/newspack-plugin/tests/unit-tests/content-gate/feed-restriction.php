@@ -105,6 +105,14 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 		}
 		wp_delete_post( $this->post_id, true );
 		$this->reset_restriction_cache();
+
+		// Restore the global state these tests mutate so they can't leak into
+		// other (RSS/feed) suites and cause order-dependent failures.
+		delete_option( Content_Gate_Advanced_Settings::OPTION_PREFIX . 'restrict_feeds' );
+		delete_option( 'rss_use_excerpt' );
+		Content_Gate_Advanced_Settings::reset_cache();
+		wp_set_current_user( 0 );
+
 		parent::tear_down();
 	}
 
@@ -121,7 +129,8 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 
 	/**
 	 * Render the gated post through a real feed loop and return the value the
-	 * given callback produces for it. Restores the global query afterwards.
+	 * given callback produces for it. Resets global post data afterwards via
+	 * wp_reset_postdata().
 	 *
 	 * @param callable $render Runs inside the loop with the gated post set up,
 	 *                         and returns the feed string for that post.
@@ -188,6 +197,10 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 			}
 		);
 
+		// Positive assertion guards against a false negative: if the loop failed
+		// to capture the post and returned an empty string, the "not contains"
+		// checks alone would still pass.
+		$this->assertStringContainsString( 'FREE_ONE', $feed_excerpt, 'Free preview should be present in feed excerpt.' );
 		$this->assertStringNotContainsString( 'PAID_THREE', $feed_excerpt, 'Paid paragraph 3 must not leak into feed excerpt.' );
 		$this->assertStringNotContainsString( 'PAID_FIVE', $feed_excerpt, 'Paid paragraph 5 must not leak into feed excerpt.' );
 	}
