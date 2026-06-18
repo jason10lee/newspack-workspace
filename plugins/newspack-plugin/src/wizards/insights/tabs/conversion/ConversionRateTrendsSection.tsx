@@ -62,17 +62,17 @@ const ConversionRateTrendsSection = ( { current }: ConversionRateTrendsSectionPr
 			id="newspack-insights-conversion-rate-trends-heading"
 			title={ __( 'Conversion rate trends', 'newspack-plugin' ) }
 			description={ __(
-				'Weekly conversion rates across the selected window. Useful for spotting acceleration, plateaus, or seasonality.',
+				'Weekly conversion rates across the selected timeframe. Useful for spotting acceleration, plateaus, or seasonality.',
 				'newspack-plugin'
 			) }
 		/>
 		<SectionState
 			state={ current.weekly_conversion_rates.state }
-			emptyMessage={ __( 'Weekly trends will appear once the window contains at least 4 weeks of data.', 'newspack-plugin' ) }
+			emptyMessage={ __( 'Weekly trends will appear once the timeframe contains at least 4 weeks of data.', 'newspack-plugin' ) }
 		>
 			<LineChart
 				series={ toTrendSeries( current.weekly_conversion_rates ) }
-				emptyMessage={ __( 'Weekly trends will appear once the window contains at least 4 weeks of data.', 'newspack-plugin' ) }
+				emptyMessage={ __( 'Weekly trends will appear once the timeframe contains at least 4 weeks of data.', 'newspack-plugin' ) }
 			/>
 		</SectionState>
 	</section>

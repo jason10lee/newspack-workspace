@@ -23,7 +23,7 @@ describe( 'ConversionRateTrendsSection', () => {
 
 	it( 'renders the empty treatment when state is empty', () => {
 		render( <ConversionRateTrendsSection current={ makeConversionWindow( { weeklyTrendsState: 'empty' } ) } /> );
-		expect( screen.getByText( 'Weekly trends will appear once the window contains at least 4 weeks of data.' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Weekly trends will appear once the timeframe contains at least 4 weeks of data.' ) ).toBeInTheDocument();
 	} );
 
 	it( 'renders the error treatment when state is error', () => {

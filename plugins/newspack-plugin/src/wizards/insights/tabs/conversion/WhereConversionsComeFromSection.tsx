@@ -60,7 +60,7 @@ const WhereConversionsComeFromSection = ( { current }: WhereConversionsComeFromS
 			id="newspack-insights-conversion-source-mix-heading"
 			title={ __( 'Where conversions come from', 'newspack-plugin' ) }
 			description={ __(
-				'Source attribution for new conversions in the window. Gate, prompt, or direct (standalone form) — which surfaces drive your registrations, subscriptions, and donations?',
+				'Source attribution for new conversions in this timeframe. Gate, prompt, or direct (standalone form) — which surfaces drive your registrations, subscriptions, and donations?',
 				'newspack-plugin'
 			) }
 		/>
