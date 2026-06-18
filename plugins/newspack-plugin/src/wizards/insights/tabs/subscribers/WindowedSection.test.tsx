@@ -67,6 +67,12 @@ describe( 'Subscribers WindowedSection empty states', () => {
 
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
 		expect( screen.getByText( '128 active subscribers, but none new this timeframe' ) ).toBeInTheDocument();
+		// The misleading period delta is suppressed even though `previous` has a real
+		// prior count — a "↓ 100%" would misread an honest zero.
+		const newCard = Array.from( container.querySelectorAll( '.newspack-insights__metric-card-label' ) )
+			.find( el => el.textContent === 'New subscribers' )
+			?.closest( '.newspack-insights__metric-card' );
+		expect( newCard?.querySelector( '.newspack-insights__metric-card-delta' ) ).toBeNull();
 		// Real cards still render.
 		expect( screen.getByText( 'Churned subscribers' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Gross revenue' ) ).toBeInTheDocument();
