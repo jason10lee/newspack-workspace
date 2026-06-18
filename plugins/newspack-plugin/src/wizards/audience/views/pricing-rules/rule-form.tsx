@@ -29,6 +29,7 @@ import { Grid, SectionHeader, Divider } from '../../../../../packages/components
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import ScopeTargets from './scope-targets';
 import Conditions from './conditions';
+import RuleAudience from './rule-audience';
 import { tsToLocalInput, localInputToTs } from './datetime';
 
 const API_PATH = '/wc-dynamic-pricing/v1/rules';
@@ -417,6 +418,13 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 						publishedAt={ rule?.published_at ?? null }
 						isNew={ isNew }
 						onChange={ setConditions }
+					/>
+					<RuleAudience
+						scopeType={ scopeType }
+						scopeIds={ scopeIds }
+						conditions={ conditions }
+						application={ rule?.application }
+						ruleId={ rule?.id }
 					/>
 				</VStack>
 			</Grid>
