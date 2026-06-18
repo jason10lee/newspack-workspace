@@ -52,7 +52,12 @@ const DonorsTab = ( { range, previousRange }: DonorsTabProps ) => {
 						snapshot={ data.snapshot }
 						lastUpdated={ <LastUpdated tab="donors" range={ range } previousRange={ previousRange } /> }
 					/>
-					<WindowedSection range={ range } current={ data.current } previous={ data.previous } />
+					<WindowedSection
+						range={ range }
+						current={ data.current }
+						previous={ data.previous }
+						activeDonors={ data.snapshot.active_donors }
+					/>
 					<RetentionSection current={ data.current } previous={ data.previous } />
 					<PerformanceSection rows={ data.current.donations_by_tier } />
 				</>

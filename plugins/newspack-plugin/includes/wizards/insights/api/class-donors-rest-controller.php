@@ -257,20 +257,29 @@ class Donors_REST_Controller extends WP_REST_Controller {
 	 * @return array
 	 */
 	private function build_window( Donors_Metric $metric, DateTimeImmutable $start, DateTimeImmutable $end ): array {
+		$new_donors    = $metric->get_new_donors_in_window( $start, $end );
+		$lapsed_donors = $metric->get_lapsed_donors_in_window( $start, $end );
+		$total_revenue = $metric->get_total_donation_revenue( $start, $end );
+
 		return [
 			'window'                     => [
 				'start' => $start->format( 'Y-m-d' ),
 				'end'   => $end->format( 'Y-m-d' ),
 			],
-			'new_donors'                 => $metric->get_new_donors_in_window( $start, $end ),
-			'lapsed_donors'              => $metric->get_lapsed_donors_in_window( $start, $end ),
+			'new_donors'                 => $new_donors,
+			'lapsed_donors'              => $lapsed_donors,
 			'one_time_revenue'           => $metric->get_one_time_donation_revenue( $start, $end ),
 			'recurring_revenue'          => $metric->get_recurring_donation_revenue( $start, $end ),
-			'total_revenue'              => $metric->get_total_donation_revenue( $start, $end ),
+			'total_revenue'              => $total_revenue,
 			'average_gift'               => $metric->get_average_donation_gift( $start, $end ),
 			'lapsed_donor_recovery_rate' => $metric->get_lapsed_donor_recovery_rate( $start, $end ),
 			'recurring_donor_retention'  => $metric->get_recurring_donor_retention( $start, $end ),
 			'donations_by_tier'          => $metric->get_donations_by_tier( $start, $end ),
+			// Derived empty-state signal (NPPD-1696): true when the window saw any
+			// donation activity at all. Pure derivation from values already fetched
+			// above — no extra query — kept in the metric class alongside the other
+			// derived signals, mirroring Gates_Metric::paywall_section_totals().
+			'has_window_activity'        => Donors_Metric::window_activity_signal( $new_donors, $lapsed_donors, $total_revenue ),
 		];
 	}
 

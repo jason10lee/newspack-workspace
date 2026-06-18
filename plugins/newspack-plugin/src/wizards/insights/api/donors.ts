@@ -118,6 +118,13 @@ export interface DonorsWindow {
 	 */
 	recurring_donor_retention: DonorsRateValue;
 	donations_by_tier: DonorsTierRow[];
+	/**
+	 * Derived empty-state signal (NPPD-1696): true when the window saw
+	 * any donation activity (revenue, a new donor, or a lapse). Drives
+	 * the WindowedSection's whole-section `no_opportunity` empty state.
+	 * Derived server-side from values already computed — no extra query.
+	 */
+	has_window_activity: boolean;
 }
 
 export interface DonorsResponse {
