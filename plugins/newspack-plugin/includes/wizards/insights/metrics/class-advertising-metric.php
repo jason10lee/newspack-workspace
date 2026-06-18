@@ -275,6 +275,27 @@ class Advertising_Metric {
 		return $fixture( $start_date, $end_date, $compare, $variant );
 	}
 
+	/**
+	 * Derived empty-state signal (NPPD-1697): whether a resolved window saw any
+	 * ad activity. A pure function of the two volume metrics the report already
+	 * produces — no SOAP query — mirroring the Donors / Subscribers empty-state
+	 * derivation (their respective `window_activity_signal()` helpers). GAM has no
+	 * refunds (no negative revenue) and no transaction count, so impressions and
+	 * revenue are the only signals.
+	 *
+	 * Set on the window only once the report has resolved AND both metrics are
+	 * computable (see {@see self::read_window()}); during loading, or when either
+	 * metric errored, it is left absent so the React layer's strict `=== false`
+	 * check can't fire mid-load or mask a per-card error.
+	 *
+	 * @param int   $impressions Total impressions in the window.
+	 * @param float $revenue     Total revenue in the window.
+	 * @return bool
+	 */
+	public static function window_activity_signal( int $impressions, float $revenue ): bool {
+		return $impressions > 0 || $revenue > 0.0;
+	}
+
 	/*
 	 * Cache (transient SWR) + Action Scheduler refresh
 	 */
@@ -302,6 +323,19 @@ class Advertising_Metric {
 			self::schedule_refresh( $start_date, $end_date );
 			$window['is_stale'] = true;
 		}
+
+		// Derived empty-state signal (NPPD-1697). Set only on a resolved window
+		// (this branch — the loading branch above returns first) and only when both
+		// volume metrics are computable. Left ABSENT when either errored, so the
+		// errored card surfaces its own error treatment rather than the section
+		// collapsing to a no_opportunity empty state (mirrors Gates' dataKnown gate).
+		$metrics = $window['metrics'] ?? [];
+		$imp     = $metrics['total_impressions'] ?? [];
+		$rev     = $metrics['total_revenue'] ?? [];
+		if ( ! empty( $imp['computable'] ) && ! empty( $rev['computable'] ) ) {
+			$window['has_window_activity'] = self::window_activity_signal( (int) ( $imp['value'] ?? 0 ), (float) ( $rev['value'] ?? 0 ) );
+		}
+
 		return $window;
 	}
 

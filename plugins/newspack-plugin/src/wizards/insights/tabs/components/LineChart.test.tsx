@@ -48,6 +48,9 @@ describe( 'LineChart render', () => {
 	} );
 
 	it( 'renders a custom emptyMessage when every series is empty', () => {
+		// Sample prop exercising the generic emptyMessage passthrough — NOT corpus
+		// copy, so it is intentionally not part of the "window" → "timeframe"
+		// normalization (NPPD-1698). Don't "sync" it.
 		render(
 			<LineChart
 				series={ [

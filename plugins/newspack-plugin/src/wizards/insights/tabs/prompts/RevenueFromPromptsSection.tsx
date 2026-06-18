@@ -18,6 +18,8 @@ import { __ } from '@wordpress/i18n';
 import type { PromptsWindow } from '../../api/prompts';
 import MetricCard from '../components/MetricCard';
 import SectionHeading from '../components/SectionHeading';
+import { NOT_CAPABLE_COPY } from './notCapableCopy';
+import { NOT_COMPUTABLE_COPY } from './notComputableCopy';
 import { scalarToMetricCardProps } from './scalarToCard';
 
 export interface RevenueFromPromptsSectionProps {
@@ -45,6 +47,8 @@ const RevenueFromPromptsSection = ( { current, previous }: RevenueFromPromptsSec
 					),
 					current: current.donation_revenue_direct,
 					previous: previous?.donation_revenue_direct,
+					notCapableMessage: NOT_CAPABLE_COPY.donation,
+					notComputableMessage: NOT_COMPUTABLE_COPY.donation,
 				} ) }
 			/>
 			<MetricCard
@@ -56,8 +60,13 @@ const RevenueFromPromptsSection = ( { current, previous }: RevenueFromPromptsSec
 					),
 					current: current.donation_revenue_influenced_14d,
 					previous: previous?.donation_revenue_influenced_14d,
+					notCapableMessage: NOT_CAPABLE_COPY.donation,
+					notComputableMessage: NOT_COMPUTABLE_COPY.donation,
 				} ) }
 			/>
+			{ /* Block-name vs intent-name asymmetry: NOT_CAPABLE keys off the block that
+			     grants capability (checkout); NOT_COMPUTABLE keys off the metric's intent
+			     (subscription). Same pattern in PaidReaderConversionSection. */ }
 			<MetricCard
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Subscription Revenue (Direct)', 'newspack-plugin' ),
@@ -67,6 +76,8 @@ const RevenueFromPromptsSection = ( { current, previous }: RevenueFromPromptsSec
 					),
 					current: current.subscription_revenue_direct,
 					previous: previous?.subscription_revenue_direct,
+					notCapableMessage: NOT_CAPABLE_COPY.checkout,
+					notComputableMessage: NOT_COMPUTABLE_COPY.subscription,
 				} ) }
 			/>
 			<MetricCard
@@ -78,6 +89,8 @@ const RevenueFromPromptsSection = ( { current, previous }: RevenueFromPromptsSec
 					),
 					current: current.subscription_revenue_influenced_14d,
 					previous: previous?.subscription_revenue_influenced_14d,
+					notCapableMessage: NOT_CAPABLE_COPY.checkout,
+					notComputableMessage: NOT_COMPUTABLE_COPY.subscription,
 				} ) }
 			/>
 		</div>

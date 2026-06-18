@@ -46,6 +46,16 @@ export interface AdvertisingWindow {
 	is_loading?: boolean;
 	/** Serving a stale payload while a background refresh runs. */
 	is_stale?: boolean;
+	/**
+	 * Derived empty-state signal (NPPD-1697): true when the resolved report saw
+	 * any ad activity (impressions or revenue). Present (boolean) only once the
+	 * report resolves and both volume metrics are computable — ABSENT while
+	 * `is_loading`, or when a metric errored. The ReachRevenueSection reads
+	 * `=== false` to fire its `no_opportunity` collapse, so `undefined` (loading /
+	 * error) falls through and never collapses mid-load. Matches the optional
+	 * `is_loading?` / `is_stale?` convention.
+	 */
+	has_window_activity?: boolean;
 }
 
 export interface AdvertisingResponse {
@@ -69,6 +79,17 @@ const queryString = ( query: InsightsQuery ): string => {
 	if ( query.compare_start && query.compare_end ) {
 		params.set( 'compare_start', query.compare_start );
 		params.set( 'compare_end', query.compare_end );
+	}
+	// Forward the `_fixture_state` URL param so fixture mode's render variants
+	// (populated / not_ready / zero / no_revenue / loading / no_viewability) are
+	// reachable from the UI for smoke testing — matching the gates / prompts tabs.
+	// A no-op in production: the server ignores it unless
+	// NEWSPACK_INSIGHTS_FIXTURE_MODE is enabled.
+	if ( typeof window !== 'undefined' ) {
+		const fixtureState = new URLSearchParams( window.location.search ).get( '_fixture_state' );
+		if ( fixtureState ) {
+			params.set( '_fixture_state', fixtureState );
+		}
 	}
 	return params.toString();
 };

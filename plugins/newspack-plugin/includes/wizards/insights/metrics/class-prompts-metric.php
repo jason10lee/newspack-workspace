@@ -79,6 +79,61 @@ final class Prompts_Metric {
 	];
 
 	/**
+	 * Conversion blocks scanned by the per-intent capability gate (NPPD-1720),
+	 * keyed by capability. A prompt is "capable" of an intent when any active
+	 * prompt contains the matching block. Mirrors the three blocks newspack-popups
+	 * watches in `Newspack_Popups_Data_Api::get_popup_metadata()` plus
+	 * `newspack-blocks/checkout-button`, which that map omits — without it,
+	 * checkout-button membership prompts would read as informational.
+	 *
+	 * @var array<string, string>
+	 */
+	private const WATCHED_BLOCKS = [
+		'registration' => 'newspack/reader-registration',
+		'donation'     => 'newspack-blocks/donate',
+		'newsletter'   => 'newspack-newsletters/subscribe',
+		'checkout'     => 'newspack-blocks/checkout-button',
+	];
+
+	/**
+	 * Prompt CPT slug (newspack-popups' `Newspack_Popups::NEWSPACK_POPUPS_CPT`).
+	 * Hardcoded so the capability scan can enumerate published prompts via core
+	 * `get_posts()` without depending on the popups plugin class being loadable,
+	 * and without the write side effect `retrieve_popups()` carries.
+	 *
+	 * @var string
+	 */
+	private const POPUPS_CPT = 'newspack_popups_cpt';
+
+	/**
+	 * Maps each conversion-tied scalar metric to the capability that gates it
+	 * (NPPD-1720). `form_submission_rate` is capable when any *form-bearing* block
+	 * is present ('form_bearing' = registration / donation / newsletter signup);
+	 * checkout-button is a click-through to a checkout page, not an inline form, so
+	 * it's excluded here to match the form-bearing nudge copy. Every other metric
+	 * gates on its specific block. Non-conversion metrics (exposure, CTR, dismissal,
+	 * the funnel, the tables) are absent here — they carry no `has_capability` flag
+	 * and always render as long as there are prompts at all.
+	 *
+	 * @var array<string, string>
+	 */
+	private const METRIC_CAPABILITY = [
+		'form_submission_rate'                       => 'form_bearing',
+		'registration_conversion_direct'             => 'registration',
+		'registration_conversion_influenced_7d'      => 'registration',
+		'newsletter_signup_conversion_direct'        => 'newsletter',
+		'newsletter_signup_conversion_influenced_7d' => 'newsletter',
+		'donation_conversion_direct'                 => 'donation',
+		'donation_conversion_influenced_14d'         => 'donation',
+		'subscription_conversion_direct'             => 'checkout',
+		'subscription_conversion_influenced_14d'     => 'checkout',
+		'donation_revenue_direct'                    => 'donation',
+		'donation_revenue_influenced_14d'            => 'donation',
+		'subscription_revenue_direct'                => 'checkout',
+		'subscription_revenue_influenced_14d'        => 'checkout',
+	];
+
+	/**
 	 * Proxy client used to dispatch catalog queries to the hub.
 	 *
 	 * @var BigQuery_Proxy_Client
@@ -104,26 +159,52 @@ final class Prompts_Metric {
 	private array $paid_attempt_cache = [];
 
 	/**
+	 * Per-request memoization for the prompt-capability scan (NPPD-1720). Null
+	 * until the first `compute_prompt_capabilities()` call; thereafter the four
+	 * capability booleans are reused across both windows and all 13 gated metrics
+	 * so the active-prompt enumeration runs at most once per request.
+	 *
+	 * @var array<string, bool>|null
+	 */
+	private ?array $prompt_capabilities = null;
+
+	/**
+	 * Active-prompt provider (test seam, NPPD-1720). When null, prompt content is
+	 * read from published prompt CPT posts via `get_posts()`. Tests inject a
+	 * callable returning canned `post_content` strings so the detector can be
+	 * exercised without loading newspack-popups. Mirrors the proxy / Woo-resolver DI.
+	 *
+	 * @var callable|null
+	 */
+	private $prompt_provider;
+
+	/**
 	 * Constructor. Optionally inject collaborators (used in tests).
 	 *
-	 * @param BigQuery_Proxy_Client|null $proxy        Injected proxy client, or null to lazy-resolve.
-	 * @param Woo_Order_Resolver|null    $woo_resolver Injected Woo resolver, or null to lazy-create.
+	 * @param BigQuery_Proxy_Client|null $proxy           Injected proxy client, or null to lazy-resolve.
+	 * @param Woo_Order_Resolver|null    $woo_resolver    Injected Woo resolver, or null to lazy-create.
+	 * @param callable|null              $prompt_provider Injected active-prompt provider (test seam),
+	 *                                                    or null to read published prompt content via get_posts().
 	 */
 	public function __construct(
 		?BigQuery_Proxy_Client $proxy = null,
-		?Woo_Order_Resolver $woo_resolver = null
+		?Woo_Order_Resolver $woo_resolver = null,
+		?callable $prompt_provider = null
 	) {
-		$this->proxy        = $proxy ?? new BigQuery_Proxy_Client();
-		$this->woo_resolver = $woo_resolver ?? new Woo_Order_Resolver();
+		$this->proxy           = $proxy ?? new BigQuery_Proxy_Client();
+		$this->woo_resolver    = $woo_resolver ?? new Woo_Order_Resolver();
+		$this->prompt_provider = $prompt_provider;
 	}
 
 	/**
 	 * Return the canned fixture payload for the Prompts tab.
 	 *
 	 * Returned by the REST controller when NEWSPACK_INSIGHTS_FIXTURE_MODE is on.
-	 * The variant selects a render path: 'populated' (default), 'empty', 'error'.
+	 * The variant selects a render path: 'populated' (default), 'empty', 'error',
+	 * 'not_capable' (NPPD-1720), 'not_computable' (NPPD-1704).
 	 *
-	 * @param string $variant One of 'populated', 'empty', 'error'.
+	 * @param string $variant One of 'populated', 'empty', 'error', 'not_capable',
+	 *                        'not_computable'.
 	 * @param bool   $compare Whether comparison was requested; when false the
 	 *                        `previous` window is null (no period-over-period deltas).
 	 * @return array Full { tab_error, current, previous } response shape.
@@ -203,6 +284,131 @@ final class Prompts_Metric {
 			$rows_key,
 			new \WP_Error( 'bigquery_proxy_malformed_rows', __( 'The query returned an unexpected shape.', 'newspack-plugin' ) )
 		);
+	}
+
+	/**
+	 * Detect which conversion intents the publisher's active prompts can drive
+	 * (NPPD-1720). Enumerates published prompts and tests each for the four
+	 * watched conversion blocks; an intent is "capable" once any prompt carries
+	 * its block. Result is memoized per request.
+	 *
+	 * Uses raw block presence via `has_block()` rather than newspack-popups'
+	 * `action_type`, which collapses a multi-block prompt to 'undefined' (see the
+	 * `@TODO: How to handle prompts with more than one block?` in
+	 * `class-newspack-popups-data-api.php`); a prompt with both a donate and a
+	 * subscribe block must register as capable of both.
+	 *
+	 * "Active" = `post_status = 'publish'`. No `frequency` filter is applied: an
+	 * audit of real publishers found no published prompts left in `frequency =
+	 * 'never'` test mode, so it would add complexity without changing results.
+	 *
+	 * Fails open: if newspack-popups isn't active the prompt CPT isn't registered
+	 * and the prompts can't be inspected, so every intent is assumed capable rather
+	 * than falsely gating every conversion card on a misconfiguration.
+	 *
+	 * @return array<string, bool> Capability keyed by 'registration'|'donation'|'newsletter'|'checkout'.
+	 */
+	private function compute_prompt_capabilities(): array {
+		if ( null !== $this->prompt_capabilities ) {
+			return $this->prompt_capabilities;
+		}
+
+		// Fail open when prompts can't be inspected (popups inactive → CPT absent,
+		// and no injected provider): assume every intent is possible rather than
+		// falsely gating every conversion card on a misconfiguration. Keyed on the
+		// CPT registration rather than an empty query so an inactive plugin reads as
+		// "can't tell" (all-capable), not "no conversions possible" (all-gated).
+		if ( null === $this->prompt_provider && ! post_type_exists( self::POPUPS_CPT ) ) {
+			$this->prompt_capabilities = array_fill_keys( array_keys( self::WATCHED_BLOCKS ), true );
+			return $this->prompt_capabilities;
+		}
+
+		$capabilities = array_fill_keys( array_keys( self::WATCHED_BLOCKS ), false );
+		// Blocks still to look for; entries drop out as soon as one is found so
+		// later prompts skip the already-satisfied checks.
+		$remaining = self::WATCHED_BLOCKS;
+
+		foreach ( $this->get_active_prompt_contents() as $content ) {
+			if ( empty( $remaining ) ) {
+				break; // Every capability satisfied — stop scanning prompts.
+			}
+			if ( '' === $content ) {
+				continue;
+			}
+			foreach ( $remaining as $capability => $block_name ) {
+				if ( \has_block( $block_name, $content ) ) {
+					$capabilities[ $capability ] = true;
+					unset( $remaining[ $capability ] );
+				}
+			}
+		}
+
+		$this->prompt_capabilities = $capabilities;
+		return $capabilities;
+	}
+
+	/**
+	 * Raw block markup of every active (published) prompt.
+	 *
+	 * Reads via a plain `get_posts()` on the prompt CPT + `get_post_field()` rather
+	 * than `Newspack_Popups_Model::retrieve_popups()` on purpose: that method routes
+	 * through `deprecate_test_never_manual()`, which writes post meta and can demote
+	 * legacy `never`/`test` prompts to draft — a write side effect we must not
+	 * trigger from a read-only analytics scan (and which would fire on a cached GET).
+	 * The direct query also drops retrieve_popups()'s 1000-prompt cap and its unused
+	 * taxonomy hydration.
+	 *
+	 * Tests inject a provider that returns canned content strings (newspack-popups
+	 * isn't loaded in the unit suite).
+	 *
+	 * @return string[] `post_content` for each published prompt.
+	 */
+	private function get_active_prompt_contents(): array {
+		if ( null !== $this->prompt_provider ) {
+			return ( $this->prompt_provider )();
+		}
+
+		$ids = get_posts(
+			[
+				'post_type'        => self::POPUPS_CPT,
+				'post_status'      => 'publish',
+				'posts_per_page'   => -1,
+				'fields'           => 'ids',
+				'no_found_rows'    => true,
+				'suppress_filters' => false,
+			]
+		);
+
+		return array_map(
+			static function ( $id ) {
+				return (string) get_post_field( 'post_content', $id );
+			},
+			$ids
+		);
+	}
+
+	/**
+	 * Per-metric capability flags for the Prompts envelope (NPPD-1720). Maps each
+	 * of the 13 conversion-tied scalar keys to a boolean the REST controller
+	 * stamps onto the metric. `form_submission_rate` is capable when any form-bearing
+	 * block is present; every other metric gates on its specific block.
+	 *
+	 * @return array<string, bool> Metric key => has_capability.
+	 */
+	public function get_capability_flags(): array {
+		$capabilities = $this->compute_prompt_capabilities();
+		// Form-bearing = blocks that submit an inline form (registration / donation /
+		// newsletter signup). Checkout-button is excluded — it's a click-through to a
+		// checkout page, not a form — matching the form-bearing nudge copy.
+		$form_bearing = $capabilities['registration'] || $capabilities['donation'] || $capabilities['newsletter'];
+
+		$flags = [];
+		foreach ( self::METRIC_CAPABILITY as $metric_key => $capability ) {
+			$flags[ $metric_key ] = 'form_bearing' === $capability
+				? $form_bearing
+				: ( $capabilities[ $capability ] ?? false );
+		}
+		return $flags;
 	}
 
 	/**
@@ -294,8 +500,12 @@ final class Prompts_Metric {
 			return $rows;
 		}
 
-		// A successful but empty response is real "no conversions", not an error:
-		// zero conversions / zero revenue, which the callers render as $0.00.
+		// A successful but empty response is real "no attempts", not an error:
+		// zero rows / zero conversions / zero revenue. Callers treat an empty window
+		// (no in-intent prompts viewed) as non-computable — both the rate and revenue
+		// methods gate `computable` on `count( rows ) > 0` — so it renders the
+		// not-computable em-dash. A window WITH attempts but no conversions is a real
+		// 0 / $0.00 (computable).
 		$rows   = is_array( $rows ) ? $rows : [];
 		$result = [
 			'rows'        => $rows,
@@ -601,7 +811,11 @@ final class Prompts_Metric {
 		if ( is_wp_error( $joined ) ) {
 			return $this->error_scalar( 'currency', $joined );
 		}
-		return $this->populated_scalar( $joined['revenue'], true, $joined['conversions'], 'currency' );
+		// Computable only when at least one paid-intent prompt was viewed (mirrors
+		// the matching conversion-rate method's `count( rows ) > 0` gate). An empty
+		// window is "no in-intent prompts viewed", not a real $0 — so it renders the
+		// not-computable em-dash, consistent with its sibling rate card (NPPD-1704).
+		return $this->populated_scalar( $joined['revenue'], count( $joined['rows'] ) > 0, $joined['conversions'], 'currency' );
 	}
 
 	/**
@@ -616,7 +830,11 @@ final class Prompts_Metric {
 		if ( is_wp_error( $joined ) ) {
 			return $this->error_scalar( 'currency', $joined );
 		}
-		return $this->populated_scalar( $joined['revenue'], true, $joined['conversions'], 'currency' );
+		// Computable only when at least one paid-intent prompt was viewed (mirrors
+		// the matching conversion-rate method's `count( rows ) > 0` gate). An empty
+		// window is "no in-intent prompts viewed", not a real $0 — so it renders the
+		// not-computable em-dash, consistent with its sibling rate card (NPPD-1704).
+		return $this->populated_scalar( $joined['revenue'], count( $joined['rows'] ) > 0, $joined['conversions'], 'currency' );
 	}
 
 	/**
@@ -631,7 +849,11 @@ final class Prompts_Metric {
 		if ( is_wp_error( $joined ) ) {
 			return $this->error_scalar( 'currency', $joined );
 		}
-		return $this->populated_scalar( $joined['revenue'], true, $joined['conversions'], 'currency' );
+		// Computable only when at least one paid-intent prompt was viewed (mirrors
+		// the matching conversion-rate method's `count( rows ) > 0` gate). An empty
+		// window is "no in-intent prompts viewed", not a real $0 — so it renders the
+		// not-computable em-dash, consistent with its sibling rate card (NPPD-1704).
+		return $this->populated_scalar( $joined['revenue'], count( $joined['rows'] ) > 0, $joined['conversions'], 'currency' );
 	}
 
 	/**
@@ -646,7 +868,11 @@ final class Prompts_Metric {
 		if ( is_wp_error( $joined ) ) {
 			return $this->error_scalar( 'currency', $joined );
 		}
-		return $this->populated_scalar( $joined['revenue'], true, $joined['conversions'], 'currency' );
+		// Computable only when at least one paid-intent prompt was viewed (mirrors
+		// the matching conversion-rate method's `count( rows ) > 0` gate). An empty
+		// window is "no in-intent prompts viewed", not a real $0 — so it renders the
+		// not-computable em-dash, consistent with its sibling rate card (NPPD-1704).
+		return $this->populated_scalar( $joined['revenue'], count( $joined['rows'] ) > 0, $joined['conversions'], 'currency' );
 	}
 
 	// --- Section 6: How readers convert ---------------------------------

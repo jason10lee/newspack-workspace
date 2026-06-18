@@ -286,19 +286,29 @@ class Subscribers_REST_Controller extends WP_REST_Controller {
 	 * @return array
 	 */
 	private function build_window( Subscribers_Metric $metric, DateTimeImmutable $start, DateTimeImmutable $end ): array {
+		$new_subscribers     = $metric->get_new_subscribers_in_window( $start, $end );
+		$churned_subscribers = $metric->get_churned_subscribers_in_window( $start, $end );
+		$revenue_gross       = $metric->get_subscription_revenue_gross( $start, $end );
+		$revenue_net         = $metric->get_subscription_revenue_net( $start, $end );
+
 		return [
 			'window'                    => [
 				'start' => $start->format( 'Y-m-d' ),
 				'end'   => $end->format( 'Y-m-d' ),
 			],
-			'new_subscribers'           => $metric->get_new_subscribers_in_window( $start, $end ),
-			'churned_subscribers'       => $metric->get_churned_subscribers_in_window( $start, $end ),
-			'revenue_gross'             => $metric->get_subscription_revenue_gross( $start, $end ),
-			'revenue_net'               => $metric->get_subscription_revenue_net( $start, $end ),
+			'new_subscribers'           => $new_subscribers,
+			'churned_subscribers'       => $churned_subscribers,
+			'revenue_gross'             => $revenue_gross,
+			'revenue_net'               => $revenue_net,
 			'refund_rate'               => $metric->get_subscription_refund_rate( $start, $end ),
 			'failed_payment_retry_rate' => $metric->get_failed_payment_retry_rate( $start, $end ),
 			'subscriptions_by_product'  => $metric->get_subscriptions_by_product( $start, $end ),
 			'cancellation_reasons'      => $metric->get_cancellation_reasons( $start, $end ),
+			// Derived empty-state signal (NPPD-1695): true when the window saw any
+			// subscription activity. Pure derivation from values already fetched
+			// above — no extra query — kept in the metric class alongside the other
+			// derived signals, mirroring Donors_Metric::window_activity_signal().
+			'has_window_activity'       => Subscribers_Metric::window_activity_signal( $new_subscribers, $churned_subscribers, $revenue_gross, $revenue_net ),
 		];
 	}
 

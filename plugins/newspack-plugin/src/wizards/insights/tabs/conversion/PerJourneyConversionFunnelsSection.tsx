@@ -101,7 +101,7 @@ const PerJourneyConversionFunnelsSection = ( { current }: PerJourneyConversionFu
 				<StandardFunnelCell
 					data={ current.anonymous_to_registered_funnel }
 					emptyMessage={ __(
-						'No registration funnel data yet. This will populate once registrations occur in this window.',
+						'No registration funnel data yet. This will populate once registrations occur in this timeframe.',
 						'newspack-plugin'
 					) }
 				/>
@@ -116,7 +116,7 @@ const PerJourneyConversionFunnelsSection = ( { current }: PerJourneyConversionFu
 				<StandardFunnelCell
 					data={ current.registered_to_subscriber_funnel }
 					emptyMessage={ __(
-						'No subscription funnel data yet. This will populate once subscriptions occur in this window.',
+						'No subscription funnel data yet. This will populate once subscriptions occur in this timeframe.',
 						'newspack-plugin'
 					) }
 				/>
@@ -127,7 +127,7 @@ const PerJourneyConversionFunnelsSection = ( { current }: PerJourneyConversionFu
 			>
 				<StandardFunnelCell
 					data={ current.registered_to_donor_funnel }
-					emptyMessage={ __( 'No donor funnel data yet. This will populate once donations occur in this window.', 'newspack-plugin' ) }
+					emptyMessage={ __( 'No donor funnel data yet. This will populate once donations occur in this timeframe.', 'newspack-plugin' ) }
 				/>
 			</JourneyFunnel>
 			<JourneyFunnel

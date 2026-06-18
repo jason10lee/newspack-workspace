@@ -65,10 +65,10 @@ describe( 'MetricCard zeroFallback (NPPD-1694)', () => {
 			expect( screen.getByText( '0 of 1,234,567' ) ).toBeInTheDocument();
 		} );
 
-		it( 'renders the em-dash + "No paywall attempts in this window" when denominator is 0', () => {
+		it( 'renders the em-dash + "No paywall attempts in this timeframe" when denominator is 0', () => {
 			render( <MetricCard label="Rate" value={ 0 } format="percent" zeroFallback={ { numerator: 0, denominator: 0, ...PAYWALL } } /> );
 			expect( screen.getByLabelText( 'Not applicable' ) ).toHaveTextContent( '—' );
-			expect( screen.getByText( 'No paywall attempts in this window' ) ).toBeInTheDocument();
+			expect( screen.getByText( 'No paywall attempts in this timeframe' ) ).toBeInTheDocument();
 		} );
 
 		it( 'falls through to the normal percentage when numerator and denominator are both positive', () => {
@@ -92,7 +92,7 @@ describe( 'MetricCard zeroFallback (NPPD-1694)', () => {
 			expect( screen.queryByText( '$0.00' ) ).not.toBeInTheDocument();
 		} );
 
-		it( 'renders the em-dash + "No paywall attempts in this window" when attempts are 0', () => {
+		it( 'renders the em-dash + "No paywall attempts in this timeframe" when attempts are 0', () => {
 			render(
 				<MetricCard
 					label="Total"
@@ -102,12 +102,12 @@ describe( 'MetricCard zeroFallback (NPPD-1694)', () => {
 				/>
 			);
 			expect( screen.getByLabelText( 'Not applicable' ) ).toHaveTextContent( '—' );
-			expect( screen.getByText( 'No paywall attempts in this window' ) ).toBeInTheDocument();
+			expect( screen.getByText( 'No paywall attempts in this timeframe' ) ).toBeInTheDocument();
 		} );
 	} );
 
 	describe( 'currency average card (currencyRole="average")', () => {
-		it( 'renders the em-dash + "No conversions in this window" when conversions are 0 but attempts > 0', () => {
+		it( 'renders the em-dash + "No conversions in this timeframe" when conversions are 0 but attempts > 0', () => {
 			render(
 				<MetricCard
 					label="Avg revenue per paywall conversion"
@@ -117,10 +117,10 @@ describe( 'MetricCard zeroFallback (NPPD-1694)', () => {
 				/>
 			);
 			expect( screen.getByLabelText( 'Not applicable' ) ).toHaveTextContent( '—' );
-			expect( screen.getByText( 'No conversions in this window' ) ).toBeInTheDocument();
+			expect( screen.getByText( 'No conversions in this timeframe' ) ).toBeInTheDocument();
 		} );
 
-		it( 'renders "No paywall attempts in this window" when attempts are 0', () => {
+		it( 'renders "No paywall attempts in this timeframe" when attempts are 0', () => {
 			render(
 				<MetricCard
 					label="Avg"
@@ -129,7 +129,7 @@ describe( 'MetricCard zeroFallback (NPPD-1694)', () => {
 					zeroFallback={ { numerator: 0, denominator: 0, currencyRole: 'average', ...PAYWALL } }
 				/>
 			);
-			expect( screen.getByText( 'No paywall attempts in this window' ) ).toBeInTheDocument();
+			expect( screen.getByText( 'No paywall attempts in this timeframe' ) ).toBeInTheDocument();
 		} );
 	} );
 
@@ -142,7 +142,7 @@ describe( 'MetricCard zeroFallback (NPPD-1694)', () => {
 				zeroFallback={ { numerator: 0, denominator: 0, attemptsLabel: 'registration gate impressions' } }
 			/>
 		);
-		expect( screen.getByText( 'No registration gate impressions in this window' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'No registration gate impressions in this timeframe' ) ).toBeInTheDocument();
 	} );
 
 	it( 'suppresses the comparison delta when a fallback hero is shown', () => {
@@ -156,5 +156,128 @@ describe( 'MetricCard zeroFallback (NPPD-1694)', () => {
 			/>
 		);
 		expect( container.querySelector( '.newspack-insights__metric-card-delta' ) ).toBeNull();
+	} );
+} );
+
+describe( 'MetricCard notCapableMessage (NPPD-1720)', () => {
+	const NUDGE = 'No donation block detected in your active prompts.';
+
+	it( 'renders the em-dash hero + the message as the secondary line', () => {
+		render( <MetricCard label="Donation Conversion (Direct)" value={ 0 } format="percent" notCapableMessage={ NUDGE } /> );
+		expect( screen.getByLabelText( 'Not applicable' ) ).toHaveTextContent( '—' );
+		expect( screen.getByText( NUDGE ) ).toBeInTheDocument();
+	} );
+
+	it( 'does not render the metric value', () => {
+		render( <MetricCard label="Donation Conversion (Direct)" value={ 0.42 } format="percent" notCapableMessage={ NUDGE } /> );
+		expect( screen.queryByText( /%/ ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'wins over zeroFallback (structural gap beats a window-bound zero)', () => {
+		render(
+			<MetricCard
+				label="Donation Conversion (Direct)"
+				value={ 0 }
+				format="percent"
+				notCapableMessage={ NUDGE }
+				zeroFallback={ { numerator: 0, denominator: 17, attemptsLabel: 'donation prompts' } }
+			/>
+		);
+		expect( screen.getByText( NUDGE ) ).toBeInTheDocument();
+		expect( screen.queryByText( '0 of 17' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'yields to the error treatment (error wins over not-capable)', () => {
+		render( <MetricCard label="Donation Conversion (Direct)" error="boom" notCapableMessage={ NUDGE } /> );
+		expect( screen.getByText( 'Data temporarily unavailable.' ) ).toBeInTheDocument();
+		expect( screen.queryByText( NUDGE ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'suppresses the comparison delta', () => {
+		const { container } = render(
+			<MetricCard label="Donation Conversion (Direct)" value={ 0 } previousValue={ 0.4 } format="percent" notCapableMessage={ NUDGE } />
+		);
+		expect( container.querySelector( '.newspack-insights__metric-card-delta' ) ).toBeNull();
+	} );
+
+	it( 'hides the formula description (the nudge replaces it)', () => {
+		const description = 'Completed donations ÷ donation-intent prompt impressions';
+		render(
+			<MetricCard label="Donation Conversion (Direct)" value={ 0 } format="percent" description={ description } notCapableMessage={ NUDGE } />
+		);
+		expect( screen.getByText( NUDGE ) ).toBeInTheDocument();
+		expect( screen.queryByText( description ) ).not.toBeInTheDocument();
+	} );
+} );
+
+describe( 'MetricCard notComputableMessage (NPPD-1704)', () => {
+	const MESSAGE = 'No donation-intent prompts viewed in this timeframe.';
+	const NUDGE = 'No donation block detected in your active prompts.';
+
+	it( 'renders the em-dash hero + the message as the secondary line', () => {
+		render( <MetricCard label="Donation Conversion (Direct)" value={ 0 } format="percent" notComputableMessage={ MESSAGE } /> );
+		expect( screen.getByLabelText( 'Not applicable' ) ).toHaveTextContent( '—' );
+		expect( screen.getByText( MESSAGE ) ).toBeInTheDocument();
+	} );
+
+	it( 'does not render the metric value', () => {
+		render( <MetricCard label="Donation Conversion (Direct)" value={ 0.42 } format="percent" notComputableMessage={ MESSAGE } /> );
+		expect( screen.queryByText( /%/ ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'yields to not-capable (add-the-block beats wait-for-data)', () => {
+		render(
+			<MetricCard
+				label="Donation Conversion (Direct)"
+				value={ 0 }
+				format="percent"
+				notCapableMessage={ NUDGE }
+				notComputableMessage={ MESSAGE }
+			/>
+		);
+		expect( screen.getByText( NUDGE ) ).toBeInTheDocument();
+		expect( screen.queryByText( MESSAGE ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'wins over zeroFallback (capable-but-no-inputs beats a bare zero count)', () => {
+		render(
+			<MetricCard
+				label="Donation Conversion (Direct)"
+				value={ 0 }
+				format="percent"
+				notComputableMessage={ MESSAGE }
+				zeroFallback={ { numerator: 0, denominator: 17, attemptsLabel: 'donation prompts' } }
+			/>
+		);
+		expect( screen.getByText( MESSAGE ) ).toBeInTheDocument();
+		expect( screen.queryByText( '0 of 17' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'yields to the error treatment (error wins over not-computable)', () => {
+		render( <MetricCard label="Donation Conversion (Direct)" error="boom" notComputableMessage={ MESSAGE } /> );
+		expect( screen.getByText( 'Data temporarily unavailable.' ) ).toBeInTheDocument();
+		expect( screen.queryByText( MESSAGE ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'suppresses the comparison delta', () => {
+		const { container } = render(
+			<MetricCard label="Donation Conversion (Direct)" value={ 0 } previousValue={ 0.4 } format="percent" notComputableMessage={ MESSAGE } />
+		);
+		expect( container.querySelector( '.newspack-insights__metric-card-delta' ) ).toBeNull();
+	} );
+
+	it( 'hides the formula description (the message replaces it)', () => {
+		const description = 'Completed donations ÷ donation-intent prompt impressions';
+		render(
+			<MetricCard
+				label="Donation Conversion (Direct)"
+				value={ 0 }
+				format="percent"
+				description={ description }
+				notComputableMessage={ MESSAGE }
+			/>
+		);
+		expect( screen.getByText( MESSAGE ) ).toBeInTheDocument();
+		expect( screen.queryByText( description ) ).not.toBeInTheDocument();
 	} );
 } );

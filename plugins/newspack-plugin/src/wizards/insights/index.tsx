@@ -46,6 +46,7 @@ const FALLBACK_CONFIG: InsightsBootConfig = {
 	timezone: 'UTC',
 	settingsUrl: '',
 	adminUrl: '',
+	siteKitUrl: '',
 	lastUpdated: null,
 };
 

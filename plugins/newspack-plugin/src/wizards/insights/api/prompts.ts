@@ -50,6 +50,14 @@ export interface PromptsScalarMetric extends PromptsErrorFields {
 	computable: boolean;
 	denominator: number | null;
 	placeholder_type: PromptsPlaceholderType;
+	/**
+	 * Per-intent capability gate (NPPD-1720). Present only on the 13
+	 * conversion-tied scalars; `false` when no active prompt contains the block
+	 * this metric measures, so the card renders the structural "not capable"
+	 * treatment instead of a value. Absent === capable (matches the server's
+	 * fail-open behaviour when newspack-popups can't be inspected).
+	 */
+	has_capability?: boolean;
 }
 
 export interface PromptsFunnelStage {
@@ -202,6 +210,16 @@ const queryString = ( query: PromptsQuery ): string => {
 	if ( query.compare_start && query.compare_end ) {
 		params.set( 'compare_start', query.compare_start );
 		params.set( 'compare_end', query.compare_end );
+	}
+	// Forward the `_fixture_state` URL param so fixture mode's render variants
+	// (empty / error / not_capable) are reachable from the UI for smoke testing.
+	// A no-op in production: the server ignores it unless
+	// NEWSPACK_INSIGHTS_FIXTURE_MODE is enabled. Mirrors api/gates.ts.
+	if ( typeof window !== 'undefined' ) {
+		const fixtureState = new URLSearchParams( window.location.search ).get( '_fixture_state' );
+		if ( fixtureState ) {
+			params.set( '_fixture_state', fixtureState );
+		}
 	}
 	return params.toString();
 };

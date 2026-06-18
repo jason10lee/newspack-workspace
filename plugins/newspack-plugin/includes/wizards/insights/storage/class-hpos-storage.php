@@ -14,9 +14,10 @@
  *     renewals) JOIN through `{prefix}woocommerce_order_items` +
  *     `{prefix}woocommerce_order_itemmeta._product_id`. The analytics
  *     lookup `{prefix}wc_order_product_lookup` is shop_order-only on
- *     production data (verified against Block Club Chicago and
- *     Richland Source — 39,461 / 13,279 shop_order rows respectively,
- *     and zero shop_subscription rows on either).
+ *     production data (verified against two production sites — a large
+ *     metro newsroom and a mid-size local publisher — ~40,000 / ~13,000
+ *     shop_order rows respectively, and zero shop_subscription rows on
+ *     either).
  *   - Revenue queries (gross/net/refund_rate) operate on shop_order
  *     and DO use `{prefix}wc_order_product_lookup`, which Woo populates
  *     correctly for shop_order line items.

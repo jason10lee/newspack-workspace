@@ -114,6 +114,32 @@ class Subscribers_Metric {
 	}
 
 	/**
+	 * Derived empty-state signal (NPPD-1695): whether a window saw any
+	 * subscription activity at all. A pure function of values the controller
+	 * already fetches — no query — mirroring {@see Donors_Metric::window_activity_signal()}.
+	 * The REST controller folds the result into the window payload; the React
+	 * layer uses it to choose the windowed section's `no_opportunity` empty
+	 * state. The `no_opportunity` / `no_conversions` decision itself stays in
+	 * the component, not here.
+	 *
+	 * Churn EVENTS count as activity (a window where subscribers left is not
+	 * empty), so `churned_subscribers > 0` contributes. Zero churn does not —
+	 * but a window with zero revenue, zero new, and zero churn genuinely has no
+	 * movement and collapses to the empty state. Net revenue is included
+	 * alongside gross so a refund-only window (gross 0, net negative) still
+	 * reads as activity.
+	 *
+	 * @param int   $new_subscribers     First-time subscribers in the window.
+	 * @param int   $churned_subscribers Subscribers who churned in the window.
+	 * @param float $revenue_gross       Gross subscription revenue in the window.
+	 * @param float $revenue_net         Net subscription revenue in the window.
+	 * @return bool
+	 */
+	public static function window_activity_signal( int $new_subscribers, int $churned_subscribers, float $revenue_gross, float $revenue_net ): bool {
+		return 0.0 !== $revenue_gross || 0.0 !== $revenue_net || $new_subscribers > 0 || $churned_subscribers > 0;
+	}
+
+	/**
 	 * Distinct active non-donation subscribers right now.
 	 *
 	 * @return int

@@ -44,7 +44,7 @@ export const scalarToMetricCardProps = ( props: ScalarCardProps ) => {
 	// misleading zero. The raw message stays server-side; the card shows generic
 	// copy keyed off the `error` prop.
 	if ( current.state === 'error' ) {
-		return { label, description, error: current.error_message ?? __( 'Data unavailable', 'newspack-plugin' ) };
+		return { label, description, error: current.error_message ?? __( 'Data temporarily unavailable.', 'newspack-plugin' ) };
 	}
 	return {
 		label,

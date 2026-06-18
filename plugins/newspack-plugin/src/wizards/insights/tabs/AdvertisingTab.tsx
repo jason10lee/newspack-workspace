@@ -83,6 +83,7 @@ const AdvertisingTab = ( { range, previousRange }: AdvertisingTabProps ) => {
 					<ReachRevenueSection
 						current={ current.metrics }
 						previous={ previous }
+						hasWindowActivity={ current.has_window_activity }
 						lastUpdated={ <LastUpdated tab="advertising" range={ range } previousRange={ previousRange } /> }
 					/>
 					<InventoryPerformanceSection current={ current.metrics } previous={ previous } />

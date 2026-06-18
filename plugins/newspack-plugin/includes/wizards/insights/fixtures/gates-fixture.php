@@ -5,8 +5,8 @@
  * Realistic mock data for UI smoke testing without a BigQuery proxy connection,
  * served by Gates_REST_Controller when NEWSPACK_INSIGHTS_FIXTURE_MODE is on. The
  * optional `_fixture_state` request param selects a render path:
- *   - 'populated' (default) — every section has data; the funnel uses Richland
- *     Source's 26,171 / 2,028 / 431 shape so both drop-off deltas render red.
+ *   - 'populated' (default) — every section has data; the funnel uses a mid-size
+ *     publisher's 25,000 / 2,000 / 400 shape so both drop-off deltas render red.
  *   - 'empty'    — every section reports the empty state (succeeded, no rows).
  *   - 'error'    — every section reports the error state (tab banner shows).
  *
@@ -150,25 +150,25 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 			// Section 3 empty-state totals (NPPD-1694).
 			'paywall_attempts_total'             => (int) round( 320 * $f ),
 			'paywall_conversions_total'          => (int) round( 11 * $f ),
-			// Section 4 — How readers convert. Funnel uses Richland Source's shape
-			// so both drop-off deltas exceed 20% and render in the error color.
+			// Section 4 — How readers convert. Funnel uses a mid-size publisher's
+			// shape so both drop-off deltas exceed 20% and render in the error color.
 			'conversion_funnel'                  => [
 				'state'  => 'populated',
 				'stages' => [
 					[
 						'label'      => __( 'Impression', 'newspack-plugin' ),
-						'count'      => (int) round( 26171 * $f ),
+						'count'      => (int) round( 25000 * $f ),
 						'pct_of_top' => 1.0,
 					],
 					[
 						'label'      => __( 'Engagement', 'newspack-plugin' ),
-						'count'      => (int) round( 2028 * $f ),
-						'pct_of_top' => 0.0775,
+						'count'      => (int) round( 2000 * $f ),
+						'pct_of_top' => 0.08,
 					],
 					[
 						'label'      => __( 'Conversion', 'newspack-plugin' ),
-						'count'      => (int) round( 431 * $f ),
-						'pct_of_top' => 0.0165,
+						'count'      => (int) round( 400 * $f ),
+						'pct_of_top' => 0.016,
 					],
 				],
 			],
@@ -239,7 +239,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 	// --- Paid-section empty-state smoke variants (NPPD-1694). ---
 	if ( 'paid_no_conversions' === $variant ) {
 		// 17 paywall attempts, zero conversions → the section's `no_conversions`
-		// empty state with {N} = 17 (Richland Source's live scenario).
+		// empty state with {N} = 17 (a mid-size publisher's live scenario).
 		$current                              = $build( 1.0 );
 		$current['paywall_attempts_total']    = 17;
 		$current['paywall_conversions_total'] = 0;

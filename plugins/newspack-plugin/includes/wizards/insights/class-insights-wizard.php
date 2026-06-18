@@ -360,8 +360,33 @@ class Insights_Wizard extends Wizard {
 			],
 			'defaultComparison' => false,
 			'timezone'          => wp_timezone_string(),
-			'settingsUrl'       => admin_url( 'admin.php?page=newspack-settings' ),
 			'adminUrl'          => admin_url(),
+			'settingsUrl'       => admin_url( 'admin.php?page=newspack-settings' ),
+			'siteKitUrl'        => self::get_site_kit_url(),
 		];
+	}
+
+	/**
+	 * Admin URL for connecting Google Analytics through Site Kit, used by the
+	 * Audience and Engagement connect banner when GA4 isn't connected
+	 * (NPPD-1731). GA4 is owned upstream by Site Kit, so the banner points
+	 * there rather than at Newspack → Connections.
+	 *
+	 * Precedence mirrors Newspack Settings and the Dashboard:
+	 *  - Site Kit set up with the Analytics module → deep link to the GA4 service.
+	 *  - Site Kit active but Analytics not yet connected → Site Kit's setup splash.
+	 *  - Site Kit not installed at all → Newspack → Connections, where it gets
+	 *    installed (the splash URL would 404 without the plugin present).
+	 *
+	 * @return string
+	 */
+	private static function get_site_kit_url(): string {
+		if ( google_site_kit_available() ) {
+			return admin_url( 'admin.php?page=googlesitekit-settings#/connected-services/analytics-4' );
+		}
+		if ( GoogleSiteKit::is_active() ) {
+			return admin_url( 'admin.php?page=googlesitekit-splash' );
+		}
+		return admin_url( 'admin.php?page=newspack-settings' );
 	}
 }

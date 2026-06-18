@@ -9,6 +9,16 @@
  *     12,400 / 2,800 / 320 shape so both drop-off deltas are visible.
  *   - 'empty'    — every section reports the empty state (succeeded, no rows).
  *   - 'error'    — every section reports the error state (tab banner shows).
+ *   - 'not_capable' — populated data, but registration / donation / subscription
+ *     metrics are marked has_capability:false (NPPD-1720) so their cards render
+ *     the structural "not capable" treatment; newsletter stays capable.
+ *   - 'not_computable' — populated data, but all 13 conversion-tied scalars are
+ *     capable (has_capability:true) yet non-computable (state 'populated',
+ *     computable:false) so their cards render the "no inputs this window"
+ *     treatment (NPPD-1704). The other exposure/engagement scalars (impressions,
+ *     CTR, dismissal) keep real values, proving the gate is per-metric, not
+ *     tab-wide. Note form_submission_rate is an engagement-area metric that IS
+ *     gated — it's one of the 13 conversion-tied scalars.
  *
  * Returns a closure so the single required file can build any variant. Never
  * enable fixture mode in production.
@@ -381,9 +391,90 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 		];
 	};
 
+	// --- Not-capable variant (NPPD-1720): per-intent capability gate. ---
+	// Mirrors a newsletter-only publisher — newsletter signup and
+	// the generic form-submission rate stay capable (real values) while
+	// registration / donation / subscription have no block and render the
+	// structural "not capable" em-dash + nudge. Demonstrates that the gate is
+	// per-intent, not tab-wide. In production these flags are stamped by the REST
+	// controller; fixture mode bypasses it, so set them here.
+	$capability_by_metric = 'not_capable' === $variant ? [
+		'form_submission_rate'                       => true,
+		'registration_conversion_direct'             => false,
+		'registration_conversion_influenced_7d'      => false,
+		'newsletter_signup_conversion_direct'        => true,
+		'newsletter_signup_conversion_influenced_7d' => true,
+		'donation_conversion_direct'                 => false,
+		'donation_conversion_influenced_14d'         => false,
+		'subscription_conversion_direct'             => false,
+		'subscription_conversion_influenced_14d'     => false,
+		'donation_revenue_direct'                    => false,
+		'donation_revenue_influenced_14d'            => false,
+		'subscription_revenue_direct'                => false,
+		'subscription_revenue_influenced_14d'        => false,
+	] : [];
+
+	$apply_capabilities = static function ( array $win ) use ( $capability_by_metric ) {
+		foreach ( $capability_by_metric as $key => $has_capability ) {
+			if ( isset( $win[ $key ] ) && is_array( $win[ $key ] ) ) {
+				$win[ $key ]['has_capability'] = $has_capability;
+			}
+		}
+		return $win;
+	};
+
+	// --- Not-computable variant (NPPD-1704): capable, but no inputs this window. ---
+	// All 13 conversion-tied scalars stay capable (has_capability:true) yet report a
+	// non-computable zero (state 'populated', computable:false) — the envelope the
+	// metric class emits for an empty window (the 5 proxy rate metrics via SAFE_DIVIDE
+	// NULL; the 8 Woo-joined paid-conversion + revenue metrics via count(rows) === 0).
+	// The other exposure/engagement scalars (impressions, CTR, dismissal) keep their
+	// real values, so a reviewer hitting _fixture_state=not_computable sees ONLY the
+	// conversion cards em-dashed — proof the gate is per-metric, not tab-wide.
+	// (form_submission_rate is the one engagement-area metric among the 13.) Contrast
+	// not_capable (pre-query block scan); this is post-query math.
+	$conversion_metrics   = [
+		'form_submission_rate',
+		'registration_conversion_direct',
+		'registration_conversion_influenced_7d',
+		'newsletter_signup_conversion_direct',
+		'newsletter_signup_conversion_influenced_7d',
+		'donation_conversion_direct',
+		'donation_conversion_influenced_14d',
+		'subscription_conversion_direct',
+		'subscription_conversion_influenced_14d',
+		'donation_revenue_direct',
+		'donation_revenue_influenced_14d',
+		'subscription_revenue_direct',
+		'subscription_revenue_influenced_14d',
+	];
+	$apply_not_computable = static function ( array $win ) use ( $conversion_metrics, $scalar_types, $zero_value ) {
+		foreach ( $conversion_metrics as $key ) {
+			$type          = $scalar_types[ $key ];
+			$win[ $key ] = [
+				'state'            => 'populated',
+				'value'            => $zero_value( $type ),
+				'computable'       => false,
+				'denominator'      => null,
+				'placeholder_type' => $type,
+				'has_capability'   => true,
+			];
+		}
+		return $win;
+	};
+
+	// not_capable stamps capability flags; not_computable overrides the 13 conversion
+	// scalars; populated leaves the window as built.
+	$transform = static function ( array $win ) use ( $variant, $apply_capabilities, $apply_not_computable ) {
+		if ( 'not_computable' === $variant ) {
+			return $apply_not_computable( $win );
+		}
+		return $apply_capabilities( $win );
+	};
+
 	return [
 		'tab_error' => false,
-		'current'   => $build( 1.0, $window ),
-		'previous'  => $compare ? $build( 0.9, $prev_window ) : null,
+		'current'   => $transform( $build( 1.0, $window ) ),
+		'previous'  => $compare ? $transform( $build( 0.9, $prev_window ) ) : null,
 	];
 };

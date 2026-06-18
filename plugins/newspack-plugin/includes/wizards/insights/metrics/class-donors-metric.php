@@ -103,6 +103,28 @@ class Donors_Metric {
 	}
 
 	/**
+	 * Derived empty-state signal (NPPD-1696): whether a window saw any donation
+	 * activity at all. A pure function of three already-computed window values —
+	 * no query — mirroring how Gates derives its section totals
+	 * ({@see Gates_Metric::paywall_section_totals()}). The REST controller folds
+	 * the result into the window payload; the React layer uses it to choose the
+	 * Donors tab's `no_opportunity` empty state. The `no_opportunity` /
+	 * `no_conversions` decision itself stays in the component, not here.
+	 *
+	 * Net revenue is the activity proxy, so a window whose only donation was later
+	 * fully refunded (net 0) with no new or lapsed donors reads as "no activity" —
+	 * an accepted display-only edge, not data harm.
+	 *
+	 * @param int   $new_donors    First-time donors in the window.
+	 * @param int   $lapsed_donors Donors who lapsed in the window.
+	 * @param float $total_revenue Net donation revenue in the window.
+	 * @return bool
+	 */
+	public static function window_activity_signal( int $new_donors, int $lapsed_donors, float $total_revenue ): bool {
+		return 0.0 !== $total_revenue || $new_donors > 0 || $lapsed_donors > 0;
+	}
+
+	/**
 	 * Active donors (UNION of recurring + trailing-365 one-time).
 	 *
 	 * @return int

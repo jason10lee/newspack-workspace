@@ -320,7 +320,7 @@ class Prompts_REST_Controller extends WP_REST_Controller {
 	 * @return array
 	 */
 	private function build_window( Prompts_Metric $metric, DateTimeImmutable $start, DateTimeImmutable $end ): array {
-		return [
+		$window = [
 			'window'                                     => [
 				'start' => $start->format( 'Y-m-d' ),
 				'end'   => $end->format( 'Y-m-d' ),
@@ -356,6 +356,18 @@ class Prompts_REST_Controller extends WP_REST_Controller {
 			'performance_by_intent'                      => $metric->get_performance_by_intent( $start, $end ),
 			'performance_by_placement'                   => $metric->get_performance_by_placement( $start, $end ),
 		];
+
+		// Stamp the per-intent capability gate (NPPD-1720) onto the conversion-tied
+		// scalars. The flag is window-independent — it reflects which conversion
+		// blocks the publisher's active prompts contain — but rides on each
+		// window's metric so the React adapter reads it off the entry it renders.
+		foreach ( $metric->get_capability_flags() as $metric_key => $has_capability ) {
+			if ( isset( $window[ $metric_key ] ) && is_array( $window[ $metric_key ] ) ) {
+				$window[ $metric_key ]['has_capability'] = $has_capability;
+			}
+		}
+
+		return $window;
 	}
 
 	/**

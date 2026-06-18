@@ -16,6 +16,8 @@ import { __ } from '@wordpress/i18n';
 import type { PromptsWindow } from '../../api/prompts';
 import MetricCard from '../components/MetricCard';
 import SectionHeading from '../components/SectionHeading';
+import { NOT_CAPABLE_COPY } from './notCapableCopy';
+import { NOT_COMPUTABLE_COPY } from './notComputableCopy';
 import { scalarToMetricCardProps } from './scalarToCard';
 
 export interface PromptEngagementSectionProps {
@@ -51,6 +53,8 @@ const PromptEngagementSection = ( { current, previous }: PromptEngagementSection
 					description: __( 'Form submissions ÷ impressions on form-bearing prompts', 'newspack-plugin' ),
 					current: current.form_submission_rate,
 					previous: previous?.form_submission_rate,
+					notCapableMessage: NOT_CAPABLE_COPY.formBearing,
+					notComputableMessage: NOT_COMPUTABLE_COPY.formBearing,
 				} ) }
 			/>
 			<MetricCard

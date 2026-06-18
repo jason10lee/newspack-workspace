@@ -32,7 +32,7 @@ describe( 'HowLongConversionsTakeSection', () => {
 
 	it( 'renders 4.1 empty treatment when time-to-register state is empty', () => {
 		render( <HowLongConversionsTakeSection current={ makeConversionWindow( { timeToRegisterState: 'empty' } ) } /> );
-		expect( screen.getByText( 'Time-to-register data will appear once registrations occur in this window.' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Time-to-register data will appear once registrations occur in this timeframe.' ) ).toBeInTheDocument();
 	} );
 
 	it( 'renders 4.1 error treatment when time-to-register state is error', () => {

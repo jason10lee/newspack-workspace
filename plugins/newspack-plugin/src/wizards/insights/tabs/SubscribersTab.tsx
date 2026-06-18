@@ -56,7 +56,12 @@ const SubscribersTab = ( { range, previousRange }: SubscribersTabProps ) => {
 						snapshot={ data.snapshot }
 						lastUpdated={ <LastUpdated tab="subscribers" range={ range } previousRange={ previousRange } /> }
 					/>
-					<WindowedSection range={ range } current={ data.current } previous={ data.previous } />
+					<WindowedSection
+						range={ range }
+						current={ data.current }
+						previous={ data.previous }
+						activeSubscribers={ data.snapshot.active_subscribers }
+					/>
 					<TenureSection rows={ data.snapshot.tenure_distribution } />
 					<PerformanceSection rows={ data.current.subscriptions_by_product } />
 				</>

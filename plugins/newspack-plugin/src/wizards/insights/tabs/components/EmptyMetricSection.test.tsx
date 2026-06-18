@@ -21,6 +21,9 @@ import EmptyMetricSection from './EmptyMetricSection';
 
 describe( 'EmptyMetricSection', () => {
 	it( 'renders the title and caption as the section identity', () => {
+		// Sample props exercising the component's rendering — NOT corpus copy, so
+		// they are intentionally not part of the "window" → "timeframe"
+		// normalization (NPPD-1698). Don't "sync" them.
 		const { container } = render(
 			<EmptyMetricSection
 				title="Paid reader conversion"
