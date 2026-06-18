@@ -53,6 +53,14 @@ class Source_Matcher {
 			$result[ $record['key'] ] = self::SOURCE_DIRECT;
 		}
 
+		// Sort both inputs by timestamp so attribution is deterministic regardless of
+		// caller / BigQuery row order; ties resolve by earliest timestamp.
+		$ts_sort = static function ( $a, $b ) {
+			return $a['ts'] <=> $b['ts'];
+		};
+		usort( $records, $ts_sort );
+		usort( $events, $ts_sort );
+
 		// Greedy nearest-match: for each event, claim the nearest unclaimed record in range.
 		$claimed = [];
 		foreach ( $events as $event ) {

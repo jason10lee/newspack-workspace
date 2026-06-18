@@ -5,14 +5,57 @@
  * @package Newspack
  */
 
+namespace Newspack\Tests\Insights;
+
 use Newspack\Insights\Source_Matcher;
+use WP_UnitTestCase;
 
 /**
  * Tests for Source_Matcher.
  *
  * @group insights
  */
-class Newspack_Test_Source_Matcher extends WP_UnitTestCase {
+class Test_Source_Matcher extends WP_UnitTestCase {
+
+	/** Attribution is deterministic regardless of caller / BigQuery row order. */
+	public function test_matching_is_order_independent() {
+		$records  = [
+			[
+				'key' => 'a',
+				'ts'  => 1000,
+			],
+			[
+				'key' => 'b',
+				'ts'  => 2000,
+			],
+		];
+		$sorted   = [
+			[
+				'ts'     => 1005,
+				'source' => 'gate',
+			],
+			[
+				'ts'     => 2005,
+				'source' => 'prompt',
+			],
+		];
+		$shuffled = [
+			[
+				'ts'     => 2005,
+				'source' => 'prompt',
+			],
+			[
+				'ts'     => 1005,
+				'source' => 'gate',
+			],
+		];
+		$expected = [
+			'a' => 'gate',
+			'b' => 'prompt',
+		];
+		$this->assertSame( $expected, Source_Matcher::attach_sources( $records, $sorted, 120, 120 ) );
+		$this->assertSame( $expected, Source_Matcher::attach_sources( $records, $shuffled, 120, 120 ) );
+	}
 
 	/** A record at ts matches an event within the symmetric window and takes its source. */
 	public function test_attaches_source_within_symmetric_window() {
