@@ -22,6 +22,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import type { PromptsPerformanceByPromptRow, PromptsPerformanceByPromptTable as TableData } from '../../../api/prompts';
+import { getPostEditUrl } from '../../components/adminLinks';
 import { formatNumber } from '../../components/format';
 import SortableTable, { renderCount, renderRate, type SortableColumn } from '../../components/SortableTable';
 import { humanizeTerm } from './humanize';
@@ -32,7 +33,13 @@ export interface PerformanceByPromptTableProps {
 }
 
 const columns: SortableColumn< PromptsPerformanceByPromptRow >[] = [
-	{ key: 'prompt_title', label: __( 'Prompt', 'newspack-plugin' ), numeric: false, render: r => r.prompt_title, sortValue: r => r.prompt_title },
+	{
+		key: 'prompt_title',
+		label: __( 'Prompt', 'newspack-plugin' ),
+		numeric: false,
+		render: r => <a href={ getPostEditUrl( r.popup_id ) }>{ r.prompt_title }</a>,
+		sortValue: r => r.prompt_title,
+	},
 	{ key: 'intent', label: __( 'Intent', 'newspack-plugin' ), numeric: false, render: r => humanizeTerm( r.intent ), sortValue: r => r.intent },
 	{
 		key: 'placement',

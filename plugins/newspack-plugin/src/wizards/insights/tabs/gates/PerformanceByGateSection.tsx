@@ -30,6 +30,7 @@ import { Icon, chevronUp, chevronDown } from '@wordpress/icons';
  * Internal dependencies
  */
 import type { GatesPerformanceRow, GatesPerformanceTable } from '../../api/gates';
+import { getPostEditUrl } from '../components/adminLinks';
 import { formatNumber, formatPercent } from '../components/format';
 import SectionHeading from '../components/SectionHeading';
 import { SECTION_ERROR_MESSAGE } from './SectionState';
@@ -69,7 +70,9 @@ const renderPercent = ( v: number | null ) => ( v === null ? <NotApplicable /> :
 
 const renderRow = ( row: GatesPerformanceRow ) => (
 	<tr key={ row.gate_post_id }>
-		<td>{ row.gate_name }</td>
+		<td>
+			<a href={ getPostEditUrl( row.gate_post_id ) }>{ row.gate_name }</a>
+		</td>
 		<td className="newspack-insights__table-num">{ formatNumber( row.impressions ) }</td>
 		<td className="newspack-insights__table-num">{ formatNumber( row.unique_viewers ) }</td>
 		<td className="newspack-insights__table-num">{ formatNumber( row.registrations ) }</td>

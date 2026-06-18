@@ -19,7 +19,7 @@ export interface SectionProps {
 	previous: InsightsWindow | null;
 }
 
-const PAGE_COL = { key: 'page_title', label: __( 'Page', 'newspack-plugin' ) };
+const ARTICLE_COL = { key: 'page_title', label: __( 'Article', 'newspack-plugin' ) };
 
 const ContentEngagementSection = ( { current }: SectionProps ) => (
 	<section className="newspack-insights__section" aria-labelledby="newspack-insights-engagement-content">
@@ -33,24 +33,24 @@ const ContentEngagementSection = ( { current }: SectionProps ) => (
 		     have width and the third doesn't stretch full-width. */ }
 		<div className="newspack-insights__table-grid newspack-insights__table-grid--cols-2">
 			<div>
-				<h3 className="newspack-insights__chart-card-title">{ __( 'Most-Engaged Pages', 'newspack-plugin' ) }</h3>
+				<h3 className="newspack-insights__chart-card-title">{ __( 'Most-Engaged Articles', 'newspack-plugin' ) }</h3>
 				<MetricTable
 					payload={ current.most_read_articles }
-					emptyMessage={ __( 'No page engagement data in this timeframe.', 'newspack-plugin' ) }
+					emptyMessage={ __( 'No article engagement data in this timeframe.', 'newspack-plugin' ) }
 					columns={ [
-						PAGE_COL,
+						ARTICLE_COL,
 						{ key: 'unique_readers', label: __( 'Readers', 'newspack-plugin' ), format: 'number', align: 'right' },
 						{ key: 'avg_engagement_seconds', label: __( 'Avg time', 'newspack-plugin' ), format: 'duration', align: 'right' },
 					] }
 				/>
 			</div>
 			<div>
-				<h3 className="newspack-insights__chart-card-title">{ __( 'Pages by Completion Rate', 'newspack-plugin' ) }</h3>
+				<h3 className="newspack-insights__chart-card-title">{ __( 'Articles by Completion Rate', 'newspack-plugin' ) }</h3>
 				<MetricTable
 					payload={ current.articles_by_completion_rate }
 					emptyMessage={ __( 'No scroll-completion data in this timeframe.', 'newspack-plugin' ) }
 					columns={ [
-						PAGE_COL,
+						ARTICLE_COL,
 						{ key: 'readers', label: __( 'Readers', 'newspack-plugin' ), format: 'number', align: 'right' },
 						{ key: 'completion_rate', label: __( 'Read to end', 'newspack-plugin' ), format: 'percent', align: 'right' },
 					] }

@@ -24,6 +24,7 @@ import { Fragment } from '@wordpress/element';
 import type { PerformanceRow } from '../../api/subscribers';
 import SectionEmpty from '../components/SectionEmpty';
 import SectionHeading from '../components/SectionHeading';
+import { getPostEditUrl } from '../components/adminLinks';
 import { formatCurrency, formatNumber } from '../components/format';
 
 export interface PerformanceSectionProps {
@@ -79,7 +80,9 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 						{ rows.map( row => (
 							<Fragment key={ row.product_id }>
 								<tr>
-									<td>{ row.name }</td>
+									<td>
+										<a href={ getPostEditUrl( row.product_id ) }>{ row.name }</a>
+									</td>
 									<td className="newspack-insights__table-num">{ formatNumber( row.active_subs ) }</td>
 									<td className="newspack-insights__table-num">{ formatNumber( row.churned_subs ) }</td>
 									<td className="newspack-insights__table-num">{ formatCurrency( row.active_value ).display }</td>
