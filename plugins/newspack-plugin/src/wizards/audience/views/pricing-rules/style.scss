@@ -63,4 +63,19 @@
 			opacity: 0.6;
 		}
 	}
+
+	&__preview-section {
+		padding: 0 0 16px;
+	}
+
+	&__preview {
+		&.is-loading {
+			opacity: 0.6;
+		}
+
+		.newspack-pricing-rules__impact-table .is-changed {
+			background: wp-colors.$alert-yellow;
+			font-weight: 600;
+		}
+	}
 }

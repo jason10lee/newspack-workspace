@@ -8,7 +8,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useState, useEffect, useCallback } from '@wordpress/element';
+import { useState, useEffect, useCallback, useMemo } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import {
@@ -29,7 +29,7 @@ import { Grid, SectionHeader, Divider } from '../../../../../packages/components
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import ScopeTargets from './scope-targets';
 import Conditions from './conditions';
-import RuleAudience from './rule-audience';
+import RulePreview from './rule-preview';
 import { tsToLocalInput, localInputToTs } from './datetime';
 
 const API_PATH = '/wc-dynamic-pricing/v1/rules';
@@ -84,6 +84,50 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 	const [ activeUntil, setActiveUntil ] = useState( tsToLocalInput( rule?.active_until ?? null ) );
 	const [ conditions, setConditions ] = useState< Record< string, boolean | number | null > >( () => ( { ...( rule?.conditions ?? {} ) } ) );
 	const [ isSaving, setIsSaving ] = useState( false );
+
+	const previewBody = useMemo( () => {
+		const b: Record< string, unknown > = {
+			id: rule?.id,
+			scope_type: scopeType,
+			scope_ids: scopeIds,
+			conditions,
+			application,
+			compose_mode: composeMode,
+			priority: Number( priority ) || 0,
+			active_from: localInputToTs( activeFrom ),
+			active_until: localInputToTs( activeUntil ),
+		};
+		if ( isSchedule ) {
+			b.strategy_id = 'stepped_by_cycle';
+			b.steps = steps
+				.filter( s => String( s.value ).trim() !== '' )
+				.map( s => ( { at: Number( s.at ) || 1, calc_type: s.calc_type, value: Number( s.value ) || 0, label: s.label } ) );
+		} else {
+			b.strategy_id = 'simple_price';
+			b.simple = {
+				calc_type: calcType,
+				value: Number( value ) || 0,
+				cycles_limit: Number( cyclesLimit ) || 0,
+				label: rule?.simple?.label ?? '',
+			};
+		}
+		return b;
+	}, [
+		rule,
+		scopeType,
+		scopeIds,
+		conditions,
+		application,
+		composeMode,
+		priority,
+		activeFrom,
+		activeUntil,
+		isSchedule,
+		steps,
+		calcType,
+		value,
+		cyclesLimit,
+	] );
 
 	const submit = useCallback( () => {
 		if ( ! title.trim() ) {
@@ -432,15 +476,21 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 						isNew={ isNew }
 						onChange={ setConditions }
 					/>
-					<RuleAudience
-						scopeType={ scopeType }
-						scopeIds={ scopeIds }
-						conditions={ conditions }
-						application={ application }
-						ruleId={ rule?.id }
-					/>
 				</VStack>
 			</Grid>
+
+			<Divider alignment="full-width" variant="tertiary" />
+
+			<div className="newspack-pricing-rules__preview-section">
+				<SectionHeader
+					title={ __( 'Impact preview', 'newspack-plugin' ) }
+					description={ __(
+						'How this rule prices products, composed with your other active rules. Updates as you edit.',
+						'newspack-plugin'
+					) }
+				/>
+				<RulePreview body={ previewBody } />
+			</div>
 
 			<Divider alignment="full-width" variant="tertiary" />
 
