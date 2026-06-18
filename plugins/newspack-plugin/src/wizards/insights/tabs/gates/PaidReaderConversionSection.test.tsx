@@ -53,7 +53,7 @@ describe( 'PaidReaderConversionSection empty states', () => {
 		expect( container.querySelector( '[data-empty-state="no_opportunity"]' ) ).toBeInTheDocument();
 		// Body is asserted on the container — the Notice's speak() duplicates it into a
 		// global live-region, so a screen-level text query would match twice.
-		expect( container ).toHaveTextContent( 'No paywall attempts in this window' );
+		expect( container ).toHaveTextContent( 'No paywall attempts in this timeframe' );
 		expect( screen.queryByText( 'Paywall Conversion (Direct)' ) ).not.toBeInTheDocument();
 	} );
 
@@ -94,7 +94,7 @@ describe( 'PaidReaderConversionSection empty states', () => {
 		const { container } = render( <PaidReaderConversionSection current={ current } previous={ null } /> );
 
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
-		expect( container ).not.toHaveTextContent( 'No paywall attempts in this window' );
+		expect( container ).not.toHaveTextContent( 'No paywall attempts in this timeframe' );
 		expect( screen.getByText( 'Paywall Conversion (Direct)' ) ).toBeInTheDocument();
 	} );
 
@@ -113,7 +113,7 @@ describe( 'PaidReaderConversionSection empty states', () => {
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
 		// Assert on the container, not `screen`: the Notice's speak() leaves the
 		// no_conversions copy in a global live-region from an earlier test.
-		expect( container ).not.toHaveTextContent( 'No paywall conversions in this window' );
+		expect( container ).not.toHaveTextContent( 'No paywall conversions in this timeframe' );
 		// Scorecards render; the errored Influenced card shows the shared error note.
 		expect( screen.getByText( 'Paywall Conversion (Influenced, 14d)' ) ).toBeInTheDocument();
 	} );

@@ -21,7 +21,7 @@
  * Good zeros render normally, NOT as empty states: "Churned subscribers"
  * is a count (its 0 + green `lowerIsBetter` delta IS the good-zero
  * signal), and "Failed payment recovery" reframes its no-retries case as
- * the positive "No failed payments this timeframe" (NPPD-1726) rather
+ * the positive "No failed payments in this timeframe" (NPPD-1726) rather
  * than a missing-data note.
  *
  * The two rate metrics (refund rate, retry recovery) carry the
@@ -53,7 +53,7 @@ export interface WindowedSectionProps {
 	 * Window-independent count of active subscribers (from
 	 * `snapshot.active_subscribers`). Supplies the `{N}` context for the
 	 * "New subscribers" no-acquisition state — the publisher has existing
-	 * subscribers, just none new in this window.
+	 * subscribers, just none new in this timeframe.
 	 */
 	activeSubscribers: number;
 }
@@ -120,7 +120,7 @@ const WindowedSection = ( { range, current, previous, activeSubscribers }: Windo
 				title={ getHeading( range ) }
 				state="no_opportunity"
 				body={ __(
-					'No subscription activity in this timeframe. Your subscription product is configured, but no new subscribers, churn, or revenue changes happened during the date range. Worth expanding the timeframe or checking the conversion funnel.',
+					'No subscription activity in this timeframe. Your subscription product is configured, but no new subscribers, churn, or revenue changes happened in this timeframe. Worth expanding the date range or checking the conversion funnel.',
 					'newspack-plugin'
 				) }
 			/>
@@ -221,7 +221,7 @@ const WindowedSection = ( { range, current, previous, activeSubscribers }: Windo
 						<p className="newspack-insights__metric-card-empty-note">
 							{ /* Good zero (NPPD-1726): no retries means no failed payments — frame it
 							     as the positive outcome, not a missing-data note. */ }
-							{ __( 'No failed payments this timeframe.', 'newspack-plugin' ) }
+							{ __( 'No failed payments in this timeframe.', 'newspack-plugin' ) }
 						</p>
 					</div>
 				) }

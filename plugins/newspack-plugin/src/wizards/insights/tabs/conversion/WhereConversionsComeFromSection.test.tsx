@@ -26,8 +26,8 @@ describe( 'WhereConversionsComeFromSection', () => {
 
 	it( 'renders the empty treatment when state is empty', () => {
 		render( <WhereConversionsComeFromSection current={ makeConversionWindow( { sourceMixState: 'empty' } ) } /> );
-		expect( screen.getByText( 'Source data will appear once registrations occur in this window.' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Source data will appear once donations occur in this window.' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Source data will appear once registrations occur in this timeframe.' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Source data will appear once donations occur in this timeframe.' ) ).toBeInTheDocument();
 	} );
 
 	it( 'renders the error treatment when state is error', () => {

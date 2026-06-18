@@ -38,7 +38,7 @@ describe( 'prompts scalarToMetricCardProps — capability routing (NPPD-1720)', 
 			description: 'd',
 			current: scalar( { has_capability: false } ),
 		} );
-		expect( props.notCapableMessage ).toBe( 'Not measurable for your active prompts' );
+		expect( props.notCapableMessage ).toBe( 'Not measurable for your active prompts.' );
 	} );
 
 	it( 'lets the error treatment win over not-capable', () => {

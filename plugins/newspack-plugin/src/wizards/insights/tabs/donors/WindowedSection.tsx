@@ -47,7 +47,7 @@ export interface WindowedSectionProps {
 	 * Window-independent count of active donors (trailing 12 months,
 	 * from `snapshot.active_donors`). Supplies the `{N}` context for the
 	 * "New donors" no-acquisition state — the publisher has existing
-	 * donors, just none new in this window.
+	 * donors, just none new in this timeframe.
 	 */
 	activeDonors: number;
 }
@@ -127,7 +127,7 @@ const WindowedSection = ( { range, current, previous, activeDonors }: WindowedSe
 				title={ getHeading( range ) }
 				state="no_opportunity"
 				body={ __(
-					'No donations in this timeframe. Your donation flow is configured, but no readers contributed during the date range. Worth expanding the timeframe or checking the donation flow placement on the site.',
+					'No donations in this timeframe. Your donation flow is configured, but no readers contributed in this timeframe. Worth expanding the date range or checking the donation flow placement on the site.',
 					'newspack-plugin'
 				) }
 			/>
@@ -183,7 +183,7 @@ const WindowedSection = ( { range, current, previous, activeDonors }: WindowedSe
 					previousValue={ previous?.total_revenue }
 					secondary={ revenueBreakdown( current ) }
 					// Real zero (e.g. a window where only lapses occurred): show "No
-					// donations in this window" rather than a bare $0.00.
+					// donations in this timeframe" rather than a bare $0.00.
 					zeroFallback={
 						current.total_revenue === 0 ? { denominator: 0, currencyRole: 'total', attemptsLabel: donationsLabel } : undefined
 					}
@@ -195,7 +195,7 @@ const WindowedSection = ( { range, current, previous, activeDonors }: WindowedSe
 					format="currency"
 					previousValue={ previous?.average_gift }
 					// Recurring-only window: no one-time gifts to average. Show "No one-time
-					// gifts in this window" instead of $0.00 (NPPD-1696 mode suppression).
+					// gifts in this timeframe" instead of $0.00 (NPPD-1696 mode suppression).
 					zeroFallback={
 						current.one_time_revenue === 0 ? { denominator: 0, currencyRole: 'average', attemptsLabel: oneTimeGiftsLabel } : undefined
 					}

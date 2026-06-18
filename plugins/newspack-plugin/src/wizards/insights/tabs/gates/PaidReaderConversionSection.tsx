@@ -63,7 +63,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 				caption={ caption }
 				state="no_opportunity"
 				body={ __(
-					'No paywall attempts in this window. Your paywall gates may not be reaching readers — could be a placement question, a frequency question, or simply that the date range doesn’t include enough traffic. See the per-gate breakdown below for configuration details.',
+					'No paywall attempts in this timeframe. Your paywall gates may not be reaching readers — could be a placement question, a frequency question, or simply that the timeframe doesn’t include enough traffic. See the per-gate breakdown below for configuration details.',
 					'newspack-plugin'
 				) }
 			/>
@@ -77,7 +77,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 				state="no_conversions"
 				signalCount={ attempts }
 				body={ __(
-					'No paywall conversions in this window. Your paywall reached {N} readers, but none completed a paid subscription within the 14-day attribution window. Worth a look at your checkout flow or pricing. See the per-gate breakdown below.',
+					'No paywall conversions in this timeframe. Your paywall reached {N} readers, but none completed a paid subscription within the 14-day attribution window. Worth a look at your checkout flow or pricing. See the per-gate breakdown below.',
 					'newspack-plugin'
 				) }
 			/>

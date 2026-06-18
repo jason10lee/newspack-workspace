@@ -70,12 +70,12 @@ const HowLongConversionsTakeSection = ( { current }: HowLongConversionsTakeSecti
 				<CurveCell title={ __( 'Time to register', 'newspack-plugin' ) }>
 					<SectionState
 						state={ current.time_to_register_distribution.state }
-						emptyMessage={ __( 'Time-to-register data will appear once registrations occur in this window.', 'newspack-plugin' ) }
+						emptyMessage={ __( 'Time-to-register data will appear once registrations occur in this timeframe.', 'newspack-plugin' ) }
 					>
 						<LineChart
 							points={ toLinePoints( current.time_to_register_distribution.points ) }
 							yMax={ 1 }
-							emptyMessage={ __( 'Time-to-register data will appear once registrations occur in this window.', 'newspack-plugin' ) }
+							emptyMessage={ __( 'Time-to-register data will appear once registrations occur in this timeframe.', 'newspack-plugin' ) }
 						/>
 					</SectionState>
 				</CurveCell>
@@ -83,12 +83,12 @@ const HowLongConversionsTakeSection = ( { current }: HowLongConversionsTakeSecti
 				<CurveCell title={ __( 'Time to subscribe', 'newspack-plugin' ) }>
 					<SectionState
 						state={ current.time_to_subscribe_distribution.state }
-						emptyMessage={ __( 'Time-to-convert data will appear once conversions occur in this window.', 'newspack-plugin' ) }
+						emptyMessage={ __( 'Time-to-convert data will appear once conversions occur in this timeframe.', 'newspack-plugin' ) }
 					>
 						<LineChart
 							series={ toLineSeries( current.time_to_subscribe_distribution ) }
 							yMax={ 1 }
-							emptyMessage={ __( 'Time-to-convert data will appear once conversions occur in this window.', 'newspack-plugin' ) }
+							emptyMessage={ __( 'Time-to-convert data will appear once conversions occur in this timeframe.', 'newspack-plugin' ) }
 						/>
 					</SectionState>
 				</CurveCell>
@@ -96,12 +96,12 @@ const HowLongConversionsTakeSection = ( { current }: HowLongConversionsTakeSecti
 				<CurveCell title={ __( 'Time to donate', 'newspack-plugin' ) }>
 					<SectionState
 						state={ current.time_to_donate_distribution.state }
-						emptyMessage={ __( 'Time-to-convert data will appear once conversions occur in this window.', 'newspack-plugin' ) }
+						emptyMessage={ __( 'Time-to-convert data will appear once conversions occur in this timeframe.', 'newspack-plugin' ) }
 					>
 						<LineChart
 							series={ toLineSeries( current.time_to_donate_distribution ) }
 							yMax={ 1 }
-							emptyMessage={ __( 'Time-to-convert data will appear once conversions occur in this window.', 'newspack-plugin' ) }
+							emptyMessage={ __( 'Time-to-convert data will appear once conversions occur in this timeframe.', 'newspack-plugin' ) }
 						/>
 					</SectionState>
 				</CurveCell>
@@ -114,12 +114,12 @@ const HowLongConversionsTakeSection = ( { current }: HowLongConversionsTakeSecti
 					) : (
 						<SectionState
 							state={ lag.state }
-							emptyMessage={ __( 'Time-to-convert data will appear once conversions occur in this window.', 'newspack-plugin' ) }
+							emptyMessage={ __( 'Time-to-convert data will appear once conversions occur in this timeframe.', 'newspack-plugin' ) }
 						>
 							<LineChart
 								points={ toLinePoints( lag.points ) }
 								yMax={ 1 }
-								emptyMessage={ __( 'Time-to-convert data will appear once conversions occur in this window.', 'newspack-plugin' ) }
+								emptyMessage={ __( 'Time-to-convert data will appear once conversions occur in this timeframe.', 'newspack-plugin' ) }
 							/>
 						</SectionState>
 					) }

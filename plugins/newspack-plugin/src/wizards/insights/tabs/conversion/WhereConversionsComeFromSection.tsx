@@ -60,7 +60,7 @@ const WhereConversionsComeFromSection = ( { current }: WhereConversionsComeFromS
 			id="newspack-insights-conversion-source-mix-heading"
 			title={ __( 'Where conversions come from', 'newspack-plugin' ) }
 			description={ __(
-				'Source attribution for new conversions in the window. Gate, prompt, or direct (standalone form) — which surfaces drive your registrations, subscriptions, and donations?',
+				'Source attribution for new conversions in this timeframe. Gate, prompt, or direct (standalone form) — which surfaces drive your registrations, subscriptions, and donations?',
 				'newspack-plugin'
 			) }
 		/>
@@ -68,17 +68,17 @@ const WhereConversionsComeFromSection = ( { current }: WhereConversionsComeFromS
 			<SourcePie
 				title={ __( 'New registrations', 'newspack-plugin' ) }
 				data={ current.source_mix_registrations }
-				emptyMessage={ __( 'Source data will appear once registrations occur in this window.', 'newspack-plugin' ) }
+				emptyMessage={ __( 'Source data will appear once registrations occur in this timeframe.', 'newspack-plugin' ) }
 			/>
 			<SourcePie
 				title={ __( 'New subscribers', 'newspack-plugin' ) }
 				data={ current.source_mix_subscribers }
-				emptyMessage={ __( 'Source data will appear once subscriptions occur in this window.', 'newspack-plugin' ) }
+				emptyMessage={ __( 'Source data will appear once subscriptions occur in this timeframe.', 'newspack-plugin' ) }
 			/>
 			<SourcePie
 				title={ __( 'New donors', 'newspack-plugin' ) }
 				data={ current.source_mix_donors }
-				emptyMessage={ __( 'Source data will appear once donations occur in this window.', 'newspack-plugin' ) }
+				emptyMessage={ __( 'Source data will appear once donations occur in this timeframe.', 'newspack-plugin' ) }
 			/>
 		</div>
 	</section>

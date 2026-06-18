@@ -120,7 +120,7 @@ describe( 'WindowedSection empty states', () => {
 		expect( breakdown ).not.toMatch( /one-time/ );
 		expect( breakdown ).not.toContain( '+' );
 		// Average one-time gift falls back to a count message rather than $0.00.
-		expect( screen.getByText( 'No one-time gifts in this window' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'No one-time gifts in this timeframe' ) ).toBeInTheDocument();
 	} );
 
 	it( 'suppresses the empty mode in the revenue breakdown — one-time-only window', () => {
@@ -135,7 +135,7 @@ describe( 'WindowedSection empty states', () => {
 
 	it( 'shows the Total donation revenue count fallback when revenue is a real zero', () => {
 		// A window where only lapses happened: section renders (has_window_activity true),
-		// but total revenue is genuinely $0 → "No donations in this window", not "$0.00".
+		// but total revenue is genuinely $0 → "No donations in this timeframe", not "$0.00".
 		const current = makeWindow( {
 			new_donors: 0,
 			lapsed_donors: 4,
@@ -146,6 +146,6 @@ describe( 'WindowedSection empty states', () => {
 		} );
 		render( <WindowedSection range={ RANGE } current={ current } previous={ null } activeDonors={ 30 } /> );
 
-		expect( screen.getByText( 'No donations in this window' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'No donations in this timeframe' ) ).toBeInTheDocument();
 	} );
 } );

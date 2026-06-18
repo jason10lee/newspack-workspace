@@ -101,7 +101,7 @@ describe( 'Subscribers WindowedSection empty states', () => {
 		const { container } = render( <WindowedSection range={ RANGE } current={ current } previous={ null } activeSubscribers={ 200 } /> );
 
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
-		expect( screen.getByText( 'No failed payments this timeframe.' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'No failed payments in this timeframe.' ) ).toBeInTheDocument();
 		// Not the old missing-data phrasing.
 		expect( screen.queryByText( 'No payment retries in this timeframe.' ) ).not.toBeInTheDocument();
 	} );
@@ -118,8 +118,8 @@ describe( 'Subscribers WindowedSection empty states', () => {
 		} );
 		render( <WindowedSection range={ RANGE } current={ current } previous={ null } activeSubscribers={ 50 } /> );
 
-		// Gross + Net both fall back (shared MetricCard helper renders "…in this window").
-		expect( screen.getAllByText( 'No subscription orders in this window' ).length ).toBeGreaterThanOrEqual( 2 );
+		// Gross + Net both fall back (shared MetricCard helper renders "…in this timeframe").
+		expect( screen.getAllByText( 'No subscription orders in this timeframe' ).length ).toBeGreaterThanOrEqual( 2 );
 	} );
 
 	it( 'renders all six cards when fully populated', () => {
