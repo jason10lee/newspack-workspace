@@ -1,10 +1,11 @@
 /**
- * ConnectBanner (NPPD-1649).
+ * ConnectBanner (NPPD-1649, NPPD-1731).
  *
  * Full-tab state shown when the orchestrator returns
  * `{ tab_error: 'oauth_not_connected', banner_text }` — i.e. the publisher
  * has no Google Analytics connection. Replaces all section content with a
- * single connect CTA. Used by both AudienceTab and EngagementTab.
+ * single CTA directing them to Site Kit, where GA4 is connected. Used by
+ * both AudienceTab and EngagementTab.
  */
 
 /**
