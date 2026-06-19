@@ -1,7 +1,7 @@
 /**
  * PDF export helpers (NPPD-1661).
  *
- * The Insights "Download PDF" export is print-based: a `@media print`
+ * The Insights "Print / Save as PDF" export is print-based: a `@media print`
  * stylesheet hides the WordPress/wizard chrome and reveals a document
  * header + footer, then we hand off to the browser's own print engine
  * via `window.print()`. The browser renders the live SVG/DOM charts at

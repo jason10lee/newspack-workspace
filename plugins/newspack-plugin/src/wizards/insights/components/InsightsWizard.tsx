@@ -179,7 +179,7 @@ interface TabSectionRenderProps extends TabSectionProps {
 
 /**
  * Per-tab wrapper rendered by the Wizard. Carries the print-only document
- * header/footer (NPPD-1661 — used by the "Download PDF" export), the
+ * header/footer (NPPD-1661 — used by the "Print / Save as PDF" export), the
  * CooldownNotice, the feedback ship-callback (NPPD-1728, top of tab), the
  * error boundary (keyed by tab so a chunk-load error clears when the user
  * navigates away), the Suspense boundary for the lazy tab chunk, and the

@@ -38,7 +38,7 @@ const PromptEngagementSection = ( { current, previous }: PromptEngagementSection
 				'newspack-plugin'
 			) }
 		/>
-		<div className="newspack-insights__metric-grid">
+		<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-3">
 			<MetricCard
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Click-Through Rate', 'newspack-plugin' ),

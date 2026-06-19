@@ -1,7 +1,7 @@
 /**
  * Print stylesheet for per-tab PDF export (NPPD-1661).
  *
- * The "Download PDF" item in the Insights options kebab calls
+ * The "Print / Save as PDF" item in the Insights options kebab calls
  * `window.print()`; this stylesheet is what turns the live admin view into
  * a clean document. We chose print-CSS over html2canvas/jsPDF precisely
  * because the charts are hand-rolled inline SVG (LineChart, PieChart,
@@ -143,6 +143,9 @@
 
 	// --- Page setup ----------------------------------------------------------
 	@page {
+		// Landscape gives the three-up scorecard rows and wide charts/tables room
+		// to breathe; the browser's "Save as PDF" honours this orientation.
+		size: landscape;
 		margin: 1.5cm;
 		// Leave room for the fixed footer so body content never collides with it.
 		margin-bottom: 2cm;
