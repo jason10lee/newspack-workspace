@@ -303,4 +303,26 @@ interface Storage_Interface {
 	 * @return int
 	 */
 	public function get_stale_registered_users(): int;
+
+	/**
+	 * Earliest non-donation subscription start (`_schedule_start`) per customer,
+	 * restricted to the given customer set. Same first-start-per-customer
+	 * definition as {@see get_new_subscribers_in_window()}, but returns the
+	 * dates rather than counting a window. Used by Tab 3 (Conversion Journey)
+	 * to compute registration→subscription lag and to anchor the BQ
+	 * source-match window.
+	 *
+	 * Customers in the input list with no non-donation subscription are absent
+	 * from the result. Empty input returns `[]` with no DB round-trip.
+	 *
+	 * Not perfect parity with {@see get_new_subscribers_in_window()} in
+	 * data-corruption edge cases: implementations additionally exclude rows
+	 * with an empty `_schedule_start` so a blank value can't yield a bogus
+	 * epoch date. The window-count metric leans on its `BETWEEN` bounds to
+	 * drop blanks implicitly, so the two reconcile on healthy data.
+	 *
+	 * @param int[] $customer_ids Customer IDs to look up.
+	 * @return array<int, \DateTimeImmutable> customer_id => first subscription start (UTC).
+	 */
+	public function get_first_subscription_order_dates( array $customer_ids ): array;
 }

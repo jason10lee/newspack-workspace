@@ -1121,4 +1121,57 @@ class HPOS_Storage implements Storage_Interface {
 			$rows
 		);
 	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @param int[] $customer_ids Customer IDs to look up.
+	 * @return array<int, \DateTimeImmutable>
+	 */
+	public function get_first_subscription_order_dates( array $customer_ids ): array {
+		if ( empty( $customer_ids ) ) {
+			return [];
+		}
+
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+		$ids       = $this->id_list( $customer_ids );
+
+		// Earliest non-donation subscription _schedule_start per customer,
+		// scoped to the given customer set. Mirrors the inner aggregate of
+		// get_new_subscribers_in_window() (same first-start definition), with
+		// one added guard: this query also excludes empty _schedule_start
+		// (om.meta_value != '') so a blank value can't yield a bogus epoch
+		// date. The window-count method drops blanks implicitly via its
+		// BETWEEN bounds, so results reconcile on healthy data.
+		// MIN(om.meta_value) is a lexical comparison: wc_orders_meta.meta_value
+		// is a string column, and _schedule_start is stored zero-padded
+		// `Y-m-d H:i:s`, so lexical order equals chronological order. The
+		// donation helper aggregates a real datetime column, so it carries no
+		// such assumption.
+		$sql = "SELECT o.customer_id, MIN(om.meta_value) AS first_start
+			FROM {$prefix}wc_orders o
+			JOIN {$prefix}wc_orders_meta om
+				ON om.order_id = o.id AND om.meta_key = '_schedule_start'
+			JOIN {$prefix}woocommerce_order_items oi
+				ON oi.order_id = o.id AND oi.order_item_type = 'line_item'
+			JOIN {$prefix}woocommerce_order_itemmeta oim
+				ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+			WHERE o.type = 'shop_subscription'
+			  AND oim.meta_value NOT IN ($donations)
+			  AND om.meta_value != ''
+			  AND o.customer_id IN ($ids)
+			GROUP BY o.customer_id";
+
+		$rows = $wpdb->get_results( $sql, ARRAY_A );
+		$map  = [];
+		foreach ( (array) $rows as $row ) {
+			if ( empty( $row['first_start'] ) ) {
+				continue;
+			}
+			$map[ (int) $row['customer_id'] ] = new \DateTimeImmutable( $row['first_start'], new \DateTimeZone( 'UTC' ) );
+		}
+		return $map;
+	}
 }

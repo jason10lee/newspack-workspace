@@ -1053,4 +1053,59 @@ class Legacy_Storage implements Storage_Interface {
 			$rows
 		);
 	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @param int[] $customer_ids Customer IDs to look up.
+	 * @return array<int, \DateTimeImmutable>
+	 */
+	public function get_first_subscription_order_dates( array $customer_ids ): array {
+		if ( empty( $customer_ids ) ) {
+			return [];
+		}
+
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+		$ids       = $this->id_list( $customer_ids );
+
+		// Legacy CPT equivalent of HPOS_Storage::get_first_subscription_order_dates():
+		// earliest non-donation subscription _schedule_start per _customer_user,
+		// scoped to the given customer set. Mirrors get_new_subscribers_in_window(),
+		// with one added guard: this query also excludes empty _schedule_start
+		// (start.meta_value != '') so a blank value can't yield a bogus epoch date
+		// — the window-count method drops blanks implicitly via its BETWEEN bounds.
+		// _customer_user is cast to UNSIGNED (it is stored as a string) to match the
+		// other list-scoped legacy queries and align grouping with the int keys returned.
+		// MIN(start.meta_value) is a lexical comparison: postmeta.meta_value is a string
+		// column, and _schedule_start is stored zero-padded `Y-m-d H:i:s`, so lexical
+		// order equals chronological order. The donation helper aggregates the real
+		// post_date_gmt datetime column, so it carries no such assumption.
+		$sql = "SELECT CAST(cust.meta_value AS UNSIGNED) AS customer_id, MIN(start.meta_value) AS first_start
+			FROM {$prefix}posts p
+			JOIN {$prefix}postmeta cust
+				ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
+			JOIN {$prefix}postmeta start
+				ON start.post_id = p.ID AND start.meta_key = '_schedule_start'
+			JOIN {$prefix}woocommerce_order_items oi
+				ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
+			JOIN {$prefix}woocommerce_order_itemmeta oim
+				ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+			WHERE p.post_type = 'shop_subscription'
+			  AND oim.meta_value NOT IN ($donations)
+			  AND start.meta_value != ''
+			  AND CAST(cust.meta_value AS UNSIGNED) IN ($ids)
+			GROUP BY CAST(cust.meta_value AS UNSIGNED)";
+
+		$rows = $wpdb->get_results( $sql, ARRAY_A );
+		$map  = [];
+		foreach ( (array) $rows as $row ) {
+			if ( empty( $row['first_start'] ) ) {
+				continue;
+			}
+			$map[ (int) $row['customer_id'] ] = new \DateTimeImmutable( $row['first_start'], new \DateTimeZone( 'UTC' ) );
+		}
+		return $map;
+	}
 }

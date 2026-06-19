@@ -348,6 +348,110 @@ class Test_Conversion_Journey_Storage extends WP_UnitTestCase {
 		$this->assertSame( 0, $metric->count_completed_donation_order_customers_by_customer_ids( [] ) );
 	}
 
+	/**
+	 * HPOS_Storage exposes get_first_subscription_order_dates().
+	 */
+	public function test_hpos_storage_implements_first_subscription_order_dates(): void {
+		$storage = new HPOS_Storage( [] );
+		$this->assertTrue( method_exists( $storage, 'get_first_subscription_order_dates' ) );
+	}
+
+	/**
+	 * Legacy_Storage exposes get_first_subscription_order_dates().
+	 */
+	public function test_legacy_storage_implements_first_subscription_order_dates(): void {
+		$storage = new Legacy_Storage( [] );
+		$this->assertTrue( method_exists( $storage, 'get_first_subscription_order_dates' ) );
+	}
+
+	/**
+	 * HPOS: get_first_subscription_order_dates([]) → [] (no DB round-trip).
+	 */
+	public function test_hpos_get_first_subscription_order_dates_empty_list_returns_empty_array(): void {
+		$storage = new HPOS_Storage( [] );
+		$this->assertSame( [], $storage->get_first_subscription_order_dates( [] ) );
+	}
+
+	/**
+	 * Legacy: get_first_subscription_order_dates([]) → [].
+	 */
+	public function test_legacy_get_first_subscription_order_dates_empty_list_returns_empty_array(): void {
+		$storage = new Legacy_Storage( [] );
+		$this->assertSame( [], $storage->get_first_subscription_order_dates( [] ) );
+	}
+
+	/**
+	 * Subscribers_Metric::get_first_subscription_order_dates() delegates directly
+	 * (list-param — NOT cached, so two distinct lists hit storage twice).
+	 */
+	public function test_subscribers_metric_get_first_subscription_order_dates_delegates(): void {
+		$dates = [
+			1 => $this->make_date( '2026-01-15' ),
+			2 => $this->make_date( '2026-02-20' ),
+		];
+		$mock = $this->createMock( Storage_Interface::class );
+		$mock->expects( $this->exactly( 2 ) )
+			->method( 'get_first_subscription_order_dates' )
+			->willReturnOnConsecutiveCalls( $dates, [] );
+
+		$metric = $this->make_subscribers_metric( $mock );
+
+		$this->assertSame( $dates, $metric->get_first_subscription_order_dates( [ 1, 2 ] ) );
+		$this->assertSame( [], $metric->get_first_subscription_order_dates( [ 99 ] ) );
+	}
+
+	/**
+	 * HPOS_Donors_Storage exposes get_first_donation_order_dates().
+	 */
+	public function test_hpos_donors_storage_implements_first_donation_order_dates(): void {
+		$storage = new HPOS_Donors_Storage( [] );
+		$this->assertTrue( method_exists( $storage, 'get_first_donation_order_dates' ) );
+	}
+
+	/**
+	 * Legacy_Donors_Storage exposes get_first_donation_order_dates().
+	 */
+	public function test_legacy_donors_storage_implements_first_donation_order_dates(): void {
+		$storage = new Legacy_Donors_Storage( [] );
+		$this->assertTrue( method_exists( $storage, 'get_first_donation_order_dates' ) );
+	}
+
+	/**
+	 * HPOS: get_first_donation_order_dates([]) → [] (no DB round-trip).
+	 */
+	public function test_hpos_get_first_donation_order_dates_empty_list_returns_empty_array(): void {
+		$storage = new HPOS_Donors_Storage( [] );
+		$this->assertSame( [], $storage->get_first_donation_order_dates( [] ) );
+	}
+
+	/**
+	 * Legacy: get_first_donation_order_dates([]) → [].
+	 */
+	public function test_legacy_get_first_donation_order_dates_empty_list_returns_empty_array(): void {
+		$storage = new Legacy_Donors_Storage( [] );
+		$this->assertSame( [], $storage->get_first_donation_order_dates( [] ) );
+	}
+
+	/**
+	 * Donors_Metric::get_first_donation_order_dates() delegates directly
+	 * (list-param — NOT cached, so two distinct lists hit storage twice).
+	 */
+	public function test_donors_metric_get_first_donation_order_dates_delegates(): void {
+		$dates = [
+			3 => $this->make_date( '2026-03-10' ),
+			4 => $this->make_date( '2026-04-05' ),
+		];
+		$mock = $this->createMock( Donors_Storage_Interface::class );
+		$mock->expects( $this->exactly( 2 ) )
+			->method( 'get_first_donation_order_dates' )
+			->willReturnOnConsecutiveCalls( $dates, [] );
+
+		$metric = $this->make_donors_metric( $mock );
+
+		$this->assertSame( $dates, $metric->get_first_donation_order_dates( [ 3, 4 ] ) );
+		$this->assertSame( [], $metric->get_first_donation_order_dates( [ 99 ] ) );
+	}
+
 	// =========================================================================
 	// Stale-registered: Subscribers_Metric wrapper delegates correctly.
 	// The actual SQL in the storage classes queries WC HPOS/legacy tables
