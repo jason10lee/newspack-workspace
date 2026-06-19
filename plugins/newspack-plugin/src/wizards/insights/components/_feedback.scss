@@ -87,4 +87,23 @@
 			display: none;
 		}
 	}
+
+	// Tier-2 modal. The WP-core Modal owns its chrome (overlay, header, close);
+	// these classes are flat (the modal renders in a portal outside the
+	// `.newspack-insights` root), so `&__x` here is concatenation, not nesting.
+	&__feedback-modal-intro {
+		margin: 0 0 16px;
+		color: wp-colors.$gray-700;
+	}
+
+	&__feedback-modal-comment {
+		margin-bottom: 16px;
+	}
+
+	&__feedback-modal-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 8px;
+		margin-top: 24px;
+	}
 }

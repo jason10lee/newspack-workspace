@@ -30,6 +30,7 @@ import DateRangePicker from './DateRangePicker';
 import CooldownNotice from './CooldownNotice';
 import PrintDocumentMeta from './PrintDocumentMeta';
 import TabFeedback from './TabFeedback';
+import FeedbackShipCallback from './FeedbackShipCallback';
 import TabSpinner from '../tabs/components/TabSpinner';
 import useComparisonMode from '../state/useComparisonMode';
 import useDateRange, { type DateRange } from '../state/useDateRange';
@@ -66,6 +67,10 @@ export interface InsightsBootConfig {
 	lastUpdated: null | string;
 	/** Site title, rendered in the PDF export document header (NPPD-1661). */
 	publisherName: string;
+	/** Absolute REST URL for the feedback endpoint (NPPD-1728 abandon beacon). */
+	feedbackBeaconUrl: string;
+	/** `wp_rest` nonce for the abandon beacon (rides as a `_wpnonce` query param). */
+	feedbackBeaconNonce: string;
 }
 
 export interface InsightsWizardProps {
@@ -168,27 +173,31 @@ interface TabSectionRenderProps extends TabSectionProps {
 	tabKey: TabKey;
 	tabLabel: string;
 	publisherName: string;
+	feedbackBeaconUrl: string;
+	feedbackBeaconNonce: string;
 }
 
 /**
  * Per-tab wrapper rendered by the Wizard. Carries the print-only document
  * header/footer (NPPD-1661 — used by the "Download PDF" export), the
- * CooldownNotice, the error boundary (keyed by tab so a chunk-load error clears
- * when the user navigates away), the Suspense boundary for the lazy tab chunk,
- * and the per-tab feedback footer (NPPD-1728). The feedback footer sits outside
- * the error boundary so it still renders — carrying the same `tabKey` as
+ * CooldownNotice, the feedback ship-callback (NPPD-1728, top of tab), the
+ * error boundary (keyed by tab so a chunk-load error clears when the user
+ * navigates away), the Suspense boundary for the lazy tab chunk, and the
+ * per-tab feedback footer (NPPD-1728). The feedback footer sits outside the
+ * error boundary so it still renders — carrying the same `tabKey` as
  * `context` — even when a tab chunk fails to load (feedback about a broken tab
  * is still signal).
  */
-const TabSection = ( { tabKey, tabLabel, publisherName, range, previousRange }: TabSectionRenderProps ) => (
+const TabSection = ( { tabKey, tabLabel, publisherName, range, previousRange, feedbackBeaconUrl, feedbackBeaconNonce }: TabSectionRenderProps ) => (
 	<>
 		<PrintDocumentMeta tabLabel={ tabLabel } publisherName={ publisherName } range={ range } previousRange={ previousRange } />
 		<CooldownNotice tab={ tabKey } range={ range } previousRange={ previousRange } />
+		<FeedbackShipCallback context={ tabKey } />
 		<TabErrorBoundary key={ tabKey }>
 			<Suspense fallback={ <Fallback /> }>{ renderTabComponent( tabKey, { range, previousRange } ) }</Suspense>
 		</TabErrorBoundary>
 		<footer className="newspack-insights__tab-footer">
-			<TabFeedback context={ tabKey } />
+			<TabFeedback context={ tabKey } beaconUrl={ feedbackBeaconUrl } beaconNonce={ feedbackBeaconNonce } />
 		</footer>
 	</>
 );
@@ -258,6 +267,8 @@ const InsightsWizard = ( { config }: InsightsWizardProps ) => {
 			range,
 			previousRange,
 			publisherName: config.publisherName,
+			feedbackBeaconUrl: config.feedbackBeaconUrl,
+			feedbackBeaconNonce: config.feedbackBeaconNonce,
 		},
 	} ) );
 
