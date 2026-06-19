@@ -128,9 +128,15 @@ const ConversionLegCell = ( { data, emptyMessage, noOpportunityMessage, noConver
 		if ( entry === 0 ) {
 			return <SectionEmpty>{ noOpportunityMessage }</SectionEmpty>;
 		}
-		// Entered but none converted → keep the funnel (the drop-off is the
-		// signal) and annotate. {N} = prior-stage base.
-		if ( conversion === 0 ) {
+		// Entered, the prior stage HAS a base, but none converted out of it → keep
+		// the funnel (the drop-off is the signal) and annotate. {N} = prior-stage
+		// base. The `priorStage > 0` guard matters: a leg where readers registered
+		// but nobody reached the prior stage (e.g. no prompt shown) has no
+		// "opportunity" base, so the no_conversions copy ("{N} saw a prompt, but
+		// none converted") would be a self-contradicting "0 saw a prompt". That
+		// case falls through to the normal funnel, which honestly shows the
+		// drop-off at the prior stage.
+		if ( conversion === 0 && priorStage > 0 ) {
 			return (
 				<>
 					<Funnel stages={ data.stages } />

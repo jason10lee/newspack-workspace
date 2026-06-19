@@ -108,7 +108,7 @@ describe( 'PerJourneyConversionFunnelsSection — per-leg states (NPPD-1742)', (
 		expect( screen.queryByText( /No registered readers entered the subscription journey/ ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'subscription good-zero / pass-through: renders the normal funnel with no empty-state note', () => {
+	it( 'subscription with conversions: renders the normal funnel with no empty-state note', () => {
 		render(
 			<PerJourneyConversionFunnelsSection
 				current={ makeConversionWindow( {
@@ -118,6 +118,22 @@ describe( 'PerJourneyConversionFunnelsSection — per-leg states (NPPD-1742)', (
 		);
 		expect( screen.queryByText( /No registered readers entered the subscription journey/ ) ).not.toBeInTheDocument();
 		expect( screen.queryByText( /but none subscribed/ ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'subscription with registrations but zero prior-stage base: normal funnel, no contradictory no_conversions note', () => {
+		// Registered readers exist, but nobody reached the prior (saw-prompt) stage,
+		// so there is no conversion "opportunity" base. Must NOT render the
+		// no_conversions note (which would claim "0 saw a prompt"); the funnel's own
+		// drop-off tells the story. Guards against the priorStage===0 edge.
+		render(
+			<PerJourneyConversionFunnelsSection
+				current={ makeConversionWindow( {
+					registeredToSubscriberFunnel: conversionLeg( { entry: 1000, prior: 0, conversion: 0 } ),
+				} ) }
+			/>
+		);
+		expect( screen.queryByText( /saw a subscription prompt/ ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( /No registered readers entered the subscription journey/ ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'donation no_conversions: annotates the donation leg with {N} = prior-stage base', () => {
