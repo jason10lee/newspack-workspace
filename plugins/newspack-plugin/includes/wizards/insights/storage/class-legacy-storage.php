@@ -1072,8 +1072,13 @@ class Legacy_Storage implements Storage_Interface {
 
 		// Legacy CPT equivalent of HPOS_Storage::get_first_subscription_order_dates():
 		// earliest non-donation subscription _schedule_start per _customer_user,
-		// scoped to the given customer set. Mirrors get_new_subscribers_in_window().
-		$sql = "SELECT cust.meta_value AS customer_id, MIN(start.meta_value) AS first_start
+		// scoped to the given customer set. Mirrors get_new_subscribers_in_window(),
+		// with one added guard: this query also excludes empty _schedule_start
+		// (start.meta_value != '') so a blank value can't yield a bogus epoch date
+		// — the window-count method drops blanks implicitly via its BETWEEN bounds.
+		// _customer_user is cast to UNSIGNED (it is stored as a string) to match the
+		// other list-scoped legacy queries and align grouping with the int keys returned.
+		$sql = "SELECT CAST(cust.meta_value AS UNSIGNED) AS customer_id, MIN(start.meta_value) AS first_start
 			FROM {$prefix}posts p
 			JOIN {$prefix}postmeta cust
 				ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
@@ -1086,8 +1091,8 @@ class Legacy_Storage implements Storage_Interface {
 			WHERE p.post_type = 'shop_subscription'
 			  AND oim.meta_value NOT IN ($donations)
 			  AND start.meta_value != ''
-			  AND cust.meta_value IN ($ids)
-			GROUP BY cust.meta_value";
+			  AND CAST(cust.meta_value AS UNSIGNED) IN ($ids)
+			GROUP BY CAST(cust.meta_value AS UNSIGNED)";
 
 		$rows = $wpdb->get_results( $sql, ARRAY_A );
 		$map  = [];

@@ -315,6 +315,12 @@ interface Storage_Interface {
 	 * Customers in the input list with no non-donation subscription are absent
 	 * from the result. Empty input returns `[]` with no DB round-trip.
 	 *
+	 * Not perfect parity with {@see get_new_subscribers_in_window()} in
+	 * data-corruption edge cases: implementations additionally exclude rows
+	 * with an empty `_schedule_start` so a blank value can't yield a bogus
+	 * epoch date. The window-count metric leans on its `BETWEEN` bounds to
+	 * drop blanks implicitly, so the two reconcile on healthy data.
+	 *
 	 * @param int[] $customer_ids Customer IDs to look up.
 	 * @return array<int, \DateTimeImmutable> customer_id => first subscription start (UTC).
 	 */

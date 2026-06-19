@@ -1140,7 +1140,11 @@ class HPOS_Storage implements Storage_Interface {
 
 		// Earliest non-donation subscription _schedule_start per customer,
 		// scoped to the given customer set. Mirrors the inner aggregate of
-		// get_new_subscribers_in_window() (same first-start definition).
+		// get_new_subscribers_in_window() (same first-start definition), with
+		// one added guard: this query also excludes empty _schedule_start
+		// (om.meta_value != '') so a blank value can't yield a bogus epoch
+		// date. The window-count method drops blanks implicitly via its
+		// BETWEEN bounds, so results reconcile on healthy data.
 		$sql = "SELECT o.customer_id, MIN(om.meta_value) AS first_start
 			FROM {$prefix}wc_orders o
 			JOIN {$prefix}wc_orders_meta om

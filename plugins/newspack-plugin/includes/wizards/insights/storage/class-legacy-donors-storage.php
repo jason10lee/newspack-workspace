@@ -923,7 +923,9 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 		// Legacy CPT equivalent of HPOS_Donors_Storage::get_first_donation_order_dates():
 		// earliest completed/processing donation order post_date_gmt per
 		// _customer_user, scoped to the given set. Mirrors get_new_donors_in_window().
-		$sql = "SELECT cust.meta_value AS customer_id, MIN(p.post_date_gmt) AS first_donation_date
+		// _customer_user is cast to UNSIGNED (it is stored as a string) to match the
+		// other list-scoped legacy donor queries and align grouping with the int keys returned.
+		$sql = "SELECT CAST(cust.meta_value AS UNSIGNED) AS customer_id, MIN(p.post_date_gmt) AS first_donation_date
 			FROM {$prefix}posts p
 			JOIN {$prefix}postmeta cust
 				ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
@@ -931,8 +933,8 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 			WHERE p.post_type = 'shop_order'
 			  AND p.post_status IN ('wc-completed', 'wc-processing')
 			  AND opl.product_id IN ($donations)
-			  AND cust.meta_value IN ($ids)
-			GROUP BY cust.meta_value";
+			  AND CAST(cust.meta_value AS UNSIGNED) IN ($ids)
+			GROUP BY CAST(cust.meta_value AS UNSIGNED)";
 
 		$rows = $wpdb->get_results( $sql, ARRAY_A );
 		$map  = [];
