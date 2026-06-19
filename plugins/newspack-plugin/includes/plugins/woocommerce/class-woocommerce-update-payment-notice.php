@@ -23,6 +23,12 @@ class WooCommerce_Update_Payment_Notice {
 	 * statuses (expired, cancelled, switched) and states where the reader still
 	 * has access (active, pending-cancel) are intentionally excluded. NPPM-2926.
 	 *
+	 * Closed set of core WCS statuses. A publisher's custom "recoverable but
+	 * unpaid" status would not match, so readers in it would silently miss the
+	 * notice; both callers fail closed, so the only effect is a missed nudge,
+	 * never a wrong action. Extend this constant (or add a filter) only if such
+	 * a status is found in the field.
+	 *
 	 * @var string[]
 	 */
 	const NOTICE_RECOVERABLE_STATUSES = [ 'on-hold', 'pending' ];
