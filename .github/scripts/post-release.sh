@@ -89,10 +89,37 @@ restore_workspace_deps_and_commit() {
   fi
 }
 
+# Attribute each conflicting file to the incoming release-side commit that last
+# touched it, so the alert can name who to route to. Emits one
+# "<file><TAB><PR><TAB><author>" row per input path ($1 = newline-separated
+# paths). This identifies the *incoming* change being merged forward, not sole
+# blame — the merge is mutual (the target branch changed the file too). PR and
+# author are left empty when unresolvable (commit has no "(#NNN)", etc.).
+attribute_conflicts() {
+  local files="$1"
+  [ -z "$files" ] && return 0
+  local mb f meta subj author pr
+  mb=$(git merge-base HEAD release 2>/dev/null || true)
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    subj=""; author=""; pr=""
+    if [ -n "$mb" ]; then
+      meta=$(git log "$mb"..release -1 --format='%s%x09%an' -- "$f" 2>/dev/null || true)
+      if [ -n "$meta" ]; then
+        subj=${meta%%$'\t'*}
+        author=${meta#*$'\t'}
+        pr=$(printf '%s' "$subj" | grep -oE '#[0-9]+' | head -1 || true)
+      fi
+    fi
+    printf '%s\t%s\t%s\n' "$f" "$pr" "$author"
+  done <<< "$files"
+}
+
 # Notify Slack about a failed post-release merge into $1, if Slack is configured.
-# $2 (optional) is a newline-separated list of conflicting files; when present
-# they're named in the message so readers can tell what needs reconciling
-# without opening the build log.
+# $2 (optional) is a newline-separated list of "<file><TAB><PR><TAB><author>"
+# rows (see attribute_conflicts); when present the files are named in the message
+# — with the incoming PR/author — so readers can tell what needs reconciling and
+# who to ping without opening the build log.
 notify_slack() {
   local target="$1"
   local conflicts="${2:-}"
@@ -114,19 +141,26 @@ notify_slack() {
   payload=$(TARGET="$target" CONFLICTS="$conflicts" node -e '
     const MAX_FILES = 10;
     const MAX_TEXT = 2900;
-    const conflicts = (process.env.CONFLICTS || "")
+    const items = (process.env.CONFLICTS || "")
       .split("\n")
       .map((s) => s.trim())
-      .filter(Boolean);
+      .filter(Boolean)
+      .map((line) => {
+        const [file, pr, author] = line.split("\t");
+        return { file, pr: pr || "", author: author || "" };
+      });
     const header = `⚠️ Post-release merge to \`${process.env.TARGET}\` failed for: \`${process.env.GITHUB_REPOSITORY}\`.`;
     const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
     const footer = `\nCheck <${runUrl}|the build> for details.`;
     let body = "";
-    if (conflicts.length) {
-      const shown = conflicts.slice(0, MAX_FILES);
-      let list = shown.map((f) => `• \`${f}\``).join("\n");
-      if (conflicts.length > MAX_FILES) {
-        list += `\n• …and ${conflicts.length - MAX_FILES} more`;
+    if (items.length) {
+      const shown = items.slice(0, MAX_FILES);
+      let list = shown.map((it) => {
+        const who = it.pr && it.author ? `${it.pr} (${it.author})` : it.pr || it.author;
+        return who ? `• \`${it.file}\` — incoming: ${who}` : `• \`${it.file}\``;
+      }).join("\n");
+      if (items.length > MAX_FILES) {
+        list += `\n• …and ${items.length - MAX_FILES} more`;
       }
       body = "\nConflicting files:\n" + list;
     }
@@ -186,7 +220,7 @@ else
     conflicts=$(git diff --name-only --diff-filter=U)
     git merge --abort
     echo "[post-release] Post-release merge to alpha failed."
-    notify_slack alpha "$conflicts"
+    notify_slack alpha "$(attribute_conflicts "$conflicts")"
     sync_failed=1
   fi
 fi
@@ -201,7 +235,7 @@ else
   conflicts=$(git diff --name-only --diff-filter=U)
   git merge --abort
   echo "[post-release] Post-release merge to $DEFAULT_BRANCH failed."
-  notify_slack "$DEFAULT_BRANCH" "$conflicts"
+  notify_slack "$DEFAULT_BRANCH" "$(attribute_conflicts "$conflicts")"
   sync_failed=1
 fi
 
