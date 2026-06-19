@@ -746,6 +746,129 @@ final class Conversion_Metric {
 	}
 
 	/**
+	 * Empirical CDF over a list of day-lags: one point per distinct day that has
+	 * conversions, with the running fraction of the cohort converted by that day.
+	 *
+	 * @param int[] $days_values Day lags (already truncated to the lookback).
+	 * @return array<int, array{day:int, cumulative_pct:float}>
+	 */
+	private function cumulative_distribution( array $days_values ): array {
+		$total = count( $days_values );
+		if ( 0 === $total ) {
+			return [];
+		}
+		$per_day = [];
+		foreach ( $days_values as $day ) {
+			$day             = (int) $day;
+			$per_day[ $day ] = ( $per_day[ $day ] ?? 0 ) + 1;
+		}
+		ksort( $per_day );
+		$running = 0;
+		$points  = [];
+		foreach ( $per_day as $day => $count ) {
+			$running += $count;
+			$points[] = [
+				'day'            => (int) $day,
+				'cumulative_pct' => round( $running / $total, 4 ),
+			];
+		}
+		return $points;
+	}
+
+	/**
+	 * Registration source events for the time-to-convert distributions, behind
+	 * the BQ probe gate. Window is a trailing 365 days ending now (snapshot).
+	 * Returns [ ['ts'=>int seconds, 'source'=>string], … ], or [] when the probe
+	 * reports no registrations or any BQ call fails (degrade to all-direct).
+	 *
+	 * @return array<int, array{ts:int, source:string}>
+	 */
+	private function registration_source_events(): array {
+		$utc   = new \DateTimeZone( 'UTC' );
+		$end   = new \DateTimeImmutable( 'now', $utc );
+		$start = $end->modify( '-365 days' );
+
+		$probe = $this->proxy->query( 'conversion_journey_has_registrations_in_window', $start, $end );
+		if ( is_wp_error( $probe ) || ! is_array( $probe ) || empty( $probe[0] ) || ! is_array( $probe[0] ) ) {
+			return [];
+		}
+		$first_row = $probe[0];
+		$count     = (int) reset( $first_row ); // Single COUNT column; read defensively regardless of alias.
+		if ( $count <= 0 ) {
+			return [];
+		}
+
+		$reg = $this->proxy->query( 'conversion_journey_registrations_with_source', $start, $end );
+		if ( is_wp_error( $reg ) || ! is_array( $reg ) ) {
+			return [];
+		}
+		$events = [];
+		foreach ( $reg as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$events[] = [
+				'ts'     => intdiv( (int) ( $row['reg_ts'] ?? 0 ), 1000000 ),
+				'source' => (string) ( $row['source'] ?? Source_Matcher::SOURCE_DIRECT ),
+			];
+		}
+		return $events;
+	}
+
+	/**
+	 * Build a multi-series time-to-convert distribution. Lag = first_ts −
+	 * registered_ts in whole days, kept to [0,365]. Each reader's source comes
+	 * from matching their user_registered to a BQ registration event within
+	 * ±WINDOW_REGISTRATION_SECONDS; unmatched → direct. Always emits the three
+	 * source groups (zero-filled when empty).
+	 *
+	 * @param array<int, array<string,int>> $rows         Conversion-lag rows.
+	 * @param string                        $first_ts_key Row key for the first-conversion epoch.
+	 * @return array{state:string, groups:array}
+	 */
+	private function build_time_to_convert_distribution( array $rows, string $first_ts_key ): array {
+		$events          = $this->registration_source_events();
+		$records         = [];
+		$lag_by_customer = [];
+		foreach ( $rows as $row ) {
+			$lag = intdiv( (int) $row[ $first_ts_key ] - (int) $row['registered_ts'], 86400 );
+			if ( $lag < 0 || $lag > 365 ) {
+				continue;
+			}
+			$cid                     = (int) $row['customer_id'];
+			$records[]               = [
+				'key' => $cid,
+				'ts'  => (int) $row['registered_ts'],
+			];
+			$lag_by_customer[ $cid ] = $lag;
+		}
+
+		$map         = Source_Matcher::attach_sources( $records, $events, Source_Matcher::WINDOW_REGISTRATION_SECONDS, Source_Matcher::WINDOW_REGISTRATION_SECONDS );
+		$days_by_src = [
+			'gate'   => [],
+			'prompt' => [],
+			'direct' => [],
+		];
+		foreach ( $lag_by_customer as $cid => $lag ) {
+			$source                   = $map[ $cid ] ?? Source_Matcher::SOURCE_DIRECT;
+			$days_by_src[ $source ][] = $lag;
+		}
+
+		$groups = [];
+		foreach ( self::SOURCES as $source ) {
+			$groups[] = [
+				'label'  => $source,
+				'points' => $this->cumulative_distribution( $days_by_src[ $source ] ),
+			];
+		}
+
+		return [
+			'state'  => empty( $lag_by_customer ) ? 'empty' : 'populated',
+			'groups' => $groups,
+		];
+	}
+
+	/**
 	 * Source-mix via the Woo identity spine. The BQ query supplies exposure
 	 * events (attempt_ts in microseconds + gate/popup params); each Woo
 	 * conversion record is matched to the nearest preceding event within
@@ -892,32 +1015,36 @@ final class Conversion_Metric {
 	}
 
 	/**
-	 * Time-to-subscribe cumulative distribution (4.2) — three series by
-	 * source (gate / prompt / direct).
+	 * Time-to-subscribe cumulative distribution (4.2) — three series by source.
+	 * Snapshot: ignores the window (all-history). May become windowed later
+	 * (e.g. holiday-season period comparison).
 	 *
-	 * Phase B `coming_soon` placeholder. Not yet wired to BigQuery.
-	 *
-	 * @param DateTimeInterface $start Window start.
-	 * @param DateTimeInterface $end   Window end.
+	 * @param DateTimeInterface $start Window start (ignored — snapshot).
+	 * @param DateTimeInterface $end   Window end (ignored — snapshot).
 	 * @return array{state: string, groups: array}
 	 */
 	public function get_time_to_subscribe_distribution( DateTimeInterface $start, DateTimeInterface $end ): array {
 		unset( $start, $end );
-		return $this->coming_soon_collection( 'groups' );
+		return $this->build_time_to_convert_distribution(
+			$this->subscribers_metric->get_subscription_conversion_lags(),
+			'first_sub_ts'
+		);
 	}
 
 	/**
 	 * Time-to-donate cumulative distribution (4.3) — three series by source.
+	 * Snapshot: ignores the window (all-history). May become windowed later.
 	 *
-	 * Phase B `coming_soon` placeholder. Not yet wired to BigQuery.
-	 *
-	 * @param DateTimeInterface $start Window start.
-	 * @param DateTimeInterface $end   Window end.
+	 * @param DateTimeInterface $start Window start (ignored — snapshot).
+	 * @param DateTimeInterface $end   Window end (ignored — snapshot).
 	 * @return array{state: string, groups: array}
 	 */
 	public function get_time_to_donate_distribution( DateTimeInterface $start, DateTimeInterface $end ): array {
 		unset( $start, $end );
-		return $this->coming_soon_collection( 'groups' );
+		return $this->build_time_to_convert_distribution(
+			$this->donors_metric->get_donation_conversion_lags(),
+			'first_donation_ts'
+		);
 	}
 
 	/**

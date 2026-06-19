@@ -155,32 +155,30 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	// --- C20: get_time_to_subscribe_distribution --------------------------
 
 	/**
-	 * C20 coming_soon: returns state 'coming_soon' with an empty 'groups'
-	 * collection and no 'pending' key.
+	 * C20 wired: returns a state-envelope with a 'groups' key (three groups
+	 * always present) and no 'pending' key. With no Woo data → empty state.
 	 */
-	public function test_time_to_subscribe_distribution_is_coming_soon() {
+	public function test_time_to_subscribe_distribution_returns_groups_envelope() {
 		[ $start, $end ] = $this->window();
 		$result          = $this->metric->get_time_to_subscribe_distribution( $start, $end );
 
-		$this->assertSame( 'coming_soon', $result['state'] );
+		$this->assertArrayHasKey( 'state', $result );
 		$this->assertArrayHasKey( 'groups', $result );
-		$this->assertSame( [], $result['groups'] );
 		$this->assertArrayNotHasKey( 'pending', $result );
 	}
 
 	// --- C21: get_time_to_donate_distribution ------------------------------
 
 	/**
-	 * C21 coming_soon: returns state 'coming_soon' with an empty 'groups'
-	 * collection and no 'pending' key.
+	 * C21 wired: returns a state-envelope with a 'groups' key (three groups
+	 * always present) and no 'pending' key. With no Woo data → empty state.
 	 */
-	public function test_time_to_donate_distribution_is_coming_soon() {
+	public function test_time_to_donate_distribution_returns_groups_envelope() {
 		[ $start, $end ] = $this->window();
 		$result          = $this->metric->get_time_to_donate_distribution( $start, $end );
 
-		$this->assertSame( 'coming_soon', $result['state'] );
+		$this->assertArrayHasKey( 'state', $result );
 		$this->assertArrayHasKey( 'groups', $result );
-		$this->assertSame( [], $result['groups'] );
 		$this->assertArrayNotHasKey( 'pending', $result );
 	}
 
@@ -1843,17 +1841,19 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Deferred (Phase-B) sections are 'coming_soon' in the populated variant and
-	 * carry their preserved extra keys.
+	 * Deferred (Phase-B) sections are 'coming_soon' in the populated fixture variant
+	 * and carry their preserved extra keys. Note: 4.2 and 4.3 are now wired to live
+	 * data in the real metric; the fixture still hardcodes 'coming_soon' as a static
+	 * snapshot and is asserted here only for fixture shape stability.
 	 */
 	public function test_fixture_populated_deferred_sections_are_coming_soon() {
 		$current = Conversion_Metric::get_fixture( 'populated', false )['current'];
 
-		// 4.2 and 4.3 — time distributions (groups key).
+		// 4.2 and 4.3 — fixture still hardcodes coming_soon (static fixture shape).
 		$this->assertSame( 'coming_soon', $current['time_to_subscribe_distribution']['state'] );
-		$this->assertSame( [], $current['time_to_subscribe_distribution']['groups'] );
+		$this->assertArrayHasKey( 'groups', $current['time_to_subscribe_distribution'] );
 		$this->assertSame( 'coming_soon', $current['time_to_donate_distribution']['state'] );
-		$this->assertSame( [], $current['time_to_donate_distribution']['groups'] );
+		$this->assertArrayHasKey( 'groups', $current['time_to_donate_distribution'] );
 
 		// 4.4 — lag distribution (points + visibility keys).
 		$this->assertSame( 'coming_soon', $current['subscriber_to_donor_lag_distribution']['state'] );
@@ -2075,5 +2075,211 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	public function test_fixture_current_window_has_24_keys() {
 		$current = Conversion_Metric::get_fixture( 'populated', false )['current'];
 		$this->assertCount( 24, $current );
+	}
+
+	/**
+	 * 4.2: per-source cumulative distribution; reg matched to a BQ source event
+	 * within ±120s; unmatched reg → direct; lag > 365 truncated.
+	 */
+	public function test_time_to_subscribe_distribution_buckets_and_truncates(): void {
+		$reg1 = 1_700_000_000;
+		$rows = [
+			// Registered, subscribed 10 days later, has a 'gate' reg event 30s after registering.
+			[
+				'customer_id'   => 1,
+				'registered_ts' => $reg1,
+				'first_sub_ts'  => $reg1 + 86400 * 10,
+			],
+			// Registered, subscribed 20 days later, no BQ reg event → direct.
+			[
+				'customer_id'   => 2,
+				'registered_ts' => $reg1 + 100000,
+				'first_sub_ts'  => $reg1 + 100000 + 86400 * 20,
+			],
+			// Registered, subscribed 400 days later → truncated out.
+			[
+				'customer_id'   => 3,
+				'registered_ts' => $reg1 + 200000,
+				'first_sub_ts'  => $reg1 + 200000 + 86400 * 400,
+			],
+		];
+		$probe = [ [ 'registration_events' => 5 ] ];
+		$reg_events = [
+			[
+				'reg_ts' => (string) ( ( $reg1 + 30 ) * 1_000_000 ),
+				'source' => 'gate',
+			],
+		];
+
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_subscription_conversion_lags' )->willReturn( $rows );
+		$metric = new Conversion_Metric(
+			$this->proxy_by_query(
+				[
+					'conversion_journey_has_registrations_in_window' => $probe,
+					'conversion_journey_registrations_with_source'   => $reg_events,
+				]
+			),
+			null,
+			$subs,
+			null
+		);
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_time_to_subscribe_distribution( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertCount( 3, $result['groups'] );
+		$labels = array_column( $result['groups'], 'label' );
+		$this->assertSame( [ 'gate', 'prompt', 'direct' ], $labels );
+
+		$gate   = $result['groups'][0];
+		$direct = $result['groups'][2];
+		$this->assertSame(
+			[
+				[
+					'day'            => 10,
+					'cumulative_pct' => 1.0,
+				],
+			],
+			$gate['points'] 
+		); // customer 1.
+		$this->assertSame(
+			[
+				[
+					'day'            => 20,
+					'cumulative_pct' => 1.0,
+				],
+			],
+			$direct['points'] 
+		); // customer 2; customer 3 truncated.
+	}
+
+	/**
+	 * 4.2 degradation: probe returns 0 → no expensive query → every reg → direct.
+	 */
+	public function test_time_to_subscribe_distribution_probe_zero_all_direct(): void {
+		$reg1 = 1_700_000_000;
+		$rows = [
+			[
+				'customer_id'   => 1,
+				'registered_ts' => $reg1,
+				'first_sub_ts'  => $reg1 + 86400 * 7,
+			],
+		];
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_subscription_conversion_lags' )->willReturn( $rows );
+		$metric = new Conversion_Metric(
+			$this->proxy_by_query( [ 'conversion_journey_has_registrations_in_window' => [ [ 'registration_events' => 0 ] ] ] ),
+			null,
+			$subs,
+			null
+		);
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_time_to_subscribe_distribution( $start, $end );
+		$this->assertSame(
+			[
+				[
+					'day'            => 7,
+					'cumulative_pct' => 1.0,
+				],
+			],
+			$result['groups'][2]['points'] 
+		); // direct.
+		$this->assertSame( [], $result['groups'][0]['points'] ); // gate empty.
+	}
+
+	/**
+	 * 4.2: no converters → empty state, still three groups.
+	 */
+	public function test_time_to_subscribe_distribution_empty(): void {
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_subscription_conversion_lags' )->willReturn( [] );
+		$metric = new Conversion_Metric(
+			$this->proxy_by_query( [ 'conversion_journey_has_registrations_in_window' => [ [ 'registration_events' => 0 ] ] ] ),
+			null,
+			$subs,
+			null
+		);
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_time_to_subscribe_distribution( $start, $end );
+		$this->assertSame( 'empty', $result['state'] );
+		$this->assertCount( 3, $result['groups'] );
+	}
+
+	/**
+	 * 4.3: per-source cumulative distribution for donations; mirrors 4.2 bucketing
+	 * test with Donors_Metric and first_donation_ts.
+	 */
+	public function test_time_to_donate_distribution_buckets_and_truncates(): void {
+		$reg1 = 1_700_000_000;
+		$rows = [
+			// Registered, donated 15 days later, has a 'prompt' reg event 50s before registering.
+			[
+				'customer_id'       => 10,
+				'registered_ts'     => $reg1,
+				'first_donation_ts' => $reg1 + 86400 * 15,
+			],
+			// Registered, donated 30 days later, no BQ reg event → direct.
+			[
+				'customer_id'       => 11,
+				'registered_ts'     => $reg1 + 100000,
+				'first_donation_ts' => $reg1 + 100000 + 86400 * 30,
+			],
+			// Registered, donated 400 days later → truncated out.
+			[
+				'customer_id'       => 12,
+				'registered_ts'     => $reg1 + 200000,
+				'first_donation_ts' => $reg1 + 200000 + 86400 * 400,
+			],
+		];
+		$probe      = [ [ 'registration_events' => 3 ] ];
+		$reg_events = [
+			[
+				'reg_ts' => (string) ( ( $reg1 - 50 ) * 1_000_000 ),
+				'source' => 'prompt',
+			],
+		];
+
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_donation_conversion_lags' )->willReturn( $rows );
+		$metric = new Conversion_Metric(
+			$this->proxy_by_query(
+				[
+					'conversion_journey_has_registrations_in_window' => $probe,
+					'conversion_journey_registrations_with_source'   => $reg_events,
+				]
+			),
+			null,
+			null,
+			$donors
+		);
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_time_to_donate_distribution( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertCount( 3, $result['groups'] );
+		$labels = array_column( $result['groups'], 'label' );
+		$this->assertSame( [ 'gate', 'prompt', 'direct' ], $labels );
+
+		$prompt = $result['groups'][1];
+		$direct = $result['groups'][2];
+		$this->assertSame(
+			[
+				[
+					'day'            => 15,
+					'cumulative_pct' => 1.0,
+				],
+			],
+			$prompt['points'] 
+		); // customer 10.
+		$this->assertSame(
+			[
+				[
+					'day'            => 30,
+					'cumulative_pct' => 1.0,
+				],
+			],
+			$direct['points'] 
+		); // customer 11; customer 12 truncated.
 	}
 }
