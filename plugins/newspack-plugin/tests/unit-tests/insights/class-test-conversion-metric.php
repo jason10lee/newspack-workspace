@@ -2016,7 +2016,14 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 */
 	public function test_source_mix_subscribers_proxy_error(): void {
 		$subs = $this->createMock( Subscribers_Metric::class );
-		$subs->method( 'get_new_subscriber_records_in_window' )->willReturn( [] );
+		$subs->method( 'get_new_subscriber_records_in_window' )->willReturn(
+			[
+				[
+					'customer_id' => 1,
+					'ts'          => 1700000000,
+				],
+			] 
+		);
 		$metric = new Conversion_Metric(
 			$this->proxy_returning( new \WP_Error( 'boom', 'nope' ) ),
 			null,
