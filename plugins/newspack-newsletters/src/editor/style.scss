@@ -246,6 +246,15 @@
 				}
 			}
 
+			// The button block has no padded wrapper in the rendered email — the
+			// button cell is the colored box itself. Zero the editor's generic
+			// block-spacing padding on the button wrapper so the canvas button
+			// matches the render (this reset is render-agnostic, not MJML-specific,
+			// so it lives here rather than in the flag-gated legacy bundle).
+			&[data-type="core/button"] {
+				padding: 0;
+			}
+
 			&[data-align="full"] {
 				margin: 0;
 				padding: 0;
