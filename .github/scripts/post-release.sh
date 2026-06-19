@@ -105,23 +105,50 @@ notify_slack() {
   # hand-rolling it: the conflict list is variable-length and newline-separated,
   # and raw newlines aren't valid inside a JSON string literal. node's
   # JSON.stringify escapes the message text correctly.
+  # A merge with many conflicts could otherwise blow past Slack's 3000-char
+  # section-text limit, which makes chat.postMessage reject the payload and drop
+  # the whole alert — exactly the large-messy-merge case this naming exists for.
+  # So cap the named list and hard-trim the text (the build link is appended last
+  # and never trimmed, so it always survives).
   local payload
   payload=$(TARGET="$target" CONFLICTS="$conflicts" node -e '
+    const MAX_FILES = 25;
+    const MAX_TEXT = 2900;
     const conflicts = (process.env.CONFLICTS || "")
       .split("\n")
       .map((s) => s.trim())
       .filter(Boolean);
-    let text = `⚠️ Post-release merge to \`${process.env.TARGET}\` failed for: \`${process.env.GITHUB_REPOSITORY}\`.`;
-    if (conflicts.length) {
-      text += "\nConflicting files:\n" + conflicts.map((f) => `• \`${f}\``).join("\n");
-    }
+    const header = `⚠️ Post-release merge to \`${process.env.TARGET}\` failed for: \`${process.env.GITHUB_REPOSITORY}\`.`;
     const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
-    text += `\nCheck <${runUrl}|the build> for details.`;
+    const footer = `\nCheck <${runUrl}|the build> for details.`;
+    let body = "";
+    if (conflicts.length) {
+      const shown = conflicts.slice(0, MAX_FILES);
+      let list = shown.map((f) => `• \`${f}\``).join("\n");
+      if (conflicts.length > MAX_FILES) {
+        list += `\n• …and ${conflicts.length - MAX_FILES} more`;
+      }
+      body = "\nConflicting files:\n" + list;
+    }
+    let text = header + body + footer;
+    if (text.length > MAX_TEXT) {
+      const room = Math.max(0, MAX_TEXT - header.length - footer.length - 1);
+      text = header + body.slice(0, room) + "…" + footer;
+    }
     process.stdout.write(JSON.stringify({
       channel: process.env.SLACK_CHANNEL_ID,
       blocks: [{ type: "section", text: { type: "mrkdwn", text } }],
     }));
-  ')
+  ') || {
+    # node missing/erroring must not abort the script (set -e) on this
+    # already-failed path, nor leave subsequent merges + sync_failed unreported.
+    echo "[post-release] Slack payload build failed; skipping notification."
+    return
+  }
+  if [ -z "$payload" ]; then
+    echo "[post-release] Empty Slack payload; skipping notification."
+    return
+  fi
   curl \
     --data "$payload" \
     -H "Content-type: application/json" \
