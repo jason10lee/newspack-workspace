@@ -412,10 +412,17 @@ final class Newspack_Newsletters_Editor {
 		if ( \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled() ) {
 			// WC renderer on: apply the canonical button to both classic and block
 			// themes so the editor canvas matches the rendered email everywhere.
-			$post = get_post();
-			if ( $post instanceof WP_Post ) {
-				$email_overrides['styles'] = \Newspack\Newsletters\Email_Renderers\Email_Theme::canonical( $post )['styles'];
-			}
+			// The button is not post-dependent, so apply it even when no post is
+			// resolvable (e.g. post-new.php or early theme.json evaluation). The
+			// primary color is resolved from the theme.json being filtered, because
+			// Lite_Site::get_primary_color() returns `currentcolor` inside this
+			// filter on block themes (see Email_Theme::resolve_primary_color()).
+			$primary = \Newspack\Newsletters\Email_Renderers\Email_Theme::resolve_primary_color( $theme_json );
+			$post    = get_post();
+			$email_overrides['styles'] = \Newspack\Newsletters\Email_Renderers\Email_Theme::canonical(
+				$post instanceof WP_Post ? $post : null,
+				$primary
+			)['styles'];
 		} elseif ( wp_is_block_theme() ) {
 			// Legacy (flag off): only override button element styles for block
 			// themes — classic themes use their own neutral defaults and don't need

@@ -37,4 +37,51 @@ class Test_Email_Theme extends WP_UnitTestCase {
 			$this->assertNotEmpty( $button['color']['background'] );
 		}
 	}
+
+	/**
+	 * The resolved primary color is never the recursion-guard sentinel, and falls
+	 * back to #36f when no primary color is resolvable.
+	 */
+	public function test_resolve_primary_color_never_currentcolor() {
+		$primary = Email_Theme::resolve_primary_color();
+
+		$this->assertNotSame( 'currentcolor', strtolower( $primary ) );
+		$this->assertNotEmpty( $primary );
+	}
+
+	/**
+	 * When the primary color is unresolvable (e.g. the `currentcolor` recursion
+	 * guard inside the theme.json filter, or newspack-plugin absent), the color is
+	 * recovered from the passed theme.json palette. This is the block-theme
+	 * editor↔render parity fix.
+	 */
+	public function test_resolve_primary_color_uses_theme_json_palette() {
+		$theme_json = new WP_Theme_JSON_Data(
+			[
+				'version'  => 3,
+				'settings' => [
+					'color' => [
+						'palette' => [
+							[
+								'slug'  => 'primary',
+								'color' => '#abcdef',
+								'name'  => 'Primary',
+							],
+						],
+					],
+				],
+			],
+			'theme'
+		);
+
+		$resolved = Email_Theme::resolve_primary_color( $theme_json );
+
+		// In this suite newspack-plugin's Lite_Site is absent, so the palette is the
+		// only source — the resolver must read it rather than fall straight to #36f.
+		if ( ! method_exists( '\Newspack\Lite_Site', 'get_primary_color' ) ) {
+			$this->assertSame( '#abcdef', $resolved );
+		} else {
+			$this->assertNotSame( 'currentcolor', strtolower( $resolved ) );
+		}
+	}
 }
