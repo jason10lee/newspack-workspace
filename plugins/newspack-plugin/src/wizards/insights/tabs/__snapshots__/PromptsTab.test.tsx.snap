@@ -86,7 +86,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
         </div>
       </div>
       <div
-        class="newspack-insights__metric-grid"
+        class="newspack-insights__metric-grid newspack-insights__metric-grid--cols-3"
       >
         <div
           class="components-surface components-card newspack-card--core newspack-insights__metric-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
@@ -249,7 +249,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
         </div>
       </div>
       <div
-        class="newspack-insights__metric-grid"
+        class="newspack-insights__metric-grid newspack-insights__metric-grid--cols-3"
       >
         <div
           class="components-surface components-card newspack-card--core newspack-insights__metric-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
