@@ -112,7 +112,7 @@ notify_slack() {
   # and never trimmed, so it always survives).
   local payload
   payload=$(TARGET="$target" CONFLICTS="$conflicts" node -e '
-    const MAX_FILES = 25;
+    const MAX_FILES = 10;
     const MAX_TEXT = 2900;
     const conflicts = (process.env.CONFLICTS || "")
       .split("\n")
@@ -132,8 +132,13 @@ notify_slack() {
     }
     let text = header + body + footer;
     if (text.length > MAX_TEXT) {
-      const room = Math.max(0, MAX_TEXT - header.length - footer.length - 1);
-      text = header + body.slice(0, room) + "…" + footer;
+      // Backstop for pathologically long paths: trim on a line boundary so we
+      // never sever a `path` backtick pair (an unclosed backtick makes Slack
+      // swallow the rest as inline code, including the build link). The MAX_FILES
+      // cap above keeps this from firing in practice.
+      const room = Math.max(0, MAX_TEXT - header.length - footer.length - 2);
+      const trimmed = body.slice(0, room).split("\n").slice(0, -1).join("\n");
+      text = header + trimmed + "\n…" + footer;
     }
     process.stdout.write(JSON.stringify({
       channel: process.env.SLACK_CHANNEL_ID,
