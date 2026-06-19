@@ -440,6 +440,16 @@ class Donors_Metric {
 	}
 
 	/**
+	 * Subscriber→donor lag rows (lag_days) for the 4.4 distribution. Pure Woo.
+	 * List-param — NOT cached.
+	 *
+	 * @return array<int, array{lag_days:int}>
+	 */
+	public function get_subscriber_to_donor_lags(): array {
+		return $this->storage->get_subscriber_to_donor_lags();
+	}
+
+	/**
 	 * Flush all Tab 7 metric caches. Hook point for NPPD-1605.
 	 *
 	 * @return void

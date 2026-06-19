@@ -353,4 +353,14 @@ interface Donors_Storage_Interface {
 	 * @return array<int, array{customer_id:int, registered_ts:int, first_donation_ts:int}>
 	 */
 	public function get_donation_conversion_lags(): array;
+
+	/**
+	 * All-history cross-converters: customers with a first non-donation
+	 * subscription and a STRICTLY-LATER first donation. Returns the lag in whole
+	 * days (DATEDIFF(first_donation, first_sub)). Pure Woo — no wp_users join, so
+	 * it counts cross-converters regardless of registration record. Drives 4.4.
+	 *
+	 * @return array<int, array{lag_days:int}>
+	 */
+	public function get_subscriber_to_donor_lags(): array;
 }

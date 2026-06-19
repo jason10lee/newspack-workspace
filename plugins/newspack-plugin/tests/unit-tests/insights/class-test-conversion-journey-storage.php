@@ -575,4 +575,24 @@ class Test_Conversion_Journey_Storage extends WP_UnitTestCase {
 		$this->assertSame( $rows, $metric->get_donation_conversion_lags() );
 		$this->assertSame( [], $metric->get_donation_conversion_lags() );
 	}
+
+	/**
+	 * Donor storages expose get_subscriber_to_donor_lags.
+	 */
+	public function test_donor_storages_implement_sub_to_donor_lags(): void {
+		$this->assertTrue( method_exists( new HPOS_Donors_Storage( [] ), 'get_subscriber_to_donor_lags' ) );
+		$this->assertTrue( method_exists( new Legacy_Donors_Storage( [] ), 'get_subscriber_to_donor_lags' ) );
+	}
+
+	/**
+	 * Donors_Metric::get_subscriber_to_donor_lags delegates (NOT cached).
+	 */
+	public function test_donors_metric_sub_to_donor_lags_delegates(): void {
+		$rows = [ [ 'lag_days' => 12 ], [ 'lag_days' => 40 ] ];
+		$mock = $this->createMock( Donors_Storage_Interface::class );
+		$mock->expects( $this->exactly( 2 ) )->method( 'get_subscriber_to_donor_lags' )->willReturnOnConsecutiveCalls( $rows, [] );
+		$metric = $this->make_donors_metric( $mock );
+		$this->assertSame( $rows, $metric->get_subscriber_to_donor_lags() );
+		$this->assertSame( [], $metric->get_subscriber_to_donor_lags() );
+	}
 }

@@ -1175,6 +1175,54 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 	}
 
 	/**
+	 * {@inheritDoc}
+	 *
+	 * @return array<int, array{lag_days:int}>
+	 */
+	public function get_subscriber_to_donor_lags(): array {
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+
+		// First non-donation subscription vs first donation per customer, joined
+		// where the donation strictly post-dates the subscription. DATEDIFF over
+		// the two UTC values is timezone-safe (date arithmetic, no tz interpretation).
+		$sql = "SELECT DATEDIFF(df.first_donation_date, sb.first_sub_date) AS lag_days
+			FROM (
+				SELECT o.customer_id, MIN(om.meta_value) AS first_sub_date
+				FROM {$prefix}wc_orders o
+				JOIN {$prefix}wc_orders_meta om
+					ON om.order_id = o.id AND om.meta_key = '_schedule_start'
+				JOIN {$prefix}woocommerce_order_items oi
+					ON oi.order_id = o.id AND oi.order_item_type = 'line_item'
+				JOIN {$prefix}woocommerce_order_itemmeta oim
+					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+				WHERE o.type = 'shop_subscription'
+				  AND oim.meta_value NOT IN ($donations)
+				  AND om.meta_value != ''
+				GROUP BY o.customer_id
+			) AS sb
+			JOIN (
+				SELECT o.customer_id, MIN(o.date_created_gmt) AS first_donation_date
+				FROM {$prefix}wc_orders o
+				JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = o.id
+				WHERE o.type = 'shop_order'
+				  AND o.status IN ('wc-completed', 'wc-processing')
+				  AND opl.product_id IN ($donations)
+				GROUP BY o.customer_id
+			) AS df ON df.customer_id = sb.customer_id
+			WHERE df.first_donation_date > sb.first_sub_date";
+
+		$rows = $wpdb->get_results( $sql, ARRAY_A );
+		return array_map(
+			static function ( $row ) {
+				return [ 'lag_days' => (int) $row['lag_days'] ];
+			},
+			(array) $rows
+		);
+	}
+
+	/**
 	 * Map (customer_id, user_registered, <first date>) rows to lag records with
 	 * UTC epoch seconds. Rows with a blank date are skipped. UTC parse keeps the
 	 * epochs correct regardless of MySQL session timezone. user_registered is
