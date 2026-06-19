@@ -466,6 +466,17 @@ class Subscribers_Metric {
 	}
 
 	/**
+	 * Earliest non-donation subscription start per customer for the given set.
+	 * List-param — NOT cached (result varies per call). Keyed by customer_id.
+	 *
+	 * @param int[] $customer_ids Customer IDs to look up.
+	 * @return array<int, \DateTimeImmutable>
+	 */
+	public function get_first_subscription_order_dates( array $customer_ids ): array {
+		return $this->storage->get_first_subscription_order_dates( $customer_ids );
+	}
+
+	/**
 	 * Flush ALL Tab 6 metric caches. Use after a manual data correction
 	 * or from the future NPPD-1605 invalidation system; not wired to any
 	 * automatic trigger today because the WP transient API has no key

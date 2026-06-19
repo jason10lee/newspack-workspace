@@ -1053,4 +1053,50 @@ class Legacy_Storage implements Storage_Interface {
 			$rows
 		);
 	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @param int[] $customer_ids Customer IDs to look up.
+	 * @return array<int, \DateTimeImmutable>
+	 */
+	public function get_first_subscription_order_dates( array $customer_ids ): array {
+		if ( empty( $customer_ids ) ) {
+			return [];
+		}
+
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+		$ids       = $this->id_list( $customer_ids );
+
+		// Legacy CPT equivalent of HPOS_Storage::get_first_subscription_order_dates():
+		// earliest non-donation subscription _schedule_start per _customer_user,
+		// scoped to the given customer set. Mirrors get_new_subscribers_in_window().
+		$sql = "SELECT cust.meta_value AS customer_id, MIN(start.meta_value) AS first_start
+			FROM {$prefix}posts p
+			JOIN {$prefix}postmeta cust
+				ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
+			JOIN {$prefix}postmeta start
+				ON start.post_id = p.ID AND start.meta_key = '_schedule_start'
+			JOIN {$prefix}woocommerce_order_items oi
+				ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
+			JOIN {$prefix}woocommerce_order_itemmeta oim
+				ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+			WHERE p.post_type = 'shop_subscription'
+			  AND oim.meta_value NOT IN ($donations)
+			  AND start.meta_value != ''
+			  AND cust.meta_value IN ($ids)
+			GROUP BY cust.meta_value";
+
+		$rows = $wpdb->get_results( $sql, ARRAY_A );
+		$map  = [];
+		foreach ( (array) $rows as $row ) {
+			if ( empty( $row['first_start'] ) ) {
+				continue;
+			}
+			$map[ (int) $row['customer_id'] ] = new \DateTimeImmutable( $row['first_start'], new \DateTimeZone( 'UTC' ) );
+		}
+		return $map;
+	}
 }
