@@ -421,7 +421,7 @@ class Insights_Wizard extends Wizard {
 			// trailing DONATION_ACTIVITY_WINDOW_DAYS window (cached for a day). Gates is
 			// gated to the preview constant NEWSPACK_INSIGHTS_GATES_PREVIEW
 			// while Phase 1 (placeholder data) is being validated.
-			'tabs'              => [
+			'tabs'                => [
 				'audience'    => true,
 				'engagement'  => true,
 				'conversion'  => true,
@@ -431,23 +431,31 @@ class Insights_Wizard extends Wizard {
 				'donors'      => self::has_donation_activity(),
 				'advertising' => self::is_advertising_tab_visible(),
 			],
-			'defaultDateRange'  => [
+			'defaultDateRange'    => [
 				'preset' => 'last-30',
 				'start'  => $thirty_ago->format( 'Y-m-d' ),
 				'end'    => $today->format( 'Y-m-d' ),
 			],
-			'defaultComparison' => false,
-			'timezone'          => wp_timezone_string(),
-			'adminUrl'          => admin_url(),
-			'settingsUrl'       => admin_url( 'admin.php?page=newspack-settings' ),
-			'siteKitUrl'        => self::get_site_kit_url(),
+			'defaultComparison'   => false,
+			'timezone'            => wp_timezone_string(),
+			'adminUrl'            => admin_url(),
+			'settingsUrl'         => admin_url( 'admin.php?page=newspack-settings' ),
+			'siteKitUrl'          => self::get_site_kit_url(),
 			// Publisher (site) name, shown in the PDF export document header
 			// (NPPD-1661). Resolved at render time from the site's own title —
 			// never a hardcoded name. Decode entities: `blogname` is stored
 			// HTML-escaped (e.g. "Ben &amp; Jerry's"), and React escapes again
 			// on render, so a raw get_bloginfo() would print the literal entity.
 			// Hand React the decoded string and let it do the single escaping.
-			'publisherName'     => wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ),
+			'publisherName'       => wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ),
+			// Feedback abandon-beacon (NPPD-1728). navigator.sendBeacon can't set
+			// request headers, so the client needs the absolute REST URL plus a
+			// `wp_rest` nonce as a query param. apiFetch carries its own nonce for
+			// the normal submit/dismiss path, but the beacon can't reuse it and
+			// `window.wpApiSettings` isn't enqueued on this page — so hand both to
+			// the client explicitly here.
+			'feedbackBeaconUrl'   => rest_url( 'newspack-insights/v1/feedback' ),
+			'feedbackBeaconNonce' => wp_create_nonce( 'wp_rest' ),
 		];
 	}
 
