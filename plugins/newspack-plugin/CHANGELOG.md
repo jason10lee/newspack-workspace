@@ -1,3 +1,10 @@
+## newspack [6.43.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.43.1...newspack@6.43.2) (2026-06-19)
+
+
+### Bug Fixes
+
+* **audience:** gate Group labels settings behind Content_Gate feature flag ([#297](https://github.com/Automattic/newspack-workspace/issues/297)) ([cfe7901](https://github.com/Automattic/newspack-workspace/commit/cfe7901d1207d6af4352eabc563ebc2f81277fec)), closes [#148](https://github.com/Automattic/newspack-workspace/issues/148) [#newspack-engineering-public](https://github.com/Automattic/newspack-workspace/issues/newspack-engineering-public)
+
 ## newspack [6.43.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.43.0...newspack@6.43.1) (2026-06-17)
 
 
