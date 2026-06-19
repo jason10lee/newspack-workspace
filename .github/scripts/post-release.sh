@@ -104,7 +104,9 @@ attribute_conflicts() {
     [ -z "$f" ] && continue
     subj=""; author=""; pr=""
     if [ -n "$mb" ]; then
-      meta=$(git log "$mb"..release -1 --format='%s%x09%an' -- "$f" 2>/dev/null || true)
+      # --no-merges so attribution lands on the squash commit carrying "(#NNN)",
+      # not a promotion-merge commit (which has no PR ref in its subject).
+      meta=$(git log "$mb"..release -1 --no-merges --format='%s%x09%an' -- "$f" 2>/dev/null || true)
       if [ -n "$meta" ]; then
         # Split from the right: the format is "<subject><TAB><author>" and an
         # author name has no tab, so a literal tab inside the subject can't
