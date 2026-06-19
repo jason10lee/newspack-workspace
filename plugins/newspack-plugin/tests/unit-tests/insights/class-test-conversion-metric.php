@@ -185,10 +185,12 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	// --- C22: get_subscriber_to_donor_lag_distribution ---------------------
 
 	/**
-	 * C22: returns state 'populated' with an empty 'points' collection when
-	 * below the cross-converter threshold, plus preserved visibility keys.
+	 * C22 (4.4): envelope is populated + hidden (insufficient_data) for the
+	 * default below-threshold cohort. Checks that state is 'populated', points
+	 * is empty, visibility is 'hidden', and visibility_reason is
+	 * 'insufficient_data' — and that no 'pending' key leaks through.
 	 */
-	public function test_lag_distribution_is_coming_soon_with_visibility_keys() {
+	public function test_lag_distribution_is_populated_and_hidden_below_threshold() {
 		[ $start, $end ] = $this->window();
 		$result          = $this->metric->get_subscriber_to_donor_lag_distribution( $start, $end );
 
@@ -2186,6 +2188,48 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 			$result['groups'][2]['points'] 
 		); // direct.
 		$this->assertSame( [], $result['groups'][0]['points'] ); // gate empty.
+	}
+
+	/**
+	 * 4.2 degradation: probe positive but second BQ query (registrations_with_source)
+	 * returns WP_Error → registration_source_events() returns [] → every reader
+	 * attributed to direct (graceful degradation).
+	 */
+	public function test_time_to_subscribe_distribution_registrations_error_all_direct(): void {
+		$reg1 = 1_700_000_000;
+		$rows = [
+			[
+				'customer_id'   => 1,
+				'registered_ts' => $reg1,
+				'first_sub_ts'  => $reg1 + 86400 * 7,
+			],
+		];
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_subscription_conversion_lags' )->willReturn( $rows );
+		$metric = new Conversion_Metric(
+			$this->proxy_by_query(
+				[
+					'conversion_journey_has_registrations_in_window' => [ [ 'registration_events' => 5 ] ],
+					'conversion_journey_registrations_with_source'   => new \WP_Error( 'bq_down', 'nope' ),
+				]
+			),
+			null,
+			$subs,
+			null
+		);
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_time_to_subscribe_distribution( $start, $end );
+		// Second-query error degrades to all-direct: gate group empty, direct has the single point.
+		$this->assertSame( [], $result['groups'][0]['points'] ); // gate.
+		$this->assertSame(
+			[
+				[
+					'day'            => 7,
+					'cumulative_pct' => 1.0,
+				],
+			],
+			$result['groups'][2]['points']
+		); // direct.
 	}
 
 	/**

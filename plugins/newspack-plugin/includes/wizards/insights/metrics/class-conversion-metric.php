@@ -882,6 +882,7 @@ final class Conversion_Metric {
 	 */
 	private function compute_source_mix( string $query_name, array $records, DateTimeInterface $start, DateTimeInterface $end ): array {
 		$bq = $this->proxy->query( $query_name, $start, $end );
+		// Precedence intentional: a genuine proxy error must surface as the 'error' envelope, not be masked as 'empty'.
 		if ( is_wp_error( $bq ) ) {
 			return $this->error_collection( 'slices', $bq );
 		}
