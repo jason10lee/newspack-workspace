@@ -1033,19 +1033,33 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 	 * a `?? 0` and silently breaks a working production section.
 	 */
 	public function test_regwall_envelope_unchanged_when_hub_fields_absent() {
+		// A pre-hub-deploy response: each query returns its precomputed rate but
+		// neither count column. Both regwall scalars are produced by their real
+		// public methods (not hand-built) so the guard exercises the full path the
+		// REST controller consumes — including the Influenced method's own rate_key.
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		$proxy->method( 'query' )->willReturn( [ [ 'regwall_conversion_rate_direct' => 0.071 ] ] );
+		$proxy->method( 'query' )->willReturnCallback(
+			static function ( string $query_name ) {
+				if ( 'gates_regwall_conversion_influenced_7d' === $query_name ) {
+					return [ [ 'regwall_conversion_influenced' => 0.123 ] ];
+				}
+				return [ [ 'regwall_conversion_rate_direct' => 0.071 ] ];
+			}
+		);
 
 		$metric     = new Gates_Metric( $proxy );
 		$direct     = $metric->get_regwall_conversion_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
-		$influenced = [
-			'denominator' => null,
-			'numerator'   => null,
-		];
+		$influenced = $metric->get_regwall_conversion_influenced_7d( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 		$totals     = Gates_Metric::regwall_section_totals( $direct, $influenced );
 
+		// Rates compute; counts stay null on both scalars (columns absent).
+		$this->assertTrue( $direct['computable'] );
 		$this->assertNull( $direct['denominator'] );
 		$this->assertNull( $direct['numerator'] );
+		$this->assertTrue( $influenced['computable'] );
+		$this->assertNull( $influenced['denominator'] );
+		$this->assertNull( $influenced['numerator'] );
+		// Section totals degrade to null (never `?? 0`), the production-safety crux.
 		$this->assertNull( $totals['registration_impressions_total'] );
 		$this->assertNull( $totals['registrations_total'] );
 	}
