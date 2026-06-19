@@ -70,7 +70,7 @@ describe( 'LastUpdated', () => {
 		expect( item ).toHaveAttribute( 'aria-disabled', 'true' );
 	} );
 
-	it( 'prints with a tab+range filename on Download PDF', () => {
+	it( 'prints with a tab+range filename on Print / Save as PDF', () => {
 		const printSpy = jest.spyOn( window, 'print' ).mockImplementation( () => undefined );
 		seedSlot( 'engagement', { status: 'success', computedAt: '2026-06-10T18:42:13Z' } );
 
@@ -81,19 +81,19 @@ describe( 'LastUpdated', () => {
 
 		render( <LastUpdated tab="engagement" range={ range } previousRange={ null } /> );
 		fireEvent.click( screen.getByRole( 'button', { name: /options/i } ) );
-		fireEvent.click( screen.getByRole( 'menuitem', { name: /download pdf/i } ) );
+		fireEvent.click( screen.getByRole( 'menuitem', { name: /save as pdf/i } ) );
 
 		expect( printSpy ).toHaveBeenCalledTimes( 1 );
 		expect( titleAtPrint ).toBe( 'engagement-2026-01-01_to_2026-01-31' );
 		printSpy.mockRestore();
 	} );
 
-	it( 'disables Download PDF while the slot is loading', () => {
+	it( 'disables Print / Save as PDF while the slot is loading', () => {
 		seedSlot( 'engagement', { status: 'loading', computedAt: '2026-06-10T18:42:13Z' } );
 
 		render( <LastUpdated tab="engagement" range={ range } previousRange={ null } /> );
 		fireEvent.click( screen.getByRole( 'button', { name: /options/i } ) );
-		const item = screen.getByRole( 'menuitem', { name: /download pdf/i } );
+		const item = screen.getByRole( 'menuitem', { name: /save as pdf/i } );
 		expect( item ).toHaveAttribute( 'aria-disabled', 'true' );
 	} );
 } );

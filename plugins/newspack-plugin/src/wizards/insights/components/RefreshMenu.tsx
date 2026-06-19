@@ -1,6 +1,6 @@
 /**
  * RefreshMenu — the "Insights options" header kebab dropdown. Holds
- * "Refresh now" and "Download PDF" (NPPD-1661).
+ * "Refresh now" and "Print / Save as PDF…" (NPPD-1661).
  */
 
 /**
@@ -31,7 +31,7 @@ const RefreshMenu = ( { onRefresh, disabled, onDownloadPdf, downloadDisabled }: 
 				isDisabled: disabled,
 			},
 			{
-				title: __( 'Download PDF', 'newspack-plugin' ),
+				title: __( 'Print / Save as PDF…', 'newspack-plugin' ),
 				onClick: onDownloadPdf,
 				isDisabled: downloadDisabled,
 			},

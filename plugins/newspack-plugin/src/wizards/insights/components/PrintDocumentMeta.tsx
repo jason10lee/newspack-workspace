@@ -4,7 +4,7 @@
  * Print-only document chrome for the per-tab PDF export. Hidden on screen
  * (`.newspack-insights__print-only { display: none }`) and revealed under
  * `@media print`, so it costs nothing in the normal admin view and only
- * surfaces when the user runs "Download PDF" from the Insights options
+ * surfaces when the user runs "Print / Save as PDF" from the Insights options
  * kebab.
  *
  * Renders:

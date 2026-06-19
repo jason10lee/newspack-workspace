@@ -39,7 +39,7 @@ const PromptExposureSection = ( { current, previous, lastUpdated }: PromptExposu
 			description={ __( 'Top of the funnel. How many readers see prompts in this timeframe.', 'newspack-plugin' ) }
 			actions={ lastUpdated }
 		/>
-		<div className="newspack-insights__metric-grid">
+		<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-3">
 			<MetricCard
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Total Prompt Impressions', 'newspack-plugin' ),
