@@ -409,9 +409,17 @@ final class Newspack_Newsletters_Editor {
 			],
 		];
 
-		// Only override button element styles for block themes — classic themes
-		// use their own neutral defaults and don't need the opinionated blue.
-		if ( wp_is_block_theme() ) {
+		if ( \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled() ) {
+			// WC renderer on: apply the canonical button to both classic and block
+			// themes so the editor canvas matches the rendered email everywhere.
+			$post = get_post();
+			if ( $post instanceof WP_Post ) {
+				$email_overrides['styles'] = \Newspack\Newsletters\Email_Renderers\Email_Theme::canonical( $post )['styles'];
+			}
+		} elseif ( wp_is_block_theme() ) {
+			// Legacy (flag off): only override button element styles for block
+			// themes — classic themes use their own neutral defaults and don't need
+			// the opinionated blue.
 			$primary_color = '#36f';
 			if ( method_exists( '\Newspack\Lite_Site', 'get_primary_color' ) ) {
 				$primary_color = Newspack\Lite_Site::get_primary_color();
