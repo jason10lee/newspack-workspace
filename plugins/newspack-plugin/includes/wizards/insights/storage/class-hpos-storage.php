@@ -1145,6 +1145,11 @@ class HPOS_Storage implements Storage_Interface {
 		// (om.meta_value != '') so a blank value can't yield a bogus epoch
 		// date. The window-count method drops blanks implicitly via its
 		// BETWEEN bounds, so results reconcile on healthy data.
+		// MIN(om.meta_value) is a lexical comparison: wc_orders_meta.meta_value
+		// is a string column, and _schedule_start is stored zero-padded
+		// `Y-m-d H:i:s`, so lexical order equals chronological order. The
+		// donation helper aggregates a real datetime column, so it carries no
+		// such assumption.
 		$sql = "SELECT o.customer_id, MIN(om.meta_value) AS first_start
 			FROM {$prefix}wc_orders o
 			JOIN {$prefix}wc_orders_meta om

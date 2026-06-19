@@ -1078,6 +1078,10 @@ class Legacy_Storage implements Storage_Interface {
 		// — the window-count method drops blanks implicitly via its BETWEEN bounds.
 		// _customer_user is cast to UNSIGNED (it is stored as a string) to match the
 		// other list-scoped legacy queries and align grouping with the int keys returned.
+		// MIN(start.meta_value) is a lexical comparison: postmeta.meta_value is a string
+		// column, and _schedule_start is stored zero-padded `Y-m-d H:i:s`, so lexical
+		// order equals chronological order. The donation helper aggregates the real
+		// post_date_gmt datetime column, so it carries no such assumption.
 		$sql = "SELECT CAST(cust.meta_value AS UNSIGNED) AS customer_id, MIN(start.meta_value) AS first_start
 			FROM {$prefix}posts p
 			JOIN {$prefix}postmeta cust
