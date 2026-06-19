@@ -155,8 +155,13 @@ notify_slack() {
     let body = "";
     if (items.length) {
       const shown = items.slice(0, MAX_FILES);
+      const repoUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}`;
       let list = shown.map((it) => {
-        const who = it.pr && it.author ? `${it.pr} (${it.author})` : it.pr || it.author;
+        // Render the PR ref as a Slack hyperlink (<url|label>) — a bare "#297" is
+        // plain text in Slack (no repo context to auto-link). GitHub redirects
+        // /pull/N to the issue if N is actually an issue, so /pull/ is safe.
+        const prLink = it.pr ? `<${repoUrl}/pull/${it.pr.replace(/^#/, "")}|${it.pr}>` : "";
+        const who = prLink && it.author ? `${prLink} (${it.author})` : prLink || it.author;
         return who ? `• \`${it.file}\` — incoming: ${who}` : `• \`${it.file}\``;
       }).join("\n");
       if (items.length > MAX_FILES) {
