@@ -56,6 +56,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 	const [ calcType, setCalcType ] = useState( rule?.simple?.calc_type ?? vocab.calc_types[ 0 ]?.value ?? 'fixed_price' );
 	const [ value, setValue ] = useState( String( rule?.simple?.value ?? '' ) );
 	const [ cyclesLimit, setCyclesLimit ] = useState( String( rule?.simple?.cycles_limit ?? 0 ) );
+	const [ simpleLabel, setSimpleLabel ] = useState( rule?.simple?.label ?? '' );
 	const [ strategyId, setStrategyId ] = useState( rule?.strategy_id ?? vocab.strategies[ 0 ]?.id ?? 'simple_price' );
 	const defaultCalc = vocab.calc_types[ 0 ]?.value ?? 'fixed_price';
 	const [ steps, setSteps ] = useState< StepRowState[] >(
@@ -108,7 +109,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 				calc_type: calcType,
 				value: Number( value ) || 0,
 				cycles_limit: Number( cyclesLimit ) || 0,
-				label: rule?.simple?.label ?? '',
+				label: simpleLabel,
 			};
 		}
 		return b;
@@ -127,6 +128,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 		calcType,
 		value,
 		cyclesLimit,
+		simpleLabel,
 	] );
 
 	const submit = useCallback( () => {
@@ -170,7 +172,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 				calc_type: calcType,
 				value: Number( value ) || 0,
 				cycles_limit: Number( cyclesLimit ) || 0,
-				label: rule?.simple?.label ?? '',
+				label: simpleLabel,
 			};
 		}
 		const path = isNew ? API_PATH : `${ API_PATH }/${ rule!.id }`;
@@ -210,6 +212,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 		calcType,
 		value,
 		cyclesLimit,
+		simpleLabel,
 		isNew,
 		rule,
 		addNotice,
@@ -375,6 +378,13 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 								type="number"
 								value={ value }
 								onChange={ setValue }
+								__next40pxDefaultSize
+							/>
+							<TextControl
+								label={ __( 'Name shown to reader', 'newspack-plugin' ) }
+								help={ __( 'Optional. Shown to readers when "Show pricing details" is on.', 'newspack-plugin' ) }
+								value={ simpleLabel }
+								onChange={ setSimpleLabel }
 								__next40pxDefaultSize
 							/>
 							<TextControl

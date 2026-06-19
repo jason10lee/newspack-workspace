@@ -31,7 +31,7 @@ const DEFAULT_VIEW: View = {
 	sort: { field: 'title', direction: 'asc' },
 	search: '',
 	fields: [ 'strategy', 'scope', 'priority', 'status', 'criterion' ],
-	filters: [ { field: 'status', operator: 'is', value: 'publish' } ],
+	filters: [], // Show all statuses by default; the REST already excludes trash.
 	layout: {},
 	titleField: 'title',
 };
