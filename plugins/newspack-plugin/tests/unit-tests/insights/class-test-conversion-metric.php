@@ -1864,6 +1864,106 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Mock proxy whose query() returns a value selected by query name.
+	 *
+	 * @param array<string,mixed> $map query_name => rows|WP_Error.
+	 * @return BigQuery_Proxy_Client
+	 */
+	private function proxy_by_query( array $map ): BigQuery_Proxy_Client {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturnCallback(
+			static function ( $query_name ) use ( $map ) {
+				return $map[ $query_name ] ?? [];
+			}
+		);
+		return $proxy;
+	}
+
+	/**
+	 * 3.2 source mix: each Woo record is attributed to the BQ event that precedes
+	 * its order within 1800s; unmatched → direct.
+	 */
+	public function test_source_mix_subscribers_attributes_by_timestamp(): void {
+		$order_ts = 1_700_000_000;
+		// Two subscribers; one has a gate event 60s before their order, one has none.
+		$records = [
+			[
+				'customer_id' => 1,
+				'ts'          => $order_ts,
+			],
+			[
+				'customer_id' => 2,
+				'ts'          => $order_ts + 5000,
+			],
+		];
+		$bq_rows = [
+			[
+				'attempt_ts'   => (string) ( ( $order_ts - 60 ) * 1_000_000 ),
+				'gate_post_id' => '99',
+				'popup_id'     => '',
+			],
+		];
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_new_subscriber_records_in_window' )->willReturn( $records );
+		$metric = new Conversion_Metric(
+			$this->proxy_by_query( [ 'conversion_journey_source_mix_subscribers' => $bq_rows ] ),
+			null,
+			$subs,
+			null
+		);
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_subscribers( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 2, $result['total'] );
+		$by = [];
+		foreach ( $result['slices'] as $slice ) {
+			$by[ $slice['source'] ] = $slice['count'];
+		}
+		$this->assertSame( 1, $by['gate'] );
+		$this->assertSame( 0, $by['prompt'] );
+		$this->assertSame( 1, $by['direct'] ); // customer 2 unmatched → direct.
+	}
+
+	/**
+	 * 3.2 source mix: a proxy WP_Error yields the error envelope.
+	 */
+	public function test_source_mix_subscribers_proxy_error(): void {
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_new_subscriber_records_in_window' )->willReturn( [] );
+		$metric = new Conversion_Metric(
+			$this->proxy_returning( new \WP_Error( 'boom', 'nope' ) ),
+			null,
+			$subs,
+			null
+		);
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_subscribers( $start, $end );
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'boom', $result['error_code'] );
+		$this->assertSame( [], $result['slices'] );
+	}
+
+	/**
+	 * 3.2 source mix: no Woo records → empty envelope (no division by zero).
+	 */
+	public function test_source_mix_subscribers_empty_records(): void {
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_new_subscriber_records_in_window' )->willReturn( [] );
+		$metric = new Conversion_Metric(
+			$this->proxy_returning( [] ),
+			null,
+			$subs,
+			null
+		);
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_subscribers( $start, $end );
+		$this->assertSame( 'empty', $result['state'] );
+		$this->assertSame( 0, $result['total'] );
+		$this->assertSame( [], $result['slices'] );
+	}
+
+	/**
 	 * The fixture populates `previous` when comparison is requested.
 	 */
 	public function test_fixture_compare_populates_previous() {

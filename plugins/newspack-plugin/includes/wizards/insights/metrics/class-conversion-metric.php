@@ -54,6 +54,7 @@ defined( 'ABSPATH' ) || exit;
 use DateTimeInterface;
 use Newspack\Insights\BigQuery_Proxy_Client;
 use Newspack\Insights\Donors_Metric;
+use Newspack\Insights\Source_Matcher;
 use Newspack\Insights\Subscribers_Metric;
 use Newspack\Insights\Woo_Order_Resolver;
 
@@ -699,59 +700,70 @@ final class Conversion_Metric {
 	/**
 	 * Source mix for new subscribers (C12 / 3.2) — gate / prompt / direct.
 	 *
-	 * Fetches `conversion_journey_source_mix_subscribers` checkout-attempt rows
-	 * from the hub, buckets them by source (gate if `gate_post_id` is non-empty;
-	 * else prompt if `popup_id` non-empty; else direct), and Woo-joins each
-	 * non-empty bucket via {@see Woo_Order_Resolver::count_completed_orders()} to
-	 * get the actual subscriber count attributable to that surface. The
-	 * `fetch_paid_attempts_woo_join` memoized cache is shared with C14
-	 * (influenced subscription rate), which reads the same rows for its
-	 * denominator.
+	 * Fetches Woo conversion records via Subscribers_Metric and BQ exposure
+	 * events via the proxy, then delegates to compute_source_mix to attribute
+	 * each record to a source via Source_Matcher timestamp proximity.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array{state: string, total: int, slices: array<int, array{source: string, count: int, pct: float}>}
 	 */
 	public function get_source_mix_subscribers( DateTimeInterface $start, DateTimeInterface $end ): array {
-		return $this->compute_source_mix( 'conversion_journey_source_mix_subscribers', $start, $end );
+		$records = $this->subscribers_metric->get_new_subscriber_records_in_window( $start, $end );
+		return $this->compute_source_mix( 'conversion_journey_source_mix_subscribers', $records, $start, $end );
 	}
 
 	/**
 	 * Source mix for new donors (C13 / 3.3) — gate / prompt / direct.
 	 *
-	 * Identical logic to C12 using the `conversion_journey_source_mix_donors`
-	 * query. The memoized cache is shared with C15 (influenced donation rate),
-	 * which reads the same rows for its denominator.
+	 * Fetches Woo conversion records via Donors_Metric and BQ exposure events
+	 * via the proxy, then delegates to compute_source_mix to attribute each
+	 * record to a source via Source_Matcher timestamp proximity.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array{state: string, total: int, slices: array<int, array{source: string, count: int, pct: float}>}
 	 */
 	public function get_source_mix_donors( DateTimeInterface $start, DateTimeInterface $end ): array {
-		return $this->compute_source_mix( 'conversion_journey_source_mix_donors', $start, $end );
+		$records = $this->donors_metric->get_new_donor_records_in_window( $start, $end );
+		return $this->compute_source_mix( 'conversion_journey_source_mix_donors', $records, $start, $end );
 	}
 
 	/**
-	 * Shared source-mix computation for C12 and C13.
+	 * Classify a BQ source-mix row to gate / prompt / direct.
 	 *
-	 * Fetches attempt rows via `fetch_paid_attempts_woo_join` (memoized), buckets
-	 * by source (gate → prompt → direct), Woo-joins each bucket independently,
-	 * and builds the { state, total, slices } collection.
+	 * @param array<string,mixed> $row BQ row.
+	 * @return string One of self::SOURCES.
+	 */
+	private function classify_source( array $row ): string {
+		if ( ! empty( $row['gate_post_id'] ) ) {
+			return 'gate';
+		}
+		if ( ! empty( $row['popup_id'] ) ) {
+			return 'prompt';
+		}
+		return Source_Matcher::SOURCE_DIRECT;
+	}
+
+	/**
+	 * Source-mix via the Woo identity spine. The BQ query supplies exposure
+	 * events (attempt_ts in microseconds + gate/popup params); each Woo
+	 * conversion record is matched to the nearest preceding event within
+	 * Source_Matcher::WINDOW_ORDER_SECONDS, unmatched → direct.
 	 *
-	 * @param string            $query_name Hub catalog query name.
-	 * @param DateTimeInterface $start      Window start.
-	 * @param DateTimeInterface $end        Window end.
+	 * @param string                                     $query_name Hub catalog query name.
+	 * @param array<int, array{customer_id:int, ts:int}> $records    Woo conversion records.
+	 * @param DateTimeInterface                          $start      Window start.
+	 * @param DateTimeInterface                          $end        Window end.
 	 * @return array
 	 */
-	private function compute_source_mix( string $query_name, DateTimeInterface $start, DateTimeInterface $end ): array {
-		$joined = $this->fetch_paid_attempts_woo_join( $query_name, $start, $end );
-		if ( is_wp_error( $joined ) ) {
-			return $this->error_collection( 'slices', $joined );
+	private function compute_source_mix( string $query_name, array $records, DateTimeInterface $start, DateTimeInterface $end ): array {
+		$bq = $this->proxy->query( $query_name, $start, $end );
+		if ( is_wp_error( $bq ) ) {
+			return $this->error_collection( 'slices', $bq );
 		}
 
-		$rows = $joined['rows'];
-
-		if ( empty( $rows ) ) {
+		if ( empty( $records ) ) {
 			return [
 				'state'  => 'empty',
 				'total'  => 0,
@@ -759,43 +771,33 @@ final class Conversion_Metric {
 			];
 		}
 
-		// Bucket rows by source. Each row's source is classified:
-		// gate   — gate_post_id is non-empty.
-		// prompt — gate_post_id is empty but popup_id is non-empty.
-		// direct — both are empty.
-		$buckets = [
-			'gate'   => [],
-			'prompt' => [],
-			'direct' => [],
-		];
-		foreach ( $rows as $row ) {
+		$events = [];
+		foreach ( (array) $bq as $row ) {
 			if ( ! is_array( $row ) ) {
-				return $this->malformed_collection( 'slices' );
+				continue;
 			}
-			if ( ! empty( $row['gate_post_id'] ) ) {
-				$buckets['gate'][] = $row;
-			} elseif ( ! empty( $row['popup_id'] ) ) {
-				$buckets['prompt'][] = $row;
-			} else {
-				$buckets['direct'][] = $row;
-			}
+			$events[] = [
+				'ts'     => intdiv( (int) ( $row['attempt_ts'] ?? 0 ), 1000000 ),
+				'source' => $this->classify_source( $row ),
+			];
 		}
 
-		// For each non-empty bucket, Woo-join to get the completed-order count.
-		$counts = [];
-		$total  = 0;
-		foreach ( self::SOURCES as $source ) {
-			$count          = empty( $buckets[ $source ] )
-				? 0
-				: $this->woo_resolver->count_completed_orders( $buckets[ $source ] );
-			$counts[ $source ] = $count;
-			$total            += $count;
+		$match_input = [];
+		foreach ( $records as $record ) {
+			$match_input[] = [
+				'key' => (int) $record['customer_id'],
+				'ts'  => (int) $record['ts'],
+			];
 		}
 
+		$map    = Source_Matcher::attach_sources( $match_input, $events, Source_Matcher::WINDOW_ORDER_SECONDS, 0 );
+		$counts = Source_Matcher::count_by_source( $map );
+		$total  = array_sum( $counts );
 		$safe   = $total > 0 ? $total : 1;
+
 		$slices = [];
 		foreach ( self::SOURCES as $source ) {
-			$count    = $counts[ $source ];
+			$count    = (int) ( $counts[ $source ] ?? 0 );
 			$slices[] = [
 				'source' => $source,
 				'count'  => $count,
