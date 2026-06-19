@@ -820,22 +820,54 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * C12 populated: proxy returns attempt rows; resolver assigns 1 order per
-	 * non-empty source bucket → correct total, slices, pct values.
+	 * C12 populated: Subscribers_Metric returns three records; BQ supplies one
+	 * gate event and one prompt event timed within 1800 s before two of them;
+	 * the third record has no matching event → direct. Source_Matcher attributes
+	 * gate=1, prompt=1, direct=1 → total=3, pct=1/3 each.
 	 */
 	public function test_source_mix_subscribers_returns_populated_slices_on_success() {
-		$rows  = $this->source_mix_rows();
+		$order_ts = 1_717_000_000;
+
+		$records = [
+			[
+				'customer_id' => 101,
+				'ts'          => $order_ts,
+			],
+			[
+				'customer_id' => 102,
+				'ts'          => $order_ts + 1000,
+			],
+			[
+				'customer_id' => 103,
+				'ts'          => $order_ts + 2000,
+			],
+		];
+
+		// Event 1: gate event 60 s before record 101.
+		// Event 2: prompt event 60 s before record 102.
+		// Record 103 has no matching event → attributed to direct.
+		$bq_rows = [
+			[
+				'attempt_ts'   => (string) ( ( $order_ts - 60 ) * 1_000_000 ),
+				'gate_post_id' => '55',
+				'popup_id'     => '',
+			],
+			[
+				'attempt_ts'   => (string) ( ( $order_ts + 1000 - 60 ) * 1_000_000 ),
+				'gate_post_id' => '',
+				'popup_id'     => '42',
+			],
+		];
+
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_new_subscriber_records_in_window' )->willReturn( $records );
+
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
 		$proxy->method( 'query' )
 			->with( 'conversion_journey_source_mix_subscribers' )
-			->willReturn( $rows );
+			->willReturn( $bq_rows );
 
-		// Each bucket gets count_completed_orders called once; return 1 for gate
-		// (2 rows), 1 for prompt (1 row), 1 for direct (1 row).
-		$resolver = $this->createMock( Woo_Order_Resolver::class );
-		$resolver->method( 'count_completed_orders' )->willReturn( 1 );
-
-		$metric          = new Conversion_Metric( $proxy, $resolver );
+		$metric          = new Conversion_Metric( $proxy, null, $subs );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_source_mix_subscribers( $start, $end );
 
@@ -889,44 +921,93 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * C12 populated: zero-total guard — when all buckets resolve to 0 orders,
-	 * total=0 and pct=0.0 for all slices (no div-by-zero).
+	 * C12 zero-count-slice guard — a single record with no matching BQ event
+	 * is attributed to direct; gate and prompt buckets have count=0 and must
+	 * produce pct=0.0 (no division-by-zero via the $safe guard in compute_source_mix).
+	 *
+	 * Note: the original test asserted total=0 with pct=0 on all slices. Under
+	 * the Source_Matcher mechanism total always equals the record count (every
+	 * record gets exactly one source), so a zero-total with non-empty records is
+	 * impossible; the equivalent guard is that zero-count source buckets yield
+	 * pct=0.0 rather than NaN or a division error.
 	 */
 	public function test_source_mix_subscribers_guards_zero_total() {
-		$rows  = $this->source_mix_rows();
-		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		$proxy->method( 'query' )->willReturn( $rows );
+		// One record, no matching BQ events → entire total goes to direct.
+		$records = [
+			[
+				'customer_id' => 101,
+				'ts'          => 1_717_000_000,
+			],
+		];
 
-		$resolver = $this->createMock( Woo_Order_Resolver::class );
-		$resolver->method( 'count_completed_orders' )->willReturn( 0 );
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_new_subscriber_records_in_window' )->willReturn( $records );
 
-		$metric          = new Conversion_Metric( $proxy, $resolver );
+		$metric          = new Conversion_Metric(
+			$this->proxy_by_query( [ 'conversion_journey_source_mix_subscribers' => [] ] ),
+			null,
+			$subs
+		);
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_source_mix_subscribers( $start, $end );
 
 		$this->assertSame( 'populated', $result['state'] );
-		$this->assertSame( 0, $result['total'] );
-		foreach ( $result['slices'] as $slice ) {
-			$this->assertSame( 0.0, $slice['pct'] );
-		}
+		$this->assertSame( 1, $result['total'] ); // 1 record, all direct.
+		$by_source = array_column( $result['slices'], null, 'source' );
+		// Zero-count buckets must produce 0.0 pct, not a division error.
+		$this->assertSame( 0.0, $by_source['gate']['pct'] );
+		$this->assertSame( 0.0, $by_source['prompt']['pct'] );
+		$this->assertSame( 0, $by_source['gate']['count'] );
+		$this->assertSame( 0, $by_source['prompt']['count'] );
 	}
 
 	// --- C13: get_source_mix_donors -----------------------------------------
 
 	/**
-	 * C13 populated: identical logic to C12, different query name.
+	 * C13 populated: identical logic to C12 using Donors_Metric and the donors
+	 * query name. Two records match BQ gate/prompt events; one is unmatched →
+	 * direct. Total=3, gate=1, prompt=1, direct=1.
 	 */
 	public function test_source_mix_donors_returns_populated_slices_on_success() {
-		$rows  = $this->source_mix_rows();
+		$order_ts = 1_717_000_000;
+
+		$records = [
+			[
+				'customer_id' => 201,
+				'ts'          => $order_ts,
+			],
+			[
+				'customer_id' => 202,
+				'ts'          => $order_ts + 1000,
+			],
+			[
+				'customer_id' => 203,
+				'ts'          => $order_ts + 2000,
+			],
+		];
+
+		$bq_rows = [
+			[
+				'attempt_ts'   => (string) ( ( $order_ts - 60 ) * 1_000_000 ),
+				'gate_post_id' => '77',
+				'popup_id'     => '',
+			],
+			[
+				'attempt_ts'   => (string) ( ( $order_ts + 1000 - 60 ) * 1_000_000 ),
+				'gate_post_id' => '',
+				'popup_id'     => '33',
+			],
+		];
+
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_new_donor_records_in_window' )->willReturn( $records );
+
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
 		$proxy->method( 'query' )
 			->with( 'conversion_journey_source_mix_donors' )
-			->willReturn( $rows );
+			->willReturn( $bq_rows );
 
-		$resolver = $this->createMock( Woo_Order_Resolver::class );
-		$resolver->method( 'count_completed_orders' )->willReturn( 1 );
-
-		$metric          = new Conversion_Metric( $proxy, $resolver );
+		$metric          = new Conversion_Metric( $proxy, null, null, $donors );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_source_mix_donors( $start, $end );
 
@@ -934,6 +1015,11 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertArrayNotHasKey( 'pending', $result );
 		$this->assertSame( 3, $result['total'] );
 		$this->assertCount( 3, $result['slices'] );
+
+		$by_source = array_column( $result['slices'], null, 'source' );
+		$this->assertSame( 1, $by_source['gate']['count'] );
+		$this->assertSame( 1, $by_source['prompt']['count'] );
+		$this->assertSame( 1, $by_source['direct']['count'] );
 	}
 
 	/**
