@@ -90,15 +90,40 @@ restore_workspace_deps_and_commit() {
 }
 
 # Notify Slack about a failed post-release merge into $1, if Slack is configured.
+# $2 (optional) is a newline-separated list of conflicting files; when present
+# they're named in the message so readers can tell what needs reconciling
+# without opening the build log.
 notify_slack() {
   local target="$1"
+  local conflicts="${2:-}"
   if [ -z "${SLACK_CHANNEL_ID:-}" ] || [ -z "${SLACK_AUTH_TOKEN:-}" ]; then
     echo "[post-release] Missing Slack channel ID and/or token. Cannot notify."
     return
   fi
   echo "[post-release] Notifying the team on Slack."
+  # Build the JSON payload with node (already used in this script) rather than
+  # hand-rolling it: the conflict list is variable-length and newline-separated,
+  # and raw newlines aren't valid inside a JSON string literal. node's
+  # JSON.stringify escapes the message text correctly.
+  local payload
+  payload=$(TARGET="$target" CONFLICTS="$conflicts" node -e '
+    const conflicts = (process.env.CONFLICTS || "")
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    let text = `⚠️ Post-release merge to \`${process.env.TARGET}\` failed for: \`${process.env.GITHUB_REPOSITORY}\`.`;
+    if (conflicts.length) {
+      text += "\nConflicting files:\n" + conflicts.map((f) => `• \`${f}\``).join("\n");
+    }
+    const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+    text += `\nCheck <${runUrl}|the build> for details.`;
+    process.stdout.write(JSON.stringify({
+      channel: process.env.SLACK_CHANNEL_ID,
+      blocks: [{ type: "section", text: { type: "mrkdwn", text } }],
+    }));
+  ')
   curl \
-    --data "{\"channel\":\"$SLACK_CHANNEL_ID\",\"blocks\":[{\"type\":\"section\",\"text\":{\"type\":\"mrkdwn\",\"text\":\"⚠️ Post-release merge to \`$target\` failed for: \`$GITHUB_REPOSITORY\`. Check <$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID|the build> for details.\"}}]}" \
+    --data "$payload" \
     -H "Content-type: application/json" \
     -H "Authorization: Bearer $SLACK_AUTH_TOKEN" \
     -X POST https://slack.com/api/chat.postMessage \
@@ -125,9 +150,11 @@ else
     restore_workspace_deps_and_commit alpha
     git push origin alpha
   else
+    # Capture the conflicting paths before --abort clears the unmerged state.
+    conflicts=$(git diff --name-only --diff-filter=U)
     git merge --abort
     echo "[post-release] Post-release merge to alpha failed."
-    notify_slack alpha
+    notify_slack alpha "$conflicts"
     sync_failed=1
   fi
 fi
@@ -138,9 +165,11 @@ if git merge --no-ff release -m "chore(release): merge in release $LATEST_VERSIO
   restore_workspace_deps_and_commit "$DEFAULT_BRANCH"
   git push origin "$DEFAULT_BRANCH"
 else
+  # Capture the conflicting paths before --abort clears the unmerged state.
+  conflicts=$(git diff --name-only --diff-filter=U)
   git merge --abort
   echo "[post-release] Post-release merge to $DEFAULT_BRANCH failed."
-  notify_slack "$DEFAULT_BRANCH"
+  notify_slack "$DEFAULT_BRANCH" "$conflicts"
   sync_failed=1
 fi
 
