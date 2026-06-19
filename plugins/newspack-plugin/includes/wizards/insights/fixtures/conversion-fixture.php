@@ -38,8 +38,8 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 		'end'   => $prev_end->format( 'Y-m-d' ),
 	];
 
-	// Deferred Phase-B sections — always 'coming_soon' regardless of variant.
-	// Each preserves the extra keys React reads unconditionally.
+	// Phase-B sections — 4.2/4.3/5.1/5.2 are 'coming_soon'; 4.4 is 'populated'
+	// (implemented). Each preserves the extra keys React reads unconditionally.
 	$deferred = static function () {
 		return [
 			// 4.2 — time-to-subscribe (multi-series).
@@ -52,9 +52,9 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 				'state'  => 'coming_soon',
 				'groups' => [],
 			],
-			// 4.4 — subscriber-to-donor lag (visibility-gated).
+			// 4.4 — subscriber-to-donor lag (visibility-gated single-series CDF).
 			'subscriber_to_donor_lag_distribution' => [
-				'state'             => 'coming_soon',
+				'state'             => 'populated',
 				'points'            => [],
 				'visibility'        => 'hidden',
 				'visibility_reason' => 'insufficient_data',

@@ -185,14 +185,14 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	// --- C22: get_subscriber_to_donor_lag_distribution ---------------------
 
 	/**
-	 * C22 coming_soon: returns state 'coming_soon' with an empty 'points'
-	 * collection, preserved visibility keys, and no 'pending' key.
+	 * C22: returns state 'populated' with an empty 'points' collection when
+	 * below the cross-converter threshold, plus preserved visibility keys.
 	 */
 	public function test_lag_distribution_is_coming_soon_with_visibility_keys() {
 		[ $start, $end ] = $this->window();
 		$result          = $this->metric->get_subscriber_to_donor_lag_distribution( $start, $end );
 
-		$this->assertSame( 'coming_soon', $result['state'] );
+		$this->assertSame( 'populated', $result['state'] );
 		$this->assertArrayHasKey( 'points', $result );
 		$this->assertSame( [], $result['points'] );
 		$this->assertSame( 'hidden', $result['visibility'] );
@@ -1855,8 +1855,8 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'coming_soon', $current['time_to_donate_distribution']['state'] );
 		$this->assertArrayHasKey( 'groups', $current['time_to_donate_distribution'] );
 
-		// 4.4 — lag distribution (points + visibility keys).
-		$this->assertSame( 'coming_soon', $current['subscriber_to_donor_lag_distribution']['state'] );
+		// 4.4 — lag distribution (points + visibility keys); populated but hidden when below threshold.
+		$this->assertSame( 'populated', $current['subscriber_to_donor_lag_distribution']['state'] );
 		$this->assertSame( [], $current['subscriber_to_donor_lag_distribution']['points'] );
 		$this->assertSame( 'hidden', $current['subscriber_to_donor_lag_distribution']['visibility'] );
 		$this->assertSame( 'insufficient_data', $current['subscriber_to_donor_lag_distribution']['visibility_reason'] );
@@ -2281,5 +2281,44 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 			],
 			$direct['points'] 
 		); // customer 11; customer 12 truncated.
+	}
+
+	/**
+	 * 4.4: below the 50-cross-converter gate → hidden.
+	 */
+	public function test_sub_to_donor_lag_hidden_below_threshold(): void {
+		$rows = array_map( static fn( $i ) => [ 'lag_days' => $i ], range( 1, 49 ) );
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_subscriber_to_donor_lags' )->willReturn( $rows );
+		$metric = new Conversion_Metric( $this->proxy_returning( [] ), null, null, $donors );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_subscriber_to_donor_lag_distribution( $start, $end );
+		$this->assertSame( 'hidden', $result['visibility'] );
+		$this->assertSame( 'insufficient_data', $result['visibility_reason'] );
+		$this->assertSame( [], $result['points'] );
+	}
+
+	/**
+	 * 4.4: at/above the gate → visible single-series CDF; lag > 365 truncated.
+	 */
+	public function test_sub_to_donor_lag_visible_at_threshold(): void {
+		$rows   = array_map( static fn( $i ) => [ 'lag_days' => 10 ], range( 1, 50 ) );
+		$rows[] = [ 'lag_days' => 400 ]; // truncated out, so 50 remain.
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_subscriber_to_donor_lags' )->willReturn( $rows );
+		$metric = new Conversion_Metric( $this->proxy_returning( [] ), null, null, $donors );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_subscriber_to_donor_lag_distribution( $start, $end );
+		$this->assertSame( 'visible', $result['visibility'] );
+		$this->assertNull( $result['visibility_reason'] );
+		$this->assertSame(
+			[
+				[
+					'day'            => 10,
+					'cumulative_pct' => 1.0,
+				],
+			],
+			$result['points'] 
+		);
 	}
 }

@@ -1049,25 +1049,40 @@ final class Conversion_Metric {
 
 	/**
 	 * Subscriber → donor lag cumulative distribution (4.4) — single series,
-	 * visibility-gated.
+	 * visibility-gated at self::MIN_COHORT_FOR_SUB_TO_DONOR cross-converters.
+	 * Pure Woo. Snapshot: ignores the window (all-history). May become windowed
+	 * later.
 	 *
-	 * Local-only (Woo-only): does NOT belong in the BQ catalog. Gated at 50
-	 * cross-converters. Phase B `coming_soon` placeholder; preserves the
-	 * `visibility` / `visibility_reason` keys React reads unconditionally.
-	 *
-	 * @param DateTimeInterface $start Window start.
-	 * @param DateTimeInterface $end   Window end.
+	 * @param DateTimeInterface $start Window start (ignored — snapshot).
+	 * @param DateTimeInterface $end   Window end (ignored — snapshot).
 	 * @return array{state: string, points: array, visibility: string, visibility_reason: string|null}
 	 */
 	public function get_subscriber_to_donor_lag_distribution( DateTimeInterface $start, DateTimeInterface $end ): array {
 		unset( $start, $end );
-		return array_merge(
-			$this->coming_soon_collection( 'points' ),
-			[
+		$days = [];
+		foreach ( $this->donors_metric->get_subscriber_to_donor_lags() as $row ) {
+			$lag = (int) $row['lag_days'];
+			if ( $lag < 0 || $lag > 365 ) {
+				continue;
+			}
+			$days[] = $lag;
+		}
+
+		if ( count( $days ) < self::MIN_COHORT_FOR_SUB_TO_DONOR ) {
+			return [
+				'state'             => 'populated',
+				'points'            => [],
 				'visibility'        => 'hidden',
 				'visibility_reason' => 'insufficient_data',
-			]
-		);
+			];
+		}
+
+		return [
+			'state'             => 'populated',
+			'points'            => $this->cumulative_distribution( $days ),
+			'visibility'        => 'visible',
+			'visibility_reason' => null,
+		];
 	}
 
 	// --- Section 5: Cohort retention ------------------------------------
