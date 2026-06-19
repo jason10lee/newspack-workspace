@@ -181,15 +181,34 @@ class Insights_Wizard extends Wizard {
 	const DONATION_ACTIVITY_TRANSIENT = 'newspack_insights_has_donation_activity';
 
 	/**
-	 * Donors tab visibility. True when the publisher has at least one
-	 * donation-related order or subscription in their history.
+	 * Trailing window, in days, over which a completed donation order keeps the
+	 * Donors tab visible. Matches the active-donor recency leg the donor
+	 * storage adapters use ({@see \Newspack\Insights\HPOS_Donors_Storage}),
+	 * so the visibility gate and the tab's own metrics agree on what counts
+	 * as "has donations". (Active subscriptions keep the tab visible
+	 * regardless of this window — see {@see self::build_donation_activity_sql()}.)
+	 *
+	 * @var int
+	 */
+	const DONATION_ACTIVITY_WINDOW_DAYS = 365;
+
+	/**
+	 * Donors tab visibility. True when the publisher has active donation
+	 * activity — an active donation subscription, or a completed donation
+	 * order in the trailing {@see self::DONATION_ACTIVITY_WINDOW_DAYS} days
+	 * (the same two-leg definition the Donors metrics use for an active
+	 * donor). A publisher who collects donations through a third-party
+	 * platform — or who has no active donation subscription and no
+	 * Newspack-native WooCommerce donation order in over a year — does not
+	 * get the tab, because its metrics would have nothing to report.
 	 *
 	 * Product existence is NOT a useful signal: every Newspack publisher
 	 * receives the canonical donation product family on install regardless
 	 * of whether they ever collect donations, so a product-existence
 	 * check showed Tab 7 on every site, including the many publishers
-	 * who have never taken a donation. Activity is the right heuristic —
-	 * a single qualifying order or subscription gates the tab visible.
+	 * who have never taken a donation. Recent activity is the right
+	 * heuristic — an active donation subscription, or a single qualifying
+	 * donation order in the trailing window, gates the tab visible.
 	 *
 	 * Result is cached for 24h via {@see self::DONATION_ACTIVITY_TRANSIENT}.
 	 * State transitions ("publisher started taking donations") are rare
@@ -227,6 +246,16 @@ class Insights_Wizard extends Wizard {
 	 */
 	public static function force_refresh_donation_activity(): bool {
 		delete_transient( self::DONATION_ACTIVITY_TRANSIENT );
+		// Recompute from live state: also clear the donation-product set and
+		// backend caches the activity query depends on, so a just-configured
+		// donation (or a test) isn't evaluated against a stale product set or
+		// backend.
+		if ( class_exists( '\Newspack\Insights\Donation_Product_Classifier' ) ) {
+			\Newspack\Insights\Donation_Product_Classifier::flush_cache();
+		}
+		if ( class_exists( '\Newspack\Insights\Storage_Detector' ) ) {
+			\Newspack\Insights\Storage_Detector::force_refresh();
+		}
 		$has_activity = self::compute_donation_activity();
 		set_transient( self::DONATION_ACTIVITY_TRANSIENT, $has_activity ? 'yes' : 'no', DAY_IN_SECONDS );
 		return $has_activity;
@@ -247,9 +276,6 @@ class Insights_Wizard extends Wizard {
 			return false;
 		}
 
-		global $wpdb;
-		$donations_list = implode( ',', array_map( 'intval', $donation_ids ) );
-
 		// Dispatch by backend so we read from the authoritative orders
 		// source rather than scanning a potentially stale legacy CPT
 		// table on HPOS sites (or vice versa).
@@ -257,44 +283,96 @@ class Insights_Wizard extends Wizard {
 			? \Newspack\Insights\Storage_Detector::detect()
 			: 'legacy';
 
-		// Constrain to statuses that represent actual donation activity:
-		// completed/processing/refunded one-time orders, and subscriptions that
-		// have genuinely existed (active through expired). This keeps failed,
-		// pending, trash, auto-draft, and checkout-draft objects from surfacing
-		// the tab on a site that never actually took a donation.
+		$donations_list = implode( ',', array_map( 'intval', $donation_ids ) );
+
+		global $wpdb;
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return (bool) (int) $wpdb->get_var( self::build_donation_activity_sql( $backend, $donations_list ) );
+		// phpcs:enable
+	}
+
+	/**
+	 * Build the query that tests for active donation activity.
+	 *
+	 * Mirrors the two-leg "active donor" definition the Donors metrics use
+	 * ({@see \Newspack\Insights\HPOS_Donors_Storage::get_active_donors()}) so
+	 * the gate and the tab's own scorecards agree on whether there's anything
+	 * to show. A publisher is active if EITHER:
+	 *
+	 *  - they have an **active donation subscription** (`shop_subscription` in
+	 *    `wc-active`), regardless of date — this keeps recurring donors
+	 *    (annual subscribers, and subscribers whose latest renewal order is
+	 *    pending/on-hold after a retry) visible, which a shop_order-only
+	 *    recency check would wrongly hide; OR
+	 *  - they have a **completed donation order** (`shop_order` in
+	 *    `wc-completed` / `wc-processing`) in the trailing
+	 *    {@see self::DONATION_ACTIVITY_WINDOW_DAYS}-day window — this also
+	 *    covers one-time gifts and subscription renewals, which post their own
+	 *    dated `shop_order` rows.
+	 *
+	 * The order leg resolves products via `wc_order_product_lookup`, the same
+	 * table the metrics use, so the two can't disagree at the margins: if that
+	 * analytics table is unpopulated the tab's metrics are empty too, so
+	 * hiding stays consistent. Lapsed subscription statuses (`wc-cancelled`,
+	 * `wc-expired`, …) and refunded/failed/pending orders are intentionally
+	 * excluded — they aren't active activity. `UTC_TIMESTAMP()` matches the
+	 * UTC `*_gmt` columns.
+	 *
+	 * Returned as a string (rather than executed in place) so the query shape
+	 * is unit-testable without WooCommerce order tables installed.
+	 *
+	 * @param string $backend        Storage backend: 'hpos' or 'legacy'.
+	 * @param string $donations_list Comma-separated, integer-sanitized product IDs.
+	 * @return string SQL string.
+	 */
+	private static function build_donation_activity_sql( string $backend, string $donations_list ): string {
+		global $wpdb;
+		$prefix = $wpdb->prefix;
+		$days   = (int) self::DONATION_ACTIVITY_WINDOW_DAYS;
+
 		if ( 'hpos' === $backend ) {
-			$sql = "SELECT EXISTS (
-				SELECT 1 FROM {$wpdb->prefix}wc_orders o
-				JOIN {$wpdb->prefix}woocommerce_order_items items ON items.order_id = o.id
-				JOIN {$wpdb->prefix}woocommerce_order_itemmeta meta
-					ON meta.order_item_id = items.order_item_id
-					AND meta.meta_key = '_product_id'
-				WHERE (
-					( o.type = 'shop_order' AND o.status IN ('wc-completed', 'wc-processing', 'wc-refunded') )
-					OR ( o.type = 'shop_subscription' AND o.status IN ('wc-active', 'wc-on-hold', 'wc-pending-cancel', 'wc-cancelled', 'wc-expired') )
+			return "SELECT (
+				EXISTS (
+					SELECT 1 FROM {$prefix}wc_orders o
+					JOIN {$prefix}woocommerce_order_items oi
+						ON oi.order_id = o.id AND oi.order_item_type = 'line_item'
+					JOIN {$prefix}woocommerce_order_itemmeta oim
+						ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+					WHERE o.type = 'shop_subscription'
+					  AND o.status = 'wc-active'
+					  AND oim.meta_value IN ($donations_list)
 				)
-				  AND meta.meta_value IN ($donations_list)
-				LIMIT 1
-			) AS has_activity";
-		} else {
-			$sql = "SELECT EXISTS (
-				SELECT 1 FROM {$wpdb->prefix}posts p
-				JOIN {$wpdb->prefix}woocommerce_order_items items ON items.order_id = p.ID
-				JOIN {$wpdb->prefix}woocommerce_order_itemmeta meta
-					ON meta.order_item_id = items.order_item_id
-					AND meta.meta_key = '_product_id'
-				WHERE (
-					( p.post_type = 'shop_order' AND p.post_status IN ('wc-completed', 'wc-processing', 'wc-refunded') )
-					OR ( p.post_type = 'shop_subscription' AND p.post_status IN ('wc-active', 'wc-on-hold', 'wc-pending-cancel', 'wc-cancelled', 'wc-expired') )
+				OR EXISTS (
+					SELECT 1 FROM {$prefix}wc_orders o
+					JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = o.id
+					WHERE o.type = 'shop_order'
+					  AND o.status IN ('wc-completed', 'wc-processing')
+					  AND o.date_created_gmt >= DATE_SUB( UTC_TIMESTAMP(), INTERVAL {$days} DAY )
+					  AND opl.product_id IN ($donations_list)
 				)
-				  AND meta.meta_value IN ($donations_list)
-				LIMIT 1
 			) AS has_activity";
 		}
 
-		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		return (bool) (int) $wpdb->get_var( $sql );
-		// phpcs:enable
+		return "SELECT (
+			EXISTS (
+				SELECT 1 FROM {$prefix}posts p
+				JOIN {$prefix}woocommerce_order_items oi
+					ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
+				JOIN {$prefix}woocommerce_order_itemmeta oim
+					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+				WHERE p.post_type = 'shop_subscription'
+				  AND p.post_status = 'wc-active'
+				  AND oim.meta_value IN ($donations_list)
+			)
+			OR EXISTS (
+				SELECT 1 FROM {$prefix}posts p
+				JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = p.ID
+				WHERE p.post_type = 'shop_order'
+				  AND p.post_status IN ('wc-completed', 'wc-processing')
+				  AND p.post_date_gmt >= DATE_SUB( UTC_TIMESTAMP(), INTERVAL {$days} DAY )
+				  AND opl.product_id IN ($donations_list)
+			)
+		) AS has_activity";
 	}
 
 	/**
@@ -337,10 +415,10 @@ class Insights_Wizard extends Wizard {
 			// See is_advertising_tab_visible(). Subscribers stays all-on for now;
 			// Tab 6 visibility detection (non-donation subscription
 			// product presence) is a separate follow-up. Donors hides
-			// when there's no donation activity — has_donation_activity()
+			// when there's no recent donation activity — has_donation_activity()
 			// uses the Donation_Product_Classifier to find donation
-			// products, then checks for actual orders/subscriptions in
-			// qualifying statuses (result cached for a day). Gates is
+			// products, then checks for an active donation subscription or a qualifying donation order in the
+			// trailing DONATION_ACTIVITY_WINDOW_DAYS window (cached for a day). Gates is
 			// gated to the preview constant NEWSPACK_INSIGHTS_GATES_PREVIEW
 			// while Phase 1 (placeholder data) is being validated.
 			'tabs'              => [
