@@ -40,18 +40,21 @@ const toLineSeries = ( data: ConversionCumulativeMulti ): LineSeries[] =>
 
 interface CurveCellProps {
 	title: string;
+	caption?: string;
 	children: React.ReactNode;
 }
 
-const CurveCell = ( { title, children }: CurveCellProps ) => (
+const CurveCell = ( { title, caption, children }: CurveCellProps ) => (
 	<div className="newspack-insights__conversion-curve-cell">
 		<h3 className="newspack-insights__conversion-subheading">{ title }</h3>
+		{ caption && <p className="newspack-insights__conversion-subcaption">{ caption }</p> }
 		{ children }
 	</div>
 );
 
 const HowLongConversionsTakeSection = ( { current }: HowLongConversionsTakeSectionProps ) => {
 	const lag = current.subscriber_to_donor_lag_distribution;
+	const snapshotCaption = __( 'This view always uses all available history, regardless of the selected date range.', 'newspack-plugin' );
 	return (
 		<section
 			className="newspack-insights__section newspack-insights__section--time-to-convert"
@@ -80,7 +83,7 @@ const HowLongConversionsTakeSection = ( { current }: HowLongConversionsTakeSecti
 					</SectionState>
 				</CurveCell>
 				{ /* 4.2 — time to subscribe: Phase B, coming_soon */ }
-				<CurveCell title={ __( 'Time to subscribe', 'newspack-plugin' ) }>
+				<CurveCell title={ __( 'Time to subscribe', 'newspack-plugin' ) } caption={ snapshotCaption }>
 					<SectionState
 						state={ current.time_to_subscribe_distribution.state }
 						emptyMessage={ __( 'Time-to-convert data will appear once conversions occur in this timeframe.', 'newspack-plugin' ) }
@@ -93,7 +96,7 @@ const HowLongConversionsTakeSection = ( { current }: HowLongConversionsTakeSecti
 					</SectionState>
 				</CurveCell>
 				{ /* 4.3 — time to donate: Phase B, coming_soon */ }
-				<CurveCell title={ __( 'Time to donate', 'newspack-plugin' ) }>
+				<CurveCell title={ __( 'Time to donate', 'newspack-plugin' ) } caption={ snapshotCaption }>
 					<SectionState
 						state={ current.time_to_donate_distribution.state }
 						emptyMessage={ __( 'Time-to-convert data will appear once conversions occur in this timeframe.', 'newspack-plugin' ) }
@@ -106,7 +109,7 @@ const HowLongConversionsTakeSection = ( { current }: HowLongConversionsTakeSecti
 					</SectionState>
 				</CurveCell>
 				{ /* 4.4 — subscriber → donor lag: Phase B, coming_soon + visibility gate */ }
-				<CurveCell title={ __( 'Subscriber → donor lag', 'newspack-plugin' ) }>
+				<CurveCell title={ __( 'Subscriber → donor lag', 'newspack-plugin' ) } caption={ snapshotCaption }>
 					{ lag.visibility === 'hidden' ? (
 						<p className="newspack-insights__conversion-gated-note">
 							{ __( 'Subscriber-to-donor lag appears when at least 50 readers have both subscribed and donated.', 'newspack-plugin' ) }

@@ -58,4 +58,23 @@ describe( 'HowLongConversionsTakeSection', () => {
 		// lag is visible but state is coming_soon — all three (4.2, 4.3, 4.4) show coming_soon.
 		expect( screen.getAllByText( /Coming soon/ ) ).toHaveLength( 3 );
 	} );
+
+	it( 'captions the snapshot charts as ignoring the date range', () => {
+		const emptyMulti = { state: 'empty' as const, groups: [] };
+		const baseWindow = {
+			time_to_register_distribution: { state: 'empty' as const, points: [] },
+			time_to_subscribe_distribution: emptyMulti,
+			time_to_donate_distribution: emptyMulti,
+			subscriber_to_donor_lag_distribution: {
+				state: 'empty' as const,
+				points: [],
+				visibility: 'visible' as const,
+				visibility_reason: null,
+			},
+		};
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		render( <HowLongConversionsTakeSection current={ baseWindow as any } /> );
+		const captions = screen.getAllByText( /uses all available history/i );
+		expect( captions ).toHaveLength( 3 ); // 4.2, 4.3, 4.4 — not 4.1.
+	} );
 } );
