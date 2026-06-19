@@ -406,6 +406,18 @@ class Donors_Metric {
 	}
 
 	/**
+	 * Earliest completed/processing donation order date per customer for the
+	 * given set. List-param — NOT cached (result varies per call). Keyed by
+	 * customer_id.
+	 *
+	 * @param int[] $customer_ids Customer IDs to look up.
+	 * @return array<int, \DateTimeImmutable>
+	 */
+	public function get_first_donation_order_dates( array $customer_ids ): array {
+		return $this->storage->get_first_donation_order_dates( $customer_ids );
+	}
+
+	/**
 	 * Flush all Tab 7 metric caches. Hook point for NPPD-1605.
 	 *
 	 * @return void

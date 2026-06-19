@@ -317,4 +317,19 @@ interface Donors_Storage_Interface {
 	 * @return array<int, array<string, mixed>>
 	 */
 	public function get_donations_by_tier( DateTimeInterface $start, DateTimeInterface $end ): array;
+
+	/**
+	 * Earliest completed/processing donation order date per customer, restricted
+	 * to the given customer set. Same first-donation-per-customer definition as
+	 * {@see get_new_donors_in_window()}, but returns the dates rather than
+	 * counting a window. Used by Tab 3 (Conversion Journey) to compute
+	 * registration→donation lag and to anchor the BQ source-match window.
+	 *
+	 * Customers in the input list with no completed donation are absent from the
+	 * result. Empty input returns `[]` with no DB round-trip.
+	 *
+	 * @param int[] $customer_ids Customer IDs to look up.
+	 * @return array<int, \DateTimeImmutable> customer_id => first donation date (UTC).
+	 */
+	public function get_first_donation_order_dates( array $customer_ids ): array;
 }

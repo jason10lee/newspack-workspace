@@ -905,6 +905,47 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 	}
 
 	/**
+	 * {@inheritDoc}
+	 *
+	 * @param int[] $customer_ids Customer IDs to look up.
+	 * @return array<int, \DateTimeImmutable>
+	 */
+	public function get_first_donation_order_dates( array $customer_ids ): array {
+		if ( empty( $customer_ids ) ) {
+			return [];
+		}
+
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+		$ids       = $this->id_list( $customer_ids );
+
+		// Legacy CPT equivalent of HPOS_Donors_Storage::get_first_donation_order_dates():
+		// earliest completed/processing donation order post_date_gmt per
+		// _customer_user, scoped to the given set. Mirrors get_new_donors_in_window().
+		$sql = "SELECT cust.meta_value AS customer_id, MIN(p.post_date_gmt) AS first_donation_date
+			FROM {$prefix}posts p
+			JOIN {$prefix}postmeta cust
+				ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
+			JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = p.ID
+			WHERE p.post_type = 'shop_order'
+			  AND p.post_status IN ('wc-completed', 'wc-processing')
+			  AND opl.product_id IN ($donations)
+			  AND cust.meta_value IN ($ids)
+			GROUP BY cust.meta_value";
+
+		$rows = $wpdb->get_results( $sql, ARRAY_A );
+		$map  = [];
+		foreach ( (array) $rows as $row ) {
+			if ( empty( $row['first_donation_date'] ) ) {
+				continue;
+			}
+			$map[ (int) $row['customer_id'] ] = new \DateTimeImmutable( $row['first_donation_date'], new \DateTimeZone( 'UTC' ) );
+		}
+		return $map;
+	}
+
+	/**
 	 * Aggregate flat per-variation rows into parent + nested variations.
 	 * Duplicated from {@see HPOS_Donors_Storage} — pure PHP transform
 	 * keeping each storage class self-contained.

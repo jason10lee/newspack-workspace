@@ -944,6 +944,45 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 	}
 
 	/**
+	 * {@inheritDoc}
+	 *
+	 * @param int[] $customer_ids Customer IDs to look up.
+	 * @return array<int, \DateTimeImmutable>
+	 */
+	public function get_first_donation_order_dates( array $customer_ids ): array {
+		if ( empty( $customer_ids ) ) {
+			return [];
+		}
+
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+		$ids       = $this->id_list( $customer_ids );
+
+		// Earliest completed/processing donation order date per customer, scoped
+		// to the given customer set. Mirrors the inner aggregate of
+		// get_new_donors_in_window() (same first-donation definition).
+		$sql = "SELECT o.customer_id, MIN(o.date_created_gmt) AS first_donation_date
+			FROM {$prefix}wc_orders o
+			JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = o.id
+			WHERE o.type = 'shop_order'
+			  AND o.status IN ('wc-completed', 'wc-processing')
+			  AND opl.product_id IN ($donations)
+			  AND o.customer_id IN ($ids)
+			GROUP BY o.customer_id";
+
+		$rows = $wpdb->get_results( $sql, ARRAY_A );
+		$map  = [];
+		foreach ( (array) $rows as $row ) {
+			if ( empty( $row['first_donation_date'] ) ) {
+				continue;
+			}
+			$map[ (int) $row['customer_id'] ] = new \DateTimeImmutable( $row['first_donation_date'], new \DateTimeZone( 'UTC' ) );
+		}
+		return $map;
+	}
+
+	/**
 	 * Aggregate flat per-variation rows into parent + nested
 	 * variations shape. Mirrors the Tab 6 pattern but with Tab 7's
 	 * five-metric column set.
