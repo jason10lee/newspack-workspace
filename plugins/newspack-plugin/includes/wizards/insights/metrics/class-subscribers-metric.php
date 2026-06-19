@@ -477,6 +477,18 @@ class Subscribers_Metric {
 	}
 
 	/**
+	 * New non-donation subscriber records (customer_id + first-sub epoch ts) in
+	 * the window, for Source_Matcher anchoring. List-param — NOT cached.
+	 *
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
+	 * @return array<int, array{customer_id:int, ts:int}>
+	 */
+	public function get_new_subscriber_records_in_window( DateTimeInterface $start, DateTimeInterface $end ): array {
+		return $this->storage->get_new_subscriber_records_in_window( $start, $end );
+	}
+
+	/**
 	 * Flush ALL Tab 6 metric caches. Use after a manual data correction
 	 * or from the future NPPD-1605 invalidation system; not wired to any
 	 * automatic trigger today because the WP transient API has no key

@@ -1174,4 +1174,67 @@ class HPOS_Storage implements Storage_Interface {
 		}
 		return $map;
 	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
+	 * @return array<int, array{customer_id:int, ts:int}>
+	 */
+	public function get_new_subscriber_records_in_window( DateTimeInterface $start, DateTimeInterface $end ): array {
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+
+		// Same inner aggregate as get_new_subscribers_in_window() (first
+		// non-donation _schedule_start per customer), filtered to the window,
+		// but returns the rows so the metric layer can anchor Source_Matcher on
+		// each customer's first-sub timestamp.
+		$sql = $wpdb->prepare(
+			"SELECT first_subs.customer_id, first_subs.first_start FROM (
+				SELECT o.customer_id, MIN(om.meta_value) AS first_start
+				FROM {$prefix}wc_orders o
+				JOIN {$prefix}wc_orders_meta om
+					ON om.order_id = o.id AND om.meta_key = '_schedule_start'
+				JOIN {$prefix}woocommerce_order_items oi
+					ON oi.order_id = o.id AND oi.order_item_type = 'line_item'
+				JOIN {$prefix}woocommerce_order_itemmeta oim
+					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+				WHERE o.type = 'shop_subscription'
+				  AND oim.meta_value NOT IN ($donations)
+				  AND om.meta_value != ''
+				GROUP BY o.customer_id
+			) AS first_subs
+			WHERE first_subs.first_start BETWEEN %s AND %s",
+			$this->fmt( $start ),
+			$this->fmt( $end )
+		);
+
+		return $this->rows_to_records( $wpdb->get_results( $sql, ARRAY_A ), 'first_start' );
+	}
+
+	/**
+	 * Map (customer_id, <date column>) rows to [ ['customer_id'=>int,'ts'=>int], … ]
+	 * with ts as UTC epoch seconds. Blank dates are skipped. The UTC parse keeps
+	 * the epoch correct regardless of MySQL session timezone.
+	 *
+	 * @param mixed  $rows     wpdb->get_results( …, ARRAY_A ) output.
+	 * @param string $date_key Row key holding the UTC `Y-m-d H:i:s` value.
+	 * @return array<int, array{customer_id:int, ts:int}>
+	 */
+	private function rows_to_records( $rows, string $date_key ): array {
+		$utc     = new \DateTimeZone( 'UTC' );
+		$records = [];
+		foreach ( (array) $rows as $row ) {
+			if ( empty( $row[ $date_key ] ) ) {
+				continue;
+			}
+			$records[] = [
+				'customer_id' => (int) $row['customer_id'],
+				'ts'          => ( new \DateTimeImmutable( $row[ $date_key ], $utc ) )->getTimestamp(),
+			];
+		}
+		return $records;
+	}
 }

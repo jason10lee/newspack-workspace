@@ -332,4 +332,16 @@ interface Donors_Storage_Interface {
 	 * @return array<int, \DateTimeImmutable> customer_id => first donation date (UTC).
 	 */
 	public function get_first_donation_order_dates( array $customer_ids ): array;
+
+	/**
+	 * New donors in the window, each with the epoch timestamp (UTC seconds) of
+	 * their FIRST completed/processing donation order. Same population as
+	 * {@see get_new_donors_in_window()} but returns one record per customer with
+	 * the anchor timestamp for Source_Matcher (Tab 3 source-mix 3.3).
+	 *
+	 * @param DateTimeInterface $start Inclusive window start.
+	 * @param DateTimeInterface $end   Inclusive window end.
+	 * @return array<int, array{customer_id:int, ts:int}>
+	 */
+	public function get_new_donor_records_in_window( DateTimeInterface $start, DateTimeInterface $end ): array;
 }

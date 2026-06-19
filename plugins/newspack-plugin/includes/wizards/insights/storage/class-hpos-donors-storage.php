@@ -983,6 +983,62 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 	}
 
 	/**
+	 * {@inheritDoc}
+	 *
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
+	 * @return array<int, array{customer_id:int, ts:int}>
+	 */
+	public function get_new_donor_records_in_window( DateTimeInterface $start, DateTimeInterface $end ): array {
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+
+		// Same inner aggregate as get_new_donors_in_window() (first completed/
+		// processing donation per customer), filtered to the window, returning rows.
+		$sql = $wpdb->prepare(
+			"SELECT first_donations.customer_id, first_donations.first_donation_date FROM (
+				SELECT o.customer_id, MIN(o.date_created_gmt) AS first_donation_date
+				FROM {$prefix}wc_orders o
+				JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = o.id
+				WHERE o.type = 'shop_order'
+				  AND o.status IN ('wc-completed', 'wc-processing')
+				  AND opl.product_id IN ($donations)
+				GROUP BY o.customer_id
+			) AS first_donations
+			WHERE first_donations.first_donation_date BETWEEN %s AND %s",
+			$this->fmt( $start ),
+			$this->fmt( $end )
+		);
+
+		return $this->rows_to_records( $wpdb->get_results( $sql, ARRAY_A ), 'first_donation_date' );
+	}
+
+	/**
+	 * Map (customer_id, <date column>) rows to [ ['customer_id'=>int,'ts'=>int], … ]
+	 * with ts as UTC epoch seconds. Blank dates skipped; UTC parse keeps the epoch
+	 * correct regardless of MySQL session timezone.
+	 *
+	 * @param mixed  $rows     wpdb->get_results( …, ARRAY_A ) output.
+	 * @param string $date_key Row key holding the UTC `Y-m-d H:i:s` value.
+	 * @return array<int, array{customer_id:int, ts:int}>
+	 */
+	private function rows_to_records( $rows, string $date_key ): array {
+		$utc     = new \DateTimeZone( 'UTC' );
+		$records = [];
+		foreach ( (array) $rows as $row ) {
+			if ( empty( $row[ $date_key ] ) ) {
+				continue;
+			}
+			$records[] = [
+				'customer_id' => (int) $row['customer_id'],
+				'ts'          => ( new \DateTimeImmutable( $row[ $date_key ], $utc ) )->getTimestamp(),
+			];
+		}
+		return $records;
+	}
+
+	/**
 	 * Aggregate flat per-variation rows into parent + nested
 	 * variations shape. Mirrors the Tab 6 pattern but with Tab 7's
 	 * five-metric column set.

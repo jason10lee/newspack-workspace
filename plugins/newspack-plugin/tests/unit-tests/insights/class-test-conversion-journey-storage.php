@@ -481,4 +481,52 @@ class Test_Conversion_Journey_Storage extends WP_UnitTestCase {
 		$metric = $this->make_subscribers_metric( $mock );
 		$this->assertSame( 0, $metric->get_stale_registered_users() );
 	}
+
+	/**
+	 * HPOS storages expose the new windowed-record methods.
+	 */
+	public function test_storages_implement_windowed_record_methods(): void {
+		$this->assertTrue( method_exists( new HPOS_Storage( [] ), 'get_new_subscriber_records_in_window' ) );
+		$this->assertTrue( method_exists( new Legacy_Storage( [] ), 'get_new_subscriber_records_in_window' ) );
+		$this->assertTrue( method_exists( new HPOS_Donors_Storage( [] ), 'get_new_donor_records_in_window' ) );
+		$this->assertTrue( method_exists( new Legacy_Donors_Storage( [] ), 'get_new_donor_records_in_window' ) );
+	}
+
+	/**
+	 * Subscribers_Metric::get_new_subscriber_records_in_window delegates (list-param, NOT cached).
+	 */
+	public function test_subscribers_metric_new_subscriber_records_delegates(): void {
+		$recs = [
+			[
+				'customer_id' => 1,
+				'ts'          => 1700000000,
+			],
+		];
+		$mock = $this->createMock( Storage_Interface::class );
+		$mock->expects( $this->exactly( 2 ) )
+			->method( 'get_new_subscriber_records_in_window' )
+			->willReturnOnConsecutiveCalls( $recs, [] );
+		$metric = $this->make_subscribers_metric( $mock );
+		$this->assertSame( $recs, $metric->get_new_subscriber_records_in_window( $this->make_date( '2026-03-01' ), $this->make_date( '2026-03-31' ) ) );
+		$this->assertSame( [], $metric->get_new_subscriber_records_in_window( $this->make_date( '2026-04-01' ), $this->make_date( '2026-04-30' ) ) );
+	}
+
+	/**
+	 * Donors_Metric::get_new_donor_records_in_window delegates (list-param, NOT cached).
+	 */
+	public function test_donors_metric_new_donor_records_delegates(): void {
+		$recs = [
+			[
+				'customer_id' => 5,
+				'ts'          => 1700000500,
+			],
+		];
+		$mock = $this->createMock( Donors_Storage_Interface::class );
+		$mock->expects( $this->exactly( 2 ) )
+			->method( 'get_new_donor_records_in_window' )
+			->willReturnOnConsecutiveCalls( $recs, [] );
+		$metric = $this->make_donors_metric( $mock );
+		$this->assertSame( $recs, $metric->get_new_donor_records_in_window( $this->make_date( '2026-03-01' ), $this->make_date( '2026-03-31' ) ) );
+		$this->assertSame( [], $metric->get_new_donor_records_in_window( $this->make_date( '2026-04-01' ), $this->make_date( '2026-04-30' ) ) );
+	}
 }
