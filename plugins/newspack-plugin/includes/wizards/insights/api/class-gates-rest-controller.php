@@ -301,7 +301,8 @@ class Gates_REST_Controller extends WP_REST_Controller {
 	private static function is_window_all_error( array $window ): bool {
 		foreach ( $window as $key => $value ) {
 			// Skip the date metadata and the scalar section-total fields
-			// (e.g. `paywall_attempts_total`, NPPD-1694) — neither is a metric.
+			// (`paywall_*_total`, NPPD-1694; `registration_impressions_total` /
+			// `registrations_total`, NPPD-1702 — int|null) — none is a metric.
 			if ( 'window' === $key || ! is_array( $value ) ) {
 				continue;
 			}
@@ -321,8 +322,10 @@ class Gates_REST_Controller extends WP_REST_Controller {
 	 * @return array
 	 */
 	private function build_window( Gates_Metric $metric, DateTimeImmutable $start, DateTimeImmutable $end ): array {
-		// Captured for the Paid-section totals below (NPPD-1694) — derived from
-		// these scalars, not re-queried.
+		// Captured for the section totals below — derived from these scalars, not
+		// re-queried. Paid (NPPD-1694) and Free (NPPD-1702) follow the same shape.
+		$regwall_direct     = $metric->get_regwall_conversion_direct( $start, $end );
+		$regwall_influenced = $metric->get_regwall_conversion_influenced_7d( $start, $end );
 		$paywall_direct     = $metric->get_paywall_conversion_direct( $start, $end );
 		$paywall_influenced = $metric->get_paywall_conversion_influenced_14d( $start, $end );
 
@@ -338,8 +341,8 @@ class Gates_REST_Controller extends WP_REST_Controller {
 				'avg_exposures_per_reader'           => $metric->get_avg_exposures_per_reader( $start, $end ),
 				'sessions_with_gate'                 => $metric->get_sessions_with_gate( $start, $end ),
 				// Section 2.
-				'regwall_conversion_direct'          => $metric->get_regwall_conversion_direct( $start, $end ),
-				'regwall_conversion_influenced_7d'   => $metric->get_regwall_conversion_influenced_7d( $start, $end ),
+				'regwall_conversion_direct'          => $regwall_direct,
+				'regwall_conversion_influenced_7d'   => $regwall_influenced,
 				// Section 3.
 				'paywall_conversion_direct'          => $paywall_direct,
 				'paywall_conversion_influenced_14d'  => $paywall_influenced,
@@ -351,6 +354,9 @@ class Gates_REST_Controller extends WP_REST_Controller {
 				// Section 5.
 				'performance_by_gate'                => $metric->get_performance_by_gate( $start, $end ),
 			],
+			// Section 2 empty-state totals (NPPD-1702) — int|null; null = hub count
+			// fields not yet deployed, so the Free section degrades to percentages.
+			Gates_Metric::regwall_section_totals( $regwall_direct, $regwall_influenced ),
 			// Section 3 empty-state totals (NPPD-1694).
 			Gates_Metric::paywall_section_totals( $paywall_direct, $paywall_influenced )
 		);
