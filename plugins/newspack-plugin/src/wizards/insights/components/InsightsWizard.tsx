@@ -29,6 +29,7 @@ import ComparisonToggle from './ComparisonToggle';
 import DateRangePicker from './DateRangePicker';
 import CooldownNotice from './CooldownNotice';
 import PrintDocumentMeta from './PrintDocumentMeta';
+import TabFeedback from './TabFeedback';
 import TabSpinner from '../tabs/components/TabSpinner';
 import useComparisonMode from '../state/useComparisonMode';
 import useDateRange, { type DateRange } from '../state/useDateRange';
@@ -172,9 +173,12 @@ interface TabSectionRenderProps extends TabSectionProps {
 /**
  * Per-tab wrapper rendered by the Wizard. Carries the print-only document
  * header/footer (NPPD-1661 — used by the "Download PDF" export), the
- * CooldownNotice, the error boundary (keyed by tab so a chunk-load error
- * clears when the user navigates away), and the Suspense boundary for the
- * lazy tab chunk.
+ * CooldownNotice, the error boundary (keyed by tab so a chunk-load error clears
+ * when the user navigates away), the Suspense boundary for the lazy tab chunk,
+ * and the per-tab feedback footer (NPPD-1728). The feedback footer sits outside
+ * the error boundary so it still renders — carrying the same `tabKey` as
+ * `context` — even when a tab chunk fails to load (feedback about a broken tab
+ * is still signal).
  */
 const TabSection = ( { tabKey, tabLabel, publisherName, range, previousRange }: TabSectionRenderProps ) => (
 	<>
@@ -183,6 +187,9 @@ const TabSection = ( { tabKey, tabLabel, publisherName, range, previousRange }: 
 		<TabErrorBoundary key={ tabKey }>
 			<Suspense fallback={ <Fallback /> }>{ renderTabComponent( tabKey, { range, previousRange } ) }</Suspense>
 		</TabErrorBoundary>
+		<footer className="newspack-insights__tab-footer">
+			<TabFeedback context={ tabKey } />
+		</footer>
 	</>
 );
 
@@ -245,7 +252,13 @@ const InsightsWizard = ( { config }: InsightsWizardProps ) => {
 		label: t.label,
 		exact: true,
 		render: TabSection,
-		props: { tabKey: t.key, tabLabel: t.label, range, previousRange, publisherName: config.publisherName },
+		props: {
+			tabKey: t.key,
+			tabLabel: t.label,
+			range,
+			previousRange,
+			publisherName: config.publisherName,
+		},
 	} ) );
 
 	const renderAboveSections = () => (
