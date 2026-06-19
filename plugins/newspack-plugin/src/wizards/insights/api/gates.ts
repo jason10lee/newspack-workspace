@@ -107,6 +107,14 @@ export interface GatesWindow {
 	// Section 2 — Free reader conversion.
 	regwall_conversion_direct: GatesScalarMetric;
 	regwall_conversion_influenced_7d: GatesScalarMetric;
+	// Section 2 empty-state totals (NPPD-1702): drive the Free section's
+	// no_opportunity / no_conversions / normal decision. Derived server-side from
+	// the regwall scalars — no extra query. `null` (not 0) when the hub count
+	// fields aren't deployed yet, so the section degrades to today's percentage
+	// render. An absent field is not a zero: a present 0 is a real "no impressions"
+	// signal; null is "the hub hasn't shipped the count fields." See NPPD-1702.
+	registration_impressions_total: number | null;
+	registrations_total: number | null;
 	// Section 3 — Paid reader conversion.
 	paywall_conversion_direct: GatesScalarMetric;
 	paywall_conversion_influenced_14d: GatesScalarMetric;
@@ -152,7 +160,8 @@ const queryString = ( query: GatesQuery ): string => {
 		params.set( 'compare_end', query.compare_end );
 	}
 	// Forward the `_fixture_state` URL param so fixture mode's render variants
-	// (empty / error / paid_no_conversions / paid_zero_cards) are reachable from
+	// (empty / error / free_no_conversions / free_fields_absent /
+	// paid_no_conversions / paid_zero_cards) are reachable from
 	// the UI for smoke testing. A no-op in production: the server ignores it
 	// unless NEWSPACK_INSIGHTS_FIXTURE_MODE is enabled.
 	if ( typeof window !== 'undefined' ) {

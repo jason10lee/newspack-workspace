@@ -234,6 +234,96 @@ final class Gates_Metric {
 	}
 
 	/**
+	 * Compute a regwall conversion rate from a precomputed hub rate, optionally
+	 * surfacing the new count fields the empty-state pattern needs (NPPD-1702).
+	 *
+	 * Unlike the paywall rate (computed locally from a Woo join), the regwall rate
+	 * is precomputed server-side by the hub. This method reads that rate exactly as
+	 * `compute_metric_from_proxy` would, then *additionally* reads two integer
+	 * columns the hub query will start returning once Derrick's Newspack Manager
+	 * change ships: `registration_impressions_total` (the denominator / {N}) and
+	 * `registrations_total` (the numerator).
+	 *
+	 * The production-safety crux: those columns do not exist in the hub response
+	 * yet. When they are absent, this returns numerator + denominator as `null` —
+	 * byte-for-byte today's regwall envelope — so the React layer renders the
+	 * percentage scorecards and no empty state (graceful degradation). An absent
+	 * field is NOT a zero: a present `0` is a real "no impressions" signal, a
+	 * missing field is "the hub hasn't deployed yet." The two are kept distinct all
+	 * the way to the component. The fields are read as a pair: a half-populated
+	 * response (one present, one absent/non-numeric) is treated as absent so a
+	 * malformed envelope degrades rather than half-renders a count fallback.
+	 *
+	 * @param string            $query_name Catalog name (`gates_regwall_conversion_*`).
+	 * @param string            $rate_key   Column holding the precomputed rate.
+	 * @param DateTimeInterface $start      Window start.
+	 * @param DateTimeInterface $end        Window end.
+	 * @return array
+	 */
+	private function compute_regwall_rate_from_proxy(
+		string $query_name,
+		string $rate_key,
+		DateTimeInterface $start,
+		DateTimeInterface $end
+	): array {
+		$rows = $this->proxy->query( $query_name, $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $this->error_scalar( 'rate', $rows );
+		}
+		if ( empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( $rate_key, $rows[0] ) ) {
+			// Query succeeded with no usable value → non-computable zero. Mirrors
+			// compute_metric_from_proxy exactly, including the int 0 it uses for a
+			// non-decimal placeholder (a rate). Counts stay null: nothing to surface.
+			return $this->populated_scalar( 0, false, null, 'rate' );
+		}
+		$row   = $rows[0];
+		$value = $row[ $rate_key ];
+		// SAFE_DIVIDE NULL: legitimate "no eligible events", non-computable zero.
+		if ( null === $value ) {
+			return $this->populated_scalar( 0, false, null, 'rate' );
+		}
+		// Non-numeric rate signals catalog/schema drift — surface as an error so a
+		// real data-quality regression isn't masked as a benign zero.
+		if ( ! is_numeric( $value ) ) {
+			return $this->error_scalar(
+				'rate',
+				new \WP_Error( 'bigquery_proxy_malformed_value', __( 'The query returned a non-numeric value.', 'newspack-plugin' ) )
+			);
+		}
+		// Read the new count columns iff BOTH are present and integer-valued.
+		// Absent (pre-hub-deploy) → null counts → today's envelope, today's render.
+		$impressions = $this->read_optional_count( $row, 'registration_impressions_total' );
+		$registrations = $this->read_optional_count( $row, 'registrations_total' );
+		if ( null === $impressions || null === $registrations ) {
+			return $this->populated_scalar( (float) $value, true, null, 'rate' );
+		}
+		return $this->populated_scalar( (float) $value, true, $impressions, 'rate', $registrations );
+	}
+
+	/**
+	 * Read an optional non-negative integer column from a proxy row (NPPD-1702).
+	 *
+	 * Returns the int when the key is present and integer-valued (a float like 3.7
+	 * is rejected as catalog drift), or `null` when the key is absent or not a
+	 * clean integer. Distinguishing "absent" from "0" is the whole point: callers
+	 * use `null` to mean "the hub hasn't deployed this field yet."
+	 *
+	 * @param array  $row Proxy row.
+	 * @param string $key Column name.
+	 * @return int|null
+	 */
+	private function read_optional_count( array $row, string $key ): ?int {
+		if ( ! array_key_exists( $key, $row ) || null === $row[ $key ] ) {
+			return null;
+		}
+		$raw = $row[ $key ];
+		if ( ! is_numeric( $raw ) || (float) $raw !== (float) (int) $raw ) {
+			return null;
+		}
+		return (int) $raw;
+	}
+
+	/**
 	 * Compute a paywall conversion rate from BQ rows + Woo completion join.
 	 *
 	 * @param string            $query_name Catalog name (`gates_paywall_conversion_*`).
@@ -363,7 +453,7 @@ final class Gates_Metric {
 	 * @return array
 	 */
 	public function get_regwall_conversion_direct( DateTimeInterface $start, DateTimeInterface $end ): array {
-		return $this->compute_metric_from_proxy( 'gates_regwall_conversion_direct', 'regwall_conversion_rate_direct', 'rate', $start, $end );
+		return $this->compute_regwall_rate_from_proxy( 'gates_regwall_conversion_direct', 'regwall_conversion_rate_direct', $start, $end );
 	}
 
 	/**
@@ -374,7 +464,7 @@ final class Gates_Metric {
 	 * @return array
 	 */
 	public function get_regwall_conversion_influenced_7d( DateTimeInterface $start, DateTimeInterface $end ): array {
-		return $this->compute_metric_from_proxy( 'gates_regwall_conversion_influenced_7d', 'regwall_conversion_influenced', 'rate', $start, $end );
+		return $this->compute_regwall_rate_from_proxy( 'gates_regwall_conversion_influenced_7d', 'regwall_conversion_influenced', $start, $end );
 	}
 
 	// --- Section 3: Paid reader conversion ------------------------------
@@ -462,6 +552,49 @@ final class Gates_Metric {
 				(int) ( $direct['numerator'] ?? 0 ),
 				(int) ( $influenced['numerator'] ?? 0 )
 			),
+		];
+	}
+
+	/**
+	 * Free-section totals for the empty-state gate (NPPD-1702).
+	 *
+	 * The Free counterpart to `paywall_section_totals`, with one deliberate and
+	 * load-bearing difference: it returns `int|null`, never coercing a missing
+	 * count to `0`. `null` means "the hub hasn't deployed the count fields yet"
+	 * (the `compute_regwall_rate_from_proxy` numerator/denominator are null in that
+	 * case); the React layer reads it to *degrade to today's percentage render*
+	 * rather than show a false `no_opportunity`. Coercing to 0 here — as the
+	 * paywall helper does, where the denominator always exists because it's
+	 * computed locally — would silently break a working production section the
+	 * moment this ships, with no hub change involved. An absent field is not a zero.
+	 *
+	 *   - `registration_impressions_total` = the Direct rate denominator (sessions
+	 *     with a registration gate impression; the {N} in the "no registrations"
+	 *     copy). Mirrors paywall keying attempts off the Direct denominator.
+	 *   - `registrations_total` = the most inclusive registration count across
+	 *     attributions (max of Direct and Influenced numerators), so a section with
+	 *     Influenced-only registrations still renders its scorecards. `null` only
+	 *     when neither attribution carries a count (fields absent).
+	 *
+	 * @param array $direct     The `regwall_conversion_direct` scalar payload.
+	 * @param array $influenced The `regwall_conversion_influenced_7d` scalar payload.
+	 * @return array{registration_impressions_total:int|null, registrations_total:int|null}
+	 */
+	public static function regwall_section_totals( array $direct, array $influenced ): array {
+		// `isset` is intentional: it treats a present-but-null denominator the same
+		// as a missing key — both mean "no count from the hub" → null. A present 0
+		// passes through as 0 (a real "no impressions" signal, NOT degradation).
+		$impressions = isset( $direct['denominator'] ) ? (int) $direct['denominator'] : null;
+
+		$direct_regs     = $direct['numerator'] ?? null;
+		$influenced_regs = $influenced['numerator'] ?? null;
+		$registrations   = ( null === $direct_regs && null === $influenced_regs )
+			? null
+			: max( (int) $direct_regs, (int) $influenced_regs );
+
+		return [
+			'registration_impressions_total' => $impressions,
+			'registrations_total'            => $registrations,
 		];
 	}
 
