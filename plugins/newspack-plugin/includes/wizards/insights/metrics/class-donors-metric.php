@@ -430,6 +430,16 @@ class Donors_Metric {
 	}
 
 	/**
+	 * Donation conversion-lag rows (customer_id, registered_ts, first_donation_ts)
+	 * for the 4.3 time-to-donate distribution. List-param — NOT cached.
+	 *
+	 * @return array<int, array{customer_id:int, registered_ts:int, first_donation_ts:int}>
+	 */
+	public function get_donation_conversion_lags(): array {
+		return $this->storage->get_donation_conversion_lags();
+	}
+
+	/**
 	 * Flush all Tab 7 metric caches. Hook point for NPPD-1605.
 	 *
 	 * @return void

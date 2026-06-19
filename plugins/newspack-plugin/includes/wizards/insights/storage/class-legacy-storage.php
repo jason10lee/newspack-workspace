@@ -1170,4 +1170,64 @@ class Legacy_Storage implements Storage_Interface {
 		}
 		return $records;
 	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @return array<int, array{customer_id:int, registered_ts:int, first_sub_ts:int}>
+	 */
+	public function get_subscription_conversion_lags(): array {
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+
+		// Legacy CPT equivalent of HPOS get_subscription_conversion_lags().
+		$sql = "SELECT first_subs.customer_id, u.user_registered, first_subs.first_start
+			FROM (
+				SELECT CAST(cust.meta_value AS UNSIGNED) AS customer_id, MIN(start.meta_value) AS first_start
+				FROM {$prefix}posts p
+				JOIN {$prefix}postmeta cust
+					ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
+				JOIN {$prefix}postmeta start
+					ON start.post_id = p.ID AND start.meta_key = '_schedule_start'
+				JOIN {$prefix}woocommerce_order_items oi
+					ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
+				JOIN {$prefix}woocommerce_order_itemmeta oim
+					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+				WHERE p.post_type = 'shop_subscription'
+				  AND oim.meta_value NOT IN ($donations)
+				  AND start.meta_value != ''
+				GROUP BY CAST(cust.meta_value AS UNSIGNED)
+			) AS first_subs
+			JOIN {$prefix}users u ON u.ID = first_subs.customer_id";
+
+		return $this->rows_to_lags( $wpdb->get_results( $sql, ARRAY_A ), 'first_start', 'first_sub_ts' );
+	}
+
+	/**
+	 * Map (customer_id, user_registered, <first date>) rows to lag records with
+	 * UTC epoch seconds. Rows with a blank date are skipped. UTC parse keeps the
+	 * epochs correct regardless of MySQL session timezone. user_registered is
+	 * treated as UTC (WordPress stores it as the GMT registration instant).
+	 *
+	 * @param mixed  $rows         wpdb rows (ARRAY_A).
+	 * @param string $first_key    Row key holding the first-conversion date.
+	 * @param string $first_ts_out Output key for the first-conversion epoch.
+	 * @return array<int, array<string,int>>
+	 */
+	private function rows_to_lags( $rows, string $first_key, string $first_ts_out ): array {
+		$utc  = new \DateTimeZone( 'UTC' );
+		$out  = [];
+		foreach ( (array) $rows as $row ) {
+			if ( empty( $row[ $first_key ] ) || empty( $row['user_registered'] ) ) {
+				continue;
+			}
+			$out[] = [
+				'customer_id'   => (int) $row['customer_id'],
+				'registered_ts' => ( new \DateTimeImmutable( $row['user_registered'], $utc ) )->getTimestamp(),
+				$first_ts_out   => ( new \DateTimeImmutable( $row[ $first_key ], $utc ) )->getTimestamp(),
+			];
+		}
+		return $out;
+	}
 }

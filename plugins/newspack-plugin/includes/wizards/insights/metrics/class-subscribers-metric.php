@@ -489,6 +489,16 @@ class Subscribers_Metric {
 	}
 
 	/**
+	 * Subscription conversion-lag rows (customer_id, registered_ts, first_sub_ts)
+	 * for the 4.2 time-to-subscribe distribution. List-param — NOT cached.
+	 *
+	 * @return array<int, array{customer_id:int, registered_ts:int, first_sub_ts:int}>
+	 */
+	public function get_subscription_conversion_lags(): array {
+		return $this->storage->get_subscription_conversion_lags();
+	}
+
+	/**
 	 * Flush ALL Tab 6 metric caches. Use after a manual data correction
 	 * or from the future NPPD-1605 invalidation system; not wired to any
 	 * automatic trigger today because the WP transient API has no key

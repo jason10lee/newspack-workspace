@@ -529,4 +529,50 @@ class Test_Conversion_Journey_Storage extends WP_UnitTestCase {
 		$this->assertSame( $recs, $metric->get_new_donor_records_in_window( $this->make_date( '2026-03-01' ), $this->make_date( '2026-03-31' ) ) );
 		$this->assertSame( [], $metric->get_new_donor_records_in_window( $this->make_date( '2026-04-01' ), $this->make_date( '2026-04-30' ) ) );
 	}
+
+	/**
+	 * Storages expose the conversion-lag methods.
+	 */
+	public function test_storages_implement_conversion_lag_methods(): void {
+		$this->assertTrue( method_exists( new HPOS_Storage( [] ), 'get_subscription_conversion_lags' ) );
+		$this->assertTrue( method_exists( new Legacy_Storage( [] ), 'get_subscription_conversion_lags' ) );
+		$this->assertTrue( method_exists( new HPOS_Donors_Storage( [] ), 'get_donation_conversion_lags' ) );
+		$this->assertTrue( method_exists( new Legacy_Donors_Storage( [] ), 'get_donation_conversion_lags' ) );
+	}
+
+	/**
+	 * Subscribers_Metric::get_subscription_conversion_lags delegates (NOT cached).
+	 */
+	public function test_subscribers_metric_subscription_conversion_lags_delegates(): void {
+		$rows = [
+			[
+				'customer_id'   => 1,
+				'registered_ts' => 1000,
+				'first_sub_ts'  => 1000 + 86400 * 10,
+			],
+		];
+		$mock = $this->createMock( Storage_Interface::class );
+		$mock->expects( $this->exactly( 2 ) )->method( 'get_subscription_conversion_lags' )->willReturnOnConsecutiveCalls( $rows, [] );
+		$metric = $this->make_subscribers_metric( $mock );
+		$this->assertSame( $rows, $metric->get_subscription_conversion_lags() );
+		$this->assertSame( [], $metric->get_subscription_conversion_lags() );
+	}
+
+	/**
+	 * Donors_Metric::get_donation_conversion_lags delegates (NOT cached).
+	 */
+	public function test_donors_metric_donation_conversion_lags_delegates(): void {
+		$rows = [
+			[
+				'customer_id'       => 2,
+				'registered_ts'     => 2000,
+				'first_donation_ts' => 2000 + 86400 * 5,
+			],
+		];
+		$mock = $this->createMock( Donors_Storage_Interface::class );
+		$mock->expects( $this->exactly( 2 ) )->method( 'get_donation_conversion_lags' )->willReturnOnConsecutiveCalls( $rows, [] );
+		$metric = $this->make_donors_metric( $mock );
+		$this->assertSame( $rows, $metric->get_donation_conversion_lags() );
+		$this->assertSame( [], $metric->get_donation_conversion_lags() );
+	}
 }

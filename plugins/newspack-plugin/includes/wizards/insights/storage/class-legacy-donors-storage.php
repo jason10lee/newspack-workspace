@@ -1108,6 +1108,60 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 	}
 
 	/**
+	 * {@inheritDoc}
+	 *
+	 * @return array<int, array{customer_id:int, registered_ts:int, first_donation_ts:int}>
+	 */
+	public function get_donation_conversion_lags(): array {
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+
+		$sql = "SELECT first_d.customer_id, u.user_registered, first_d.first_donation_date
+			FROM (
+				SELECT CAST(cust.meta_value AS UNSIGNED) AS customer_id, MIN(p.post_date_gmt) AS first_donation_date
+				FROM {$prefix}posts p
+				JOIN {$prefix}postmeta cust
+					ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
+				JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = p.ID
+				WHERE p.post_type = 'shop_order'
+				  AND p.post_status IN ('wc-completed', 'wc-processing')
+				  AND opl.product_id IN ($donations)
+				GROUP BY CAST(cust.meta_value AS UNSIGNED)
+			) AS first_d
+			JOIN {$prefix}users u ON u.ID = first_d.customer_id";
+
+		return $this->rows_to_lags( $wpdb->get_results( $sql, ARRAY_A ), 'first_donation_date', 'first_donation_ts' );
+	}
+
+	/**
+	 * Map (customer_id, user_registered, <first date>) rows to lag records with
+	 * UTC epoch seconds. Rows with a blank date are skipped. UTC parse keeps the
+	 * epochs correct regardless of MySQL session timezone. user_registered is
+	 * treated as UTC (WordPress stores it as the GMT registration instant).
+	 *
+	 * @param mixed  $rows         wpdb rows (ARRAY_A).
+	 * @param string $first_key    Row key holding the first-conversion date.
+	 * @param string $first_ts_out Output key for the first-conversion epoch.
+	 * @return array<int, array<string,int>>
+	 */
+	private function rows_to_lags( $rows, string $first_key, string $first_ts_out ): array {
+		$utc  = new \DateTimeZone( 'UTC' );
+		$out  = [];
+		foreach ( (array) $rows as $row ) {
+			if ( empty( $row[ $first_key ] ) || empty( $row['user_registered'] ) ) {
+				continue;
+			}
+			$out[] = [
+				'customer_id'   => (int) $row['customer_id'],
+				'registered_ts' => ( new \DateTimeImmutable( $row['user_registered'], $utc ) )->getTimestamp(),
+				$first_ts_out   => ( new \DateTimeImmutable( $row[ $first_key ], $utc ) )->getTimestamp(),
+			];
+		}
+		return $out;
+	}
+
+	/**
 	 * Variation label picker.
 	 *
 	 * @param string $period         _subscription_period meta value.

@@ -344,4 +344,13 @@ interface Donors_Storage_Interface {
 	 * @return array<int, array{customer_id:int, ts:int}>
 	 */
 	public function get_new_donor_records_in_window( DateTimeInterface $start, DateTimeInterface $end ): array;
+
+	/**
+	 * All-history: every customer with a completed/processing donation order AND
+	 * a wp_users row, with their registration epoch and first-donation epoch
+	 * (both UTC seconds). Drives the 4.3 time-to-donate distribution.
+	 *
+	 * @return array<int, array{customer_id:int, registered_ts:int, first_donation_ts:int}>
+	 */
+	public function get_donation_conversion_lags(): array;
 }

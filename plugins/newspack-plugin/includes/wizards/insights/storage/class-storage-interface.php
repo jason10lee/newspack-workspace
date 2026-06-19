@@ -337,4 +337,14 @@ interface Storage_Interface {
 	 * @return array<int, array{customer_id:int, ts:int}>
 	 */
 	public function get_new_subscriber_records_in_window( DateTimeInterface $start, DateTimeInterface $end ): array;
+
+	/**
+	 * All-history: every customer with a non-donation subscription AND a
+	 * wp_users row, with their registration epoch and first-subscription epoch
+	 * (both UTC seconds). Drives the 4.2 time-to-subscribe distribution
+	 * (lag = first_sub_ts − registered_ts) and its user_registered source anchor.
+	 *
+	 * @return array<int, array{customer_id:int, registered_ts:int, first_sub_ts:int}>
+	 */
+	public function get_subscription_conversion_lags(): array;
 }
