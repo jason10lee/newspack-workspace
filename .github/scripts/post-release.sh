@@ -106,9 +106,19 @@ attribute_conflicts() {
     if [ -n "$mb" ]; then
       meta=$(git log "$mb"..release -1 --format='%s%x09%an' -- "$f" 2>/dev/null || true)
       if [ -n "$meta" ]; then
-        subj=${meta%%$'\t'*}
-        author=${meta#*$'\t'}
-        pr=$(printf '%s' "$subj" | grep -oE '#[0-9]+' | head -1 || true)
+        # Split from the right: the format is "<subject><TAB><author>" and an
+        # author name has no tab, so a literal tab inside the subject can't
+        # corrupt the author field.
+        subj=${meta%$'\t'*}
+        author=${meta##*$'\t'}
+        # Prefer the trailing "(#NNN)" squash-merge PR ref; fall back to the last
+        # bare "#NNN" so an issue ref earlier in the subject isn't mistaken for it.
+        pr=$(printf '%s' "$subj" | grep -oE '\(#[0-9]+\)' | tail -1 | tr -cd '0-9' || true)
+        if [ -n "$pr" ]; then
+          pr="#$pr"
+        else
+          pr=$(printf '%s' "$subj" | grep -oE '#[0-9]+' | tail -1 || true)
+        fi
       fi
     fi
     printf '%s\t%s\t%s\n' "$f" "$pr" "$author"
@@ -138,7 +148,11 @@ notify_slack() {
   # So cap the named list and hard-trim the text (the build link is appended last
   # and never trimmed, so it always survives).
   local payload
-  payload=$(TARGET="$target" CONFLICTS="$conflicts" node -e '
+  # Pass SLACK_CHANNEL_ID inline: the node child reads it from process.env, which
+  # only sees *exported* vars; forwarding it explicitly (like TARGET/CONFLICTS)
+  # decouples delivery from how the workflow happens to set it. The GITHUB_* vars
+  # node reads are always exported by the Actions runtime, so they stay ambient.
+  payload=$(TARGET="$target" CONFLICTS="$conflicts" SLACK_CHANNEL_ID="$SLACK_CHANNEL_ID" node -e '
     const MAX_FILES = 10;
     const MAX_TEXT = 2900;
     const items = (process.env.CONFLICTS || "")
@@ -185,9 +199,11 @@ notify_slack() {
     }));
   ') || {
     # node missing/erroring must not abort the script (set -e) on this
-    # already-failed path, nor leave subsequent merges + sync_failed unreported.
-    echo "[post-release] Slack payload build failed; skipping notification."
-    return
+    # already-failed path. Don't go silent either: fall back to a minimal
+    # hand-rolled alert (fixed text, no variable conflict list → no JSON-escaping
+    # hazard) so the team is still notified the merge failed.
+    echo "[post-release] Slack payload build failed; sending minimal fallback alert."
+    payload="{\"channel\":\"$SLACK_CHANNEL_ID\",\"blocks\":[{\"type\":\"section\",\"text\":{\"type\":\"mrkdwn\",\"text\":\"⚠️ Post-release merge to \`$target\` failed for: \`$GITHUB_REPOSITORY\`. Check <$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID|the build> for details.\"}}]}"
   }
   if [ -z "$payload" ]; then
     echo "[post-release] Empty Slack payload; skipping notification."
@@ -222,7 +238,9 @@ else
     git push origin alpha
   else
     # Capture the conflicting paths before --abort clears the unmerged state.
-    conflicts=$(git diff --name-only --diff-filter=U)
+    # core.quotePath=false keeps non-ASCII paths literal (not octal-escaped &
+    # double-quoted), so attribution lookups match and the alert shows real names.
+    conflicts=$(git -c core.quotePath=false diff --name-only --diff-filter=U)
     git merge --abort
     echo "[post-release] Post-release merge to alpha failed."
     notify_slack alpha "$(attribute_conflicts "$conflicts")"
@@ -237,7 +255,9 @@ if git merge --no-ff release -m "chore(release): merge in release $LATEST_VERSIO
   git push origin "$DEFAULT_BRANCH"
 else
   # Capture the conflicting paths before --abort clears the unmerged state.
-  conflicts=$(git diff --name-only --diff-filter=U)
+  # core.quotePath=false keeps non-ASCII paths literal (not octal-escaped &
+  # double-quoted), so attribution lookups match and the alert shows real names.
+  conflicts=$(git -c core.quotePath=false diff --name-only --diff-filter=U)
   git merge --abort
   echo "[post-release] Post-release merge to $DEFAULT_BRANCH failed."
   notify_slack "$DEFAULT_BRANCH" "$(attribute_conflicts "$conflicts")"
