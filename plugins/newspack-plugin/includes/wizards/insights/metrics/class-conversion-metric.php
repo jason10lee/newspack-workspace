@@ -142,6 +142,8 @@ final class Conversion_Metric {
 	private ?bool $subscription_leg_configured = null;
 
 	/**
+	 * Donation-leg config-matrix gate memo; see $subscription_leg_configured.
+	 *
 	 * @var bool|null
 	 */
 	private ?bool $donation_leg_configured = null;
