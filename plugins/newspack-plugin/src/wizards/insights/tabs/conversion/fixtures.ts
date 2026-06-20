@@ -22,6 +22,7 @@ import type {
 	ConversionSourceMixData,
 	ConversionTopPagesTable,
 	ConversionVisibility,
+	ConversionVisibilityReason,
 	ConversionWeeklyTrendsData,
 	ConversionWindow,
 	ConversionCumulativeSingle,
@@ -49,6 +50,40 @@ const gatedFunnel = ( visibility: ConversionVisibility, state: ConversionMetricS
 	visibility,
 	visibility_reason: visibility === 'hidden' ? 'insufficient_data' : null,
 } );
+
+/**
+ * A config-matrix conversion leg (NPPD-1742) — Section 2.2 / 2.3. Builds a
+ * three-stage gated funnel with controllable entry/prior/conversion counts so
+ * tests can drive the funnel-shaped states: entry 0 → no_opportunity; entry > 0
+ * & conversion 0 → no_conversions; all > 0 → normal. `visibility: 'hidden'`
+ * models an unconfigured stream (reason `'not_configured'`).
+ */
+export const conversionLeg = (
+	opts: {
+		visibility?: ConversionVisibility;
+		state?: ConversionMetricState;
+		entry?: number;
+		prior?: number;
+		conversion?: number;
+		reason?: ConversionVisibilityReason;
+	} = {}
+): ConversionGatedFunnelData => {
+	const { visibility = 'visible', state = 'populated', entry = 1000, prior = 400, conversion = 80, reason } = opts;
+	const top = entry > 0 ? entry : 1;
+	return {
+		state,
+		stages:
+			state === 'populated'
+				? [
+						{ label: 'Registered', count: entry, pct_of_top: entry / top },
+						{ label: 'Saw a conversion-intent surface', count: prior, pct_of_top: prior / top },
+						{ label: 'Converted', count: conversion, pct_of_top: conversion / top },
+				  ]
+				: [],
+		visibility,
+		visibility_reason: reason ?? ( visibility === 'hidden' ? 'not_configured' : null ),
+	};
+};
 
 const sourceMix = ( state: ConversionMetricState = 'coming_soon' ): ConversionSourceMixData => ( {
 	state,
@@ -98,6 +133,14 @@ const topPages = ( state: ConversionMetricState = 'coming_soon' ): ConversionTop
 export interface ConversionWindowOverrides {
 	crossUpsellVisibility?: ConversionVisibility;
 	lagVisibility?: ConversionVisibility;
+	/** Config-matrix visibility for the subscription leg (2.2), NPPD-1742. */
+	subscriptionVisibility?: ConversionVisibility;
+	/** Config-matrix visibility for the donation leg (2.3), NPPD-1742. */
+	donationVisibility?: ConversionVisibility;
+	/** Full override of the subscription leg (for the funnel-shaped states). */
+	registeredToSubscriberFunnel?: ConversionGatedFunnelData;
+	/** Full override of the donation leg (for the funnel-shaped states). */
+	registeredToDonorFunnel?: ConversionGatedFunnelData;
 	/** Override the lifecycle funnel state (Section 1). */
 	lifecycleState?: ConversionMetricState;
 	/** Override the source-mix state (Section 3, all three pies). */
@@ -126,8 +169,9 @@ export const makeConversionWindow = ( overrides: ConversionWindowOverrides = {} 
 	),
 	// Section 2 — Phase A, wired.
 	anonymous_to_registered_funnel: funnel( 'populated', 'Anonymous', 'Saw a conversion surface', 'Registered' ),
-	registered_to_subscriber_funnel: funnel( 'populated', 'Registered', 'Saw a subscription-intent surface', 'Became subscriber' ),
-	registered_to_donor_funnel: funnel( 'populated', 'Registered', 'Saw a donation-intent surface', 'Became donor' ),
+	registered_to_subscriber_funnel:
+		overrides.registeredToSubscriberFunnel ?? conversionLeg( { visibility: overrides.subscriptionVisibility ?? 'visible' } ),
+	registered_to_donor_funnel: overrides.registeredToDonorFunnel ?? conversionLeg( { visibility: overrides.donationVisibility ?? 'visible' } ),
 	subscriber_to_donor_funnel: gatedFunnel( overrides.crossUpsellVisibility ?? 'hidden', 'populated', 'Active subscriber', 'Also donor' ),
 	// Section 3 — Phase A, wired.
 	source_mix_registrations: sourceMix( overrides.sourceMixState ?? 'populated' ),
