@@ -8,12 +8,23 @@
 use Newspack\WooCommerce_Update_Payment_Notice;
 
 require_once __DIR__ . '/../../mocks/wc-mocks.php';
-require_once __DIR__ . '/../../mocks/wc-memberships-mocks.php';
 
 /**
  * Tests for WooCommerce_Update_Payment_Notice status allowlist logic.
  *
+ * Runs in a separate process: the WC Memberships mock defines a global
+ * WC_Memberships class + wc_memberships() function, which would otherwise flip
+ * Memberships::is_active() true for the whole PHPUnit process and break
+ * unrelated suites (PHP defines/classes can't be unset). The mock is loaded in
+ * set_up() — which executes inside this class's isolated child process — rather
+ * than at file scope or in set_up_before_class() (both run in the shared parent
+ * process and would leak the globals into sibling suites). See the same
+ * separate-process convention in
+ * reader-activation-sync/class-test-content-gate-legacy.php.
+ *
  * @group update_payment_notice
+ * @runTestsInSeparateProcesses
+ * @preserveGlobalState disabled
  */
 class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 	/**
@@ -21,6 +32,10 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
+		// Loaded here (isolated child process), not at file scope or in
+		// set_up_before_class() (shared parent), so the global WC_Memberships
+		// class / wc_memberships() never leak into unrelated suites.
+		require_once __DIR__ . '/../../mocks/wc-memberships-mocks.php';
 		global $subscriptions_database, $products_database, $orders_database;
 		$subscriptions_database = [];
 		$products_database      = [];
