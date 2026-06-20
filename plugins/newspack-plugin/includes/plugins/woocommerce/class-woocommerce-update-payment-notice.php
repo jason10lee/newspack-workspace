@@ -189,8 +189,10 @@ class WooCommerce_Update_Payment_Notice {
 			}
 			// Also suppress when the reader holds equivalent active access (same
 			// membership plan via another active subscription, or active
-			// membership) bought through a different product. NPPM-2926.
-			if ( $purchased_product && Memberships::user_has_equivalent_active_access( $purchased_product ) ) {
+			// membership) bought through a different product. Pass this
+			// subscription's ID so an active membership derived from it is not
+			// mistaken for independent access. NPPM-2926.
+			if ( $purchased_product && Memberships::user_has_equivalent_active_access( $purchased_product, null, $subscription->get_id() ) ) {
 				continue;
 			}
 

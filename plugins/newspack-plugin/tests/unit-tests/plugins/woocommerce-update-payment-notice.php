@@ -25,10 +25,11 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 		$subscriptions_database = [];
 		$products_database      = [];
 		$orders_database        = [];
-		global $wc_memberships_plans, $wc_memberships_active_memberships, $wc_memberships_plan_subscription_products;
+		global $wc_memberships_plans, $wc_memberships_active_memberships, $wc_memberships_plan_subscription_products, $wc_memberships_membership_subscriptions;
 		$wc_memberships_plans                      = [];
 		$wc_memberships_active_memberships         = [];
 		$wc_memberships_plan_subscription_products = [];
+		$wc_memberships_membership_subscriptions   = [];
 		global $wcs_grouped_parents;
 		$wcs_grouped_parents = [];
 	}
@@ -337,6 +338,33 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 			]
 		);
 		$this->assertTrue( \Newspack\Memberships::user_has_equivalent_active_access( $product, $user_id ) );
+	}
+
+	/**
+	 * An active membership tied to the *evaluated* subscription is not "other"
+	 * access — Layer 3 must skip it so the notice the failing subscription needs
+	 * is not falsely suppressed (mirrors Layer 2's active-status self-match
+	 * proofing). NPPM-2926.
+	 */
+	public function test_no_equivalent_access_when_active_membership_is_from_evaluated_subscription() {
+		$user_id = self::factory()->user->create();
+		newspack_register_mock_membership_plan( 803, [ 4242 ] );
+		// The user's only active membership for the plan derives from subscription #555.
+		global $wc_memberships_active_memberships, $wc_memberships_membership_subscriptions;
+		$wc_memberships_active_memberships[ $user_id ]       = [ 803 ];
+		$wc_memberships_membership_subscriptions[ $user_id ] = [ 803 => 555 ];
+
+		$product = wc_create_mock_product(
+			[
+				'id'   => 4242,
+				'name' => 'Newsroom Pro – Monthly',
+			]
+		);
+
+		// Excluding #555 (the evaluated subscription) → no equivalent access.
+		$this->assertFalse( \Newspack\Memberships::user_has_equivalent_active_access( $product, $user_id, 555 ) );
+		// The same membership tied to a *different* subscription still counts.
+		$this->assertTrue( \Newspack\Memberships::user_has_equivalent_active_access( $product, $user_id, 999 ) );
 	}
 
 	/**

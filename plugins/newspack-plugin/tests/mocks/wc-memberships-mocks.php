@@ -3,19 +3,27 @@
  * Minimal WooCommerce Memberships test doubles for the Newspack plugin.
  *
  * Models only what the update-payment-notice membership-equivalence logic
- * needs (NPPM-2926 Gap A): plan->product mapping, active-membership checks,
- * and the WC Memberships <-> Subscriptions integration chain that
- * Memberships::get_user_subscription_for_membership_plan() walks.
+ * needs (NPPM-2926 Gap A): plan->product mapping, active memberships (with
+ * optional subscription linkage, so a membership can be recognized as deriving
+ * from a specific subscription), and the WC Memberships <-> Subscriptions
+ * integration chain that Memberships::get_user_subscription_for_membership_plan() walks.
  *
  * @package Newspack\Tests
  */
 
 // Mock registries, reset by tests in set_up(): registered plans, active
-// memberships keyed by user ID, and each plan's subscription product IDs.
-global $wc_memberships_plans, $wc_memberships_active_memberships, $wc_memberships_plan_subscription_products;
+// memberships keyed by user ID, each plan's subscription product IDs, and the
+// optional subscription that ties an active membership (so a membership can be
+// recognized as deriving from a specific subscription).
+global $wc_memberships_plans, $wc_memberships_active_memberships, $wc_memberships_plan_subscription_products, $wc_memberships_membership_subscriptions;
 $wc_memberships_plans                      = [];
 $wc_memberships_active_memberships         = [];
 $wc_memberships_plan_subscription_products = [];
+// [ user_id => [ plan_id => subscription_id ] ]. A plan present here yields a
+// subscription-tied membership (exposes get_subscription_id()); absent yields a
+// plain membership with no get_subscription_id(), mirroring core WC Memberships
+// where only the Subscriptions-integration subclass exposes it.
+$wc_memberships_membership_subscriptions = [];
 
 // Satisfies Memberships::is_active()'s class_exists( 'WC_Memberships' ) check.
 if ( ! class_exists( 'WC_Memberships' ) ) {
@@ -100,12 +108,45 @@ if ( ! function_exists( 'wc_memberships_get_membership_plans' ) ) {
 	}
 }
 
-if ( ! function_exists( 'wc_memberships_is_user_active_member' ) ) {
-	function wc_memberships_is_user_active_member( $user_id, $plan ) {
-		global $wc_memberships_active_memberships;
-		$plan_id = is_object( $plan ) ? $plan->get_id() : (int) $plan;
-		$plans   = $wc_memberships_active_memberships[ $user_id ] ?? [];
-		return in_array( $plan_id, array_map( 'intval', $plans ), true );
+/**
+ * A plain active user membership: knows its plan. Mirrors WC_Memberships_User_Membership.
+ */
+class Newspack_Mock_User_Membership {
+	protected $plan_id;
+	public function __construct( $plan_id ) {
+		$this->plan_id = (int) $plan_id;
+	}
+	public function get_plan_id() {
+		return $this->plan_id;
+	}
+}
+
+/**
+ * A subscription-tied active membership. Only this variant exposes
+ * get_subscription_id(), mirroring WC_Memberships_Integration_Subscriptions_User_Membership.
+ */
+class Newspack_Mock_Subscription_User_Membership extends Newspack_Mock_User_Membership {
+	private $subscription_id;
+	public function __construct( $plan_id, $subscription_id ) {
+		parent::__construct( $plan_id );
+		$this->subscription_id = (int) $subscription_id;
+	}
+	public function get_subscription_id() {
+		return $this->subscription_id;
+	}
+}
+
+if ( ! function_exists( 'wc_memberships_get_user_active_memberships' ) ) {
+	function wc_memberships_get_user_active_memberships( $user_id ) {
+		global $wc_memberships_active_memberships, $wc_memberships_membership_subscriptions;
+		$memberships = [];
+		foreach ( $wc_memberships_active_memberships[ $user_id ] ?? [] as $plan_id ) {
+			$subscription_id = $wc_memberships_membership_subscriptions[ $user_id ][ $plan_id ] ?? null;
+			$memberships[]   = $subscription_id
+				? new Newspack_Mock_Subscription_User_Membership( $plan_id, $subscription_id )
+				: new Newspack_Mock_User_Membership( $plan_id );
+		}
+		return $memberships;
 	}
 }
 

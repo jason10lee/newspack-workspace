@@ -872,12 +872,15 @@ class Memberships {
 	 * subscription is effectively superseded by equivalent active access bought
 	 * through a different product. NPPM-2926.
 	 *
-	 * @param \WC_Product $product The purchased product (variation-accurate).
-	 * @param int|null    $user_id User ID. Defaults to the current user.
+	 * @param \WC_Product $product                 The purchased product (variation-accurate).
+	 * @param int|null    $user_id                 User ID. Defaults to the current user.
+	 * @param int|null    $exclude_subscription_id Subscription under evaluation; an active
+	 *                                             membership tied to it is not counted as
+	 *                                             "other" access (self-match guard).
 	 *
 	 * @return bool
 	 */
-	public static function user_has_equivalent_active_access( $product, $user_id = null ) {
+	public static function user_has_equivalent_active_access( $product, $user_id = null, $exclude_subscription_id = null ) {
 		if ( ! self::is_active() || ! $product ) {
 			return false;
 		}
@@ -886,17 +889,39 @@ class Memberships {
 			return false;
 		}
 
-		foreach ( self::get_plan_ids_for_product( $product ) as $plan_id ) {
-			// Layer 3 — currently-active membership access (active-only, not delayed).
-			if ( function_exists( 'wc_memberships_is_user_active_member' )
-				&& wc_memberships_is_user_active_member( $user_id, $plan_id ) ) {
+		$plan_ids = self::get_plan_ids_for_product( $product );
+		if ( empty( $plan_ids ) ) {
+			return false;
+		}
+
+		// Layer 3 — currently-active membership access. Enumerate the user's
+		// active memberships so we can skip one tied to the subscription under
+		// evaluation: a membership kept active by the same on-hold/pending
+		// subscription is not "other" access, and counting it would falsely
+		// suppress the very notice that subscription needs. This mirrors
+		// Layer 2's active-status self-match proofing. NPPM-2926.
+		if ( function_exists( 'wc_memberships_get_user_active_memberships' ) ) {
+			foreach ( wc_memberships_get_user_active_memberships( $user_id ) as $membership ) {
+				if ( ! in_array( (int) $membership->get_plan_id(), $plan_ids, true ) ) {
+					continue;
+				}
+				// Only subscription-tied memberships expose get_subscription_id();
+				// a plain (e.g. manually granted) membership is always "other" access.
+				if ( $exclude_subscription_id
+					&& method_exists( $membership, 'get_subscription_id' )
+					&& (int) $membership->get_subscription_id() === (int) $exclude_subscription_id ) {
+					continue;
+				}
 				return true;
 			}
-			// Layer 2 — another active subscription that grants the same plan.
-			// get_user_subscription_for_membership_plan() resolves through
-			// WooCommerce_Connection::get_active_subscriptions_for_user(), which
-			// filters to ACTIVE_SUBSCRIPTION_STATUSES — so the on-hold/pending
-			// subscription under evaluation can never self-match here.
+		}
+
+		// Layer 2 — another active subscription that grants the same plan.
+		// get_user_subscription_for_membership_plan() resolves through
+		// WooCommerce_Connection::get_active_subscriptions_for_user(), which
+		// filters to ACTIVE_SUBSCRIPTION_STATUSES — so the on-hold/pending
+		// subscription under evaluation can never self-match here.
+		foreach ( $plan_ids as $plan_id ) {
 			if ( self::get_user_subscription_for_membership_plan( $user_id, $plan_id ) ) {
 				return true;
 			}
