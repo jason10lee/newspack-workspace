@@ -997,9 +997,13 @@ add_action( 'init', 'newspack_register_meta' );
  *
  * @param bool   $protected Whether the meta key is considered protected.
  * @param string $meta_key  The meta key.
+ * @param string $meta_type The type of object the meta belongs to (post, term, user, etc.).
  * @return bool Whether the meta key is protected.
  */
-function newspack_protect_editor_meta( $protected, $meta_key ) {
+function newspack_protect_editor_meta( $protected, $meta_key, $meta_type ) {
+	if ( 'post' !== $meta_type ) {
+		return $protected;
+	}
 	$editor_meta = array(
 		'newspack_featured_image_position',
 		'newspack_post_subtitle',
@@ -1010,7 +1014,7 @@ function newspack_protect_editor_meta( $protected, $meta_key ) {
 	);
 	return in_array( $meta_key, $editor_meta, true ) ? true : $protected;
 }
-add_filter( 'is_protected_meta', 'newspack_protect_editor_meta', 10, 2 );
+add_filter( 'is_protected_meta', 'newspack_protect_editor_meta', 10, 3 );
 
 
 /**

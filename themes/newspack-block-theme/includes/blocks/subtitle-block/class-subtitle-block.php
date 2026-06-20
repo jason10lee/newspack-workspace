@@ -22,7 +22,7 @@ final class Subtitle_Block {
 	public static function init() {
 		\add_action( 'init', [ __CLASS__, 'register_block_and_post_meta' ] );
 		\add_action( 'enqueue_block_assets', [ __CLASS__, 'enqueue_block_assets' ] );
-		\add_filter( 'is_protected_meta', [ __CLASS__, 'protect_post_meta' ], 10, 2 );
+		\add_filter( 'is_protected_meta', [ __CLASS__, 'protect_post_meta' ], 10, 3 );
 	}
 
 	/**
@@ -65,9 +65,13 @@ final class Subtitle_Block {
 	 *
 	 * @param bool   $protected Whether the meta key is considered protected.
 	 * @param string $meta_key  The meta key.
+	 * @param string $meta_type The type of object the meta belongs to (post, term, user, etc.).
 	 * @return bool Whether the meta key is protected.
 	 */
-	public static function protect_post_meta( $protected, $meta_key ) {
+	public static function protect_post_meta( $protected, $meta_key, $meta_type ) {
+		if ( 'post' !== $meta_type ) {
+			return $protected;
+		}
 		return self::POST_META_NAME === $meta_key ? true : $protected;
 	}
 
