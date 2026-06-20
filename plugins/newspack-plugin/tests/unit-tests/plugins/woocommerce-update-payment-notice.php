@@ -411,7 +411,7 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 	/**
 	 * No equivalent access when no membership plans are registered.
 	 */
-	public function test_no_equivalent_access_when_memberships_inactive() {
+	public function test_no_equivalent_access_when_no_plans_registered() {
 		// With no registered plans, get_plan_ids_for_product() returns [] and the
 		// helper must return false (fallback to Layer 1 only).
 		$user_id = self::factory()->user->create();
