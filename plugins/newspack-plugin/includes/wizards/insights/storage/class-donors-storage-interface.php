@@ -332,4 +332,25 @@ interface Donors_Storage_Interface {
 	 * @return array<int, \DateTimeImmutable> customer_id => first donation date (UTC).
 	 */
 	public function get_first_donation_order_dates( array $customer_ids ): array;
+
+	/**
+	 * Prompt-attributed completed donation conversions in a window, sourced from
+	 * order meta (`_newspack_popup_id`) rather than the GA4 attempt → customer_id
+	 * join (NPPD-1685). The originating prompt id is written onto the order at
+	 * checkout ({@see \Newspack\Donations::checkout_create_order_line_item()}),
+	 * alongside a real `customer_id` and total — so this captures the
+	 * anonymous-at-attempt donors the {@see \Newspack\Insights\Woo_Order_Resolver}
+	 * join silently dropped.
+	 *
+	 * Scope: INITIAL completed/processing donation orders only — recurring renewal
+	 * orders inherit the parent's `_newspack_popup_id` and are excluded via
+	 * `_subscription_renewal` — with `date_created_gmt` in [start, end], grouped by
+	 * popup id. Meta-absence is NOT a coverage gap: orders without the meta did not
+	 * stem from a prompt and are correctly excluded. No fallback, no union.
+	 *
+	 * @param DateTimeInterface $start Inclusive window start.
+	 * @param DateTimeInterface $end   Inclusive window end.
+	 * @return array<string, array{conversions:int, revenue:float}> popup_id => { conversions, revenue }.
+	 */
+	public function get_prompt_attributed_donation_conversions( DateTimeInterface $start, DateTimeInterface $end ): array;
 }

@@ -1121,4 +1121,79 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 		}
 		return __( 'Variation', 'newspack-plugin' );
 	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @param DateTimeInterface $start Inclusive window start.
+	 * @param DateTimeInterface $end   Inclusive window end.
+	 * @return array<string, array{conversions:int, revenue:float}>
+	 */
+	public function get_prompt_attributed_donation_conversions( DateTimeInterface $start, DateTimeInterface $end ): array {
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+
+		// NPPD-1685 audit fix: structurally mirrors the legacy reader — `_newspack_popup_id`
+		// is written more than once per order, so it must NOT be JOINed (that multiplies
+		// COUNT/SUM). Filter prompt-attributed orders with EXISTS and derive exactly ONE
+		// popup id per order via a correlated MIN() subquery; `total_amount` is a column
+		// on the orders table (no meta multiplication). Renewals excluded via NOT EXISTS.
+		//
+		// UNVERIFIED AGAINST LIVE HPOS DATA (NPPD-1685): the legacy path is proven on
+		// real publishers (Evanston 27 / $2,294.84, New Bedford Light 5 / $533.79), but
+		// every reachable HPOS-on publisher had zero order volume, so this HPOS query has
+		// not executed against real HPOS orders. It is mirrored from the proven legacy
+		// shape; confirm the count + revenue at first HPOS-publisher contact.
+		$sql = $wpdb->prepare(
+			"SELECT o.popup_id,
+				COUNT(*) AS conversions,
+				SUM(o.order_total) AS revenue
+			FROM (
+				SELECT ord.id AS order_id,
+					(
+						SELECT MIN(pop.meta_value)
+						FROM {$prefix}wc_orders_meta pop
+						WHERE pop.order_id = ord.id
+						  AND pop.meta_key = '_newspack_popup_id'
+						  AND pop.meta_value NOT IN ('', '0')
+					) AS popup_id,
+					ord.total_amount AS order_total
+				FROM {$prefix}wc_orders ord
+				WHERE ord.type = 'shop_order'
+				  AND ord.status IN ('wc-completed', 'wc-processing')
+				  AND ord.date_created_gmt BETWEEN %s AND %s
+				  AND NOT EXISTS (
+				      SELECT 1 FROM {$prefix}wc_orders_meta rn
+				      WHERE rn.order_id = ord.id AND rn.meta_key = '_subscription_renewal'
+				        AND rn.meta_value NOT IN ('', '0')
+				  )
+				  AND EXISTS (
+				      SELECT 1 FROM {$prefix}wc_order_product_lookup opl
+				      WHERE opl.order_id = ord.id AND opl.product_id IN ($donations)
+				  )
+				  AND EXISTS (
+				      SELECT 1 FROM {$prefix}wc_orders_meta pop
+				      WHERE pop.order_id = ord.id AND pop.meta_key = '_newspack_popup_id'
+				        AND pop.meta_value NOT IN ('', '0')
+				  )
+			) AS o
+			GROUP BY o.popup_id",
+			$this->fmt( $start ),
+			$this->fmt( $end )
+		);
+
+		$out = [];
+		foreach ( (array) $wpdb->get_results( $sql, ARRAY_A ) as $row ) {
+			$popup_id = (string) ( $row['popup_id'] ?? '' );
+			if ( '' === $popup_id ) {
+				continue;
+			}
+			$out[ $popup_id ] = [
+				'conversions' => (int) ( $row['conversions'] ?? 0 ),
+				'revenue'     => (float) ( $row['revenue'] ?? 0 ),
+			];
+		}
+		return $out;
+	}
 }
