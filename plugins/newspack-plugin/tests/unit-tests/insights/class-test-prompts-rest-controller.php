@@ -122,9 +122,18 @@ class Test_Prompts_REST_Controller extends WP_UnitTestCase {
 		// not leak through to the wire format.
 		$this->assertArrayNotHasKey( 'tab_pending', $data );
 		$this->assertArrayHasKey( 'tab_error', $data );
-		$this->assertTrue( $data['tab_error'], 'Test env has an unconfigured proxy → every metric errors → tab_error: true.' );
+		// NPPD-1745: tab_error is scoped to hub-backed metrics. The test env has an
+		// unconfigured proxy (every hub metric errors) AND no WooCommerce, so the two
+		// migrated donation cards return a NON-error empty state (revenue: local;
+		// rate: hybrid, short-circuited on non-WC). A hub-backed card
+		// (donation_conversion_direct) is therefore not in 'error', so the window is
+		// not "all hub-backed errored" → no banner. The banner-fires-on-hub-outage
+		// path is pinned directly in test_tab_error_* below.
+		$this->assertFalse( $data['tab_error'] );
 		$this->assertArrayHasKey( 'current', $data );
 		$this->assertNull( $data['previous'] );
+		$this->assertSame( 'populated', $data['current']['donation_revenue_direct']['state'], 'local card is non-error' );
+		$this->assertSame( 'populated', $data['current']['donation_conversion_direct']['state'], 'hybrid card empties on non-WC' );
 
 		// Window echo + one representative metric per section is present.
 		$current = $data['current'];
@@ -427,5 +436,64 @@ class Test_Prompts_REST_Controller extends WP_UnitTestCase {
 		$this->assertIsArray( $payload['previous'] );
 		$this->assertArrayHasKey( 'total_prompt_impressions', $payload['previous'] );
 		$this->assertSame( 'populated', $payload['previous']['total_prompt_impressions']['state'] );
+	}
+
+	/**
+	 * Invoke the private static is_window_all_error() on a synthetic window.
+	 *
+	 * @param array $window Window payload.
+	 * @return bool
+	 */
+	private function invoke_is_window_all_error( array $window ): bool {
+		$method = new \ReflectionMethod( Prompts_REST_Controller::class, 'is_window_all_error' );
+		$method->setAccessible( true );
+		return (bool) $method->invoke( null, $window );
+	}
+
+	/**
+	 * Build a window where every hub-backed metric errors and every local card is
+	 * populated (the hub-outage-with-local-survivor scenario).
+	 *
+	 * @return array
+	 */
+	private function window_hub_down_local_alive(): array {
+		$window = [
+			'window' => [
+				'start' => '2026-03-22',
+				'end'   => '2026-04-21',
+			],
+		];
+		foreach ( Prompts_Metric::METRIC_SOURCES as $key => $source ) {
+			$window[ $key ] = [ 'state' => 'local' === $source ? 'populated' : 'error' ];
+		}
+		return $window;
+	}
+
+	/**
+	 * NPPD-1745 regression guard: the "whole tab failed" banner STILL fires when
+	 * every hub-backed metric errors, even though a surviving local card renders.
+	 * This is the exact thing the old all-error logic would have silently killed.
+	 */
+	public function test_tab_error_fires_on_hub_outage_despite_local_survivor() {
+		$window = $this->window_hub_down_local_alive();
+
+		// The local survivor is genuinely present and populated.
+		$this->assertSame( 'local', Prompts_Metric::METRIC_SOURCES['donation_revenue_direct'] );
+		$this->assertSame( 'populated', $window['donation_revenue_direct']['state'] );
+
+		$this->assertTrue(
+			$this->invoke_is_window_all_error( $window ),
+			'all hub-backed errored → banner fires even though the local card rendered'
+		);
+	}
+
+	/**
+	 * The banner does NOT fire if any hub-backed metric recovers.
+	 */
+	public function test_tab_error_does_not_fire_when_a_hub_metric_recovers() {
+		$window = $this->window_hub_down_local_alive();
+		$window['total_prompt_impressions'] = [ 'state' => 'populated' ]; // one hub card recovers.
+
+		$this->assertFalse( $this->invoke_is_window_all_error( $window ) );
 	}
 }
