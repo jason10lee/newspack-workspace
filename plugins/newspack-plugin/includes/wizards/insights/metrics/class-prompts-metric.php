@@ -38,6 +38,7 @@ defined( 'ABSPATH' ) || exit;
 
 use DateTimeInterface;
 use Newspack\Insights\BigQuery_Proxy_Client;
+use Newspack\Insights\Donors_Metric;
 use Newspack\Insights\Woo_Order_Resolver;
 
 /**
@@ -134,6 +135,53 @@ final class Prompts_Metric {
 	];
 
 	/**
+	 * Data-source classification per metric key (NPPD-1745). Declares, explicitly,
+	 * whether each card depends on the hub (BigQuery proxy), on local Woo order
+	 * data, or both:
+	 *
+	 *  - 'hub'    — fully hub-backed; errors when the proxy is down.
+	 *  - 'local'  — fully local (Woo order meta); survives a hub outage.
+	 *  - 'hybrid' — local numerator + hub denominator (or vice-versa); a hub
+	 *               failure makes it genuinely uncomputable, so it counts as
+	 *               hub-backed for the tab-error banner.
+	 *
+	 * Read by {@see \Newspack\Insights\Prompts_REST_Controller::is_window_all_error()}
+	 * so the "whole tab failed" banner fires when **all hub-backed metrics** error,
+	 * even though a surviving local card still renders — instead of being silently
+	 * suppressed by that one local card.
+	 *
+	 * MIGRATION CHECKLIST: when a card moves from hub to order-meta sourcing, update
+	 * its entry here (→ 'local' or 'hybrid'). Keys mirror {@see Prompts_REST_Controller::build_window()}.
+	 *
+	 * @var array<string, string>
+	 */
+	public const METRIC_SOURCES = [
+		'total_prompt_impressions'                   => 'hub',
+		'unique_readers_reached'                     => 'hub',
+		'avg_prompts_per_reader'                     => 'hub',
+		'click_through_rate'                         => 'hub',
+		'form_submission_rate'                       => 'hub',
+		'dismissal_rate'                             => 'hub',
+		'registration_conversion_direct'             => 'hub',
+		'registration_conversion_influenced_7d'      => 'hub',
+		'newsletter_signup_conversion_direct'        => 'hub',
+		'newsletter_signup_conversion_influenced_7d' => 'hub',
+		'donation_conversion_direct'                 => 'hybrid', // Local order-meta numerator + hub donation-impressions denominator.
+		'donation_conversion_influenced_14d'         => 'hub',
+		'subscription_conversion_direct'             => 'hub',     // NPPD-1745 follow-up ticket migrates this.
+		'subscription_conversion_influenced_14d'     => 'hub',
+		'donation_revenue_direct'                    => 'local',   // Pure Woo order meta; survives a hub outage.
+		'donation_revenue_influenced_14d'            => 'hub',
+		'subscription_revenue_direct'                => 'hub',     // NPPD-1745 follow-up ticket migrates this.
+		'subscription_revenue_influenced_14d'        => 'hub',
+		'conversion_funnel'                          => 'hub',
+		'exposures_distribution'                     => 'hub',
+		'performance_by_prompt'                      => 'hub',
+		'performance_by_intent'                      => 'hub',
+		'performance_by_placement'                   => 'hub',
+	];
+
+	/**
 	 * Proxy client used to dispatch catalog queries to the hub.
 	 *
 	 * @var BigQuery_Proxy_Client
@@ -146,6 +194,19 @@ final class Prompts_Metric {
 	 * @var Woo_Order_Resolver
 	 */
 	private Woo_Order_Resolver $woo_resolver;
+
+	/**
+	 * Donors_Metric collaborator (NPPD-1685). Owns the WC-native donation
+	 * storage + caching used to source the DIRECT prompt-donation metrics from
+	 * order meta instead of the GA4 attempt → Woo_Order_Resolver join. Lazily
+	 * built on first direct-donation call ({@see self::donors_metric()}) so the
+	 * storage detector + classifier don't run for requests that never touch a
+	 * direct-donation card. Influenced (14d) donation metrics still use the
+	 * resolver and do NOT use this collaborator.
+	 *
+	 * @var Donors_Metric|null
+	 */
+	private ?Donors_Metric $donors_metric;
 
 	/**
 	 * Per-request memoization for paid-conversion BQ row fetches.
@@ -185,15 +246,51 @@ final class Prompts_Metric {
 	 * @param Woo_Order_Resolver|null    $woo_resolver    Injected Woo resolver, or null to lazy-create.
 	 * @param callable|null              $prompt_provider Injected active-prompt provider (test seam),
 	 *                                                    or null to read published prompt content via get_posts().
+	 * @param Donors_Metric|null         $donors_metric   Injected donors collaborator (NPPD-1685), or null to lazy-create.
 	 */
 	public function __construct(
 		?BigQuery_Proxy_Client $proxy = null,
 		?Woo_Order_Resolver $woo_resolver = null,
-		?callable $prompt_provider = null
+		?callable $prompt_provider = null,
+		?Donors_Metric $donors_metric = null
 	) {
 		$this->proxy           = $proxy ?? new BigQuery_Proxy_Client();
 		$this->woo_resolver    = $woo_resolver ?? new Woo_Order_Resolver();
 		$this->prompt_provider = $prompt_provider;
+		$this->donors_metric   = $donors_metric;
+	}
+
+	/**
+	 * Lazily resolve the Donors_Metric collaborator (NPPD-1685). Built on first
+	 * use so requests that never hit a direct-donation card don't pay for the
+	 * storage detector + donation-product classifier.
+	 *
+	 * @return Donors_Metric
+	 */
+	private function donors_metric(): Donors_Metric {
+		if ( null === $this->donors_metric ) {
+			$this->donors_metric = new Donors_Metric();
+		}
+		return $this->donors_metric;
+	}
+
+	/**
+	 * Whether WooCommerce is active. The direct donation/subscription metrics read
+	 * local Woo orders, so they no-op to an empty state on non-WC publishers
+	 * (NPPD-1685). Filterable so tests can exercise both the WC-active and non-WC
+	 * paths without toggling a global class (the class is `final`, so it can't be
+	 * doubled).
+	 *
+	 * @return bool
+	 */
+	protected function woocommerce_active(): bool {
+		/**
+		 * Filters whether Insights treats WooCommerce as active for the direct
+		 * order-meta donation/subscription metrics.
+		 *
+		 * @param bool $active Whether the WooCommerce class is loaded.
+		 */
+		return (bool) apply_filters( 'newspack_insights_woocommerce_active', class_exists( 'WooCommerce' ) );
 	}
 
 	/**
@@ -712,18 +809,92 @@ final class Prompts_Metric {
 	 * @return array
 	 */
 	public function get_donation_conversion_direct( DateTimeInterface $start, DateTimeInterface $end ): array {
-		$joined = $this->fetch_paid_attempts_woo_join( 'prompts_donation_conversion_direct', $start, $end );
-		if ( is_wp_error( $joined ) ) {
-			return $this->error_scalar( 'rate', $joined );
+		// NPPD-1685/1745: rate = prompt-attributed donation conversions (Woo order
+		// meta, anonymous-inclusive) ÷ donation-intent prompt impressions (hub,
+		// anonymous-inclusive — `prompts_performance_by_prompt`). Numerator is local,
+		// denominator is hub, so this card is 'hybrid' (see METRIC_SOURCES): a hub
+		// impressions failure makes the rate genuinely uncomputable and counts toward
+		// the tab-error banner.
+		if ( ! $this->woocommerce_active() ) {
+			// Non-WC publisher (third-party donations): no local conversions to count.
+			// Empty state, not a fake 0% (NPPD-1737/1738 Option A scoping).
+			return $this->populated_scalar( 0.0, false, 0, 'rate' );
 		}
-		$denominator = count( $joined['rows'] );
-		$numerator   = $joined['conversions'];
-		return $this->populated_scalar(
-			$denominator > 0 ? $numerator / $denominator : 0.0,
-			$denominator > 0,
-			$denominator,
-			'rate'
-		);
+
+		$impressions = $this->fetch_donation_prompt_impressions( $start, $end );
+		if ( is_wp_error( $impressions ) ) {
+			return $this->error_scalar( 'rate', $impressions );
+		}
+
+		$by_popup    = $this->donors_metric()->get_prompt_attributed_donation_conversions( $start, $end );
+		$conversions = 0;
+		foreach ( $by_popup as $row ) {
+			$conversions += (int) $row['conversions'];
+		}
+
+		// Shared coherence guard + em-dash semantics (also drives the per-prompt
+		// donation_conversion_rate, so the two rates can't diverge). null = not
+		// computable (no impressions, or the >100% cross-surface case); a float
+		// (incl. a genuine 0.0) = a real rate.
+		$rate = $this->donation_rate_value( $conversions, $impressions );
+		return null === $rate
+			? $this->populated_scalar( 0.0, false, $impressions, 'rate' )
+			: $this->populated_scalar( $rate, true, $impressions, 'rate' );
+	}
+
+	/**
+	 * The direct donation conversion-rate value, with the coherence guard and
+	 * em-dash semantics shared by the tab-level card
+	 * ({@see self::get_donation_conversion_direct()}) and the per-prompt table
+	 * ({@see self::get_performance_by_prompt()}) so the two rates cannot diverge
+	 * (NPPD-1745).
+	 *
+	 * Returns the rate as a float — a genuine 0.0 when there are impressions but no
+	 * conversions ("viewed but no conversion") — or null when not computable:
+	 *  - no impressions → no denominator (em-dash); or
+	 *  - conversions > impressions → a cross-surface incoherence (order-meta
+	 *    numerator vs GA4 impressions) that must not render as a >100% rate.
+	 *
+	 * @param int $conversions Prompt-attributed donation conversions (order meta).
+	 * @param int $impressions Donation-intent prompt impressions (hub).
+	 * @return float|null
+	 */
+	private function donation_rate_value( int $conversions, int $impressions ): ?float {
+		if ( $impressions <= 0 ) {
+			return null;
+		}
+		if ( $conversions > $impressions ) {
+			return null;
+		}
+		return (float) $conversions / $impressions;
+	}
+
+	/**
+	 * Total donation-intent prompt impressions in the window, summed from the hub's
+	 * `prompts_performance_by_prompt` per-popup rows (NPPD-1745). Anonymous-inclusive
+	 * (impressions are `np_prompt_interaction(seen)` counts, no identity filter), so
+	 * reusing it as the conversion-rate denominator does not reintroduce the
+	 * anonymous-at-attempt bias the order-meta numerator escapes.
+	 *
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
+	 * @return int|\WP_Error Total donation-intent impressions, or the proxy error.
+	 */
+	private function fetch_donation_prompt_impressions( DateTimeInterface $start, DateTimeInterface $end ) {
+		$rows = $this->proxy->query( 'prompts_performance_by_prompt', $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $rows;
+		}
+		if ( ! is_array( $rows ) ) {
+			return 0;
+		}
+		$impressions = 0;
+		foreach ( $rows as $row ) {
+			if ( is_array( $row ) && 'donation' === (string) ( $row['intent'] ?? '' ) ) {
+				$impressions += (int) ( $row['impressions'] ?? 0 );
+			}
+		}
+		return $impressions;
 	}
 
 	/**
@@ -807,15 +978,34 @@ final class Prompts_Metric {
 	 * @return array
 	 */
 	public function get_donation_revenue_direct( DateTimeInterface $start, DateTimeInterface $end ): array {
-		$joined = $this->fetch_paid_attempts_woo_join( 'prompts_donation_conversion_direct', $start, $end );
-		if ( is_wp_error( $joined ) ) {
-			return $this->error_scalar( 'currency', $joined );
+		// NPPD-1685: source DIRECT donation revenue from order meta
+		// (`_newspack_popup_id` on initial donation orders) instead of the GA4
+		// attempt → customer_id join, which silently dropped anonymous-at-attempt
+		// donors (~100% non-joinable). Order meta carries a real customer_id +
+		// total and is anonymous-inclusive. Influenced (14d) revenue still uses the
+		// join — see get_donation_revenue_influenced_14d().
+		if ( ! $this->woocommerce_active() ) {
+			// Non-WC publisher (e.g. third-party donation platform): no orders to
+			// read. Empty state, not a real $0 (NPPD-1737/1738 Option A scoping).
+			return $this->populated_scalar( 0.0, false, 0, 'currency' );
 		}
-		// Computable only when at least one paid-intent prompt was viewed (mirrors
-		// the matching conversion-rate method's `count( rows ) > 0` gate). An empty
-		// window is "no in-intent prompts viewed", not a real $0 — so it renders the
-		// not-computable em-dash, consistent with its sibling rate card (NPPD-1704).
-		return $this->populated_scalar( $joined['revenue'], count( $joined['rows'] ) > 0, $joined['conversions'], 'currency' );
+
+		$by_popup    = $this->donors_metric()->get_prompt_attributed_donation_conversions( $start, $end );
+		$revenue     = 0.0;
+		$conversions = 0;
+		foreach ( $by_popup as $row ) {
+			$revenue     += (float) $row['revenue'];
+			$conversions += (int) $row['conversions'];
+		}
+
+		// Computable when there was prompt-attributed donation activity in the
+		// window. With the order-meta source there are no GA4 "attempt" rows to gate
+		// on, so the gate is now `conversions > 0` rather than "≥1 prompt viewed".
+		// NOTE (NPPD-1685): this narrows the not-computable em-dash from "no
+		// in-intent prompts viewed" to "no prompt-attributed donations" — restoring
+		// the impressions-based distinction is folded into the direct conversion-RATE
+		// work (which brings in the prompt-impressions denominator).
+		return $this->populated_scalar( $revenue, $conversions > 0, $conversions, 'currency' );
 	}
 
 	/**
@@ -1037,10 +1227,12 @@ final class Prompts_Metric {
 			];
 		}
 
-		// Fetch per-popup Woo augmentation once for each direction; the cache
-		// in fetch_paid_attempts_woo_join means this is free if the matching
-		// paid-rate / revenue method has already run this request.
-		$donation_counts     = $this->fetch_per_popup_woo_counts( 'prompts_donation_conversion_direct', $start, $end );
+		// Per-popup conversion augmentation. Donations come from order meta
+		// (NPPD-1685/1745 — anonymous-inclusive, keyed by popup id, no GA4 join);
+		// subscriptions still use the Woo-resolver path until their own ticket
+		// migrates them. On a non-WC publisher the donation map is empty.
+		$wc                  = $this->woocommerce_active();
+		$donation_map        = $wc ? $this->donors_metric()->get_prompt_attributed_donation_conversions( $start, $end ) : [];
 		$subscription_counts = $this->fetch_per_popup_woo_counts( 'prompts_subscription_conversion_direct', $start, $end );
 
 		$mapped = [];
@@ -1055,15 +1247,16 @@ final class Prompts_Metric {
 			$intent      = (string) ( $row['intent'] ?? '' );
 			$impressions = (int) ( $row['impressions'] ?? 0 );
 
-			$donation_conversions = 'donation' === $intent ? (int) ( $donation_counts[ $popup_id ] ?? 0 ) : 0;
+			$donation_conversions = 'donation' === $intent ? (int) ( $donation_map[ $popup_id ]['conversions'] ?? 0 ) : 0;
 			// Subscription-intent prompts share `action_type=registration` at
 			// the data layer; the Woo product-type filter on the hub-side
 			// subscription query already scopes attempts correctly.
 			$subscription_conversions = 'registration' === $intent ? (int) ( $subscription_counts[ $popup_id ] ?? 0 ) : 0;
 
-			// When the popup's intent matches but the Woo-side proxy failed (degraded),
-			// the rate is a real 0.0 — the impression denominator is still applicable;
-			// the null branch covers only intent mismatch (the column is N/A).
+			// donation_conversion_rate shares the tab-level coherence guard + em-dash
+			// semantics via donation_rate_value() (null = not computable: no
+			// impressions or a >100% cross-surface ratio; a float incl. 0.0 = real
+			// rate). null also covers intent mismatch + non-WC (the column is N/A).
 			$mapped[] = [
 				'popup_id'                     => $popup_id,
 				'prompt_title'                 => (string) ( $row['prompt_title'] ?? '' ),
@@ -1077,7 +1270,7 @@ final class Prompts_Metric {
 				'registrations'                => (int) ( $row['registrations'] ?? 0 ),
 				'newsletter_signups'           => (int) ( $row['newsletter_signups'] ?? 0 ),
 				'donation_conversions'         => $donation_conversions,
-				'donation_conversion_rate'     => ( 'donation' === $intent && $impressions > 0 ) ? $donation_conversions / $impressions : null,
+				'donation_conversion_rate'     => ( 'donation' === $intent && $wc ) ? $this->donation_rate_value( $donation_conversions, $impressions ) : null,
 				'subscription_conversions'     => $subscription_conversions,
 				'subscription_conversion_rate' => ( 'registration' === $intent && $impressions > 0 ) ? $subscription_conversions / $impressions : null,
 			];
