@@ -1015,7 +1015,12 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		add_filter( 'newspack_insights_woocommerce_active', '__return_true' ); // Removed in tearDown.
 		$donors = $this->createMock( Donors_Metric::class );
 		$donors->method( 'get_prompt_attributed_donation_conversions' )->willReturn(
-			[ '42' => [ 'conversions' => 5, 'revenue' => 0.0 ] ]
+			[
+				'42' => [
+					'conversions' => 5,
+					'revenue'     => 0.0,
+				],
+			]
 		);
 
 		$metric = new Prompts_Metric( $proxy, $resolver, null, $donors );
@@ -1057,7 +1062,12 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		add_filter( 'newspack_insights_woocommerce_active', '__return_true' );
 		$donors = $this->createMock( Donors_Metric::class );
 		$donors->method( 'get_prompt_attributed_donation_conversions' )->willReturn(
-			[ '42' => [ 'conversions' => 50, 'revenue' => 0.0 ] ]
+			[
+				'42' => [
+					'conversions' => 50,
+					'revenue'     => 0.0,
+				],
+			]
 		);
 
 		$metric = new Prompts_Metric( $proxy, null, null, $donors );
