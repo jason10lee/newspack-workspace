@@ -9,9 +9,9 @@
  * Tests for Newspack_Newsletters_Editor::add_newspack_extra_info().
  *
  * Regression coverage for NPPM-2756: the Posts Inserter block lets the user
- * pick any post type the REST API exposes (viewable + show_ui), but the extra
- * REST fields it relies on — most importantly `featured_media_info` — were only
- * registered for `post`. As a result featured images (and author/byline data)
+ * pick any post type the REST API exposes (REST-exposed + viewable + show_ui),
+ * but the extra REST fields it relies on — most importantly `featured_media_info`
+ * — were only registered for `post`. As a result featured images (and author/byline data)
  * silently disappeared for Pages, Newsletters, Events, etc. This locks the
  * fields to every post type the inserter can actually offer.
  */

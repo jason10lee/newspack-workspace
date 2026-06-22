@@ -801,7 +801,7 @@ final class Newspack_Newsletters_Editor {
 					'context' => [
 						'edit',
 					],
-					'type'    => 'array',
+					'type'    => 'object',
 				],
 			]
 		);
