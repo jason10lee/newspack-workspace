@@ -219,10 +219,14 @@ final class Newspack_Newsletters_Editor {
 			return;
 		}
 
-		// Theme-native editor: under the WC renderer keep the theme's editor styles
-		// so the canvas matches the standard post editor. Only the legacy MJML editor
-		// strips theme styles.
-		if ( \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled() ) {
+		// Theme-native editor: under the WC renderer, keep the theme's editor styles
+		// ONLY for block themes — they express block appearance via theme.json, which
+		// the WC email render also consumes, so the canvas and the email match (1:1).
+		// Classic themes style blocks via editor CSS the email render can't reproduce,
+		// so they keep stripping and fall back to theme.json + Newspack defaults (which
+		// both the canvas and the email use), preserving 1:1. The legacy MJML editor
+		// (flag off) always strips.
+		if ( \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled() && wp_is_block_theme() ) {
 			return;
 		}
 
@@ -680,25 +684,6 @@ final class Newspack_Newsletters_Editor {
 				filemtime( NEWSPACK_NEWSLETTERS_PLUGIN_FILE . 'dist/newsletterAdsEditor.js' ),
 				true
 			);
-		}
-
-		// Theme-native editor (WC renderer, classic theme only): WP core's
-		// `wp_enqueue_classic_theme_styles()` runs on this same hook (priority 10,
-		// registered before this plugin) and enqueues `classic-theme-styles`
-		// (classic-themes.css) when the active theme has no theme.json. That
-		// stylesheet paints `.wp-block-button__link` with `border-radius: 9999px`
-		// and `background-color: #32373c`, producing a pill button that does not
-		// match the email render (no such stylesheet on the front-end). Dequeue it
-		// so the canvas falls back to theme.json + the 4 px default, matching the
-		// email output. Block themes never load this stylesheet (they have
-		// theme.json), so the guard `! wp_is_block_theme()` is belt-and-suspenders.
-		if (
-			self::is_email_editor_request() &&
-			class_exists( \Newspack\Newsletters\Email_Renderers\Feature_Flag::class ) &&
-			\Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled() &&
-			! wp_is_block_theme()
-		) {
-			wp_dequeue_style( 'classic-theme-styles' );
 		}
 
 		// If it's a reusable block, register this plugin's blocks.
