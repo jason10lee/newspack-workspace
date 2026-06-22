@@ -295,6 +295,13 @@ final class Newspack_Newsletters_Editor {
 		if ( ! self::is_email_editor_request() ) {
 			return;
 		}
+		// Theme-native editor: under the WC renderer, let theme.json drive block
+		// appearance (font sizes, spacing, layout, button) so the canvas matches
+		// the standard post editor. The legacy MJML editor keeps the email-safe
+		// overrides below.
+		if ( \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled() ) {
+			return;
+		}
 		add_theme_support(
 			'editor-font-sizes',
 			[
@@ -335,6 +342,14 @@ final class Newspack_Newsletters_Editor {
 	 */
 	public static function override_theme_json_for_email_editor( $theme_json ) {
 		if ( ! self::is_email_editor_request() ) {
+			return $theme_json;
+		}
+
+		// Theme-native editor: under the WC renderer, let theme.json drive block
+		// appearance (font sizes, spacing, layout, button) so the canvas matches
+		// the standard post editor. The legacy MJML editor keeps the email-safe
+		// overrides below.
+		if ( \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled() ) {
 			return $theme_json;
 		}
 
