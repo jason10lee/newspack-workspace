@@ -10,7 +10,7 @@ import { __, sprintf } from '@wordpress/i18n';
 import { commentAuthorAvatar, drafts, envelope, globe, published, scheduled, trash } from '@wordpress/icons';
 import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
 
-import { getAdminUrl } from '../../admin-globals';
+import { getAdminUrl, isManualProvider } from '../../admin-globals';
 import { formatPostDate } from '../../utils/format-date';
 import { termsForTaxonomy } from '../../utils/terms';
 import { statusKindLabel, STATUS_KIND_LABELS } from './status-label';
@@ -59,8 +59,9 @@ const renderStatus = ( { item } ) => {
 	let label;
 	if ( 'sent' === kind && status.sent_at ) {
 		label = sprintf(
-			/* translators: %s: formatted send date */
-			__( 'Sent %s', 'newspack-newsletters' ),
+			// The manual provider publishes rather than sends through an ESP, so the date reads "Published %s".
+			/* translators: %s: formatted publish/send date */
+			isManualProvider() ? __( 'Published %s', 'newspack-newsletters' ) : __( 'Sent %s', 'newspack-newsletters' ),
 			formatDate( status.sent_at )
 		);
 	} else if ( 'scheduled' === kind && status.scheduled_at ) {
@@ -165,7 +166,8 @@ export function getFields( { authors = [], categories = [], tags = [], sendLists
 		},
 		{
 			id: 'send_date',
-			label: __( 'Send date', 'newspack-newsletters' ),
+			// For the manual provider the date is a publish date, not an ESP send date.
+			label: isManualProvider() ? __( 'Publish date', 'newspack-newsletters' ) : __( 'Send date', 'newspack-newsletters' ),
 			enableSorting: true,
 			getValue: ( { item } ) => item?.newspack_newsletters_status?.sent_at || item?.newspack_newsletters_status?.scheduled_at || 0,
 			render: renderSendDate,

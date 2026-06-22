@@ -174,31 +174,39 @@ export default compose( [
 
 	const { name: serviceProviderName, renderPreSendInfo, renderPostUpdateInfo } = getServiceProvider();
 
+	// The manual provider doesn't send through an ESP – the publisher copies the rendered HTML and sends it
+	// themselves. So the editor keeps WordPress' native publish/published terminology instead of send/sent.
+	const isManual = 'manual' === serviceProviderName;
+
 	const isButtonEnabled =
 		( isPublishable || isEditedPostBeingScheduled ) &&
 		isSaveable &&
 		! isPublished &&
 		! isSaving &&
 		'future' !== status &&
-		( newsletterData.campaign || 'manual' === serviceProviderName ) &&
+		( newsletterData.campaign || isManual ) &&
 		0 === newsletterValidationErrors.length;
 	let label;
 	if ( isPublished ) {
 		if ( isSaving ) {
-			label = __( 'Sending', 'newspack-newsletters' );
+			label = isManual ? __( 'Publishing…', 'newspack-newsletters' ) : __( 'Sending', 'newspack-newsletters' );
+		} else if ( isManual ) {
+			label = __( 'Published', 'newspack-newsletters' );
 		} else {
 			label = is_public ? __( 'Sent and Published', 'newspack-newsletters' ) : __( 'Sent', 'newspack-newsletters' );
 		}
 	} else if ( 'future' === status ) {
 		if ( postDate && new Date( postDate ) < new Date() ) {
 			// Scheduled, but in the past ¯\_(ツ)_/¯.
-			label = __( 'Send', 'newspack-newsletters' );
+			label = isManual ? __( 'Publish', 'newspack-newsletters' ) : __( 'Send', 'newspack-newsletters' );
 		} else {
 			// Scheduled to be sent.
 			label = __( 'Scheduled', 'newspack-newsletters' );
 		}
 	} else if ( isEditedPostBeingScheduled ) {
-		label = __( 'Schedule sending', 'newspack-newsletters' );
+		label = isManual ? __( 'Schedule', 'newspack-newsletters' ) : __( 'Schedule sending', 'newspack-newsletters' );
+	} else if ( isManual ) {
+		label = __( 'Publish', 'newspack-newsletters' );
 	} else {
 		label = is_public ? __( 'Send and Publish', 'newspack-newsletters' ) : __( 'Send', 'newspack-newsletters' );
 	}
@@ -206,7 +214,7 @@ export default compose( [
 	let updateLabel;
 	if ( isSaving ) {
 		updateLabel = __( 'Updating…', 'newspack-newsletters' );
-	} else if ( 'manual' === serviceProviderName ) {
+	} else if ( isManual ) {
 		updateLabel = __( 'Update and copy HTML', 'newspack-newsletters' );
 	} else {
 		updateLabel = __( 'Update', 'newspack-newsletters' );
@@ -225,12 +233,8 @@ export default compose( [
 
 	const [ testEmail, setTestEmail ] = useState( window?.newspack_newsletters_data?.user_test_emails?.join( ',' ) || '' );
 
-	let modalSubmitLabel;
-	if ( 'manual' === serviceProviderName ) {
-		modalSubmitLabel = is_public ? __( 'Mark as sent and publish', 'newspack-newsletters' ) : __( 'Mark as sent', 'newspack-newsletters' );
-	} else {
-		modalSubmitLabel = label;
-	}
+	// `label` already carries the manual provider's "Publish" wording, so it works as the modal submit label too.
+	const modalSubmitLabel = label;
 
 	const triggerCampaignSend = async () => {
 		editPost( { status: publishStatus } );
@@ -294,7 +298,7 @@ export default compose( [
 							<div className="newspack-newsletters__modal__content">
 								<DisableAutoAds saveOnToggle />
 								<hr />
-								{ 'manual' !== serviceProviderName && (
+								{ ! isManual && (
 									<Testing testEmail={ testEmail } onChangeEmail={ setTestEmail } disabled={ isSaving } inlineNotifications />
 								) }
 								<hr />
@@ -337,7 +341,7 @@ export default compose( [
 			{ modalVisible && (
 				<Modal
 					className="newspack-newsletters__modal"
-					title={ __( 'Send your newsletter?', 'newspack-newsletters' ) }
+					title={ isManual ? __( 'Publish your newsletter?', 'newspack-newsletters' ) : __( 'Send your newsletter?', 'newspack-newsletters' ) }
 					onRequestClose={ () => setModalVisible( false ) }
 					shouldCloseOnClickOutside={ false }
 					isFullScreen
@@ -349,7 +353,7 @@ export default compose( [
 						<div className="newspack-newsletters__modal__content">
 							<DisableAutoAds saveOnToggle />
 							<hr />
-							{ 'manual' !== serviceProviderName && (
+							{ ! isManual && (
 								<Testing testEmail={ testEmail } onChangeEmail={ setTestEmail } disabled={ isSaving } inlineNotifications />
 							) }
 							<div className="newspack-newsletters__modal__spacer" />

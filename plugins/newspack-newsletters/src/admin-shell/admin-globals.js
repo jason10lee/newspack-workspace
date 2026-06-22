@@ -30,3 +30,14 @@ export function getAdminUrl() {
 export function getCptSlug() {
 	return getGlobal()?.cptSlug || DEFAULT_CPT_SLUG;
 }
+
+/**
+ * Whether the configured ESP is the "manual" provider, which doesn't send
+ * through an ESP – the publisher copies the HTML and sends it themselves. The
+ * list then uses WordPress' native publish/published wording instead of send/sent.
+ *
+ * @return {boolean} True when the manual provider is active.
+ */
+export function isManualProvider() {
+	return 'manual' === getGlobal()?.serviceProvider;
+}

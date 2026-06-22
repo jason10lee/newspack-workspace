@@ -8,8 +8,12 @@ import { createHigherOrderComponent } from '@wordpress/compose';
 import { useState } from '@wordpress/element';
 
 import { SHARE_BLOCK_NOTICE_ID } from '../../editor/blocks/share/consts';
+import { isManualESP } from '../../newsletter-editor/utils';
 
-const successNote = __( 'Campaign sent on', 'newspack-newsletters' );
+// The manual provider doesn't send through an ESP, so the post-publish notice uses publish wording.
+// This constant doubles as the marker that keeps the notice from being cleared, so both must match.
+// Trailing space is intentional: the date is concatenated directly (e.g., "Published on 6/18/2026").
+const successNote = isManualESP() ? __( 'Published on ', 'newspack-newsletters' ) : __( 'Campaign sent on ', 'newspack-newsletters' );
 const shouldRemoveNotice = notice => {
 	return (
 		notice.id !== SHARE_BLOCK_NOTICE_ID &&
