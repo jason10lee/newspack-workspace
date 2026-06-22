@@ -153,8 +153,8 @@ class Test_Posts_Inserter_Rest_Fields extends WP_UnitTestCase {
 	}
 
 	/**
-	 * `featured_media_info` must register for every viewable + show_ui post
-	 * type the inserter can offer — not just `post`.
+	 * `featured_media_info` must register for every REST-exposed + viewable +
+	 * show_ui post type the inserter can offer — not just `post`.
 	 */
 	public function test_featured_media_info_registers_for_inserter_post_types() {
 		Newspack_Newsletters_Editor::add_newspack_extra_info();
@@ -171,7 +171,7 @@ class Test_Posts_Inserter_Rest_Fields extends WP_UnitTestCase {
 		$this->assertContains(
 			self::VIEWABLE_CPT,
 			$types,
-			'public + show_ui CPTs (e.g. events) are offered by the inserter'
+			'REST-exposed + viewable + show_ui CPTs (e.g. events) are offered by the inserter'
 		);
 	}
 
