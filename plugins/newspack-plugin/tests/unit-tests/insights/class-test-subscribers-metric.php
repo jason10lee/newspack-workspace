@@ -68,4 +68,106 @@ class Test_Subscribers_Metric extends WP_UnitTestCase {
 			'all signals present'          => [ 8, 2, 900.0, 850.0, true, 'A fully populated window is active.' ],
 		];
 	}
+
+	// --- NPPD-1746: gate-precedence bucketing of attributed subscription orders ---
+
+	/**
+	 * THE dual-key precedence assertion, isolated. An order carrying BOTH a gate id
+	 * and a popup id is a GATE conversion: it lands in `by_gate` ONLY — counted once,
+	 * its revenue once — and does NOT appear in `by_popup`. Zero dual-key orders
+	 * exist across both Phase-1 publishers, so this test is the only thing exercising
+	 * the precedence rule; it is deliberately standalone, not folded into a broader
+	 * fixture check.
+	 */
+	public function test_bucket_dual_key_order_is_gate_only() {
+		$result = Subscribers_Metric::bucket_attributed_subscription_orders(
+			[
+				[
+					'order_id'    => 1,
+					'gate_id'     => '888',
+					'popup_id'    => '4242',
+					'order_total' => 90.00,
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				'888' => [
+					'conversions' => 1,
+					'revenue'     => 90.00,
+				],
+			],
+			$result['by_gate'],
+			'dual-key order counts once in the gate bucket'
+		);
+		$this->assertSame( [], $result['by_popup'], 'dual-key order must NOT appear in the popup bucket' );
+	}
+
+	/**
+	 * Gate-only and popup-only orders route to their own surface; an organic order
+	 * (neither id) is dropped. Revenue and counts aggregate per id.
+	 */
+	public function test_bucket_routes_each_surface_and_drops_organic() {
+		$result = Subscribers_Metric::bucket_attributed_subscription_orders(
+			[
+				[
+					'order_id'    => 1,
+					'gate_id'     => '888',
+					'popup_id'    => null,
+					'order_total' => 75.00,
+				],
+				[
+					'order_id'    => 2,
+					'gate_id'     => '888',
+					'popup_id'    => null,
+					'order_total' => 25.00,
+				],
+				[
+					'order_id'    => 3,
+					'gate_id'     => null,
+					'popup_id'    => '4242',
+					'order_total' => 60.00,
+				],
+				[
+					'order_id'    => 4,
+					'gate_id'     => null,
+					'popup_id'    => null,
+					'order_total' => 50.00,
+				],
+			]
+		);
+
+		$this->assertSame(
+			[
+				'888' => [
+					'conversions' => 2,
+					'revenue'     => 100.00,
+				],
+			],
+			$result['by_gate'] 
+		);
+		$this->assertSame(
+			[
+				'4242' => [
+					'conversions' => 1,
+					'revenue'     => 60.00,
+				],
+			],
+			$result['by_popup'] 
+		);
+	}
+
+	/**
+	 * Empty input yields empty surface maps (not a warning, not a null).
+	 */
+	public function test_bucket_empty_input() {
+		$this->assertSame(
+			[
+				'by_gate'  => [],
+				'by_popup' => [],
+			],
+			Subscribers_Metric::bucket_attributed_subscription_orders( [] )
+		);
+	}
 }

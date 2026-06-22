@@ -477,6 +477,89 @@ class Subscribers_Metric {
 	}
 
 	/**
+	 * Prompt/gate-attributed subscription conversions in a window, bucketed by
+	 * surface with gate precedence (NPPD-1746). Delegates the per-order read to the
+	 * storage backend, then folds the orders into two surface maps:
+	 *
+	 *   [ 'by_gate'  => [ gate_id  => { conversions, revenue } ],
+	 *     'by_popup' => [ popup_id => { conversions, revenue } ] ]
+	 *
+	 * The Gates tab consumes `by_gate`; the Prompts tab consumes `by_popup`. Each
+	 * order lands in exactly one surface (see the precedence note on
+	 * {@see bucket_attributed_subscription_orders()}), so the two per-surface rates
+	 * never double-count an order.
+	 *
+	 * @param DateTimeInterface $start Inclusive window start.
+	 * @param DateTimeInterface $end   Inclusive window end.
+	 * @return array{by_gate: array<string, array{conversions:int, revenue:float}>, by_popup: array<string, array{conversions:int, revenue:float}>}
+	 */
+	public function get_attributed_subscription_conversions( DateTimeInterface $start, DateTimeInterface $end ): array {
+		return (array) $this->cached(
+			'attributed_subscription_conversions',
+			$this->window_key( $start, $end ),
+			self::TTL_DEFAULT,
+			function () use ( $start, $end ) {
+				return self::bucket_attributed_subscription_orders(
+					$this->storage->get_attributed_subscription_orders( $start, $end )
+				);
+			}
+		);
+	}
+
+	/**
+	 * Fold per-order attributed-subscription rows into per-surface conversion +
+	 * revenue maps, applying gate precedence. Pure function (no storage, no cache),
+	 * exposed `static` so the precedence rule can be unit-tested directly.
+	 *
+	 * GATE PRECEDENCE (NPPD-1746): a subscription that passed through a paywall gate
+	 * is a gate conversion. An order carrying BOTH `_gate_post_id` and
+	 * `_newspack_popup_id` is bucketed to the gate ONLY — never both — so one order
+	 * is counted in exactly one surface and the gate-rate and popup-rate can never
+	 * double-count it. Zero dual-key orders were observed across both Phase-1
+	 * publishers measured, so this branch is dormant on today's data; it is
+	 * defined defensively because "never fires today" is exactly what silently
+	 * becomes a double-count once the write paths shift and the assumption is
+	 * forgotten. The one-id-per-order MIN() resolution in the storage reader and
+	 * this gate-over-popup rule together make the bucketing fully deterministic.
+	 *
+	 * @param array<int, array{order_id:int, gate_id:?string, popup_id:?string, order_total:float}> $orders Per-order rows.
+	 * @return array{by_gate: array<string, array{conversions:int, revenue:float}>, by_popup: array<string, array{conversions:int, revenue:float}>}
+	 */
+	public static function bucket_attributed_subscription_orders( array $orders ): array {
+		$by_gate  = [];
+		$by_popup = [];
+		foreach ( $orders as $order ) {
+			$gate_id  = isset( $order['gate_id'] ) ? (string) $order['gate_id'] : '';
+			$popup_id = isset( $order['popup_id'] ) ? (string) $order['popup_id'] : '';
+			$total    = (float) ( $order['order_total'] ?? 0 );
+
+			if ( '' !== $gate_id ) {
+				if ( ! isset( $by_gate[ $gate_id ] ) ) {
+					$by_gate[ $gate_id ] = [
+						'conversions' => 0,
+						'revenue'     => 0.0,
+					];
+				}
+				++$by_gate[ $gate_id ]['conversions'];
+				$by_gate[ $gate_id ]['revenue'] += $total;
+			} elseif ( '' !== $popup_id ) {
+				if ( ! isset( $by_popup[ $popup_id ] ) ) {
+					$by_popup[ $popup_id ] = [
+						'conversions' => 0,
+						'revenue'     => 0.0,
+					];
+				}
+				++$by_popup[ $popup_id ]['conversions'];
+				$by_popup[ $popup_id ]['revenue'] += $total;
+			}
+		}
+		return [
+			'by_gate'  => $by_gate,
+			'by_popup' => $by_popup,
+		];
+	}
+
+	/**
 	 * Flush ALL Tab 6 metric caches. Use after a manual data correction
 	 * or from the future NPPD-1605 invalidation system; not wired to any
 	 * automatic trigger today because the WP transient API has no key
