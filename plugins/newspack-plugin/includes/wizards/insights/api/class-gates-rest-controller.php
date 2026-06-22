@@ -277,7 +277,7 @@ class Gates_REST_Controller extends WP_REST_Controller {
 	): array {
 		$current  = $this->build_window( $metric, $start, $end );
 		$response = [
-			'tab_error' => self::is_window_all_error( $current ),
+			'tab_error' => self::is_window_all_error( $current, $metric->woocommerce_active() ),
 			'current'   => $current,
 			'previous'  => null,
 		];
@@ -288,29 +288,49 @@ class Gates_REST_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Whether every metric in a window payload reports `state: 'error'`.
+	 * Whether every HUB-BACKED metric in a window payload reports `state: 'error'`
+	 * — i.e. the whole tab failed to load (e.g. the BigQuery proxy is down).
 	 *
-	 * Returns `false` as soon as any metric is not in the error state (the `window`
-	 * key is date metadata, not a metric, so it's skipped). A metric missing a
-	 * `state` key is treated as non-error, so the banner only shows on an
-	 * unambiguous all-failed window.
+	 * Scoped to hub-backed metrics via {@see Gates_Metric::METRIC_SOURCES} (NPPD-1746):
+	 * `local` cards (paywall revenue-direct, sourced from Woo order meta) keep
+	 * rendering during a hub outage, so including them would silently suppress the
+	 * banner even when every hub query failed. `hybrid` cards count as hub-backed (a
+	 * hub denominator failure makes them error). Returns `false` as soon as any
+	 * hub-backed metric is not in the error state, and `false` for a window that
+	 * surfaced no hub-backed metric at all (nothing to declare "all failed").
 	 *
-	 * @param array $window The shape returned by `build_window()`.
+	 * NPPD-1745 #1 (banner hole on non-WC, mirrored from the Prompts tab): a `hybrid`
+	 * card short-circuits to a not-applicable empty state on a non-WooCommerce
+	 * publisher BEFORE it ever calls the hub — so a hub outage can't make it error,
+	 * and treating its surviving empty state as a healthy hub-backed card would mask
+	 * the outage. On a non-WC publisher, hybrid cards are therefore skipped (treated
+	 * like `local`); the genuinely hub-backed `hub` cards still drive the decision.
+	 *
+	 * @param array $window             The shape returned by `build_window()`.
+	 * @param bool  $woocommerce_active Whether WooCommerce is active for this publisher.
 	 * @return bool
 	 */
-	private static function is_window_all_error( array $window ): bool {
-		foreach ( $window as $key => $value ) {
-			// Skip the date metadata and the scalar section-total fields
-			// (`paywall_*_total`, NPPD-1694; `registration_impressions_total` /
-			// `registrations_total`, NPPD-1702 — int|null) — none is a metric.
-			if ( 'window' === $key || ! is_array( $value ) ) {
+	private static function is_window_all_error( array $window, bool $woocommerce_active ): bool {
+		$saw_hub_backed = false;
+		foreach ( Gates_Metric::METRIC_SOURCES as $key => $source ) {
+			if ( 'local' === $source ) {
 				continue;
 			}
-			if ( ! isset( $value['state'] ) || 'error' !== $value['state'] ) {
+			// On a non-WC publisher a hybrid card never reaches the hub (it empties out
+			// first), so it can't error on a hub outage — don't let its surviving empty
+			// state mask the outage.
+			if ( ! $woocommerce_active && 'hybrid' === $source ) {
+				continue;
+			}
+			if ( ! isset( $window[ $key ] ) || ! is_array( $window[ $key ] ) || ! isset( $window[ $key ]['state'] ) ) {
+				continue;
+			}
+			$saw_hub_backed = true;
+			if ( 'error' !== $window[ $key ]['state'] ) {
 				return false;
 			}
 		}
-		return true;
+		return $saw_hub_backed;
 	}
 
 	/**
