@@ -534,6 +534,8 @@ class Group_Subscription_Invite {
 		// Only the genuine non-add is a failure: leave the invite intact so it can be retried.
 		// An already-member is a fulfilled invite, so fall through to cancel it (it would otherwise
 		// keep counting toward the member limit).
+		// user_is_member() returns bool here (the invite always targets a group subscription, so the
+		// null "not a group subscription" case can't occur); a falsy result means "not a member".
 		if ( empty( $result['members_added'][ $user->ID ] ) && ! Group_Subscription::user_is_member( $user->ID, $subscription ) ) {
 			return new \WP_Error(
 				'newspack_group_subscription_invite_not_added',

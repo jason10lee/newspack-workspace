@@ -92,7 +92,7 @@ class Test_Group_Subscription_API extends WP_UnitTestCase {
 		$result = Group_Subscription_API::api_update_members( $request );
 
 		$this->assertWPError( $result, 'Member mutation on a cancelled subscription should return a WP_Error.' );
-		$this->assertSame( 403, $result->get_error_data()['status'], 'The rejection should carry HTTP 403.' );
+		$this->assertSame( 409, $result->get_error_data()['status'], 'The rejection should carry HTTP 409.' );
 	}
 
 	/**
@@ -109,7 +109,7 @@ class Test_Group_Subscription_API extends WP_UnitTestCase {
 	}
 
 	/**
-	 * S2: an active subscription passes the manageable gate (no 403).
+	 * S2: an active subscription passes the manageable gate (no 409).
 	 */
 	public function test_update_members_allowed_on_active_subscription() {
 		$subscription = $this->create_group_subscription( 'active' );
@@ -135,7 +135,7 @@ class Test_Group_Subscription_API extends WP_UnitTestCase {
 		$result = Group_Subscription_API::api_invite( $request );
 
 		$this->assertWPError( $result, 'An email invite on a cancelled subscription should return a WP_Error.' );
-		$this->assertSame( 403, $result->get_error_data()['status'], 'The rejection should carry HTTP 403.' );
+		$this->assertSame( 409, $result->get_error_data()['status'], 'The rejection should carry HTTP 409.' );
 	}
 
 	/**
@@ -152,7 +152,7 @@ class Test_Group_Subscription_API extends WP_UnitTestCase {
 		$result = Group_Subscription_API::api_generate_invite_link( $request );
 
 		$this->assertWPError( $result, 'Generating an invite link on a cancelled subscription should return a WP_Error.' );
-		$this->assertSame( 403, $result->get_error_data()['status'], 'The rejection should carry HTTP 403.' );
+		$this->assertSame( 409, $result->get_error_data()['status'], 'The rejection should carry HTTP 409.' );
 	}
 
 	/**
