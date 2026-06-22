@@ -92,6 +92,61 @@ final class Conversion_Metric {
 	const SOURCES = [ 'gate', 'prompt', 'direct' ];
 
 	/**
+	 * Data-source classification per metric key (NPPD-1745 fix for Tab 3). Declares,
+	 * explicitly, whether each card depends on the hub (BigQuery proxy), on local Woo
+	 * order data, or both:
+	 *
+	 *  - 'hub'    — fully hub-backed; errors when the proxy is down.
+	 *  - 'local'  — fully local (Woo order meta or Woo storage layer); survives a
+	 *               hub outage.
+	 *  - 'hybrid' — local numerator + hub denominator (or vice-versa); a hub
+	 *               failure makes it genuinely uncomputable, so it counts as
+	 *               hub-backed for the tab-error banner.
+	 *
+	 * Read by {@see \Newspack\Insights\Conversion_REST_Controller::is_window_all_error()}
+	 * so the "whole tab failed" banner fires when **all hub-backed metrics** error,
+	 * even though surviving local cards still render — instead of being silently
+	 * suppressed by a Woo-only card.
+	 *
+	 * MIGRATION CHECKLIST: when a card moves from hub to order-meta sourcing, update
+	 * its entry here (→ 'local' or 'hybrid'). Keys mirror
+	 * {@see Conversion_REST_Controller::build_window()} +
+	 * {@see Conversion_REST_Controller::build_snapshot()}.
+	 *
+	 * NOTE: source_mix_subscribers and source_mix_donors are 'hybrid' because their
+	 * numerator is local Woo order-meta and their denominator (total registrations
+	 * bucket) comes from the hub. They will migrate to 'local' when the order-meta
+	 * rework is complete.
+	 *
+	 * @var array<string, string>
+	 */
+	public const METRIC_SOURCES = [
+		'reader_lifecycle_funnel'              => 'hub',
+		'anonymous_to_registered_funnel'       => 'hub',
+		'registered_to_subscriber_funnel'      => 'hub',
+		'registered_to_donor_funnel'           => 'hub',
+		'subscriber_to_donor_funnel'           => 'local',   // 2.4 — Woo-only, visibility-gated.
+		'source_mix_registrations'             => 'hub',
+		'source_mix_subscribers'               => 'hybrid',  // Woo records numerator + hub source; errors on hub outage.
+		'source_mix_donors'                    => 'hybrid',  // Woo records numerator + hub source; errors on hub outage.
+		'time_to_register_distribution'        => 'hub',     // 4.1 — BQ.
+		'time_to_subscribe_distribution'       => 'local',   // 4.2 — coming_soon stub; never errors.
+		'time_to_donate_distribution'          => 'local',   // 4.3 — coming_soon stub; never errors.
+		'subscriber_to_donor_lag_distribution' => 'local',   // 4.4 — Woo.
+		'registration_to_conversion_cohort'    => 'local',   // 5.1 — coming_soon / Woo.
+		'subscriber_retention_cohort'          => 'local',   // 5.2 — Woo.
+		'weekly_conversion_rates'              => 'hub',
+		'influenced_registration_rate_7d'      => 'hub',
+		'influenced_subscription_rate_14d'     => 'hub',
+		'influenced_donation_rate_14d'         => 'hub',
+		'influenced_newsletter_rate_7d'        => 'hub',
+		'top_pages_no_conversion'              => 'hub',
+		'stale_registered_count'               => 'local',   // 8.1 — Woo.
+		'at_risk_subscriber_count'             => 'local',   // 8.2 — Woo.
+		'lapsed_donor_count'                   => 'local',   // 8.3 — Woo.
+	];
+
+	/**
 	 * Proxy client used to dispatch catalog queries to the hub.
 	 *
 	 * @var BigQuery_Proxy_Client
@@ -185,6 +240,28 @@ final class Conversion_Metric {
 		$this->woo_resolver       = $woo_resolver ?? new Woo_Order_Resolver();
 		$this->subscribers_metric = $subscribers_metric ?? new Subscribers_Metric();
 		$this->donors_metric      = $donors_metric ?? new Donors_Metric();
+	}
+
+	/**
+	 * Whether WooCommerce is active. Local-only metrics (subscriber→donor funnel,
+	 * opportunity counts, lag distribution) read Woo storage, so they no-op on
+	 * non-WC publishers. Filterable so tests can exercise both paths without toggling
+	 * a global class (the class is `final`, so it can't be doubled). Public because
+	 * the REST controller reads it to scope the tab-error banner: on a non-WC
+	 * publisher a hybrid card short-circuits before reaching the hub, so it must not
+	 * count as a hub-backed survivor (mirrors the identical pattern in
+	 * {@see \Newspack\Insights\Prompts_Metric::woocommerce_active()}, NPPD-1745).
+	 *
+	 * @return bool
+	 */
+	public function woocommerce_active(): bool {
+		/**
+		 * Filters whether Insights treats WooCommerce as active for the
+		 * local Woo order-meta and storage-layer metrics on Tab 3.
+		 *
+		 * @param bool $active Whether the WooCommerce class is loaded.
+		 */
+		return (bool) apply_filters( 'newspack_insights_woocommerce_active', class_exists( 'WooCommerce' ) );
 	}
 
 	/**

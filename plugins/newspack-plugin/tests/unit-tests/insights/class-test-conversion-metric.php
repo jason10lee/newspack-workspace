@@ -1987,14 +1987,15 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	/**
 	 * Error fixture: BQ-backed metrics carry state:'error'; local-only metrics
 	 * (subscriber-to-donor funnel, opportunity counts) stay 'populated'; tab_error
-	 * is false because deferred + local metrics are non-error; deferred sections
-	 * stay 'coming_soon'.
+	 * is NOW true (NPPD-1745) because all hub-backed metrics are 'error' — the
+	 * scoped banner fires regardless of the local/coming_soon cards; deferred
+	 * sections stay 'coming_soon'.
 	 */
 	public function test_fixture_error_variant() {
 		$payload = Conversion_Metric::get_fixture( 'error', false );
 
-		// tab_error is false — snapshot and deferred metrics are non-error.
-		$this->assertFalse( $payload['tab_error'] );
+		// NPPD-1745: tab_error is now true — all hub-backed metrics error in the fixture.
+		$this->assertTrue( $payload['tab_error'] );
 		$current = $payload['current'];
 
 		// BQ-backed metrics → error.
