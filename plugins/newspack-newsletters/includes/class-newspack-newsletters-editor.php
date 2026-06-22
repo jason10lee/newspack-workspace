@@ -219,6 +219,13 @@ final class Newspack_Newsletters_Editor {
 			return;
 		}
 
+		// Theme-native editor: under the WC renderer keep the theme's editor styles
+		// so the canvas matches the standard post editor. Only the legacy MJML editor
+		// strips theme styles.
+		if ( \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled() ) {
+			return;
+		}
+
 		$allowed_actions = [
 			__CLASS__ . '::enqueue_block_assets',
 			'newspack_enqueue_scripts',
