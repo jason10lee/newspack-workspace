@@ -881,12 +881,10 @@ final class Conversion_Metric {
 	 * @return array
 	 */
 	private function compute_source_mix( string $query_name, array $records, DateTimeInterface $start, DateTimeInterface $end ): array {
-		$bq = $this->proxy->query( $query_name, $start, $end );
-		// Precedence intentional: a genuine proxy error must surface as the 'error' envelope, not be masked as 'empty'.
-		if ( is_wp_error( $bq ) ) {
-			return $this->error_collection( 'slices', $bq );
-		}
-
+		// No conversions in the window → the metric is 'empty' regardless of the
+		// source layer, so skip the BQ round-trip entirely. BigQuery only attributes
+		// a source to conversions that already exist in Woo; with none there is
+		// nothing to attribute, and a proxy error here would be a false 'error'.
 		if ( empty( $records ) ) {
 			return [
 				'state'  => 'empty',
@@ -895,10 +893,21 @@ final class Conversion_Metric {
 			];
 		}
 
+		$bq = $this->proxy->query( $query_name, $start, $end );
+		if ( is_wp_error( $bq ) ) {
+			return $this->error_collection( 'slices', $bq );
+		}
+		// A non-array success body, or any non-array row, is a malformed response
+		// (consistent with the other BQ-backed metrics) — surface 'error' rather
+		// than silently degrading to all-direct.
+		if ( ! is_array( $bq ) ) {
+			return $this->malformed_collection( 'slices' );
+		}
+
 		$events = [];
-		foreach ( (array) $bq as $row ) {
+		foreach ( $bq as $row ) {
 			if ( ! is_array( $row ) ) {
-				continue;
+				return $this->malformed_collection( 'slices' );
 			}
 			$events[] = [
 				'ts'     => intdiv( (int) ( $row['attempt_ts'] ?? 0 ), 1000000 ),

@@ -909,8 +909,17 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$proxy    = $this->createMock( BigQuery_Proxy_Client::class );
 		$proxy->method( 'query' )->willReturn( $wp_error );
 
-		$resolver        = $this->createMock( Woo_Order_Resolver::class );
-		$metric          = new Conversion_Metric( $proxy, $resolver );
+		// Records exist (conversions happened); the BQ source layer fails → 'error'.
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_new_subscriber_records_in_window' )->willReturn(
+			[
+				[
+					'customer_id' => 1,
+					'ts'          => 1700000000,
+				],
+			] 
+		);
+		$metric          = new Conversion_Metric( $proxy, null, $subs );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_source_mix_subscribers( $start, $end );
 
@@ -1047,8 +1056,17 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$proxy    = $this->createMock( BigQuery_Proxy_Client::class );
 		$proxy->method( 'query' )->willReturn( $wp_error );
 
-		$resolver        = $this->createMock( Woo_Order_Resolver::class );
-		$metric          = new Conversion_Metric( $proxy, $resolver );
+		// Records exist (conversions happened); the BQ source layer fails → 'error'.
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_new_donor_records_in_window' )->willReturn(
+			[
+				[
+					'customer_id' => 1,
+					'ts'          => 1700000000,
+				],
+			] 
+		);
+		$metric          = new Conversion_Metric( $proxy, null, null, $donors );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_source_mix_donors( $start, $end );
 
@@ -1843,18 +1861,17 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Deferred (Phase-B) sections are 'coming_soon' in the populated fixture variant
-	 * and carry their preserved extra keys. Note: 4.2 and 4.3 are now wired to live
-	 * data in the real metric; the fixture still hardcodes 'coming_soon' as a static
-	 * snapshot and is asserted here only for fixture shape stability.
+	 * Phase-B section states in the populated fixture variant. 4.2/4.3/4.4 are
+	 * implemented (all-history snapshots → 'populated'); 5.1/5.2 cohorts remain
+	 * 'coming_soon' stubs. Each carries its preserved extra keys.
 	 */
-	public function test_fixture_populated_deferred_sections_are_coming_soon() {
+	public function test_fixture_populated_phase_b_section_states() {
 		$current = Conversion_Metric::get_fixture( 'populated', false )['current'];
 
-		// 4.2 and 4.3 — fixture still hardcodes coming_soon (static fixture shape).
-		$this->assertSame( 'coming_soon', $current['time_to_subscribe_distribution']['state'] );
+		// 4.2 and 4.3 — implemented; the fixture carries representative curves.
+		$this->assertSame( 'populated', $current['time_to_subscribe_distribution']['state'] );
 		$this->assertArrayHasKey( 'groups', $current['time_to_subscribe_distribution'] );
-		$this->assertSame( 'coming_soon', $current['time_to_donate_distribution']['state'] );
+		$this->assertSame( 'populated', $current['time_to_donate_distribution']['state'] );
 		$this->assertArrayHasKey( 'groups', $current['time_to_donate_distribution'] );
 
 		// 4.4 — lag distribution (points + visibility keys); populated but hidden when below threshold.
@@ -1910,8 +1927,8 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'empty', $current['top_pages_no_conversion']['state'] );
 		$this->assertSame( [], $current['top_pages_no_conversion']['rows'] );
 
-		// Deferred sections stay 'coming_soon'.
-		$this->assertSame( 'coming_soon', $current['time_to_subscribe_distribution']['state'] );
+		// 4.2 is an all-history snapshot → populated; the 5.1 cohort stays coming_soon.
+		$this->assertSame( 'populated', $current['time_to_subscribe_distribution']['state'] );
 		$this->assertSame( 'coming_soon', $current['registration_to_conversion_cohort']['state'] );
 	}
 
@@ -1946,8 +1963,8 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'populated', $current['at_risk_subscriber_count']['state'] );
 		$this->assertSame( 'populated', $current['lapsed_donor_count']['state'] );
 
-		// Deferred sections stay 'coming_soon'.
-		$this->assertSame( 'coming_soon', $current['time_to_subscribe_distribution']['state'] );
+		// 4.2 is an all-history snapshot → populated; the 5.1 cohort stays coming_soon.
+		$this->assertSame( 'populated', $current['time_to_subscribe_distribution']['state'] );
 		$this->assertSame( 'coming_soon', $current['registration_to_conversion_cohort']['state'] );
 	}
 
@@ -2024,7 +2041,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 					'customer_id' => 1,
 					'ts'          => 1700000000,
 				],
-			] 
+			]
 		);
 		$metric = new Conversion_Metric(
 			$this->proxy_returning( new \WP_Error( 'boom', 'nope' ) ),
@@ -2055,6 +2072,29 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$result          = $metric->get_source_mix_subscribers( $start, $end );
 		$this->assertSame( 'empty', $result['state'] );
 		$this->assertSame( 0, $result['total'] );
+		$this->assertSame( [], $result['slices'] );
+	}
+
+	/**
+	 * 3.2 source mix: a non-array BigQuery success body is a malformed response
+	 * and surfaces as an 'error' envelope (not silent all-direct) when Woo
+	 * records exist.
+	 */
+	public function test_source_mix_subscribers_malformed_bq_body(): void {
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_new_subscriber_records_in_window' )->willReturn(
+			[
+				[
+					'customer_id' => 1,
+					'ts'          => 1700000000,
+				],
+			] 
+		);
+		$metric          = new Conversion_Metric( $this->proxy_returning( 'not-an-array' ), null, $subs );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_subscribers( $start, $end );
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_malformed_rows', $result['error_code'] );
 		$this->assertSame( [], $result['slices'] );
 	}
 
@@ -2143,7 +2183,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 					'cumulative_pct' => 1.0,
 				],
 			],
-			$gate['points'] 
+			$gate['points']
 		); // customer 1.
 		$this->assertSame(
 			[
@@ -2152,7 +2192,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 					'cumulative_pct' => 1.0,
 				],
 			],
-			$direct['points'] 
+			$direct['points']
 		); // customer 2; customer 3 truncated.
 	}
 
@@ -2185,7 +2225,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 					'cumulative_pct' => 1.0,
 				],
 			],
-			$result['groups'][2]['points'] 
+			$result['groups'][2]['points']
 		); // direct.
 		$this->assertSame( [], $result['groups'][0]['points'] ); // gate empty.
 	}
@@ -2314,7 +2354,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 					'cumulative_pct' => 1.0,
 				],
 			],
-			$prompt['points'] 
+			$prompt['points']
 		); // customer 10.
 		$this->assertSame(
 			[
@@ -2323,7 +2363,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 					'cumulative_pct' => 1.0,
 				],
 			],
-			$direct['points'] 
+			$direct['points']
 		); // customer 11; customer 12 truncated.
 	}
 
@@ -2362,7 +2402,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 					'cumulative_pct' => 1.0,
 				],
 			],
-			$result['points'] 
+			$result['points']
 		);
 	}
 }
