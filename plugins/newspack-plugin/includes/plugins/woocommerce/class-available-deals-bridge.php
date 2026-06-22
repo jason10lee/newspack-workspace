@@ -125,11 +125,21 @@ final class Available_Deals_Bridge {
 		if ( ! $repo ) {
 			return [];
 		}
-		$out = [];
+		// Lead with an "Any deal" option (empty value) so the criterion is optional,
+		// like the other option criteria (donation, user_account, …): an empty
+		// selection is pruned on save (segments-model filter_criteria), making the
+		// criterion inert. String values match the SelectControl's string output;
+		// list__in compares loosely against the reader's available_deals.
+		$out = [
+			[
+				'label' => __( 'Any deal', 'newspack-plugin' ),
+				'value' => '',
+			],
+		];
 		foreach ( $repo->active() as $rule ) {
 			$out[] = [
 				'label' => $rule->title,
-				'value' => (int) $rule->id,
+				'value' => (string) $rule->id,
 			];
 		}
 		return $out;
