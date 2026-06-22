@@ -39,11 +39,14 @@ export const isManualProvider = () => 'manual' === getServiceProviderSlug();
  *
  * @return {{public: string, private: string}} Description per visibility value.
  */
-export const getNewsletterVisibilityDescriptions = () => ( {
-	public: isManualProvider()
-		? __( 'Published as an article on your site.', 'newspack-newsletters' )
-		: __( 'Sent by email and published as an article on your site.', 'newspack-newsletters' ),
-	private: isManualProvider()
-		? __( 'Not visible on your site.', 'newspack-newsletters' )
-		: __( 'Sent by email only; not visible on your site.', 'newspack-newsletters' ),
-} );
+export const getNewsletterVisibilityDescriptions = () => {
+	const isManual = isManualProvider();
+	return {
+		public: isManual
+			? __( 'Published as an article on your site.', 'newspack-newsletters' )
+			: __( 'Sent by email and published as an article on your site.', 'newspack-newsletters' ),
+		private: isManual
+			? __( 'Not visible on your site.', 'newspack-newsletters' )
+			: __( 'Sent by email only; not visible on your site.', 'newspack-newsletters' ),
+	};
+};

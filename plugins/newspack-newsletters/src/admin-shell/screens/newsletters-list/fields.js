@@ -60,9 +60,14 @@ const renderStatus = ( { item } ) => {
 	let label;
 	if ( 'sent' === kind && status.sent_at ) {
 		// The manual provider publishes rather than sends through an ESP, so the date reads "Published %s".
-		const dateFormat = isManualProvider()
-			? /* translators: %s: formatted publish date */ __( 'Published %s', 'newspack-newsletters' )
-			: /* translators: %s: formatted send date */ __( 'Sent %s', 'newspack-newsletters' );
+		let dateFormat;
+		if ( isManualProvider() ) {
+			/* translators: %s: formatted publish date */
+			dateFormat = __( 'Published %s', 'newspack-newsletters' );
+		} else {
+			/* translators: %s: formatted send date */
+			dateFormat = __( 'Sent %s', 'newspack-newsletters' );
+		}
 		label = sprintf( dateFormat, formatDate( status.sent_at ) );
 	} else if ( 'scheduled' === kind && status.scheduled_at ) {
 		label = sprintf(
