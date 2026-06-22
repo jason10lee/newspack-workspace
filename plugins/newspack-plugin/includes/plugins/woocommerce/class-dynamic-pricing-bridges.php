@@ -37,6 +37,22 @@ final class Dynamic_Pricing_Bridges {
 		add_filter( 'woocommerce_dynamic_pricing_is_excluded', [ __CLASS__, 'exclude_donations' ], 10, 3 );
 		add_filter( 'woocommerce_dynamic_pricing_is_excluded', [ __CLASS__, 'exclude_group_subscriptions' ], 10, 3 );
 		add_filter( 'newspack_modal_checkout_price_summary', [ __CLASS__, 'annotate_modal_checkout_summary' ], 20, 2 );
+		add_action( 'woocommerce_dynamic_pricing_register', [ __CLASS__, 'register_conditions' ] );
+	}
+
+	/**
+	 * Register Newspack condition matchers into the dynamic-pricing engine. Fires
+	 * only when the engine is active (the action is the engine's own extension
+	 * seam), so the matcher — which implements the engine interface — is
+	 * referenced, and therefore autoloaded, only when it can load.
+	 *
+	 * @param \Automattic\WooCommerce\DynamicPricing\Pricing_Engine $engine Engine instance.
+	 */
+	public static function register_conditions( $engine ): void {
+		if ( ! is_object( $engine ) || ! method_exists( $engine, 'register_condition' ) ) {
+			return;
+		}
+		$engine->register_condition( new Reader_Segment_Condition_Matcher() );
 	}
 
 	/**
