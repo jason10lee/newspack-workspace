@@ -1,5 +1,5 @@
 import { registerCriteria } from '../../criteria/utils';
-import { getBestPrioritySegment, getOverride, shouldPromptBeDisplayed, periods } from './index.js';
+import { getBestPrioritySegment, getMatchingSegmentIds, getOverride, shouldPromptBeDisplayed, periods } from './index.js';
 
 // Mock the window.location object. See: https://developer.mozilla.org/en-US/docs/Web/API/Location
 const setWindowLocation = ( domain = 'example.com', search = '' ) => {
@@ -234,6 +234,16 @@ describe( 'segmentation API', () => {
 		const prompt = createPrompt( [], '0,0,0,month', '123' );
 		const pidOverride = getOverride( 123, false, false, '?pid=123' );
 		expect( shouldPromptBeDisplayed( prompt, null, ras, pidOverride ) ).toBeTruthy();
+	} );
+
+	it( 'getMatchingSegmentIds returns all matching segment IDs, sorted', () => {
+		ras.store.set( 'simple', 'simple-match' );
+		expect( getMatchingSegmentIds( segments ) ).toEqual( [ 'segment2', 'segment3' ] );
+	} );
+
+	it( 'getMatchingSegmentIds returns an empty array when nothing matches', () => {
+		ras.store.set( 'simple', 'no-match' );
+		expect( getMatchingSegmentIds( segments ) ).toEqual( [] );
 	} );
 
 	it( 'should return false if the reader has or had the UTM Suppression value in utm_source params', () => {
