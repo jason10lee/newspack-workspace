@@ -910,13 +910,18 @@ final class Newspack_Newsletters_Editor {
 				];
 			}
 		} else {
+			// Derive the author from the post ID rather than `$post['author']`:
+			// the REST response only carries an `author` key for post types that
+			// support authors, and this field now covers types that may not
+			// (NPPM-2756). `post_author` is always set on the row.
+			$author_id = (int) get_post_field( 'post_author', $post['id'] );
 			$author_data[] = [
 				/* Get the author name */
-				'display_name' => get_the_author_meta( 'display_name', $post['author'] ),
+				'display_name' => get_the_author_meta( 'display_name', $author_id ),
 				/* Get the author ID */
-				'id'           => $post['author'],
+				'id'           => $author_id,
 				/* Get the author Link */
-				'author_link'  => get_author_posts_url( $post['author'] ),
+				'author_link'  => get_author_posts_url( $author_id ),
 			];
 		}
 
@@ -964,7 +969,9 @@ final class Newspack_Newsletters_Editor {
 		if ( $medium_url ) {
 			$featured_media_info['medium_url'] = $medium_url;
 		}
-		return $featured_media_info;
+		// Cast to object so the response always matches the `object` REST schema —
+		// an empty array would otherwise encode as a JSON array `[]`, not `{}`.
+		return (object) $featured_media_info;
 	}
 }
 Newspack_Newsletters_Editor::instance();

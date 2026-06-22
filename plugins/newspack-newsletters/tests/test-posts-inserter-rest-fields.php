@@ -54,6 +54,15 @@ class Test_Posts_Inserter_Rest_Fields extends WP_UnitTestCase {
 	const NO_REST_CPT = 'nppm2756_no_rest';
 
 	/**
+	 * Snapshot of the REST additional-fields registry, captured before each test
+	 * and restored after, so the registrations these tests make don't leak into
+	 * other test classes and cause order-dependent failures.
+	 *
+	 * @var array|null
+	 */
+	private $rest_fields_backup;
+
+	/**
 	 * Register the helper post types before the suite runs.
 	 */
 	public static function set_up_before_class() {
@@ -106,6 +115,24 @@ class Test_Posts_Inserter_Rest_Fields extends WP_UnitTestCase {
 		unregister_post_type( self::UI_ONLY_CPT );
 		unregister_post_type( self::NO_REST_CPT );
 		parent::tear_down_after_class();
+	}
+
+	/**
+	 * Snapshot the REST additional-fields registry before each test.
+	 */
+	public function set_up() {
+		parent::set_up();
+		global $wp_rest_additional_fields;
+		$this->rest_fields_backup = $wp_rest_additional_fields;
+	}
+
+	/**
+	 * Restore the REST additional-fields registry after each test.
+	 */
+	public function tear_down() {
+		global $wp_rest_additional_fields;
+		$wp_rest_additional_fields = $this->rest_fields_backup;
+		parent::tear_down();
 	}
 
 	/**
@@ -200,5 +227,20 @@ class Test_Posts_Inserter_Rest_Fields extends WP_UnitTestCase {
 				"$field must be exposed only in the edit context"
 			);
 		}
+	}
+
+	/**
+	 * `featured_media_info` carries keyed URLs (`large_url`/`medium_url`), so its
+	 * schema must be `object`, not `array` — the original NPPM-2756 regression.
+	 * Pin it so a revert to `array` can't slip through.
+	 */
+	public function test_featured_media_info_schema_is_object() {
+		global $wp_rest_additional_fields;
+
+		Newspack_Newsletters_Editor::add_newspack_extra_info();
+
+		$args = $wp_rest_additional_fields['page']['featured_media_info'] ?? null;
+		$this->assertNotNull( $args, 'featured_media_info must be registered for page' );
+		$this->assertSame( 'object', $args['schema']['type'] ?? null );
 	}
 }
