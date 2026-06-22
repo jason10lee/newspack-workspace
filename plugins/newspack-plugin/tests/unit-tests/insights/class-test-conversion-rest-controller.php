@@ -19,6 +19,7 @@ use Newspack\Insights\Conversion_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Server;
 use WP_UnitTestCase;
+use ReflectionMethod;
 
 /**
  * Conversion_REST_Controller test class.
@@ -93,9 +94,10 @@ class Test_Conversion_REST_Controller extends WP_UnitTestCase {
 
 	/**
 	 * A valid window returns 200 with the cache envelope wrapping the state
-	 * envelope. In the test env the BQ proxy is unconfigured — BQ-wired metrics
-	 * surface `state: 'error'`, but the snapshot and coming_soon metrics report
-	 * non-error states, so `tab_error` is false (not all metrics are 'error').
+	 * envelope. In the test env the BQ proxy is unconfigured — BQ-wired (hub)
+	 * metrics surface `state: 'error'`. After the NPPD-1745 fix the banner is
+	 * scoped to hub-backed metrics only; local / coming_soon cards are irrelevant
+	 * to the decision. With every hub card erroring, `tab_error` is now true.
 	 */
 	public function test_valid_window_returns_200_envelope() {
 		$response = $this->dispatch(
@@ -170,12 +172,23 @@ class Test_Conversion_REST_Controller extends WP_UnitTestCase {
 	}
 
 	/**
-	 * `tab_error` is false when at least one metric has a non-error state
-	 * (coming_soon or populated). Snapshot metrics (Section 5 cohorts, Sections
-	 * 8.1–8.3) and coming_soon placeholders return non-error states, so the tab
-	 * cannot be all-error even when BQ-wired metrics fail.
+	 * NPPD-1745 scoped-banner behavior in the test env.
+	 *
+	 * In the test env the BQ proxy is unconfigured (hub metrics error) AND there are
+	 * no active subscribers/donors, so `registered_to_subscriber_funnel` and
+	 * `registered_to_donor_funnel` short-circuit to `state: 'empty'` WITHOUT calling
+	 * the hub (the visibility-gated unconfigured-leg path). Under the scoped logic
+	 * an `empty` hub-classified metric is a legitimate non-error survivor — it did
+	 * not fail at the hub. So `tab_error` correctly remains FALSE in the test env,
+	 * even with all other hub metrics erroring.
+	 *
+	 * The banner-hole fix is verified by the synthetic-window unit tests below
+	 * (test_tab_error_fires_on_hub_outage_despite_local_survivor etc.), which craft
+	 * windows where every hub metric is in 'error' state and assert the banner fires.
+	 * The real-dispatch test here verifies the scoped logic does NOT spuriously fire
+	 * the banner when a legitimately-empty hub metric is present.
 	 */
-	public function test_tab_error_false_when_non_error_metrics_present() {
+	public function test_tab_error_false_when_hub_metrics_include_unconfigured_empty_legs() {
 		$response = $this->dispatch(
 			[
 				'start' => '2026-03-22',
@@ -184,21 +197,17 @@ class Test_Conversion_REST_Controller extends WP_UnitTestCase {
 		);
 		$data = $response->get_data()['data'];
 
-		// The Conversion Journey tab has snapshot and coming_soon metrics that are
-		// NOT 'error', so tab_error must be false even with a broken BQ proxy.
+		// The visibility-gated funnels (registered→subscriber, registered→donor)
+		// return state: 'empty' in the test env (no active subscribers/donors), so
+		// they count as non-error hub-backed survivors and keep tab_error false.
 		$this->assertFalse( $data['tab_error'] );
 	}
 
 	/**
-	 * `tab_error` is false when at least one metric has a non-error state.
-	 * The Conversion Journey has coming_soon and snapshot (populated) metrics
-	 * that always report non-error, so tab_error is always false in a real
-	 * controller response even when the BQ proxy is unconfigured.
-	 *
-	 * We verify this by dispatching a real request and asserting that
-	 * (a) tab_error is false, and (b) deferred sections carry 'coming_soon'.
+	 * Scoped-banner does not suppress coming_soon and local state checks.
+	 * Verifies deferred sections are present regardless of banner state.
 	 */
-	public function test_tab_error_false_for_coming_soon_and_populated_states() {
+	public function test_tab_error_false_with_coming_soon_and_local_states_present() {
 		$response = $this->dispatch(
 			[
 				'start' => '2026-03-22',
@@ -206,9 +215,12 @@ class Test_Conversion_REST_Controller extends WP_UnitTestCase {
 			]
 		);
 		$data = $response->get_data()['data'];
-		$this->assertFalse( $data['tab_error'], 'tab_error must be false when coming_soon/populated metrics are present' );
 
-		// Verify that deferred (coming_soon) metrics are present in the window.
+		// See test_tab_error_false_when_hub_metrics_include_unconfigured_empty_legs
+		// for why tab_error is false in this env.
+		$this->assertFalse( $data['tab_error'] );
+
+		// Deferred (coming_soon) metrics are still present and carry the right state.
 		$current = $data['current'];
 		$this->assertSame( 'coming_soon', $current['registration_to_conversion_cohort']['state'] );
 		$this->assertSame( 'coming_soon', $current['time_to_subscribe_distribution']['state'] );
@@ -366,14 +378,15 @@ class Test_Conversion_REST_Controller extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Fixture-mode error variant: BQ metrics are 'error', local-only metrics
-	 * stay 'populated', deferred stay 'coming_soon'.
+	 * Fixture-mode error variant: BQ (hub) metrics are 'error', local-only
+	 * metrics stay 'populated', deferred stay 'coming_soon'. NPPD-1745: with the
+	 * scoped banner, all-hub-error → tab_error true (fixture updated to match).
 	 */
 	public function test_fixture_error_variant_via_metric() {
 		$payload = Conversion_Metric::get_fixture( 'error', false );
 
-		// tab_error is false because snapshot + deferred are non-error.
-		$this->assertFalse( $payload['tab_error'] );
+		// NPPD-1745: tab_error is now true because all hub-backed metrics are 'error'.
+		$this->assertTrue( $payload['tab_error'] );
 		$current = $payload['current'];
 
 		$this->assertSame( 'error', $current['reader_lifecycle_funnel']['state'] );
@@ -412,5 +425,151 @@ class Test_Conversion_REST_Controller extends WP_UnitTestCase {
 		// First refresh seeds the BQ cooldown stamp so the React layer can render the throttle UI.
 		$this->assertNotEmpty( $body['cache']['cooldown_until'] );
 		$this->assertArrayHasKey( 'tab_error', $body['data'] );
+	}
+
+	// -----------------------------------------------------------------------
+	// NPPD-1745 scoped-banner unit tests (mirrors class-test-prompts-rest-controller.php).
+	// -----------------------------------------------------------------------
+
+	/**
+	 * Invoke the private static is_window_all_error() on a synthetic window.
+	 *
+	 * @param array $window             Window payload.
+	 * @param bool  $woocommerce_active Whether WC is active (defaults to WC-active path).
+	 * @return bool
+	 */
+	private function invoke_is_window_all_error( array $window, bool $woocommerce_active = true ): bool {
+		$method = new ReflectionMethod( Conversion_REST_Controller::class, 'is_window_all_error' );
+		$method->setAccessible( true );
+		return (bool) $method->invoke( null, $window, $woocommerce_active );
+	}
+
+	/**
+	 * Build a window where every hub-backed metric errors and every local card is
+	 * populated (the hub-outage-with-local-survivor scenario).
+	 *
+	 * @return array
+	 */
+	private function window_hub_down_local_alive(): array {
+		$window = [
+			'window' => [
+				'start' => '2026-03-22',
+				'end'   => '2026-04-21',
+			],
+		];
+		foreach ( Conversion_Metric::METRIC_SOURCES as $key => $source ) {
+			$window[ $key ] = [ 'state' => 'local' === $source ? 'populated' : 'error' ];
+		}
+		return $window;
+	}
+
+	/**
+	 * NPPD-1745 regression guard: the "whole tab failed" banner STILL fires when
+	 * every hub-backed metric errors, even though surviving local cards render.
+	 * This is the exact thing the old all-error logic would have silently killed.
+	 */
+	public function test_tab_error_fires_on_hub_outage_despite_local_survivor() {
+		$window = $this->window_hub_down_local_alive();
+
+		// The local survivor is genuinely present and populated.
+		$this->assertSame( 'local', Conversion_Metric::METRIC_SOURCES['subscriber_to_donor_funnel'] );
+		$this->assertSame( 'populated', $window['subscriber_to_donor_funnel']['state'] );
+
+		$this->assertTrue(
+			$this->invoke_is_window_all_error( $window ),
+			'all hub-backed errored → banner fires even though local cards rendered'
+		);
+	}
+
+	/**
+	 * The banner does NOT fire if any hub-backed metric recovers.
+	 */
+	public function test_tab_error_does_not_fire_when_a_hub_metric_recovers() {
+		$window = $this->window_hub_down_local_alive();
+		$window['reader_lifecycle_funnel'] = [ 'state' => 'populated' ]; // One hub card recovers.
+
+		$this->assertFalse( $this->invoke_is_window_all_error( $window ) );
+	}
+
+	/**
+	 * Build the non-WC hub-outage window: every pure-hub card errors, while the
+	 * hybrid cards short-circuit to a populated empty state (they never reach the
+	 * hub on a non-WC publisher) and the local cards render. The banner-hole case.
+	 *
+	 * @return array
+	 */
+	private function window_non_wc_hub_down(): array {
+		$window = [
+			'window' => [
+				'start' => '2026-03-22',
+				'end'   => '2026-04-21',
+			],
+		];
+		foreach ( Conversion_Metric::METRIC_SOURCES as $key => $source ) {
+			// hub → error (outage); hybrid + local → populated (non-WC: a hybrid card
+			// empties out before it reaches the hub; local is always local).
+			$window[ $key ] = [ 'state' => 'hub' === $source ? 'error' : 'populated' ];
+		}
+		return $window;
+	}
+
+	/**
+	 * NPPD-1745 banner-hole fix: on a non-WC publisher a hybrid card short-circuits
+	 * to a populated empty state without ever calling the hub, so it must NOT count
+	 * as a hub-backed survivor. With every pure-hub card erroring, the banner fires
+	 * even though the hybrid + local cards render. (Pre-fix, the populated hybrid
+	 * card returned false here, silently suppressing the banner.)
+	 */
+	public function test_tab_error_fires_on_non_wc_hub_outage() {
+		$window = $this->window_non_wc_hub_down();
+
+		// Sanity: a hybrid card is genuinely populated (not error) in this window.
+		$this->assertSame( 'hybrid', Conversion_Metric::METRIC_SOURCES['source_mix_subscribers'] );
+		$this->assertSame( 'populated', $window['source_mix_subscribers']['state'] );
+
+		$this->assertTrue(
+			$this->invoke_is_window_all_error( $window, false ),
+			'non-WC: the hybrid card is skipped, so all-pure-hub-errored fires the banner'
+		);
+		// Guard: were WC active, the same populated hybrid card would be a genuine
+		// hub-backed survivor and (correctly) suppress the banner.
+		$this->assertFalse(
+			$this->invoke_is_window_all_error( $window, true ),
+			'WC-active: a populated hybrid card is a real survivor → no banner'
+		);
+	}
+
+	/**
+	 * NPPD-1745 #5 drift guard: every state-bearing metric that build_window() and
+	 * build_snapshot() emit must have a METRIC_SOURCES entry. is_window_all_error()
+	 * iterates METRIC_SOURCES, so a card added to the window but never classified
+	 * in the map would silently drop out of the tab-error banner with no test to
+	 * catch it.
+	 */
+	public function test_every_window_metric_is_classified_in_metric_sources() {
+		$data = $this->dispatch(
+			[
+				'start' => '2026-03-22',
+				'end'   => '2026-04-21',
+			]
+		)->get_data()['data'];
+
+		$missing = [];
+		foreach ( $data['current'] as $key => $value ) {
+			// Skip date metadata; only state-bearing metric envelopes participate
+			// in the banner decision.
+			if ( 'window' === $key || ! is_array( $value ) || ! isset( $value['state'] ) ) {
+				continue;
+			}
+			if ( ! array_key_exists( $key, Conversion_Metric::METRIC_SOURCES ) ) {
+				$missing[] = $key;
+			}
+		}
+
+		$this->assertSame(
+			[],
+			$missing,
+			'every state-bearing build_window/build_snapshot metric must be classified in Conversion_Metric::METRIC_SOURCES'
+		);
 	}
 }

@@ -181,7 +181,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 			$deferred()
 		);
 		return [
-			'tab_error' => false, // snapshot + deferred are non-error, so tab is not all-error.
+			'tab_error' => true, // NPPD-1745: all hub-backed metrics error → banner fires.
 			'current'   => $current,
 			'previous'  => null,
 		];
