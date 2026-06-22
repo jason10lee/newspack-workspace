@@ -229,6 +229,11 @@ class WooCommerce_Email_Style_Sync {
 	 * empty and a logo now exists (covering a logo uploaded after first-run
 	 * burned its single header pass). A non-empty header image is never
 	 * touched on this path, so a publisher value is preserved.
+	 *
+	 * The base-color and header-image paths are independent: a publisher
+	 * customization that suppresses the base-color write does NOT stop the
+	 * header-image backfill, so a logo uploaded later still reaches classic
+	 * WC emails on a site whose base color the publisher has customized.
 	 */
 	public static function sync_styles(): void {
 		if ( ! self::is_sync_enabled() ) {
@@ -240,6 +245,14 @@ class WooCommerce_Email_Style_Sync {
 
 		$last_synced = get_option( self::LAST_SYNCED_BASE_COLOR_OPTION, '' );
 		$has_marker  = is_string( $last_synced ) && '' !== $last_synced;
+
+		// Whether a publisher customization suppresses the base-color write.
+		// This must NOT bail out of the whole method: the header-image
+		// backfill below still has to run so a logo uploaded after first-run
+		// reaches classic WC emails even on a site whose base color the
+		// publisher has customized (otherwise an early `return` here strands
+		// the empty header_image forever on base-color-customized sites).
+		$skip_base_color = false;
 
 		if ( $has_marker ) {
 			// Write-provenance check: if the current stored value differs
@@ -257,7 +270,7 @@ class WooCommerce_Email_Style_Sync {
 					self::LOGGER_HEADER,
 					'info'
 				);
-				return;
+				$skip_base_color = true;
 			}
 		} elseif ( self::has_base_color_customization() ) {
 			// No marker yet (first-run hasn't fired — unusual but
@@ -269,10 +282,12 @@ class WooCommerce_Email_Style_Sync {
 				self::LOGGER_HEADER,
 				'info'
 			);
-			return;
+			$skip_base_color = true;
 		}
 
-		self::sync_base_color();
+		if ( ! $skip_base_color ) {
+			self::sync_base_color();
+		}
 
 		// Backfill the header image if it's still empty and a logo now
 		// exists. First-run's single header-image pass is burned even when

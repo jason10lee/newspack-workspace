@@ -401,6 +401,42 @@ class Newspack_Test_WooCommerce_Email_Style_Sync extends WP_UnitTestCase {
 	}
 
 	/**
+	 * NPPD-1537 regression: a publisher base-color customization suppresses
+	 * the base-color write but must NOT prevent the header-image backfill.
+	 * Scenario: custom base color (no marker), no logo at first run, logo
+	 * uploaded later. The later sync_styles() must preserve the custom color
+	 * AND backfill the now-available logo into the empty header_image —
+	 * previously an early `return` on the base-color skip stranded it.
+	 */
+	public function test_sync_styles_backfills_header_image_even_when_base_color_is_customized() {
+		// Publisher-customized base color, no provenance marker (first-run
+		// skipped it), and an empty header_image row.
+		update_option( 'woocommerce_email_base_color', '#deadbe' );
+		$this->assertFalse(
+			get_option( WooCommerce_Email_Style_Sync::LAST_SYNCED_BASE_COLOR_OPTION, false ),
+			'Precondition: no provenance marker.'
+		);
+
+		// A logo is uploaded after first-run.
+		$attachment_id = $this->create_fake_logo_attachment_id();
+		set_theme_mod( 'custom_logo', $attachment_id );
+		set_theme_mod( 'primary_color_hex', '#abcdef' );
+
+		WooCommerce_Email_Style_Sync::sync_styles();
+
+		$this->assertSame(
+			'#deadbe',
+			get_option( 'woocommerce_email_base_color' ),
+			'Publisher base-color customization must be preserved (skip, not clobber).'
+		);
+		$this->assertSame(
+			wp_get_attachment_url( $attachment_id ),
+			get_option( 'woocommerce_email_header_image' ),
+			'Header-image backfill must still run even though the base-color write was skipped.'
+		);
+	}
+
+	/**
 	 * NPPD-1537: the provenance marker must NOT be recorded when the
 	 * `woocommerce_email_base_color` write is vetoed by a
 	 * `pre_update_option_*` filter — otherwise provenance would claim we
