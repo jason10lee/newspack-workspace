@@ -24,6 +24,13 @@ final class Available_Deals_Bridge {
 	 * Register hooks.
 	 */
 	public static function init(): void {
+		// Idempotent: the class self-inits at file load, and tests may call init()
+		// again — register the hooks only once so filters aren't double-added.
+		static $done = false;
+		if ( $done ) {
+			return;
+		}
+		$done = true;
 		add_filter( 'newspack_reader_data_read_only_keys', [ __CLASS__, 'register_read_only_key' ] );
 		add_action( 'init', [ __CLASS__, 'register_data_event_handlers' ] );
 		add_filter( 'newspack_popups_default_criteria', [ __CLASS__, 'register_criteria' ] );
