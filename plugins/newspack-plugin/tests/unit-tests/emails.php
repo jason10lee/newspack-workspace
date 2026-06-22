@@ -673,6 +673,66 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The REST route's validate_callback rejects malformed raw post_id
+	 * shapes directly. Unit-level guard for the callback itself: valid
+	 * shapes return true, malformed shapes return the shared
+	 * newspack_emails_invalid_post_id (400) WP_Error.
+	 */
+	public function test_validate_test_send_post_id_callback() {
+		foreach ( [ 1, '1', '42', 999 ] as $valid ) {
+			self::assertTrue(
+				Emails::validate_test_send_post_id( $valid ),
+				sprintf( 'post_id %s must validate', is_string( $valid ) ? "'{$valid}'" : $valid )
+			);
+		}
+		foreach ( [ '1.5', '1e3', '-5', '0', 0, 'abc', '12abc', ' 5 ', '', null ] as $bad ) {
+			$result = Emails::validate_test_send_post_id( $bad );
+			$label  = null === $bad ? 'NULL' : ( '' === $bad ? "''" : ( is_string( $bad ) ? "'{$bad}'" : $bad ) );
+			self::assertInstanceOf( WP_Error::class, $result, "post_id {$label} must be rejected" );
+			self::assertSame( 'newspack_emails_invalid_post_id', $result->get_error_code(), "post_id {$label} wrong code" );
+			self::assertSame( 400, $result->get_error_data()['status'], "post_id {$label} wrong status" );
+		}
+	}
+
+	/**
+	 * Full REST dispatch: the route registers post_id with
+	 * `sanitize_callback => absint`, which coerces '1.5'→1, '1e3'→1,
+	 * '-5'→5 BEFORE the handler runs. The added validate_callback runs
+	 * first (on the raw value) so malformed input is rejected with a
+	 * 400 instead of silently resolving a valid-but-wrong post. Only a
+	 * full server dispatch exercises the sanitize/validate ordering —
+	 * calling api_send_test_email() directly does not.
+	 */
+	public function test_rest_dispatch_rejects_malformed_post_id_before_coercion() {
+		$admin = self::login_as_admin();
+		try {
+			foreach ( [ '1.5', '1e3', '-5' ] as $bad_post_id ) {
+				$request = new WP_REST_Request( 'POST', '/newspack/v1/newspack-emails/test' );
+				$request->set_param( 'post_id', $bad_post_id );
+				$request->set_param( 'recipient', 'tester@example.com' );
+
+				$response = rest_get_server()->dispatch( $request );
+
+				self::assertSame(
+					400,
+					$response->get_status(),
+					"post_id '{$bad_post_id}' must be rejected by the route before absint coercion"
+				);
+				// rest_invalid_param wraps the validate_callback error;
+				// the nested detail carries our specific code.
+				$data = $response->get_data();
+				self::assertSame(
+					'newspack_emails_invalid_post_id',
+					$data['data']['details']['post_id']['code'] ?? null,
+					"post_id '{$bad_post_id}' must surface newspack_emails_invalid_post_id"
+				);
+			}
+		} finally {
+			self::logout_admin( $admin );
+		}
+	}
+
+	/**
 	 * Digit-only string post_id normalizes to int and routes to the
 	 * post-id branch correctly. Locks in the send_email
 	 * gettype()-branching hardening: numeric-string callers (from

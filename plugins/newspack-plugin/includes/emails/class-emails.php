@@ -456,6 +456,45 @@ class Emails {
 	}
 
 	/**
+	 * Whether a value is shaped like a positive integer post id: an int,
+	 * or a non-empty digit-only string. Deliberately stricter than
+	 * is_numeric()/absint(), both of which accept '1.5', '1e3',
+	 * '1.7e308', '-5' and silently coerce them to a different (or wrong)
+	 * id. Shared by validate_send_prerequisites() (direct-PHP guard) and
+	 * the REST route's validate_callback (raw-input guard, runs before
+	 * absint sanitization can mask a malformed value).
+	 *
+	 * @param mixed $value Raw post-id value.
+	 * @return bool True when $value is an int or digit-only string > 0.
+	 */
+	private static function is_positive_int_shaped( $value ) {
+		$is_int_shaped = is_int( $value )
+			|| ( is_string( $value ) && '' !== $value && ctype_digit( $value ) );
+		return $is_int_shaped && (int) $value > 0;
+	}
+
+	/**
+	 * REST `validate_callback` for the test-send `post_id` arg. Runs on
+	 * the RAW request value before the `absint` sanitize_callback, so a
+	 * malformed shape ('1.5', '1e3', '-5') is rejected with the same
+	 * `newspack_emails_invalid_post_id` error the direct-PHP path
+	 * returns, instead of being coerced into a valid-but-wrong id.
+	 *
+	 * @param mixed $value Raw param value.
+	 * @return true|WP_Error True when valid, WP_Error otherwise.
+	 */
+	public static function validate_test_send_post_id( $value ) {
+		if ( ! self::is_positive_int_shaped( $value ) ) {
+			return new \WP_Error(
+				'newspack_emails_invalid_post_id',
+				esc_html__( 'A valid email post ID is required.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
+			);
+		}
+		return true;
+	}
+
+	/**
 	 * Validate the shared prerequisites for sending an email via the
 	 * post-id path. Used by both send_email()'s post-id branch and
 	 * send_test_email() so future shared guards (rate limiting, etc.)
@@ -490,9 +529,7 @@ class Emails {
 		// integer-shaped value (int type OR a digit-only string),
 		// then normalize to int so downstream calls operate on a
 		// well-typed positive integer.
-		$is_int_shaped = is_int( $post_id )
-			|| ( is_string( $post_id ) && '' !== $post_id && ctype_digit( $post_id ) );
-		if ( ! $is_int_shaped || (int) $post_id <= 0 ) {
+		if ( ! self::is_positive_int_shaped( $post_id ) ) {
 			return new \WP_Error(
 				'newspack_emails_invalid_post_id',
 				esc_html__( 'A valid email post ID is required.', 'newspack-plugin' ),
@@ -941,6 +978,10 @@ class Emails {
 					],
 					'post_id'   => [
 						'required'          => true,
+						// validate_callback runs on the RAW value before
+						// sanitize, so a malformed shape is rejected rather
+						// than coerced by absint into a valid-but-wrong id.
+						'validate_callback' => [ __CLASS__, 'validate_test_send_post_id' ],
 						'sanitize_callback' => 'absint',
 					],
 				],
