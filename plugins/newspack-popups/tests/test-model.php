@@ -256,6 +256,108 @@ class ModelTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Creates an autosave revision for a prompt with the given content and
+	 * modified timestamp, mirroring what the editor's autosave() produces.
+	 *
+	 * @param int    $popup_id    Parent prompt ID.
+	 * @param string $content     Autosave post_content.
+	 * @param string $modified_gmt GMT datetime string for the autosave.
+	 * @return int Autosave revision ID.
+	 */
+	private function create_autosave( $popup_id, $content, $modified_gmt ) {
+		$autosave_id = wp_insert_post(
+			[
+				'post_type'    => 'revision',
+				'post_status'  => 'inherit',
+				'post_parent'  => $popup_id,
+				'post_name'    => "{$popup_id}-autosave-v1",
+				'post_content' => $content,
+				'post_author'  => get_current_user_id(),
+			]
+		);
+		$this->set_modified_gmt( $autosave_id, $modified_gmt );
+		return $autosave_id;
+	}
+
+	/**
+	 * Force a post's modified timestamps so autosave-vs-saved ordering is
+	 * deterministic without sleeping in the test.
+	 *
+	 * @param int    $post_id      Post ID.
+	 * @param string $modified_gmt GMT datetime string.
+	 */
+	private function set_modified_gmt( $post_id, $modified_gmt ) {
+		global $wpdb;
+		$wpdb->update(
+			$wpdb->posts,
+			[
+				'post_modified'     => $modified_gmt,
+				'post_modified_gmt' => $modified_gmt,
+			],
+			[ 'ID' => $post_id ]
+		);
+		clean_post_cache( $post_id );
+	}
+
+	/**
+	 * NPPM-2940: after a full save, the editor's stale autosave can be OLDER
+	 * than the saved post (Gutenberg's autosave() no-ops on a clean post). The
+	 * preview must render the freshly-saved post, not the older autosave whose
+	 * blocks were since removed.
+	 */
+	public function test_preview_prefers_saved_post_when_newer_than_autosave() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		$popup_id = self::factory()->post->create(
+			[
+				'post_type'    => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_content' => '<!-- wp:paragraph --><p>Kept body.</p><!-- /wp:paragraph -->',
+			]
+		);
+
+		$this->create_autosave(
+			$popup_id,
+			'<!-- wp:heading --><h3>Removed heading</h3><!-- /wp:heading --><!-- wp:paragraph --><p>Kept body.</p><!-- /wp:paragraph -->',
+			'2020-01-01 00:00:00'
+		);
+		$this->set_modified_gmt( $popup_id, '2030-01-01 00:00:00' );
+
+		$preview = Newspack_Popups_Model::retrieve_preview_popup( $popup_id );
+		self::assertStringNotContainsString(
+			'Removed heading',
+			$preview['content'],
+			'Preview must render the freshly-saved post, not a stale (older) autosave whose block was removed (NPPM-2940).'
+		);
+	}
+
+	/**
+	 * Guard the normal preview flow: while the editor has unsaved changes the
+	 * autosave is NEWER than the saved post, so the preview must show it.
+	 */
+	public function test_preview_uses_autosave_when_newer_than_saved_post() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		$popup_id = self::factory()->post->create(
+			[
+				'post_type'    => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_content' => '<!-- wp:paragraph --><p>Saved body.</p><!-- /wp:paragraph -->',
+			]
+		);
+
+		$this->set_modified_gmt( $popup_id, '2020-01-01 00:00:00' );
+		$this->create_autosave(
+			$popup_id,
+			'<!-- wp:paragraph --><p>Unsaved edit.</p><!-- /wp:paragraph -->',
+			'2030-01-01 00:00:00'
+		);
+
+		$preview = Newspack_Popups_Model::retrieve_preview_popup( $popup_id );
+		self::assertStringContainsString(
+			'Unsaved edit.',
+			$preview['content'],
+			'Preview must render the newer autosave so editors see their unsaved changes.'
+		);
+	}
+
+	/**
 	 * Tests that an invalid `pp` query param does not produce a popup list with null entries,
 	 * which would cascade to "Trying to access array offset on null" warnings downstream.
 	 */
