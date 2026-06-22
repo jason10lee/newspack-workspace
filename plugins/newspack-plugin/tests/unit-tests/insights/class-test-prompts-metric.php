@@ -30,6 +30,7 @@ namespace Newspack\Tests\Insights;
 use DateTimeImmutable;
 use DateTimeZone;
 use Newspack\Insights\BigQuery_Proxy_Client;
+use Newspack\Insights\Donors_Metric;
 use Newspack\Insights\Prompts_Metric;
 use Newspack\Insights\Woo_Order_Resolver;
 use WP_UnitTestCase;
@@ -355,13 +356,17 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Data provider for the 4 paid-conversion rate methods.
+	 * Data provider for the proxy-backed paid-conversion rate methods.
+	 *
+	 * NPPD-1745: `get_donation_conversion_direct` is intentionally absent — it no
+	 * longer dispatches `prompts_donation_conversion_direct`. It's now hybrid:
+	 * order-meta conversions ÷ hub donation-impressions (see
+	 * test_donation_conversion_direct_*). The other three are still proxy-backed.
 	 *
 	 * @return array
 	 */
 	public function provide_paid_conversion_rate_methods(): array {
 		return [
-			'donation_direct'         => [ 'get_donation_conversion_direct', 'prompts_donation_conversion_direct' ],
 			'donation_influenced'     => [ 'get_donation_conversion_influenced_14d', 'prompts_donation_conversion_influenced_14d' ],
 			'subscription_direct'     => [ 'get_subscription_conversion_direct', 'prompts_subscription_conversion_direct' ],
 			'subscription_influenced' => [ 'get_subscription_conversion_influenced_14d', 'prompts_subscription_conversion_influenced_14d' ],
@@ -457,15 +462,19 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Data provider for the 4 revenue methods. The `query_name` is the
-	 * underlying conversion-query name (revenue methods share the cache with
-	 * their rate counterparts; the hub's revenue alias is byte-identical).
+	 * Data provider for the proxy-backed revenue methods. The `query_name` is the
+	 * underlying conversion-query name (revenue methods share the cache with their
+	 * rate counterparts; the hub's revenue alias is byte-identical).
+	 *
+	 * NPPD-1685: `get_donation_revenue_direct` is intentionally absent — it no
+	 * longer dispatches a proxy query; it sources from order meta via
+	 * Donors_Metric (see test_donation_revenue_direct_*). The other three are
+	 * still proxy/resolver-backed.
 	 *
 	 * @return array
 	 */
 	public function provide_paid_revenue_methods(): array {
 		return [
-			'donation_direct'         => [ 'get_donation_revenue_direct', 'prompts_donation_conversion_direct' ],
 			'donation_influenced'     => [ 'get_donation_revenue_influenced_14d', 'prompts_donation_conversion_influenced_14d' ],
 			'subscription_direct'     => [ 'get_subscription_revenue_direct', 'prompts_subscription_conversion_direct' ],
 			'subscription_influenced' => [ 'get_subscription_revenue_influenced_14d', 'prompts_subscription_conversion_influenced_14d' ],
@@ -473,37 +482,239 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Per-(query_name, window) memoization: the matching rate + revenue
-	 * methods for the same intent + direction share one proxy round-trip.
-	 *
-	 * `expects($this->once())` is the regression guard — a second call fails
-	 * the test. The two methods read different fields from the same Woo-joined
-	 * result, so they must dispatch the underlying conversion query exactly
-	 * once.
+	 * NPPD-1685: direct donation revenue sums the prompt-attributed order-meta map
+	 * from Donors_Metric (anonymous-inclusive), NOT the GA4 attempt → resolver
+	 * join. Inject a stub Donors_Metric; assert revenue + conversion count are the
+	 * map totals and the card is computable.
 	 */
-	public function test_paid_methods_share_single_proxy_call_per_window() {
-		$rows  = $this->paid_attempt_rows();
+	public function test_donation_revenue_direct_sources_from_order_meta() {
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_prompt_attributed_donation_conversions' )->willReturn(
+			[
+				'194959' => [
+					'conversions' => 2,
+					'revenue'     => 50.0,
+				],
+				'244419' => [
+					'conversions' => 1,
+					'revenue'     => 25.0,
+				],
+			]
+		);
+
+		$metric = $this->make_donation_revenue_metric( $donors, true );
+
+		$revenue = $metric->get_donation_revenue_direct( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $revenue['state'] );
+		$this->assertSame( 75.0, $revenue['value'], 'revenue is the summed order-meta map' );
+		$this->assertTrue( $revenue['computable'] );
+		$this->assertSame( 3, $revenue['denominator'], 'denominator is the summed conversion count' );
+	}
+
+	/**
+	 * NPPD-1685: on a non-WooCommerce publisher the direct donation revenue card
+	 * is a not-computable empty state (em-dash), NOT a fake $0.
+	 */
+	public function test_donation_revenue_direct_empty_state_when_not_woocommerce() {
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->expects( $this->never() )->method( 'get_prompt_attributed_donation_conversions' );
+
+		$metric = $this->make_donation_revenue_metric( $donors, false );
+
+		$revenue = $metric->get_donation_revenue_direct( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $revenue['state'] );
+		$this->assertFalse( $revenue['computable'] );
+		$this->assertSame( 0.0, $revenue['value'] );
+	}
+
+	/**
+	 * Build a Prompts_Metric with an injected Donors_Metric and a forced
+	 * `woocommerce_active()` return (the seam), so both the WC-active and non-WC
+	 * paths are testable without toggling a global class.
+	 *
+	 * @param Donors_Metric $donors Injected donors collaborator.
+	 * @param bool          $wc     What woocommerce_active() should return.
+	 * @return Prompts_Metric
+	 */
+	private function make_donation_revenue_metric( Donors_Metric $donors, bool $wc ): Prompts_Metric {
+		return $this->make_direct_donation_metric( null, $donors, $wc );
+	}
+
+	/**
+	 * Build a Prompts_Metric for the direct donation cards with an injected proxy +
+	 * Donors_Metric and a forced `woocommerce_active()` (via filter — the class is
+	 * final). The proxy feeds the rate card's hub impressions denominator; revenue
+	 * passes null. Filter removed in tearDown().
+	 *
+	 * @param BigQuery_Proxy_Client|null $proxy  Injected proxy (rate) or null (revenue).
+	 * @param Donors_Metric              $donors Injected donors collaborator.
+	 * @param bool                       $wc     What woocommerce_active() should return.
+	 * @return Prompts_Metric
+	 */
+	private function make_direct_donation_metric( ?BigQuery_Proxy_Client $proxy, Donors_Metric $donors, bool $wc ): Prompts_Metric {
+		add_filter( 'newspack_insights_woocommerce_active', $wc ? '__return_true' : '__return_false' );
+		return new Prompts_Metric( $proxy, null, null, $donors );
+	}
+
+	/**
+	 * Stub Donors_Metric whose order-meta map sums to $conversions conversions.
+	 *
+	 * @param int $conversions Total conversions to spread across two popups.
+	 * @return Donors_Metric
+	 */
+	private function donors_with_conversions( int $conversions ): Donors_Metric {
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_prompt_attributed_donation_conversions' )->willReturn(
+			[
+				'1' => [
+					'conversions' => $conversions,
+					'revenue'     => 0.0,
+				],
+			]
+		);
+		return $donors;
+	}
+
+	/**
+	 * Proxy whose `prompts_performance_by_prompt` returns the given total
+	 * donation-intent impressions (plus an unrelated registration row).
+	 *
+	 * @param int $donation_impressions Donation-intent impressions to report.
+	 * @return BigQuery_Proxy_Client
+	 */
+	private function proxy_with_donation_impressions( int $donation_impressions ): BigQuery_Proxy_Client {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		$proxy->expects( $this->once() )
-			->method( 'query' )
-			->with( 'prompts_donation_conversion_direct', $this->isInstanceOf( DateTimeImmutable::class ), $this->isInstanceOf( DateTimeImmutable::class ) )
-			->willReturn( $rows );
+		$proxy->method( 'query' )->willReturn(
+			[
+				[
+					'popup_id'    => 1,
+					'intent'      => 'donation',
+					'impressions' => $donation_impressions,
+				],
+				[
+					'popup_id'    => 9,
+					'intent'      => 'registration',
+					'impressions' => 500,
+				],
+			]
+		);
+		return $proxy;
+	}
 
-		$resolver = $this->createMock( Woo_Order_Resolver::class );
-		$resolver->method( 'count_completed_orders' )->willReturn( 1 );
-		$resolver->method( 'sum_completed_revenue' )->willReturn( 25.0 );
+	/**
+	 * NPPD-1745: direct donation rate = order-meta conversions ÷ hub
+	 * donation-intent impressions, anonymous-inclusive on both sides.
+	 */
+	public function test_donation_conversion_direct_rate_from_order_meta_over_impressions() {
+		$metric = $this->make_direct_donation_metric(
+			$this->proxy_with_donation_impressions( 200 ),
+			$this->donors_with_conversions( 50 ),
+			true
+		);
 
-		$metric = new Prompts_Metric( $proxy, $resolver );
-		$start  = $this->start();
-		$end    = $this->end();
-
-		$rate    = $metric->get_donation_conversion_direct( $start, $end );
-		$revenue = $metric->get_donation_revenue_direct( $start, $end );
+		$rate = $metric->get_donation_conversion_direct( $this->start(), $this->end() );
 
 		$this->assertSame( 'populated', $rate['state'] );
-		$this->assertSame( 0.5, $rate['value'] );
-		$this->assertSame( 'populated', $revenue['state'] );
-		$this->assertSame( 25.0, $revenue['value'] );
+		$this->assertSame( 0.25, $rate['value'] );
+		$this->assertTrue( $rate['computable'] );
+		$this->assertSame( 200, $rate['denominator'] );
+	}
+
+	/**
+	 * No donation impressions → no denominator → not computable (em-dash),
+	 * distinct from the real 0% below.
+	 */
+	public function test_donation_conversion_direct_not_computable_without_impressions() {
+		$metric = $this->make_direct_donation_metric(
+			$this->proxy_with_donation_impressions( 0 ),
+			$this->donors_with_conversions( 5 ),
+			true
+		);
+
+		$rate = $metric->get_donation_conversion_direct( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $rate['state'] );
+		$this->assertFalse( $rate['computable'] );
+		$this->assertSame( 0.0, $rate['value'] );
+	}
+
+	/**
+	 * Em-dash unification: impressions exist but zero conversions is a REAL 0%
+	 * (computable), distinct from the not-computable no-impressions case.
+	 */
+	public function test_donation_conversion_direct_real_zero_percent_when_no_conversions() {
+		$metric = $this->make_direct_donation_metric(
+			$this->proxy_with_donation_impressions( 200 ),
+			$this->donors_with_conversions( 0 ),
+			true
+		);
+
+		$rate = $metric->get_donation_conversion_direct( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $rate['state'] );
+		$this->assertTrue( $rate['computable'], 'viewed-but-no-conversion is a real 0%, not an em-dash' );
+		$this->assertSame( 0.0, $rate['value'] );
+		$this->assertSame( 200, $rate['denominator'] );
+	}
+
+	/**
+	 * Coherence guard: conversions (order-meta surface) exceeding impressions
+	 * (GA4 surface) must not fabricate a >100% rate — suppress to not-computable.
+	 */
+	public function test_donation_conversion_direct_coherence_guard_suppresses_over_100() {
+		$metric = $this->make_direct_donation_metric(
+			$this->proxy_with_donation_impressions( 10 ),
+			$this->donors_with_conversions( 50 ),
+			true
+		);
+
+		$rate = $metric->get_donation_conversion_direct( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $rate['state'] );
+		$this->assertFalse( $rate['computable'], 'a >100% cross-surface ratio is suppressed, not shown' );
+		$this->assertSame( 0.0, $rate['value'] );
+	}
+
+	/**
+	 * Hybrid card: if the hub impressions call errors, the rate is genuinely
+	 * uncomputable → error state (so it counts toward the tab-error banner).
+	 */
+	public function test_donation_conversion_direct_errors_when_impressions_hub_errors() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( new \WP_Error( 'bigquery_proxy_error', 'down' ) );
+
+		$metric = $this->make_direct_donation_metric( $proxy, $this->donors_with_conversions( 5 ), true );
+
+		$rate = $metric->get_donation_conversion_direct( $this->start(), $this->end() );
+
+		$this->assertSame( 'error', $rate['state'] );
+	}
+
+	/**
+	 * Non-WC publisher: empty state (not a fake 0%); the order-meta numerator is
+	 * never queried.
+	 */
+	public function test_donation_conversion_direct_empty_state_when_not_woocommerce() {
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->expects( $this->never() )->method( 'get_prompt_attributed_donation_conversions' );
+
+		$metric = $this->make_direct_donation_metric( null, $donors, false );
+
+		$rate = $metric->get_donation_conversion_direct( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $rate['state'] );
+		$this->assertFalse( $rate['computable'] );
+		$this->assertSame( 0.0, $rate['value'] );
+	}
+
+	/**
+	 * Remove the WC-active seam filter set by make_donation_revenue_metric().
+	 */
+	public function tear_down(): void {
+		remove_all_filters( 'newspack_insights_woocommerce_active' );
+		parent::tear_down();
 	}
 
 	/**
@@ -524,7 +735,10 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		$resolver->method( 'sum_completed_revenue' )->willReturn( 25.0 );
 
 		$metric = new Prompts_Metric( $proxy, $resolver );
-		$metric->get_donation_conversion_direct( $this->start(), $this->end() );
+		// NPPD-1745: get_donation_conversion_direct no longer dispatches a paid-attempt
+		// query (it's hybrid order-meta ÷ impressions). Use two still-proxy-backed
+		// intents with distinct query_names to exercise per-query_name cache keying.
+		$metric->get_donation_conversion_influenced_14d( $this->start(), $this->end() );
 		$metric->get_subscription_conversion_direct( $this->start(), $this->end() );
 	}
 
@@ -730,14 +944,22 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	 * augmentation queries (in dispatch order).
 	 *
 	 * @param array           $perf_rows         Rows for `prompts_performance_by_prompt`.
-	 * @param array|\WP_Error $donation_rows Rows for `prompts_donation_conversion_direct`.
+	 * @param array|\WP_Error $donation_rows     Unused since NPPD-1745 (donations come
+	 *                                           from order meta, not the proxy); kept for
+	 *                                           call-site compatibility.
 	 * @param array|\WP_Error $subscription_rows Rows for `prompts_subscription_conversion_direct`.
+	 * @param int             $expected_queries  Expected proxy `query()` count: 2 on a
+	 *                                           WC-active publisher (perf + subscription),
+	 *                                           1 on a non-WC publisher (perf only).
 	 * @return BigQuery_Proxy_Client
 	 */
-	protected function make_performance_proxy( array $perf_rows, $donation_rows, $subscription_rows ): BigQuery_Proxy_Client {
+	protected function make_performance_proxy( array $perf_rows, $donation_rows, $subscription_rows, int $expected_queries = 2 ): BigQuery_Proxy_Client {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		// Dispatch order: perf table, donation augmentation, subscription augmentation.
-		$proxy->expects( $this->exactly( 3 ) )
+		// On a WC-active publisher the perf table + the subscription augmentation run
+		// (2 queries); on a non-WC publisher the subscription augmentation is gated off,
+		// so only the perf query runs (1). Donations come from order meta via
+		// Donors_Metric (NPPD-1745), not the proxy.
+		$proxy->expects( $this->exactly( $expected_queries ) )
 			->method( 'query' )
 			->willReturnCallback(
 				function ( $query_name ) use ( $perf_rows, $donation_rows, $subscription_rows ) {
@@ -790,13 +1012,23 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		$proxy = $this->make_performance_proxy( $perf_rows, $donation_attempts, $subscription_attempts );
 
 		$resolver = $this->createMock( Woo_Order_Resolver::class );
-		// Each per-popup augmentation call gets its own scoped row subset; we
-		// stub a fixed return per call regardless of which subset arrived. The
-		// per-popup grouping itself is what the test exercises.
+		// Subscriptions still use the resolver path; donations now come from order
+		// meta via an injected Donors_Metric (NPPD-1745).
 		$resolver->method( 'count_completed_orders' )->willReturn( 5 );
 		$resolver->method( 'sum_completed_revenue' )->willReturn( 0.0 );
 
-		$metric = new Prompts_Metric( $proxy, $resolver );
+		add_filter( 'newspack_insights_woocommerce_active', '__return_true' ); // Removed in tearDown.
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_prompt_attributed_donation_conversions' )->willReturn(
+			[
+				'42' => [
+					'conversions' => 5,
+					'revenue'     => 0.0,
+				],
+			]
+		);
+
+		$metric = new Prompts_Metric( $proxy, $resolver, null, $donors );
 		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
 
 		$this->assertSame( 'populated', $result['state'] );
@@ -826,13 +1058,55 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * NPPD-1745: the per-prompt donation_conversion_rate shares the tab-level
+	 * coherence guard (donation_rate_value) — conversions exceeding a popup's
+	 * impressions suppress the rate to null, never a >100% value.
+	 */
+	public function test_per_prompt_donation_rate_coherence_guard_suppresses_over_100() {
+		$proxy = $this->make_performance_proxy( [ $this->performance_row( 42, 'Donate', 'donation', 10 ) ], [], [] );
+		add_filter( 'newspack_insights_woocommerce_active', '__return_true' );
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_prompt_attributed_donation_conversions' )->willReturn(
+			[
+				'42' => [
+					'conversions' => 50,
+					'revenue'     => 0.0,
+				],
+			]
+		);
+
+		$metric = new Prompts_Metric( $proxy, null, null, $donors );
+		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
+
+		$this->assertSame( 50, $result['rows'][0]['donation_conversions'] );
+		$this->assertNull( $result['rows'][0]['donation_conversion_rate'], 'per-prompt rate uses the shared coherence guard' );
+	}
+
+	/**
+	 * NPPD-1745: per-prompt em-dash semantics match the tab-level card —
+	 * impressions with zero conversions is a real 0%, not a null em-dash.
+	 */
+	public function test_per_prompt_donation_rate_real_zero_percent_when_no_conversions() {
+		$proxy = $this->make_performance_proxy( [ $this->performance_row( 42, 'Donate', 'donation', 200 ) ], [], [] );
+		add_filter( 'newspack_insights_woocommerce_active', '__return_true' );
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_prompt_attributed_donation_conversions' )->willReturn( [] ); // No conversions for popup 42.
+
+		$metric = new Prompts_Metric( $proxy, null, null, $donors );
+		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
+
+		$this->assertSame( 0, $result['rows'][0]['donation_conversions'] );
+		$this->assertSame( 0.0, $result['rows'][0]['donation_conversion_rate'], 'real 0% per-prompt, not an em-dash' );
+	}
+
+	/**
 	 * Performance by prompt: locks the canonical row-key contract the React
 	 * layer consumes (`PromptPerformanceRow`). A column rename on either side
 	 * silently blanks the table, so assert the exact set + order.
 	 */
 	public function test_performance_by_prompt_row_schema_is_locked() {
 		$perf_rows = [ $this->performance_row( 42, 'Donate now', 'donation', 100 ) ];
-		$proxy     = $this->make_performance_proxy( $perf_rows, [], [] );
+		$proxy     = $this->make_performance_proxy( $perf_rows, [], [], 1 ); // Non-WC env: perf query only.
 
 		$resolver = $this->createMock( Woo_Order_Resolver::class );
 		$resolver->method( 'count_completed_orders' )->willReturn( 0 );
@@ -936,46 +1210,34 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Performance by prompt: when the donation-augmentation proxy call fails,
-	 * the table still renders with engagement columns intact; donation
-	 * columns degrade to 0 / null (no error envelope, no exception).
+	 * Performance by prompt: on a non-WooCommerce publisher the donation columns
+	 * degrade to 0 / null (no order data) while the engagement table still renders
+	 * — and the order-meta reader is never queried (NPPD-1745). Replaces the old
+	 * donation-proxy-failure degradation test; donations no longer hit the proxy.
 	 */
-	public function test_performance_by_prompt_degrades_gracefully_on_woo_query_failure() {
+	public function test_performance_by_prompt_donation_columns_degrade_on_non_woocommerce() {
 		$perf_rows = [ $this->performance_row( 42, 'Donate now', 'donation', 1000 ) ];
+		$proxy     = $this->make_performance_proxy( $perf_rows, [], [], 1 ); // Non-WC: subscription augmentation is gated off too.
 
-		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		$proxy->expects( $this->exactly( 3 ) )
-			->method( 'query' )
-			->willReturnCallback(
-				function ( $query_name ) use ( $perf_rows ) {
-					switch ( $query_name ) {
-						case 'prompts_performance_by_prompt':
-							return $perf_rows;
-						case 'prompts_donation_conversion_direct':
-							return new \WP_Error( 'bigquery_query_failed', 'donation BQ down' );
-						case 'prompts_subscription_conversion_direct':
-							return [];
-					}
-					return null;
-				}
-			);
+		// No WC filter → woocommerce_active() is false; the order-meta reader must
+		// not be queried.
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->expects( $this->never() )->method( 'get_prompt_attributed_donation_conversions' );
 
-		$resolver = $this->createMock( Woo_Order_Resolver::class );
-		$resolver->method( 'count_completed_orders' )->willReturn( 0 );
-		$resolver->method( 'sum_completed_revenue' )->willReturn( 0.0 );
-
-		$metric = new Prompts_Metric( $proxy, $resolver );
+		$metric = new Prompts_Metric( $proxy, null, null, $donors );
 		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
 
 		// Table renders successfully — engagement data is load-bearing.
 		$this->assertSame( 'populated', $result['state'] );
 		$this->assertSame( 1000, $result['rows'][0]['impressions'] );
 		$this->assertSame( 0.1, $result['rows'][0]['ctr'] );
-		// Donation augmentation degraded to zero conversions; the rate stays
-		// computable (0/impressions = 0.0) since the intent matches and the
-		// engagement denominator is real — only the numerator is missing.
+		// Donation columns degrade to N/A on a non-WC publisher.
 		$this->assertSame( 0, $result['rows'][0]['donation_conversions'] );
-		$this->assertEqualsWithDelta( 0.0, $result['rows'][0]['donation_conversion_rate'], 0.0001 );
+		$this->assertNull( $result['rows'][0]['donation_conversion_rate'], 'non-WC donation column is N/A, not 0%' );
+		// Subscription columns degrade too — the resolver path also requires WC, so it
+		// is gated off on a non-WC publisher (no wc_get_orders() call).
+		$this->assertSame( 0, $result['rows'][0]['subscription_conversions'] );
+		$this->assertNull( $result['rows'][0]['subscription_conversion_rate'], 'non-WC subscription column is N/A' );
 	}
 
 	/**

@@ -1078,4 +1078,82 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 		}
 		return __( 'Variation', 'newspack-plugin' );
 	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @param DateTimeInterface $start Inclusive window start.
+	 * @param DateTimeInterface $end   Inclusive window end.
+	 * @return array<string, array{conversions:int, revenue:float}>
+	 */
+	public function get_prompt_attributed_donation_conversions( DateTimeInterface $start, DateTimeInterface $end ): array {
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+
+		// NPPD-1685 audit fix: `_newspack_popup_id` is written more than once per
+		// order (the checkout hook adds it without `unique = true`), so JOINing that
+		// meta multiplies COUNT/SUM by the number of duplicate rows. Don't
+		// join-then-dedupe — filter prompt-attributed orders with EXISTS and derive
+		// exactly ONE popup id per order via a correlated MIN() subquery, so
+		// duplicate meta cannot re-inflate even if an order ever carried two
+		// different popup ids. Donation membership and renewal exclusion are also
+		// EXISTS / NOT EXISTS so neither can multiply rows. Renewal orders inherit
+		// the parent's popup meta and are excluded via `_subscription_renewal`.
+		// Proven on Evanston (27 / $2,294.84) and New Bedford Light (5 / $533.79).
+		$sql = $wpdb->prepare(
+			"SELECT o.popup_id,
+				COUNT(*) AS conversions,
+				SUM(o.order_total) AS revenue
+			FROM (
+				SELECT p.ID AS order_id,
+					(
+						SELECT MIN(pop.meta_value)
+						FROM {$prefix}postmeta pop
+						WHERE pop.post_id = p.ID
+						  AND pop.meta_key = '_newspack_popup_id'
+						  AND pop.meta_value NOT IN ('', '0')
+					) AS popup_id,
+					(
+						SELECT MAX(CAST(tot.meta_value AS DECIMAL(15,2)))
+						FROM {$prefix}postmeta tot
+						WHERE tot.post_id = p.ID AND tot.meta_key = '_order_total'
+					) AS order_total
+				FROM {$prefix}posts p
+				WHERE p.post_type = 'shop_order'
+				  AND p.post_status IN ('wc-completed', 'wc-processing')
+				  AND p.post_date_gmt BETWEEN %s AND %s
+				  AND NOT EXISTS (
+				      SELECT 1 FROM {$prefix}postmeta rn
+				      WHERE rn.post_id = p.ID AND rn.meta_key = '_subscription_renewal'
+				        AND rn.meta_value NOT IN ('', '0')
+				  )
+				  AND EXISTS (
+				      SELECT 1 FROM {$prefix}wc_order_product_lookup opl
+				      WHERE opl.order_id = p.ID AND opl.product_id IN ($donations)
+				  )
+				  AND EXISTS (
+				      SELECT 1 FROM {$prefix}postmeta pop
+				      WHERE pop.post_id = p.ID AND pop.meta_key = '_newspack_popup_id'
+				        AND pop.meta_value NOT IN ('', '0')
+				  )
+			) AS o
+			GROUP BY o.popup_id",
+			$this->fmt( $start ),
+			$this->fmt( $end )
+		);
+
+		$out = [];
+		foreach ( (array) $wpdb->get_results( $sql, ARRAY_A ) as $row ) {
+			$popup_id = (string) ( $row['popup_id'] ?? '' );
+			if ( '' === $popup_id ) {
+				continue;
+			}
+			$out[ $popup_id ] = [
+				'conversions' => (int) ( $row['conversions'] ?? 0 ),
+				'revenue'     => (float) ( $row['revenue'] ?? 0 ),
+			];
+		}
+		return $out;
+	}
 }
