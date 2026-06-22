@@ -238,7 +238,9 @@ describe( 'segmentation API', () => {
 
 	it( 'getMatchingSegmentIds returns all matching segment IDs, sorted', () => {
 		ras.store.set( 'simple', 'simple-match' );
-		expect( getMatchingSegmentIds( segments ) ).toEqual( [ 'segment2', 'segment3' ] );
+		// Out-of-order fixture so the assertion actually exercises the sort.
+		const outOfOrder = { segment3: segments.segment3, segment2: segments.segment2 };
+		expect( getMatchingSegmentIds( outOfOrder ) ).toEqual( [ 'segment2', 'segment3' ] );
 	} );
 
 	it( 'getMatchingSegmentIds returns an empty array when nothing matches', () => {
@@ -255,6 +257,13 @@ describe( 'segmentation API', () => {
 
 	it( 'syncMatchedSegments does not write for an anonymous reader', () => {
 		ras.store.set( 'reader', { authenticated: false } );
+		ras.store.set( 'simple', 'simple-match' );
+		syncMatchedSegments( ras, segments );
+		expect( ras.store.get( 'matched_segments' ) ).toBeUndefined();
+	} );
+
+	it( 'syncMatchedSegments does not write when no reader key is set', () => {
+		// beforeEach cleared the store; no 'reader' key exists (typical anonymous visitor).
 		ras.store.set( 'simple', 'simple-match' );
 		syncMatchedSegments( ras, segments );
 		expect( ras.store.get( 'matched_segments' ) ).toBeUndefined();

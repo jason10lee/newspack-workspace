@@ -144,7 +144,7 @@ export const syncMatchedSegments = ( ras, segments ) => {
 		return;
 	}
 	const ids = getMatchingSegmentIds( segments );
-	const current = ras.store.get( 'matched_segments' ) || [];
+	const current = ( ras.store.get( 'matched_segments' ) || [] ).slice().sort();
 	if ( JSON.stringify( ids ) === JSON.stringify( current ) ) {
 		return;
 	}
