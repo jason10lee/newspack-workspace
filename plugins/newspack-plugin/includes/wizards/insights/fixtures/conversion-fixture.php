@@ -234,8 +234,23 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 				'reader_lifecycle_funnel'          => array_merge( $error, [ 'stages' => [] ] ),
 				// Section 2.
 				'anonymous_to_registered_funnel'   => array_merge( $error, [ 'stages' => [] ] ),
-				'registered_to_subscriber_funnel'  => array_merge( $error, [ 'stages' => [] ] ),
-				'registered_to_donor_funnel'       => array_merge( $error, [ 'stages' => [] ] ),
+				// Config-matrix legs (NPPD-1742): configured (visible); the query errored.
+				'registered_to_subscriber_funnel'  => array_merge(
+					$error,
+					[
+						'stages'            => [],
+						'visibility'        => 'visible',
+						'visibility_reason' => null,
+					] 
+				),
+				'registered_to_donor_funnel'       => array_merge(
+					$error,
+					[
+						'stages'            => [],
+						'visibility'        => 'visible',
+						'visibility_reason' => null,
+					] 
+				),
 				// 2.4 — Subscriber → Donor: local-only; stays populated (visibility-gated).
 				'subscriber_to_donor_funnel'       => [
 					'state'             => 'populated',
@@ -333,8 +348,22 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 				'reader_lifecycle_funnel'          => $empty_stages,
 				// Section 2.
 				'anonymous_to_registered_funnel'   => $empty_stages,
-				'registered_to_subscriber_funnel'  => $empty_stages,
-				'registered_to_donor_funnel'       => $empty_stages,
+				// Config-matrix legs (NPPD-1742): configured (visible) but no rows →
+				// the component renders the funnel-shaped no_opportunity treatment.
+				'registered_to_subscriber_funnel'  => array_merge(
+					$empty_stages,
+					[
+						'visibility'        => 'visible',
+						'visibility_reason' => null,
+					] 
+				),
+				'registered_to_donor_funnel'       => array_merge(
+					$empty_stages,
+					[
+						'visibility'        => 'visible',
+						'visibility_reason' => null,
+					] 
+				),
 				'subscriber_to_donor_funnel'       => [
 					'state'             => 'populated',
 					'stages'            => [],
@@ -643,13 +672,18 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 					'state'  => 'populated',
 					'stages' => $a2r_stages,
 				],
+				// Config-matrix legs (NPPD-1742): visible in the populated fixture.
 				'registered_to_subscriber_funnel'  => [
-					'state'  => 'populated',
-					'stages' => $r2s_stages,
+					'state'             => 'populated',
+					'stages'            => $r2s_stages,
+					'visibility'        => 'visible',
+					'visibility_reason' => null,
 				],
 				'registered_to_donor_funnel'       => [
-					'state'  => 'populated',
-					'stages' => $r2d_stages,
+					'state'             => 'populated',
+					'stages'            => $r2d_stages,
+					'visibility'        => 'visible',
+					'visibility_reason' => null,
 				],
 				'subscriber_to_donor_funnel'       => [
 					'state'             => 'populated',
@@ -703,6 +737,26 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 			$deferred()
 		);
 	};
+
+	// --- Config-matrix smoke variant (NPPD-1742): registrations-only publisher. ---
+	// Both conversion-endpoint legs hidden ('not_configured'); the component omits
+	// their cells, leaving only the registration and cross-upsell cells.
+	if ( 'conversion_registrations_only' === $variant ) {
+		$current = $build( 1.0, $window );
+		foreach ( [ 'registered_to_subscriber_funnel', 'registered_to_donor_funnel' ] as $leg ) {
+			$current[ $leg ] = [
+				'state'             => 'empty',
+				'stages'            => [],
+				'visibility'        => 'hidden',
+				'visibility_reason' => 'not_configured',
+			];
+		}
+		return [
+			'tab_error' => false,
+			'current'   => $current,
+			'previous'  => null,
+		];
+	}
 
 	return [
 		'tab_error' => false,

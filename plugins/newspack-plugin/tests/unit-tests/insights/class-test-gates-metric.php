@@ -786,4 +786,281 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 		$this->assertSame( 0, $missing['paywall_attempts_total'] );
 		$this->assertSame( 0, $missing['paywall_conversions_total'] );
 	}
+
+	// --- NPPD-1702: Free-section count fields + empty-state envelope ---------
+
+	/**
+	 * When the hub returns the new count columns, the regwall rate scalar surfaces
+	 * them as numerator (registrations) + denominator (impressions), same shape as
+	 * the Paid rate scalars — so the card can render "0 of N".
+	 *
+	 * @dataProvider provide_regwall_methods
+	 * @param string $method     Method on Gates_Metric to call.
+	 * @param string $query_name Catalog query name.
+	 * @param string $rate_key   Precomputed-rate column.
+	 */
+	public function test_regwall_surfaces_counts_when_fields_present( string $method, string $query_name, string $rate_key ) {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->once() )
+			->method( 'query' )
+			->with( $query_name, $this->isInstanceOf( DateTimeImmutable::class ), $this->isInstanceOf( DateTimeImmutable::class ) )
+			->willReturn(
+				[
+					[
+						$rate_key                        => 0.05,
+						'registration_impressions_total' => 200,
+						'registrations_total'            => 10,
+					],
+				]
+			);
+
+		$metric = new Gates_Metric( $proxy );
+		$result = $metric->$method( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertTrue( $result['computable'] );
+		$this->assertSame( 0.05, $result['value'] );
+		$this->assertSame( 200, $result['denominator'] );
+		$this->assertSame( 10, $result['numerator'] );
+	}
+
+	/**
+	 * Production-safety crux: when the hub has NOT deployed the count columns, the
+	 * regwall scalar's numerator/denominator stay null — byte-for-byte today's
+	 * envelope — so the React layer renders percentages, not an empty state. An
+	 * absent field is not a zero.
+	 *
+	 * @dataProvider provide_regwall_methods
+	 * @param string $method     Method on Gates_Metric to call.
+	 * @param string $query_name Catalog query name (unused; dispatch asserted elsewhere).
+	 * @param string $rate_key   Precomputed-rate column.
+	 */
+	public function test_regwall_counts_null_when_fields_absent( string $method, string $query_name, string $rate_key ) {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		// Only the precomputed rate column — no count columns (pre-hub-deploy).
+		$proxy->method( 'query' )->willReturn( [ [ $rate_key => 0.08 ] ] );
+
+		$metric = new Gates_Metric( $proxy );
+		$result = $metric->$method( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertTrue( $result['computable'] );
+		$this->assertSame( 0.08, $result['value'] );
+		$this->assertNull( $result['denominator'] );
+		$this->assertNull( $result['numerator'] );
+	}
+
+	/**
+	 * A half-populated response (one count column present, the other absent) is
+	 * treated as absent — both counts null — so a malformed envelope degrades to
+	 * percentages rather than half-rendering a count fallback.
+	 */
+	public function test_regwall_counts_null_when_only_one_field_present() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn(
+			[
+				[
+					'regwall_conversion_rate_direct' => 0.05,
+					'registration_impressions_total' => 200,
+					// registrations_total absent.
+				],
+			]
+		);
+
+		$metric = new Gates_Metric( $proxy );
+		$result = $metric->get_regwall_conversion_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertNull( $result['denominator'] );
+		$this->assertNull( $result['numerator'] );
+	}
+
+	/**
+	 * A present-but-zero impressions column is a real "no impressions" signal, NOT
+	 * absence: it surfaces as denominator 0 (the section's no_opportunity trigger),
+	 * distinct from the null-denominator degradation path.
+	 */
+	public function test_regwall_counts_present_zero_is_not_absent() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn(
+			[
+				[
+					'regwall_conversion_rate_direct' => 0.0,
+					'registration_impressions_total' => 0,
+					'registrations_total'            => 0,
+				],
+			]
+		);
+
+		$metric = new Gates_Metric( $proxy );
+		$result = $metric->get_regwall_conversion_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 0, $result['denominator'] );
+		$this->assertSame( 0, $result['numerator'] );
+	}
+
+	/**
+	 * A non-integer count column signals catalog drift and is treated as absent
+	 * (null), not truncated — the section degrades rather than trusting bad data.
+	 */
+	public function test_regwall_counts_null_on_non_integer_field() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn(
+			[
+				[
+					'regwall_conversion_rate_direct' => 0.05,
+					'registration_impressions_total' => 12.5,
+					'registrations_total'            => 3,
+				],
+			]
+		);
+
+		$metric = new Gates_Metric( $proxy );
+		$result = $metric->get_regwall_conversion_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertNull( $result['denominator'] );
+		$this->assertNull( $result['numerator'] );
+	}
+
+	/**
+	 * Data provider: the two regwall rate methods + their catalog dispatch.
+	 *
+	 * @return array
+	 */
+	public function provide_regwall_methods(): array {
+		return [
+			'direct'     => [ 'get_regwall_conversion_direct', 'gates_regwall_conversion_direct', 'regwall_conversion_rate_direct' ],
+			'influenced' => [ 'get_regwall_conversion_influenced_7d', 'gates_regwall_conversion_influenced_7d', 'regwall_conversion_influenced' ],
+		];
+	}
+
+	/**
+	 * Free section totals: impressions from the Direct denominator; registrations
+	 * the inclusive max across Direct and Influenced numerators.
+	 */
+	public function test_regwall_section_totals_normal_data() {
+		$totals = Gates_Metric::regwall_section_totals(
+			[
+				'denominator' => 14000,
+				'numerator'   => 994,
+			],
+			[
+				'denominator' => 12000,
+				'numerator'   => 1476,
+			]
+		);
+
+		$this->assertSame( 14000, $totals['registration_impressions_total'] );
+		// max( direct 994, influenced 1476 ) — don't hide Influenced-only registrations.
+		$this->assertSame( 1476, $totals['registrations_total'] );
+	}
+
+	/**
+	 * Free section totals: impressions > 0 but zero registrations in either
+	 * attribution → the section's no_conversions trigger (a present 0, not null).
+	 */
+	public function test_regwall_section_totals_zero_registrations() {
+		$totals = Gates_Metric::regwall_section_totals(
+			[
+				'denominator' => 14000,
+				'numerator'   => 0,
+			],
+			[
+				'denominator' => 12000,
+				'numerator'   => 0,
+			]
+		);
+
+		$this->assertSame( 14000, $totals['registration_impressions_total'] );
+		$this->assertSame( 0, $totals['registrations_total'] );
+	}
+
+	/**
+	 * Free section totals: a present-zero impressions count → no_opportunity. This
+	 * is a real 0, distinct from the null degradation path below.
+	 */
+	public function test_regwall_section_totals_zero_impressions() {
+		$totals = Gates_Metric::regwall_section_totals(
+			[
+				'denominator' => 0,
+				'numerator'   => 0,
+			],
+			[
+				'denominator' => 0,
+				'numerator'   => 0,
+			]
+		);
+
+		$this->assertSame( 0, $totals['registration_impressions_total'] );
+		$this->assertSame( 0, $totals['registrations_total'] );
+	}
+
+	/**
+	 * The production-safety crux at the helper level: when the regwall scalars
+	 * carry null counts (hub fields absent), the totals are null — NOT 0 — so the
+	 * React layer degrades to percentages instead of a false no_opportunity. This
+	 * is the deliberate divergence from `paywall_section_totals`, which coerces to
+	 * 0 because its denominator is always computed locally.
+	 */
+	public function test_regwall_section_totals_null_when_fields_absent() {
+		$absent = Gates_Metric::regwall_section_totals(
+			[
+				'denominator' => null,
+				'numerator'   => null,
+			],
+			[
+				'denominator' => null,
+				'numerator'   => null,
+			]
+		);
+		$this->assertNull( $absent['registration_impressions_total'] );
+		$this->assertNull( $absent['registrations_total'] );
+
+		// Missing keys entirely (e.g. a payload shape that predates the field) also
+		// degrade to null, not 0.
+		$missing = Gates_Metric::regwall_section_totals( [], [] );
+		$this->assertNull( $missing['registration_impressions_total'] );
+		$this->assertNull( $missing['registrations_total'] );
+	}
+
+	/**
+	 * End-to-end envelope guard: a fields-absent proxy response produces a regwall
+	 * scalar with null counts AND null section totals — the whole graceful-
+	 * degradation path, asserted through the public method that the REST controller
+	 * consumes. This is the test that fails loudly if a future refactor reintroduces
+	 * a `?? 0` and silently breaks a working production section.
+	 */
+	public function test_regwall_envelope_unchanged_when_hub_fields_absent() {
+		// A pre-hub-deploy response: each query returns its precomputed rate but
+		// neither count column. Both regwall scalars are produced by their real
+		// public methods (not hand-built) so the guard exercises the full path the
+		// REST controller consumes — including the Influenced method's own rate_key.
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturnCallback(
+			static function ( string $query_name ) {
+				if ( 'gates_regwall_conversion_influenced_7d' === $query_name ) {
+					return [ [ 'regwall_conversion_influenced' => 0.123 ] ];
+				}
+				return [ [ 'regwall_conversion_rate_direct' => 0.071 ] ];
+			}
+		);
+
+		$metric     = new Gates_Metric( $proxy );
+		$direct     = $metric->get_regwall_conversion_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+		$influenced = $metric->get_regwall_conversion_influenced_7d( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+		$totals     = Gates_Metric::regwall_section_totals( $direct, $influenced );
+
+		// Rates compute; counts stay null on both scalars (columns absent).
+		$this->assertTrue( $direct['computable'] );
+		$this->assertNull( $direct['denominator'] );
+		$this->assertNull( $direct['numerator'] );
+		$this->assertTrue( $influenced['computable'] );
+		$this->assertNull( $influenced['denominator'] );
+		$this->assertNull( $influenced['numerator'] );
+		// Section totals degrade to null (never `?? 0`), the production-safety crux.
+		$this->assertNull( $totals['registration_impressions_total'] );
+		$this->assertNull( $totals['registrations_total'] );
+	}
 }

@@ -47,7 +47,10 @@ export type ConversionPlaceholderType = 'count' | 'rate' | 'currency' | 'decimal
  * below threshold; visible when the live cohort sizes meet the threshold.
  */
 export type ConversionVisibility = 'hidden' | 'visible';
-export type ConversionVisibilityReason = 'insufficient_data' | null;
+// 'insufficient_data' — cohort below threshold (2.4 / 4.4 cross-upsell gates).
+// 'not_configured' — the conversion stream isn't a reader-revenue product for
+// this publisher (NPPD-1742 config matrix: subscription / donation legs).
+export type ConversionVisibilityReason = 'insufficient_data' | 'not_configured' | null;
 
 /**
  * Collection metrics report all four states; scalars use
@@ -208,8 +211,11 @@ export interface ConversionWindow {
 	reader_lifecycle_funnel: ConversionFunnelData;
 	// Section 2 — Per-journey conversion funnels.
 	anonymous_to_registered_funnel: ConversionFunnelData;
-	registered_to_subscriber_funnel: ConversionFunnelData;
-	registered_to_donor_funnel: ConversionFunnelData;
+	// Subscription / donation legs carry the config-matrix visibility gate
+	// (NPPD-1742): `visibility: 'hidden'` + reason `'not_configured'` when the
+	// publisher doesn't run that reader-revenue stream.
+	registered_to_subscriber_funnel: ConversionGatedFunnelData;
+	registered_to_donor_funnel: ConversionGatedFunnelData;
 	subscriber_to_donor_funnel: ConversionGatedFunnelData;
 	// Section 3 — Where conversions come from.
 	source_mix_registrations: ConversionSourceMixData;
@@ -263,6 +269,16 @@ const queryString = ( query: ConversionQuery ): string => {
 	if ( query.compare_start && query.compare_end ) {
 		params.set( 'compare_start', query.compare_start );
 		params.set( 'compare_end', query.compare_end );
+	}
+	// Forward the `_fixture_state` URL param so fixture mode's render variants
+	// (empty / error / conversion_registrations_only) are reachable from the UI
+	// for smoke testing. A no-op in production: the server ignores it unless
+	// NEWSPACK_INSIGHTS_FIXTURE_MODE is enabled. Mirrors api/gates.ts.
+	if ( typeof window !== 'undefined' ) {
+		const fixtureState = new URLSearchParams( window.location.search ).get( '_fixture_state' );
+		if ( fixtureState ) {
+			params.set( '_fixture_state', fixtureState );
+		}
 	}
 	return params.toString();
 };

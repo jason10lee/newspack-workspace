@@ -1301,6 +1301,9 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	private function subscribers_metric_returning_count( int $return ): Subscribers_Metric {
 		$mock = $this->createMock( Subscribers_Metric::class );
 		$mock->method( 'count_active_non_donation_subscribers_by_customer_ids' )->willReturn( $return );
+		// NPPD-1742: a non-empty active-subscriber set marks the subscription leg
+		// configured, so the funnel logic runs instead of returning the hidden leg.
+		$mock->method( 'get_active_non_donation_subscriber_customer_ids' )->willReturn( [ 101 ] );
 		return $mock;
 	}
 
@@ -1313,6 +1316,9 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	private function donors_metric_returning_count( int $return ): Donors_Metric {
 		$mock = $this->createMock( Donors_Metric::class );
 		$mock->method( 'count_completed_donation_order_customers_by_customer_ids' )->willReturn( $return );
+		// NPPD-1742: active donors > 0 marks the donation leg configured, so the
+		// funnel logic runs instead of returning the hidden leg.
+		$mock->method( 'get_active_donors' )->willReturn( 1 );
 		return $mock;
 	}
 
@@ -1341,14 +1347,14 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		];
 
 		$proxy = $this->proxy_returning( $rows );
-		$subs  = $this->createMock( Subscribers_Metric::class );
-		$subs->method( 'count_active_non_donation_subscribers_by_customer_ids' )->willReturn( 1 );
+		$subs  = $this->subscribers_metric_returning_count( 1 );
 
 		$metric          = new Conversion_Metric( $proxy, null, $subs );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_subscriber_funnel( $start, $end );
 
 		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 'visible', $result['visibility'] );
 		$this->assertArrayNotHasKey( 'pending', $result );
 		$this->assertCount( 3, $result['stages'] );
 
@@ -1374,12 +1380,14 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 * C10 empty: proxy returns [] → state 'empty', empty stages.
 	 */
 	public function test_registered_to_subscriber_funnel_returns_empty_state_on_no_rows() {
-		$metric          = new Conversion_Metric( $this->proxy_returning( [] ), null, $this->createMock( Subscribers_Metric::class ) );
+		$metric          = new Conversion_Metric( $this->proxy_returning( [] ), null, $this->subscribers_metric_returning_count( 0 ) );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_subscriber_funnel( $start, $end );
 
 		$this->assertSame( 'empty', $result['state'] );
 		$this->assertSame( [], $result['stages'] );
+		// Configured (visible) but no rows → the component renders no_opportunity.
+		$this->assertSame( 'visible', $result['visibility'] );
 	}
 
 	/**
@@ -1387,7 +1395,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 */
 	public function test_registered_to_subscriber_funnel_returns_error_on_proxy_error() {
 		$wp_error        = new \WP_Error( 'bigquery_proxy_http_error', 'HTTP 500' );
-		$metric          = new Conversion_Metric( $this->proxy_returning( $wp_error ), null, $this->createMock( Subscribers_Metric::class ) );
+		$metric          = new Conversion_Metric( $this->proxy_returning( $wp_error ), null, $this->subscribers_metric_returning_count( 0 ) );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_subscriber_funnel( $start, $end );
 
@@ -1400,7 +1408,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 * C10 malformed: proxy returns non-array first row → state 'error' (malformed).
 	 */
 	public function test_registered_to_subscriber_funnel_returns_error_on_malformed_rows() {
-		$metric          = new Conversion_Metric( $this->proxy_returning( [ 'not-an-array' ] ), null, $this->createMock( Subscribers_Metric::class ) );
+		$metric          = new Conversion_Metric( $this->proxy_returning( [ 'not-an-array' ] ), null, $this->subscribers_metric_returning_count( 0 ) );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_subscriber_funnel( $start, $end );
 
@@ -1418,7 +1426,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 			'uid'                      => 1,
 			'saw_subscription_surface' => 1,
 		];
-		$metric          = new Conversion_Metric( $this->proxy_returning( [ $valid_row, 'not-an-array' ] ), null, $this->createMock( Subscribers_Metric::class ) );
+		$metric          = new Conversion_Metric( $this->proxy_returning( [ $valid_row, 'not-an-array' ] ), null, $this->subscribers_metric_returning_count( 0 ) );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_subscriber_funnel( $start, $end );
 
@@ -1454,14 +1462,14 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		];
 
 		$proxy  = $this->proxy_returning( $rows );
-		$donors = $this->createMock( Donors_Metric::class );
-		$donors->method( 'count_completed_donation_order_customers_by_customer_ids' )->willReturn( 2 );
+		$donors = $this->donors_metric_returning_count( 2 );
 
 		$metric          = new Conversion_Metric( $proxy, null, null, $donors );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_donor_funnel( $start, $end );
 
 		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 'visible', $result['visibility'] );
 		$this->assertArrayNotHasKey( 'pending', $result );
 		$this->assertCount( 3, $result['stages'] );
 
@@ -1486,12 +1494,13 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 * C11 empty: proxy returns [] → state 'empty', empty stages.
 	 */
 	public function test_registered_to_donor_funnel_returns_empty_state_on_no_rows() {
-		$metric          = new Conversion_Metric( $this->proxy_returning( [] ), null, null, $this->createMock( Donors_Metric::class ) );
+		$metric          = new Conversion_Metric( $this->proxy_returning( [] ), null, null, $this->donors_metric_returning_count( 0 ) );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_donor_funnel( $start, $end );
 
 		$this->assertSame( 'empty', $result['state'] );
 		$this->assertSame( [], $result['stages'] );
+		$this->assertSame( 'visible', $result['visibility'] );
 	}
 
 	/**
@@ -1499,7 +1508,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 */
 	public function test_registered_to_donor_funnel_returns_error_on_proxy_error() {
 		$wp_error        = new \WP_Error( 'bigquery_proxy_http_error', 'HTTP 502' );
-		$metric          = new Conversion_Metric( $this->proxy_returning( $wp_error ), null, null, $this->createMock( Donors_Metric::class ) );
+		$metric          = new Conversion_Metric( $this->proxy_returning( $wp_error ), null, null, $this->donors_metric_returning_count( 0 ) );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_donor_funnel( $start, $end );
 
@@ -1512,7 +1521,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 * C11 malformed: proxy returns non-array first row → state 'error' (malformed).
 	 */
 	public function test_registered_to_donor_funnel_returns_error_on_malformed_rows() {
-		$metric          = new Conversion_Metric( $this->proxy_returning( [ 'not-an-array' ] ), null, null, $this->createMock( Donors_Metric::class ) );
+		$metric          = new Conversion_Metric( $this->proxy_returning( [ 'not-an-array' ] ), null, null, $this->donors_metric_returning_count( 0 ) );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_donor_funnel( $start, $end );
 
@@ -1530,12 +1539,55 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 			'uid'                  => 1,
 			'saw_donation_surface' => 1,
 		];
-		$metric          = new Conversion_Metric( $this->proxy_returning( [ $valid_row, 'not-an-array' ] ), null, null, $this->createMock( Donors_Metric::class ) );
+		$metric          = new Conversion_Metric( $this->proxy_returning( [ $valid_row, 'not-an-array' ] ), null, null, $this->donors_metric_returning_count( 0 ) );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_donor_funnel( $start, $end );
 
 		$this->assertSame( 'error', $result['state'] );
 		$this->assertSame( 'bigquery_proxy_malformed_rows', $result['error_code'] );
+		$this->assertSame( [], $result['stages'] );
+	}
+
+	// --- NPPD-1742: configuration matrix (leg visibility) -------------------
+
+	/**
+	 * Subscription leg is hidden ('not_configured') when the publisher has no
+	 * active non-donation subscription — and no BQ query is issued for it.
+	 */
+	public function test_registered_to_subscriber_funnel_hidden_when_not_configured() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->never() )->method( 'query' );
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_active_non_donation_subscriber_customer_ids' )->willReturn( [] );
+
+		$metric          = new Conversion_Metric( $proxy, null, $subs );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_registered_to_subscriber_funnel( $start, $end );
+
+		$this->assertSame( 'hidden', $result['visibility'] );
+		$this->assertSame( 'not_configured', $result['visibility_reason'] );
+		$this->assertSame( 'empty', $result['state'] );
+		$this->assertSame( [], $result['stages'] );
+	}
+
+	/**
+	 * Donation leg is hidden ('not_configured') when there are no active donors —
+	 * activity-based, not product-existence (every site ships a donation product).
+	 * No BQ query is issued for it.
+	 */
+	public function test_registered_to_donor_funnel_hidden_when_not_configured() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->never() )->method( 'query' );
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_active_donors' )->willReturn( 0 );
+
+		$metric          = new Conversion_Metric( $proxy, null, null, $donors );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_registered_to_donor_funnel( $start, $end );
+
+		$this->assertSame( 'hidden', $result['visibility'] );
+		$this->assertSame( 'not_configured', $result['visibility_reason'] );
+		$this->assertSame( 'empty', $result['state'] );
 		$this->assertSame( [], $result['stages'] );
 	}
 

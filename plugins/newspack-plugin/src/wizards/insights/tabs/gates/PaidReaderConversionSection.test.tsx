@@ -39,6 +39,10 @@ const makeWindow = ( over: Partial< GatesWindow > = {} ): GatesWindow => ( {
 	avg_revenue_per_paywall_conversion: scalar( { placeholder_type: 'currency' } ),
 	paywall_attempts_total: 0,
 	paywall_conversions_total: 0,
+	// NPPD-1702 Free-section totals — required by the type; null (absent) here
+	// since these tests exercise the Paid section, which never reads them.
+	registration_impressions_total: null,
+	registrations_total: null,
 	conversion_funnel: { state: 'empty', stages: [] },
 	exposures_distribution: { state: 'empty', buckets: [] },
 	performance_by_gate: { state: 'empty', rows: [] },

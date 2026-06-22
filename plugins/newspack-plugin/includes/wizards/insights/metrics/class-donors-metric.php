@@ -451,6 +451,30 @@ class Donors_Metric {
 	}
 
 	/**
+	 * NPPD-1685: prompt-attributed completed donation conversions for the window,
+	 * sourced from order meta (`_newspack_popup_id`) — the anonymous-inclusive,
+	 * join-free source for the DIRECT prompt-donation metrics, replacing the GA4
+	 * attempt → {@see Woo_Order_Resolver} path that dropped anonymous-at-attempt
+	 * donors. Keyed by popup id: `{ conversions, revenue }`. Reused by
+	 * {@see Prompts_Metric::get_donation_revenue_direct()} (and the direct
+	 * conversion-rate / per-prompt cards).
+	 *
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
+	 * @return array<string, array{conversions:int, revenue:float}>
+	 */
+	public function get_prompt_attributed_donation_conversions( DateTimeInterface $start, DateTimeInterface $end ): array {
+		return (array) $this->cached(
+			'prompt_attributed_donation_conversions',
+			$this->window_key( $start, $end ),
+			self::TTL_DEFAULT,
+			function () use ( $start, $end ) {
+				return $this->storage->get_prompt_attributed_donation_conversions( $start, $end );
+			}
+		);
+	}
+
+	/**
 	 * Flush all Tab 7 metric caches. Hook point for NPPD-1605.
 	 *
 	 * @return void

@@ -143,6 +143,23 @@ final class Conversion_Metric {
 	private Donors_Metric $donors_metric;
 
 	/**
+	 * Per-request memo for the subscription/donation configuration-matrix gates
+	 * (NPPD-1742). Null until first resolved; both are current-state (not
+	 * windowed), so they're computed once and reused across the current/previous
+	 * windows the controller builds.
+	 *
+	 * @var bool|null
+	 */
+	private ?bool $subscription_leg_configured = null;
+
+	/**
+	 * Donation-leg config-matrix gate memo; see $subscription_leg_configured.
+	 *
+	 * @var bool|null
+	 */
+	private ?bool $donation_leg_configured = null;
+
+	/**
 	 * Minimum cohort size required to show the Subscriber → Donor funnel
 	 * (active subscribers AND active donors must both meet this threshold).
 	 *
@@ -486,6 +503,69 @@ final class Conversion_Metric {
 	}
 
 	/**
+	 * Whether the subscription conversion leg should render (NPPD-1742).
+	 *
+	 * "Configured" is proxied by the presence of at least one active non-donation
+	 * subscription — there is no single Newspack-mapped subscription product to
+	 * check (unlike donations), and the Subscribers tab is likewise activity-gated.
+	 * Memoized: current-state, identical across the current/previous windows.
+	 *
+	 * @return bool
+	 */
+	private function is_subscription_leg_configured(): bool {
+		if ( null === $this->subscription_leg_configured ) {
+			$this->subscription_leg_configured = count( $this->subscribers_metric->get_active_non_donation_subscriber_customer_ids() ) > 0;
+		}
+		return $this->subscription_leg_configured;
+	}
+
+	/**
+	 * Whether the donation conversion leg should render (NPPD-1742).
+	 *
+	 * Activity-based (active donors > 0), NOT product-existence: every Newspack
+	 * site ships the canonical donation product on install, so a product check is
+	 * true everywhere. Mirrors the Donors tab's own activity-based visibility gate.
+	 * Memoized like {@see self::is_subscription_leg_configured()}.
+	 *
+	 * @return bool
+	 */
+	private function is_donation_leg_configured(): bool {
+		if ( null === $this->donation_leg_configured ) {
+			$this->donation_leg_configured = $this->donors_metric->get_active_donors() > 0;
+		}
+		return $this->donation_leg_configured;
+	}
+
+	/**
+	 * The hidden-leg payload for an unconfigured conversion stream (NPPD-1742).
+	 * `state: 'empty'` keeps the leg out of the all-error tab-banner check; the
+	 * `visibility: 'hidden'` flag is what the component reads to omit the cell.
+	 *
+	 * @return array{state: string, stages: array, visibility: string, visibility_reason: string}
+	 */
+	private function unconfigured_leg(): array {
+		return [
+			'state'             => 'empty',
+			'stages'            => [],
+			'visibility'        => 'hidden',
+			'visibility_reason' => 'not_configured',
+		];
+	}
+
+	/**
+	 * Stamp a configured (rendering) leg payload with `visibility: 'visible'`, so
+	 * every leg carries the same shape regardless of configuration (NPPD-1742).
+	 *
+	 * @param array $leg The computed funnel payload.
+	 * @return array
+	 */
+	private function with_leg_visibility( array $leg ): array {
+		$leg['visibility']        = 'visible';
+		$leg['visibility_reason'] = null;
+		return $leg;
+	}
+
+	/**
 	 * Registered → Subscriber funnel (C10 / 2.2) — three stages, non-donation
 	 * subscriptions only. Dispatches
 	 * `conversion_journey_funnel_registered_to_subscriber`; the hub returns
@@ -498,6 +578,24 @@ final class Conversion_Metric {
 	 * @return array{state: string, stages: array<int, array{label: string, count: int, pct_of_top: float}>}
 	 */
 	public function get_registered_to_subscriber_funnel( DateTimeInterface $start, DateTimeInterface $end ): array {
+		// Configuration matrix (NPPD-1742): when the publisher has no active
+		// non-donation subscription product, the subscription leg is not a
+		// reader-revenue stream for them — hide the leg rather than render a zero
+		// funnel. Component omits the cell on `visibility: 'hidden'`.
+		if ( ! $this->is_subscription_leg_configured() ) {
+			return $this->unconfigured_leg();
+		}
+		return $this->with_leg_visibility( $this->compute_registered_to_subscriber_funnel( $start, $end ) );
+	}
+
+	/**
+	 * Build the Registered → Subscriber funnel payload (no visibility gating).
+	 *
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
+	 * @return array{state: string, stages: array<int, array{label: string, count: int, pct_of_top: float}>}
+	 */
+	private function compute_registered_to_subscriber_funnel( DateTimeInterface $start, DateTimeInterface $end ): array {
 		$rows = $this->proxy->query( 'conversion_journey_funnel_registered_to_subscriber', $start, $end );
 		if ( is_wp_error( $rows ) ) {
 			return $this->error_collection( 'stages', $rows );
@@ -557,6 +655,26 @@ final class Conversion_Metric {
 	 * @return array{state: string, stages: array<int, array{label: string, count: int, pct_of_top: float}>}
 	 */
 	public function get_registered_to_donor_funnel( DateTimeInterface $start, DateTimeInterface $end ): array {
+		// Configuration matrix (NPPD-1742): hide the donation leg when the
+		// publisher has no active donors. Activity-based on purpose — every
+		// Newspack site ships the canonical donation product on install, so a
+		// product-existence check (Donation_Product_Classifier) is true
+		// everywhere and would never hide the leg. This mirrors how the Donors
+		// tab itself gates visibility on activity, not product presence.
+		if ( ! $this->is_donation_leg_configured() ) {
+			return $this->unconfigured_leg();
+		}
+		return $this->with_leg_visibility( $this->compute_registered_to_donor_funnel( $start, $end ) );
+	}
+
+	/**
+	 * Build the Registered → Donor funnel payload (no visibility gating).
+	 *
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
+	 * @return array{state: string, stages: array<int, array{label: string, count: int, pct_of_top: float}>}
+	 */
+	private function compute_registered_to_donor_funnel( DateTimeInterface $start, DateTimeInterface $end ): array {
 		$rows = $this->proxy->query( 'conversion_journey_funnel_registered_to_donor', $start, $end );
 		if ( is_wp_error( $rows ) ) {
 			return $this->error_collection( 'stages', $rows );
