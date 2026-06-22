@@ -881,8 +881,8 @@ final class Newspack_Newsletters_Editor {
 	/**
 	 * Append author data to the REST /posts response, so we can include Coauthors, link and display names.
 	 *
-	 * @param object $post Post object for the post being returned.
-	 * @return object Formatted data for all authors associated with the post.
+	 * @param array $post Prepared REST response data for the post being returned.
+	 * @return array Formatted data for all authors associated with the post.
 	 */
 	public static function newspack_get_author_info( $post ) {
 		$author_data = [];
@@ -932,7 +932,7 @@ final class Newspack_Newsletters_Editor {
 	/**
 	 * Get custom byline for the REST /posts response.
 	 *
-	 * @param object $post Post object for the post being returned.
+	 * @param array $post Prepared REST response data for the post being returned.
 	 * @return string|null Formatted custom byline HTML or null if not active.
 	 */
 	public static function newspack_get_custom_byline( $post ) {
@@ -946,7 +946,7 @@ final class Newspack_Newsletters_Editor {
 	/**
 	 * Append sponsor data to the REST /posts response.
 	 *
-	 * @param object $post Post object for the post being returned.
+	 * @param array $post Prepared REST response data for the post being returned.
 	 * @return array Formatted data for all sponsors associated with the post.
 	 */
 	public static function newspack_get_sponsors_info( $post ) {
@@ -956,7 +956,7 @@ final class Newspack_Newsletters_Editor {
 	/**
 	 * Get featured media info for the REST /posts response.
 	 *
-	 * @param object $post Post object for the post being returned.
+	 * @param array $post Prepared REST response data for the post being returned.
 	 * @return object Formatted data for the featured media associated with the post.
 	 */
 	public static function newspack_get_featured_media_info( $post ) {
