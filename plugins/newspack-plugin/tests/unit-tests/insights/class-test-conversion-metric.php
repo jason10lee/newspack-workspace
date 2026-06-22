@@ -2631,4 +2631,142 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 0, $by['prompt']['count'] );
 		$this->assertSame( 1, $by['direct']['count'] ); // No BQ event → direct.
 	}
+
+	// --- C12 order-meta-primary tests (3.2) ------------------------------------
+	// Subscriber records now carry gate_post_id / popup_id from the parent order.
+	// BQ must NOT be called when every record has usable order meta.
+
+	/**
+	 * C12 order-meta gate: subscriber records with gate_post_id set → classified
+	 * as 'gate' WITHOUT any BQ proxy call. Mirrors C13 donor gate test.
+	 */
+	public function test_source_mix_subscribers_gate_from_order_meta_skips_bq(): void {
+		$records = [
+			[
+				'customer_id'  => 701,
+				'ts'           => 1_700_000_000,
+				'gate_post_id' => '55',
+				'popup_id'     => '',
+			],
+			[
+				'customer_id'  => 702,
+				'ts'           => 1_700_001_000,
+				'gate_post_id' => '55',
+				'popup_id'     => '',
+			],
+		];
+
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_new_subscriber_records_in_window' )->willReturn( $records );
+
+		// Proxy whose query() would fail the test if called.
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->never() )->method( 'query' );
+
+		$metric          = new Conversion_Metric( $proxy, null, $subs, null );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_subscribers( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 2, $result['total'] );
+		$by = array_column( $result['slices'], null, 'source' );
+		$this->assertSame( 2, $by['gate']['count'] );
+		$this->assertSame( 0, $by['prompt']['count'] );
+		$this->assertSame( 0, $by['direct']['count'] );
+	}
+
+	/**
+	 * C12 order-meta prompt: subscriber records with popup_id (and no
+	 * gate_post_id) set → classified as 'prompt' WITHOUT any BQ proxy call.
+	 */
+	public function test_source_mix_subscribers_prompt_from_order_meta_skips_bq(): void {
+		$records = [
+			[
+				'customer_id'  => 801,
+				'ts'           => 1_700_000_000,
+				'gate_post_id' => '',
+				'popup_id'     => '42',
+			],
+		];
+
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_new_subscriber_records_in_window' )->willReturn( $records );
+
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->never() )->method( 'query' );
+
+		$metric          = new Conversion_Metric( $proxy, null, $subs, null );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_subscribers( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 1, $result['total'] );
+		$by = array_column( $result['slices'], null, 'source' );
+		$this->assertSame( 0, $by['gate']['count'] );
+		$this->assertSame( 1, $by['prompt']['count'] );
+		$this->assertSame( 0, $by['direct']['count'] );
+	}
+
+	/**
+	 * C12 mixed: some subscriber records have parent-order meta (classified
+	 * without BQ), others do not (go to matcher). BQ is called once for the
+	 * unmetered records; totals combine correctly.
+	 * 1 gate from meta + 1 prompt from BQ + 1 direct from BQ = 3 total.
+	 */
+	public function test_source_mix_subscribers_mixed_meta_and_bq(): void {
+		$order_ts = 1_700_000_000;
+		$records  = [
+			// Has gate meta → classified from parent order meta; BQ not needed.
+			[
+				'customer_id'  => 901,
+				'ts'           => $order_ts,
+				'gate_post_id' => '77',
+				'popup_id'     => '',
+			],
+			// No meta → goes to BQ matcher; BQ returns a prompt event.
+			[
+				'customer_id'  => 902,
+				'ts'           => $order_ts + 1000,
+				'gate_post_id' => '',
+				'popup_id'     => '',
+			],
+			// No meta → goes to BQ matcher; BQ has no matching event → direct.
+			[
+				'customer_id'  => 903,
+				'ts'           => $order_ts + 9000,
+				'gate_post_id' => '',
+				'popup_id'     => '',
+			],
+		];
+
+		// BQ returns a prompt event 60s before customer 902's subscription start.
+		$bq_rows = [
+			[
+				'attempt_ts'   => (string) ( ( $order_ts + 1000 - 60 ) * 1_000_000 ),
+				'gate_post_id' => '',
+				'popup_id'     => '33',
+			],
+		];
+
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_new_subscriber_records_in_window' )->willReturn( $records );
+
+		// BQ must be called exactly once (for the 2 records lacking parent-order meta).
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->once() )
+			->method( 'query' )
+			->with( 'conversion_journey_source_mix_subscribers' )
+			->willReturn( $bq_rows );
+
+		$metric          = new Conversion_Metric( $proxy, null, $subs, null );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_subscribers( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 3, $result['total'] ); // 1 gate + 1 prompt + 1 direct.
+		$by = array_column( $result['slices'], null, 'source' );
+		$this->assertSame( 1, $by['gate']['count'] );   // from parent order meta.
+		$this->assertSame( 1, $by['prompt']['count'] ); // from BQ matcher.
+		$this->assertSame( 1, $by['direct']['count'] ); // BQ-unmatched.
+	}
 }

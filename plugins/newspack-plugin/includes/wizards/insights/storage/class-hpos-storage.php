@@ -1191,14 +1191,88 @@ class HPOS_Storage implements Storage_Interface {
 		$donations = $this->id_list( $this->donation_product_ids );
 
 		// Same inner aggregate as get_new_subscribers_in_window() (first
-		// non-donation _schedule_start per customer), filtered to the window,
-		// but returns the rows so the metric layer can anchor Source_Matcher on
-		// each customer's first-sub timestamp. Guest orders (customer_id = 0)
-		// are excluded: a guest has no user account to match against BQ
-		// registration events, so they would always collapse to 'direct' and
-		// inflate that bucket artificially.
+		// non-donation _schedule_start per customer), filtered to the window.
+		// Guest orders (customer_id = 0) are excluded: a guest has no user
+		// account to match against BQ registration events.
+		//
+		// Source meta lives on the PARENT shop_order (the subscription's initial
+		// checkout order), NOT on the shop_subscription row itself. Each
+		// subscription's parent_order_id in {prefix}wc_orders points to the
+		// initial shop_order; we read _gate_post_id / _memberships_content_gate
+		// / _newspack_popup_id from that parent order's meta.
+		//
+		// To identify the first subscription per customer in the window we pick
+		// the subscription whose _schedule_start = the customer's MIN. Correlated
+		// subqueries (MySQL 5.7-safe, no window functions) then read meta from
+		// that first subscription's parent order. LIMIT 1 resolves same-timestamp
+		// ties (two subscriptions sharing the same MIN _schedule_start): any one
+		// tied first-subscription's parent order meta is used — the signal is a
+		// soft fallback, not an exact ID.
+		//
+		// gate_post_id: first non-empty _gate_post_id on the parent order,
+		// falling back to legacy _memberships_content_gate (both
+		// NOT IN ('','0')).
+		// popup_id:     non-empty _newspack_popup_id on the parent order.
+		// No parent order / no meta → '' for that column; the metric layer falls
+		// those records to the BQ temporal matcher (unchanged behaviour).
 		$sql = $wpdb->prepare(
-			"SELECT first_subs.customer_id, first_subs.first_start FROM (
+			"SELECT
+				first_subs.customer_id,
+				first_subs.first_start,
+				COALESCE((
+					SELECT om_gate.meta_value
+					FROM {$prefix}wc_orders o_sub
+					JOIN {$prefix}wc_orders_meta om_start_s
+						ON om_start_s.order_id = o_sub.id AND om_start_s.meta_key = '_schedule_start'
+					JOIN {$prefix}wc_orders_meta om_gate
+						ON om_gate.order_id = o_sub.parent_order_id AND om_gate.meta_key = '_gate_post_id'
+					JOIN {$prefix}woocommerce_order_items oi_s
+						ON oi_s.order_id = o_sub.id AND oi_s.order_item_type = 'line_item'
+					JOIN {$prefix}woocommerce_order_itemmeta oim_s
+						ON oim_s.order_item_id = oi_s.order_item_id AND oim_s.meta_key = '_product_id'
+					WHERE o_sub.type = 'shop_subscription'
+					  AND o_sub.customer_id = first_subs.customer_id
+					  AND oim_s.meta_value NOT IN ($donations)
+					  AND om_start_s.meta_value = first_subs.first_start
+					  AND om_gate.meta_value NOT IN ('', '0')
+					LIMIT 1
+				), (
+					SELECT om_legacy.meta_value
+					FROM {$prefix}wc_orders o_sub
+					JOIN {$prefix}wc_orders_meta om_start_s
+						ON om_start_s.order_id = o_sub.id AND om_start_s.meta_key = '_schedule_start'
+					JOIN {$prefix}wc_orders_meta om_legacy
+						ON om_legacy.order_id = o_sub.parent_order_id AND om_legacy.meta_key = '_memberships_content_gate'
+					JOIN {$prefix}woocommerce_order_items oi_s
+						ON oi_s.order_id = o_sub.id AND oi_s.order_item_type = 'line_item'
+					JOIN {$prefix}woocommerce_order_itemmeta oim_s
+						ON oim_s.order_item_id = oi_s.order_item_id AND oim_s.meta_key = '_product_id'
+					WHERE o_sub.type = 'shop_subscription'
+					  AND o_sub.customer_id = first_subs.customer_id
+					  AND oim_s.meta_value NOT IN ($donations)
+					  AND om_start_s.meta_value = first_subs.first_start
+					  AND om_legacy.meta_value NOT IN ('', '0')
+					LIMIT 1
+				), '') AS gate_post_id,
+				COALESCE((
+					SELECT om_popup.meta_value
+					FROM {$prefix}wc_orders o_sub
+					JOIN {$prefix}wc_orders_meta om_start_s
+						ON om_start_s.order_id = o_sub.id AND om_start_s.meta_key = '_schedule_start'
+					JOIN {$prefix}wc_orders_meta om_popup
+						ON om_popup.order_id = o_sub.parent_order_id AND om_popup.meta_key = '_newspack_popup_id'
+					JOIN {$prefix}woocommerce_order_items oi_s
+						ON oi_s.order_id = o_sub.id AND oi_s.order_item_type = 'line_item'
+					JOIN {$prefix}woocommerce_order_itemmeta oim_s
+						ON oim_s.order_item_id = oi_s.order_item_id AND oim_s.meta_key = '_product_id'
+					WHERE o_sub.type = 'shop_subscription'
+					  AND o_sub.customer_id = first_subs.customer_id
+					  AND oim_s.meta_value NOT IN ($donations)
+					  AND om_start_s.meta_value = first_subs.first_start
+					  AND om_popup.meta_value NOT IN ('', '0')
+					LIMIT 1
+				), '') AS popup_id
+			FROM (
 				SELECT o.customer_id, MIN(om.meta_value) AS first_start
 				FROM {$prefix}wc_orders o
 				JOIN {$prefix}wc_orders_meta om
@@ -1218,7 +1292,32 @@ class HPOS_Storage implements Storage_Interface {
 			$this->fmt( $end )
 		);
 
-		return $this->rows_to_records( $wpdb->get_results( $sql, ARRAY_A ), 'first_start' );
+		return $this->rows_to_subscriber_records( $wpdb->get_results( $sql, ARRAY_A ) );
+	}
+
+	/**
+	 * Map (customer_id, first_start, gate_post_id, popup_id) rows to subscriber
+	 * source records with UTC epoch seconds. Blank dates are skipped. UTC parse
+	 * keeps the epoch correct regardless of MySQL session timezone.
+	 *
+	 * @param mixed $rows wpdb->get_results( …, ARRAY_A ) output.
+	 * @return array<int, array{customer_id:int, ts:int, gate_post_id:string, popup_id:string}>
+	 */
+	private function rows_to_subscriber_records( $rows ): array {
+		$utc     = new \DateTimeZone( 'UTC' );
+		$records = [];
+		foreach ( (array) $rows as $row ) {
+			if ( empty( $row['first_start'] ) ) {
+				continue;
+			}
+			$records[] = [
+				'customer_id'  => (int) $row['customer_id'],
+				'ts'           => ( new \DateTimeImmutable( $row['first_start'], $utc ) )->getTimestamp(),
+				'gate_post_id' => (string) ( $row['gate_post_id'] ?? '' ),
+				'popup_id'     => (string) ( $row['popup_id'] ?? '' ),
+			];
+		}
+		return $records;
 	}
 
 	/**

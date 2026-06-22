@@ -477,12 +477,15 @@ class Subscribers_Metric {
 	}
 
 	/**
-	 * New non-donation subscriber records (customer_id + first-sub epoch ts) in
-	 * the window, for Source_Matcher anchoring. List-param — NOT cached.
+	 * New non-donation subscriber records for source-mix attribution (3.2).
+	 * Each record carries customer_id, first-sub epoch ts, and source meta
+	 * (gate_post_id, popup_id) read from the subscription's parent shop_order.
+	 * Records without usable meta fall to the BQ temporal matcher in
+	 * compute_source_mix. List-param — NOT cached.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array<int, array{customer_id:int, ts:int}>
+	 * @return array<int, array{customer_id:int, ts:int, gate_post_id:string, popup_id:string}>
 	 */
 	public function get_new_subscriber_records_in_window( DateTimeInterface $start, DateTimeInterface $end ): array {
 		return $this->storage->get_new_subscriber_records_in_window( $start, $end );

@@ -328,13 +328,18 @@ interface Storage_Interface {
 
 	/**
 	 * New non-donation subscribers in the window, each with the epoch timestamp
-	 * (UTC seconds) of their FIRST subscription start. Same population as
+	 * (UTC seconds) of their FIRST subscription start plus order-meta sourced from
+	 * the subscription's parent shop_order. Same population as
 	 * {@see get_new_subscribers_in_window()} but returns one record per customer
-	 * with the anchor timestamp for Source_Matcher (Tab 3 source-mix 3.2).
+	 * enriched with parent-order source attribution for Tab 3 source-mix 3.2.
+	 * gate_post_id: non-empty _gate_post_id (or legacy _memberships_content_gate)
+	 * from the first subscription's parent order; '' if absent. popup_id:
+	 * non-empty _newspack_popup_id from the parent order; '' if absent. Records
+	 * with both '' fall to the BQ temporal matcher in compute_source_mix.
 	 *
 	 * @param DateTimeInterface $start Inclusive window start.
 	 * @param DateTimeInterface $end   Inclusive window end.
-	 * @return array<int, array{customer_id:int, ts:int}>
+	 * @return array<int, array{customer_id:int, ts:int, gate_post_id:string, popup_id:string}>
 	 */
 	public function get_new_subscriber_records_in_window( DateTimeInterface $start, DateTimeInterface $end ): array;
 
