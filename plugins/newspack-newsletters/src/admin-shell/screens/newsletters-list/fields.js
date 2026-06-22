@@ -10,7 +10,8 @@ import { __, sprintf } from '@wordpress/i18n';
 import { commentAuthorAvatar, drafts, envelope, globe, published, scheduled, trash } from '@wordpress/icons';
 import { dateI18n, getSettings as getDateSettings } from '@wordpress/date';
 
-import { getAdminUrl, isManualProvider } from '../../admin-globals';
+import { getAdminUrl } from '../../admin-globals';
+import { isManualProvider } from '../../../utils/service-provider';
 import { formatPostDate } from '../../utils/format-date';
 import { termsForTaxonomy } from '../../utils/terms';
 import { statusKindLabel, STATUS_KIND_LABELS } from './status-label';

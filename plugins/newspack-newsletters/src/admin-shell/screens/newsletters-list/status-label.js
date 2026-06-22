@@ -8,7 +8,7 @@
 import { __ } from '@wordpress/i18n';
 
 import { createStatusLabelModule } from '../../utils/status-label';
-import { isManualProvider } from '../../admin-globals';
+import { isManualProvider } from '../../../utils/service-provider';
 
 export const { STATUS_KIND_LABELS, statusKindLabel } = createStatusLabelModule( () => ( {
 	// The manual provider doesn't send through an ESP, so a published newsletter reads "Published", not "Sent".

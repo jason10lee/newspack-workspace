@@ -18,6 +18,7 @@ import { get } from 'lodash';
  * Internal dependencies
  */
 import { getServiceProvider } from '../../service-providers';
+import { isManualProvider } from '../../utils/service-provider';
 import { validateNewsletter } from '../../newsletter-editor/utils';
 import { useNewsletterData } from '../../newsletter-editor/store';
 import { refreshEmailHtml } from '../../editor/mjml';
@@ -172,11 +173,11 @@ export default compose( [
 
 	const newsletterValidationErrors = validateNewsletter( meta );
 
-	const { name: serviceProviderName, renderPreSendInfo, renderPostUpdateInfo } = getServiceProvider();
+	const { renderPreSendInfo, renderPostUpdateInfo } = getServiceProvider();
 
 	// The manual provider doesn't send through an ESP – the publisher copies the rendered HTML and sends it
 	// themselves. So the editor keeps WordPress' native publish/published terminology instead of send/sent.
-	const isManual = 'manual' === serviceProviderName;
+	const isManual = isManualProvider();
 
 	const isButtonEnabled =
 		( isPublishable || isEditedPostBeingScheduled ) &&
@@ -189,7 +190,7 @@ export default compose( [
 	let label;
 	if ( isPublished ) {
 		if ( isSaving ) {
-			label = isManual ? __( 'Publishing…', 'newspack-newsletters' ) : __( 'Sending', 'newspack-newsletters' );
+			label = isManual ? __( 'Publishing…', 'newspack-newsletters' ) : __( 'Sending…', 'newspack-newsletters' );
 		} else if ( isManual ) {
 			label = __( 'Published', 'newspack-newsletters' );
 		} else {

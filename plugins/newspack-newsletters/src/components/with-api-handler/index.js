@@ -8,15 +8,17 @@ import { createHigherOrderComponent } from '@wordpress/compose';
 import { useState } from '@wordpress/element';
 
 import { SHARE_BLOCK_NOTICE_ID } from '../../editor/blocks/share/consts';
-import { isManualESP } from '../../newsletter-editor/utils';
+import { CAMPAIGN_SENT_NOTICE_ID } from '../../utils/consts';
+import { isManualProvider } from '../../utils/service-provider';
 
 // The manual provider doesn't send through an ESP, so the post-publish notice uses publish wording.
-// This constant doubles as the marker that keeps the notice from being cleared, so both must match.
-const successNote = isManualESP() ? __( 'Published on', 'newspack-newsletters' ) : __( 'Campaign sent on', 'newspack-newsletters' );
+const successNote = isManualProvider() ? __( 'Published on', 'newspack-newsletters' ) : __( 'Campaign sent on', 'newspack-newsletters' );
 const shouldRemoveNotice = notice => {
 	return (
 		notice.id !== SHARE_BLOCK_NOTICE_ID &&
 		notice.id !== 'newspack-newsletters-email-content-too-large' &&
+		// Keep the post-publish notice by its stable id, so this doesn't depend on its wording.
+		notice.id !== CAMPAIGN_SENT_NOTICE_ID &&
 		'error' !== notice.status &&
 		( 'success' !== notice.status || -1 === notice.content.indexOf( successNote ) )
 	);
