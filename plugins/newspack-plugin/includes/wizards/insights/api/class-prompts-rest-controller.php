@@ -279,7 +279,7 @@ class Prompts_REST_Controller extends WP_REST_Controller {
 	): array {
 		$current  = $this->build_window( $metric, $start, $end );
 		$response = [
-			'tab_error' => self::is_window_all_error( $current ),
+			'tab_error' => self::is_window_all_error( $current, $metric->woocommerce_active() ),
 			'current'   => $current,
 			'previous'  => null,
 		];
@@ -305,13 +305,28 @@ class Prompts_REST_Controller extends WP_REST_Controller {
 	 * Returns `false` for a window with no recognizable hub-backed metric at all
 	 * (nothing to declare failed).
 	 *
-	 * @param array $window The shape returned by `build_window()`.
+	 * NPPD-1745 (banner hole on non-WC): a `hybrid` card (local order-meta numerator
+	 * over a hub denominator) short-circuits to a not-applicable empty state on a
+	 * non-WooCommerce publisher BEFORE it ever calls the hub — so a hub outage can't
+	 * make it error, and treating its surviving empty state as a healthy hub-backed
+	 * card would mask the outage and suppress the banner. On a non-WC publisher,
+	 * hybrid cards are therefore skipped (treated like `local`); the genuinely
+	 * hub-backed cards (pure `hub`) still drive the decision.
+	 *
+	 * @param array $window             The shape returned by `build_window()`.
+	 * @param bool  $woocommerce_active Whether WooCommerce is active for this publisher.
 	 * @return bool
 	 */
-	private static function is_window_all_error( array $window ): bool {
+	private static function is_window_all_error( array $window, bool $woocommerce_active ): bool {
 		$saw_hub_backed = false;
 		foreach ( Prompts_Metric::METRIC_SOURCES as $key => $source ) {
 			if ( 'local' === $source ) {
+				continue;
+			}
+			// On a non-WC publisher a hybrid card never reaches the hub (it empties out
+			// first), so it can't error on a hub outage — don't let its surviving empty
+			// state mask the outage.
+			if ( ! $woocommerce_active && 'hybrid' === $source ) {
 				continue;
 			}
 			if ( ! isset( $window[ $key ] ) || ! is_array( $window[ $key ] ) || ! isset( $window[ $key ]['state'] ) ) {

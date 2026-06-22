@@ -290,11 +290,13 @@ final class Prompts_Metric {
 	 * local Woo orders, so they no-op to an empty state on non-WC publishers
 	 * (NPPD-1685). Filterable so tests can exercise both the WC-active and non-WC
 	 * paths without toggling a global class (the class is `final`, so it can't be
-	 * doubled).
+	 * doubled). Public because the REST controller reads it to scope the tab-error
+	 * banner: on a non-WC publisher a hybrid card short-circuits before reaching the
+	 * hub, so it must not count as a hub-backed survivor (NPPD-1745).
 	 *
 	 * @return bool
 	 */
-	protected function woocommerce_active(): bool {
+	public function woocommerce_active(): bool {
 		/**
 		 * Filters whether Insights treats WooCommerce as active for the direct
 		 * order-meta donation/subscription metrics.
@@ -854,17 +856,29 @@ final class Prompts_Metric {
 	}
 
 	/**
-	 * The direct donation conversion-rate value, with the coherence guard and
-	 * em-dash semantics shared by the tab-level card
+	 * The direct donation conversion-rate value (NPPD-1745). The tab-level card
 	 * ({@see self::get_donation_conversion_direct()}) and the per-prompt table
-	 * ({@see self::get_performance_by_prompt()}) so the two rates cannot diverge
-	 * (NPPD-1745).
+	 * ({@see self::get_performance_by_prompt()}) both route through this one helper,
+	 * so they share the same formula, coherence guard, and em-dash semantics. Their
+	 * VALUES still differ by design — the tab card divides window-aggregate
+	 * conversions by aggregate impressions, while each table row uses that prompt's
+	 * own counts — but neither can drift to a different rule (e.g. one rendering a
+	 * >100% rate the other suppresses), which is the divergence that matters.
 	 *
 	 * Returns the rate as a float — a genuine 0.0 when there are impressions but no
 	 * conversions ("viewed but no conversion") — or null when not computable:
 	 *  - no impressions → no denominator (em-dash); or
 	 *  - conversions > impressions → a cross-surface incoherence (order-meta
 	 *    numerator vs GA4 impressions) that must not render as a >100% rate.
+	 *
+	 * KNOWN LIMITATION (NPPD-1745 #2): the numerator is complete + server-side, but
+	 * the GA4 impressions denominator is consent/adblock-undercounted — different
+	 * populations, so the denominator can legitimately be the smaller of the two. The
+	 * guard then nulls the rate to an em-dash, which is the honest render (a fabricated
+	 * >100% would be worse), but it means the headline rate is fragile by construction
+	 * when impressions run low. Same denominator-fidelity issue as the gate
+	 * `checkout_impressions` case; a more complete impressions source is a tracked
+	 * follow-up, out of scope for this PR.
 	 *
 	 * @param int $conversions Prompt-attributed donation conversions (order meta).
 	 * @param int $impressions Donation-intent prompt impressions (hub).
@@ -897,7 +911,12 @@ final class Prompts_Metric {
 			return $rows;
 		}
 		if ( ! is_array( $rows ) ) {
-			return 0;
+			// A successful-but-malformed hub response (not an array of rows) is a data
+			// fault, not "0 impressions". The sibling per-prompt table surfaces it as
+			// malformed_collection; mirror that here so the hybrid rate card errors
+			// (counting toward the tab-error banner) instead of silently rendering an
+			// em-dash off a fabricated 0 denominator (NPPD-1745 review #3).
+			return new \WP_Error( 'bigquery_proxy_malformed_rows', __( 'The query returned an unexpected shape.', 'newspack-plugin' ) );
 		}
 		$impressions = 0;
 		foreach ( $rows as $row ) {
