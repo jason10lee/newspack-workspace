@@ -261,10 +261,12 @@ class Conversion_REST_Controller extends WP_REST_Controller {
 	/**
 	 * Assemble the top-level response.
 	 *
-	 * `tab_error` is true only when every metric in the current window reports
-	 * `state: 'error'` — i.e. the whole tab failed to load (e.g. the BigQuery
-	 * proxy is down/misconfigured). React renders a tab-level error banner in
-	 * that case; otherwise each section renders its own error/empty/populated
+	 * `tab_error` is true only when every **hub-backed** metric in the current
+	 * window reports `state: 'error'` — i.e. the hub (BigQuery proxy) is
+	 * down/misconfigured. Local (Woo order-meta / storage-layer) cards survive a
+	 * hub outage and do not suppress the banner (NPPD-1745; see
+	 * {@see self::is_window_all_error()}). React renders a tab-level error banner
+	 * in that case; otherwise each section renders its own error/empty/populated
 	 * treatment.
 	 *
 	 * Snapshot metrics (Section 5 cohorts, Sections 8.1–8.3) are
@@ -296,7 +298,7 @@ class Conversion_REST_Controller extends WP_REST_Controller {
 
 		$current  = $this->build_window( $metric, $start, $end ) + $snapshot;
 		$response = [
-			'tab_error' => self::is_window_all_error( $current ),
+			'tab_error' => self::is_window_all_error( $current, $metric->woocommerce_active() ),
 			'current'   => $current,
 			'previous'  => null,
 		];
@@ -307,27 +309,53 @@ class Conversion_REST_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Whether every metric in a window payload reports `state: 'error'`.
+	 * Whether every **hub-backed** metric in a window reports `state: 'error'`.
 	 *
-	 * Returns `false` as soon as any metric is not in the error state (the `window`
-	 * key is date metadata, not a metric, so it's skipped). A metric missing a
-	 * `state` key is treated as non-error, so the banner only shows on an
-	 * unambiguous all-failed window. States 'coming_soon', 'populated', and
-	 * 'empty' are NOT errors — tab_error requires ONLY state === 'error'.
+	 * Scoped to hub-backed metrics (NPPD-1745): Tab 3 has many Woo-local cards
+	 * (subscriber→donor funnel, opportunity counts, coming_soon stubs). Under the
+	 * old "every metric errored" rule the banner could never fire when the hub is
+	 * down — a local card always survives. So the banner now fires when all
+	 * hub-backed (and hybrid-when-WC-active) metrics error, even though surviving
+	 * local cards still render. The classification is declared explicitly on
+	 * {@see \Newspack\Insights\Conversion_Metric::METRIC_SOURCES}.
 	 *
-	 * @param array $window The shape returned by `build_window()` merged with `build_snapshot()`.
+	 * Returns `false` as soon as any hub-backed metric is not in the error state.
+	 * Returns `false` for a window with no recognizable hub-backed metric at all
+	 * (nothing to declare failed).
+	 *
+	 * NPPD-1745 (banner hole on non-WC): a `hybrid` card (local order-meta numerator
+	 * over a hub denominator) short-circuits to a not-applicable empty state on a
+	 * non-WooCommerce publisher BEFORE it ever calls the hub — so a hub outage
+	 * can't make it error, and treating its surviving empty state as a healthy
+	 * hub-backed card would mask the outage and suppress the banner. On a non-WC
+	 * publisher, hybrid cards are therefore skipped (treated like `local`); the
+	 * genuinely hub-backed cards (pure `hub`) still drive the decision.
+	 *
+	 * @param array $window             The shape returned by `build_window()` merged with `build_snapshot()`.
+	 * @param bool  $woocommerce_active Whether WooCommerce is active for this publisher.
 	 * @return bool
 	 */
-	private static function is_window_all_error( array $window ): bool {
-		foreach ( $window as $key => $value ) {
-			if ( 'window' === $key ) {
+	private static function is_window_all_error( array $window, bool $woocommerce_active ): bool {
+		$saw_hub_backed = false;
+		foreach ( Conversion_Metric::METRIC_SOURCES as $key => $source ) {
+			if ( 'local' === $source ) {
 				continue;
 			}
-			if ( ! is_array( $value ) || ! isset( $value['state'] ) || 'error' !== $value['state'] ) {
+			// On a non-WC publisher a hybrid card never reaches the hub (it empties out
+			// first), so it can't error on a hub outage — don't let its surviving empty
+			// state mask the outage.
+			if ( ! $woocommerce_active && 'hybrid' === $source ) {
+				continue;
+			}
+			if ( ! isset( $window[ $key ] ) || ! is_array( $window[ $key ] ) || ! isset( $window[ $key ]['state'] ) ) {
+				continue;
+			}
+			$saw_hub_backed = true;
+			if ( 'error' !== $window[ $key ]['state'] ) {
 				return false;
 			}
 		}
-		return true;
+		return $saw_hub_backed;
 	}
 
 	/**
