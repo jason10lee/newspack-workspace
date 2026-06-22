@@ -712,9 +712,9 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	/**
 	 * Remove the WC-active seam filter set by make_donation_revenue_metric().
 	 */
-	public function tearDown(): void {
+	public function tear_down(): void {
 		remove_all_filters( 'newspack_insights_woocommerce_active' );
-		parent::tearDown();
+		parent::tear_down();
 	}
 
 	/**
@@ -948,13 +948,18 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	 *                                           from order meta, not the proxy); kept for
 	 *                                           call-site compatibility.
 	 * @param array|\WP_Error $subscription_rows Rows for `prompts_subscription_conversion_direct`.
+	 * @param int             $expected_queries  Expected proxy `query()` count: 2 on a
+	 *                                           WC-active publisher (perf + subscription),
+	 *                                           1 on a non-WC publisher (perf only).
 	 * @return BigQuery_Proxy_Client
 	 */
-	protected function make_performance_proxy( array $perf_rows, $donation_rows, $subscription_rows ): BigQuery_Proxy_Client {
+	protected function make_performance_proxy( array $perf_rows, $donation_rows, $subscription_rows, int $expected_queries = 2 ): BigQuery_Proxy_Client {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		// Two queries now: the perf table + the subscription augmentation. Donations
-		// are sourced from order meta via Donors_Metric (NPPD-1745), not the proxy.
-		$proxy->expects( $this->exactly( 2 ) )
+		// On a WC-active publisher the perf table + the subscription augmentation run
+		// (2 queries); on a non-WC publisher the subscription augmentation is gated off,
+		// so only the perf query runs (1). Donations come from order meta via
+		// Donors_Metric (NPPD-1745), not the proxy.
+		$proxy->expects( $this->exactly( $expected_queries ) )
 			->method( 'query' )
 			->willReturnCallback(
 				function ( $query_name ) use ( $perf_rows, $donation_rows, $subscription_rows ) {
@@ -1101,7 +1106,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	 */
 	public function test_performance_by_prompt_row_schema_is_locked() {
 		$perf_rows = [ $this->performance_row( 42, 'Donate now', 'donation', 100 ) ];
-		$proxy     = $this->make_performance_proxy( $perf_rows, [], [] );
+		$proxy     = $this->make_performance_proxy( $perf_rows, [], [], 1 ); // Non-WC env: perf query only.
 
 		$resolver = $this->createMock( Woo_Order_Resolver::class );
 		$resolver->method( 'count_completed_orders' )->willReturn( 0 );
@@ -1212,7 +1217,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	 */
 	public function test_performance_by_prompt_donation_columns_degrade_on_non_woocommerce() {
 		$perf_rows = [ $this->performance_row( 42, 'Donate now', 'donation', 1000 ) ];
-		$proxy     = $this->make_performance_proxy( $perf_rows, [], [] );
+		$proxy     = $this->make_performance_proxy( $perf_rows, [], [], 1 ); // Non-WC: subscription augmentation is gated off too.
 
 		// No WC filter → woocommerce_active() is false; the order-meta reader must
 		// not be queried.
@@ -1229,6 +1234,10 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		// Donation columns degrade to N/A on a non-WC publisher.
 		$this->assertSame( 0, $result['rows'][0]['donation_conversions'] );
 		$this->assertNull( $result['rows'][0]['donation_conversion_rate'], 'non-WC donation column is N/A, not 0%' );
+		// Subscription columns degrade too — the resolver path also requires WC, so it
+		// is gated off on a non-WC publisher (no wc_get_orders() call).
+		$this->assertSame( 0, $result['rows'][0]['subscription_conversions'] );
+		$this->assertNull( $result['rows'][0]['subscription_conversion_rate'], 'non-WC subscription column is N/A' );
 	}
 
 	/**

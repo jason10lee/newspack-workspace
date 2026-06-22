@@ -220,6 +220,17 @@ final class Prompts_Metric {
 	private array $paid_attempt_cache = [];
 
 	/**
+	 * Per-request memo for `prompts_performance_by_prompt` hub rows, keyed by
+	 * `Ymd|Ymd` window (NPPD-1745). The direct donation-rate denominator
+	 * ({@see self::fetch_donation_prompt_impressions()}) and the per-prompt table
+	 * ({@see self::get_performance_by_prompt()}) both read this query for the same
+	 * window in one request; memoizing avoids the duplicate hub round-trip.
+	 *
+	 * @var array<string, array|\WP_Error>
+	 */
+	private array $performance_by_prompt_cache = [];
+
+	/**
 	 * Per-request memoization for the prompt-capability scan (NPPD-1720). Null
 	 * until the first `compute_prompt_capabilities()` call; thereafter the four
 	 * capability booleans are reused across both windows and all 13 gated metrics
@@ -881,7 +892,7 @@ final class Prompts_Metric {
 	 * @return int|\WP_Error Total donation-intent impressions, or the proxy error.
 	 */
 	private function fetch_donation_prompt_impressions( DateTimeInterface $start, DateTimeInterface $end ) {
-		$rows = $this->proxy->query( 'prompts_performance_by_prompt', $start, $end );
+		$rows = $this->fetch_performance_by_prompt_rows( $start, $end );
 		if ( is_wp_error( $rows ) ) {
 			return $rows;
 		}
@@ -895,6 +906,26 @@ final class Prompts_Metric {
 			}
 		}
 		return $impressions;
+	}
+
+	/**
+	 * Fetch (memoized per window) the `prompts_performance_by_prompt` hub rows, so
+	 * the rate-denominator and the per-prompt table share one round-trip per request
+	 * (NPPD-1745).
+	 *
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
+	 * @return array|\WP_Error Rows, or the proxy error.
+	 */
+	private function fetch_performance_by_prompt_rows( DateTimeInterface $start, DateTimeInterface $end ) {
+		$utc       = new \DateTimeZone( 'UTC' );
+		$cache_key = \DateTimeImmutable::createFromInterface( $start )->setTimezone( $utc )->format( 'Ymd' )
+			. '|'
+			. \DateTimeImmutable::createFromInterface( $end )->setTimezone( $utc )->format( 'Ymd' );
+		if ( ! array_key_exists( $cache_key, $this->performance_by_prompt_cache ) ) {
+			$this->performance_by_prompt_cache[ $cache_key ] = $this->proxy->query( 'prompts_performance_by_prompt', $start, $end );
+		}
+		return $this->performance_by_prompt_cache[ $cache_key ];
 	}
 
 	/**
@@ -1001,10 +1032,12 @@ final class Prompts_Metric {
 		// Computable when there was prompt-attributed donation activity in the
 		// window. With the order-meta source there are no GA4 "attempt" rows to gate
 		// on, so the gate is now `conversions > 0` rather than "≥1 prompt viewed".
-		// NOTE (NPPD-1685): this narrows the not-computable em-dash from "no
-		// in-intent prompts viewed" to "no prompt-attributed donations" — restoring
-		// the impressions-based distinction is folded into the direct conversion-RATE
-		// work (which brings in the prompt-impressions denominator).
+		// NOTE (NPPD-1745): this card is intentionally local / hub-resilient, so its
+		// em-dash is conversions-based ("no prompt-attributed donations"), NOT
+		// impressions-based. The —/0% impressions distinction lives only on the
+		// sibling rate card (which is hybrid). Revenue does not fetch impressions by
+		// design, so the two cards' em-dash semantics differ on purpose — do not
+		// "fix" this to match the rate card without making revenue hub-dependent.
 		return $this->populated_scalar( $revenue, $conversions > 0, $conversions, 'currency' );
 	}
 
@@ -1213,7 +1246,7 @@ final class Prompts_Metric {
 	 * @return array{state: string, rows: array, error_code?: string, error_message?: string}
 	 */
 	public function get_performance_by_prompt( DateTimeInterface $start, DateTimeInterface $end ): array {
-		$rows = $this->proxy->query( 'prompts_performance_by_prompt', $start, $end );
+		$rows = $this->fetch_performance_by_prompt_rows( $start, $end );
 		if ( is_wp_error( $rows ) ) {
 			return $this->error_collection( 'rows', $rows );
 		}
@@ -1230,10 +1263,13 @@ final class Prompts_Metric {
 		// Per-popup conversion augmentation. Donations come from order meta
 		// (NPPD-1685/1745 — anonymous-inclusive, keyed by popup id, no GA4 join);
 		// subscriptions still use the Woo-resolver path until their own ticket
-		// migrates them. On a non-WC publisher the donation map is empty.
+		// migrates them. BOTH are gated on WooCommerce being active: the resolver
+		// path calls wc_get_orders(), so on a non-WC publisher the subscription
+		// fetch would fatal if the hub ever returned attempt rows. Both maps are
+		// empty on a non-WC publisher.
 		$wc                  = $this->woocommerce_active();
 		$donation_map        = $wc ? $this->donors_metric()->get_prompt_attributed_donation_conversions( $start, $end ) : [];
-		$subscription_counts = $this->fetch_per_popup_woo_counts( 'prompts_subscription_conversion_direct', $start, $end );
+		$subscription_counts = $wc ? $this->fetch_per_popup_woo_counts( 'prompts_subscription_conversion_direct', $start, $end ) : [];
 
 		$mapped = [];
 		foreach ( $rows as $row ) {
@@ -1272,7 +1308,7 @@ final class Prompts_Metric {
 				'donation_conversions'         => $donation_conversions,
 				'donation_conversion_rate'     => ( 'donation' === $intent && $wc ) ? $this->donation_rate_value( $donation_conversions, $impressions ) : null,
 				'subscription_conversions'     => $subscription_conversions,
-				'subscription_conversion_rate' => ( 'registration' === $intent && $impressions > 0 ) ? $subscription_conversions / $impressions : null,
+				'subscription_conversion_rate' => ( 'registration' === $intent && $wc && $impressions > 0 ) ? $subscription_conversions / $impressions : null,
 			];
 		}
 
