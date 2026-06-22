@@ -110,8 +110,9 @@ final class Available_Deals_Bridge {
 	}
 
 	/**
-	 * Advertisable rules as criterion options ({ label, value }), or [] when the
-	 * engine is absent.
+	 * Active pricing rules as criterion options ({ label, value }), or [] when the
+	 * engine is absent. Any published/active rule is selectable, regardless of the
+	 * publicize (cart-display) flag — the segment selection is the targeting.
 	 *
 	 * @return array
 	 */
@@ -126,12 +127,10 @@ final class Available_Deals_Bridge {
 		}
 		$out = [];
 		foreach ( $repo->active() as $rule ) {
-			if ( $rule->publicize ) {
-				$out[] = [
-					'label' => $rule->title,
-					'value' => (int) $rule->id,
-				];
-			}
+			$out[] = [
+				'label' => $rule->title,
+				'value' => (int) $rule->id,
+			];
 		}
 		return $out;
 	}
