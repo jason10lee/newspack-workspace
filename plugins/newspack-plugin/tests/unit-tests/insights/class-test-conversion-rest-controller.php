@@ -223,7 +223,7 @@ class Test_Conversion_REST_Controller extends WP_UnitTestCase {
 		// Deferred (coming_soon) metrics are still present and carry the right state.
 		$current = $data['current'];
 		$this->assertSame( 'coming_soon', $current['registration_to_conversion_cohort']['state'] );
-		$this->assertSame( 'coming_soon', $current['time_to_subscribe_distribution']['state'] );
+		$this->assertSame( 'empty', $current['time_to_subscribe_distribution']['state'] );
 	}
 
 	/**
@@ -328,8 +328,9 @@ class Test_Conversion_REST_Controller extends WP_UnitTestCase {
 		$this->assertSame( 'populated', $current['influenced_registration_rate_7d']['state'] );
 		$this->assertSame( 'populated', $current['top_pages_no_conversion']['state'] );
 
-		// Deferred sections are 'coming_soon'.
-		$this->assertSame( 'coming_soon', $current['time_to_subscribe_distribution']['state'] );
+		// 4.2 is implemented (all-history snapshot → populated in the fixture);
+		// 5.1/5.2 cohorts are still coming_soon stubs.
+		$this->assertSame( 'populated', $current['time_to_subscribe_distribution']['state'] );
 		$this->assertSame( 'coming_soon', $current['registration_to_conversion_cohort']['state'] );
 		$this->assertSame( 'coming_soon', $current['subscriber_retention_cohort']['state'] );
 	}
@@ -373,8 +374,9 @@ class Test_Conversion_REST_Controller extends WP_UnitTestCase {
 		$this->assertSame( 'populated', $current['influenced_registration_rate_7d']['state'] );
 		$this->assertFalse( $current['influenced_registration_rate_7d']['computable'] );
 
-		// Deferred stay coming_soon.
-		$this->assertSame( 'coming_soon', $current['time_to_subscribe_distribution']['state'] );
+		// 4.2 is an all-history snapshot → populated in the fixture regardless of
+		// the window variant (5.1/5.2 cohorts remain coming_soon).
+		$this->assertSame( 'populated', $current['time_to_subscribe_distribution']['state'] );
 	}
 
 	/**

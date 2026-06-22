@@ -269,11 +269,11 @@ class Conversion_REST_Controller extends WP_REST_Controller {
 	 * in that case; otherwise each section renders its own error/empty/populated
 	 * treatment.
 	 *
-	 * Snapshot metrics (Section 5 cohorts, Sections 8.1–8.3) are
-	 * current-state and window-independent, so compute them once and share
-	 * the same payload across both windows. In comparison mode this avoids
-	 * re-running them for `previous`, where they become the tab's most
-	 * expensive Woo/BQ queries returning identical data.
+	 * Snapshot metrics (Sections 4.2–4.4 distributions, Section 5 cohorts,
+	 * Sections 8.1–8.3) are current-state and window-independent, so compute
+	 * them once and share the same payload across both windows. In comparison
+	 * mode this avoids re-running them for `previous` — identical data computed
+	 * at most once per request.
 	 *
 	 * @param Conversion_Metric      $metric        Orchestrator.
 	 * @param DateTimeImmutable      $start         Current window start.
@@ -289,11 +289,11 @@ class Conversion_REST_Controller extends WP_REST_Controller {
 		?DateTimeImmutable $compare_start,
 		?DateTimeImmutable $compare_end
 	): array {
-		// Snapshot metrics (Section 5 cohorts, Sections 8.1–8.3) are
-		// current-state and window-independent, so compute them once and share
-		// the same payload across both windows. In comparison mode this avoids
-		// re-running them for `previous`, where (in Phase 2) they become the
-		// tab's most expensive Woo/BQ queries returning identical data.
+		// Snapshot metrics (Sections 4.2–4.4 distributions, Section 5 cohorts,
+		// Sections 8.1–8.3) are current-state and window-independent, so compute
+		// them once and share the same payload across both windows. In comparison
+		// mode this avoids re-running them for `previous` — identical data computed
+		// at most once per request.
 		$snapshot = $this->build_snapshot( $metric, $start, $end );
 
 		$current  = $this->build_window( $metric, $start, $end ) + $snapshot;
@@ -359,8 +359,8 @@ class Conversion_REST_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Window-bound payload: the 18 metrics that depend on the selected window,
-	 * plus the `window` echo. The 5 window-independent snapshot metrics are
+	 * Window-bound payload: the 15 metrics that depend on the selected window,
+	 * plus the `window` echo. The 8 window-independent snapshot metrics are
 	 * merged in by {@see self::build_response()} via {@see self::build_snapshot()}.
 	 *
 	 * @param Conversion_Metric $metric Orchestrator.
@@ -370,44 +370,41 @@ class Conversion_REST_Controller extends WP_REST_Controller {
 	 */
 	private function build_window( Conversion_Metric $metric, DateTimeImmutable $start, DateTimeImmutable $end ): array {
 		return [
-			'window'                               => [
+			'window'                           => [
 				'start' => $start->format( 'Y-m-d' ),
 				'end'   => $end->format( 'Y-m-d' ),
 			],
 			// Section 1 — The reader lifecycle.
-			'reader_lifecycle_funnel'              => $metric->get_reader_lifecycle_funnel( $start, $end ),
+			'reader_lifecycle_funnel'          => $metric->get_reader_lifecycle_funnel( $start, $end ),
 			// Section 2 — Per-journey conversion funnels.
-			'anonymous_to_registered_funnel'       => $metric->get_anonymous_to_registered_funnel( $start, $end ),
-			'registered_to_subscriber_funnel'      => $metric->get_registered_to_subscriber_funnel( $start, $end ),
-			'registered_to_donor_funnel'           => $metric->get_registered_to_donor_funnel( $start, $end ),
-			'subscriber_to_donor_funnel'           => $metric->get_subscriber_to_donor_funnel( $start, $end ),
+			'anonymous_to_registered_funnel'   => $metric->get_anonymous_to_registered_funnel( $start, $end ),
+			'registered_to_subscriber_funnel'  => $metric->get_registered_to_subscriber_funnel( $start, $end ),
+			'registered_to_donor_funnel'       => $metric->get_registered_to_donor_funnel( $start, $end ),
+			'subscriber_to_donor_funnel'       => $metric->get_subscriber_to_donor_funnel( $start, $end ),
 			// Section 3 — Where conversions come from.
-			'source_mix_registrations'             => $metric->get_source_mix_registrations( $start, $end ),
-			'source_mix_subscribers'               => $metric->get_source_mix_subscribers( $start, $end ),
-			'source_mix_donors'                    => $metric->get_source_mix_donors( $start, $end ),
-			// Section 4 — How long conversions take (cumulative LineCharts).
-			'time_to_register_distribution'        => $metric->get_time_to_register_distribution( $start, $end ),
-			'time_to_subscribe_distribution'       => $metric->get_time_to_subscribe_distribution( $start, $end ),
-			'time_to_donate_distribution'          => $metric->get_time_to_donate_distribution( $start, $end ),
-			'subscriber_to_donor_lag_distribution' => $metric->get_subscriber_to_donor_lag_distribution( $start, $end ),
+			'source_mix_registrations'         => $metric->get_source_mix_registrations( $start, $end ),
+			'source_mix_subscribers'           => $metric->get_source_mix_subscribers( $start, $end ),
+			'source_mix_donors'                => $metric->get_source_mix_donors( $start, $end ),
+			// Section 4.1 — How long conversions take (windowed cumulative LineChart).
+			'time_to_register_distribution'    => $metric->get_time_to_register_distribution( $start, $end ),
 			// Section 6 — Conversion rate trends.
-			'weekly_conversion_rates'              => $metric->get_weekly_conversion_rates( $start, $end ),
+			'weekly_conversion_rates'          => $metric->get_weekly_conversion_rates( $start, $end ),
 			// Section 7 — Cross-tab influenced attribution (comparison-enabled).
-			'influenced_registration_rate_7d'      => $metric->get_influenced_registration_rate_7d( $start, $end ),
-			'influenced_subscription_rate_14d'     => $metric->get_influenced_subscription_rate_14d( $start, $end ),
-			'influenced_donation_rate_14d'         => $metric->get_influenced_donation_rate_14d( $start, $end ),
-			'influenced_newsletter_rate_7d'        => $metric->get_influenced_newsletter_rate_7d( $start, $end ),
+			'influenced_registration_rate_7d'  => $metric->get_influenced_registration_rate_7d( $start, $end ),
+			'influenced_subscription_rate_14d' => $metric->get_influenced_subscription_rate_14d( $start, $end ),
+			'influenced_donation_rate_14d'     => $metric->get_influenced_donation_rate_14d( $start, $end ),
+			'influenced_newsletter_rate_7d'    => $metric->get_influenced_newsletter_rate_7d( $start, $end ),
 			// Section 8.4 — Top pages that don't convert (windowed table).
-			'top_pages_no_conversion'              => $metric->get_top_pages_no_conversion( $start, $end ),
+			'top_pages_no_conversion'          => $metric->get_top_pages_no_conversion( $start, $end ),
 		];
 	}
 
 	/**
-	 * Window-independent snapshot metrics: Section 5 cohort retention (5.1,
-	 * 5.2) and Sections 8.1–8.3 opportunity counts. These are current-state —
-	 * the orchestrator methods accept the window for signature parity but
-	 * ignore it — so the controller computes them once and reuses the result
-	 * for both the current and comparison windows.
+	 * Window-independent snapshot metrics: Sections 4.2–4.4 distributions,
+	 * Section 5 cohort retention (5.1, 5.2), and Sections 8.1–8.3 opportunity
+	 * counts. These are current-state — the orchestrator methods accept the
+	 * window for signature parity but ignore it — so the controller computes
+	 * them once and reuses the result for both the current and comparison windows.
 	 *
 	 * @param Conversion_Metric $metric Orchestrator.
 	 * @param DateTimeImmutable $start  Current window start (passed for parity; ignored by the metrics).
@@ -416,13 +413,17 @@ class Conversion_REST_Controller extends WP_REST_Controller {
 	 */
 	private function build_snapshot( Conversion_Metric $metric, DateTimeImmutable $start, DateTimeImmutable $end ): array {
 		return [
+			// Sections 4.2–4.4 — all-history distributions (snapshot: computed once, shared across windows).
+			'time_to_subscribe_distribution'       => $metric->get_time_to_subscribe_distribution( $start, $end ),
+			'time_to_donate_distribution'          => $metric->get_time_to_donate_distribution( $start, $end ),
+			'subscriber_to_donor_lag_distribution' => $metric->get_subscriber_to_donor_lag_distribution( $start, $end ),
 			// Section 5 — Cohort retention (snapshot).
-			'registration_to_conversion_cohort' => $metric->get_registration_to_conversion_cohort( $start, $end ),
-			'subscriber_retention_cohort'       => $metric->get_subscriber_retention_cohort( $start, $end ),
+			'registration_to_conversion_cohort'    => $metric->get_registration_to_conversion_cohort( $start, $end ),
+			'subscriber_retention_cohort'          => $metric->get_subscriber_retention_cohort( $start, $end ),
 			// Sections 8.1–8.3 — Opportunity buckets (snapshot counts).
-			'stale_registered_count'            => $metric->get_stale_registered_count( $start, $end ),
-			'at_risk_subscriber_count'          => $metric->get_at_risk_subscriber_count( $start, $end ),
-			'lapsed_donor_count'                => $metric->get_lapsed_donor_count( $start, $end ),
+			'stale_registered_count'               => $metric->get_stale_registered_count( $start, $end ),
+			'at_risk_subscriber_count'             => $metric->get_at_risk_subscriber_count( $start, $end ),
+			'lapsed_donor_count'                   => $metric->get_lapsed_donor_count( $start, $end ),
 		];
 	}
 

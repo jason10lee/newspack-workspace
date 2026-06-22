@@ -418,6 +418,39 @@ class Donors_Metric {
 	}
 
 	/**
+	 * New donor records (customer_id + first-donation epoch ts + order-meta
+	 * source signals) in the window. Used by compute_source_mix for order-meta-
+	 * primary classification. List-param — NOT cached.
+	 *
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
+	 * @return array<int, array{customer_id:int, ts:int, gate_post_id:string, popup_id:string}>
+	 */
+	public function get_new_donor_records_in_window( DateTimeInterface $start, DateTimeInterface $end ): array {
+		return $this->storage->get_new_donor_records_in_window( $start, $end );
+	}
+
+	/**
+	 * Donation conversion-lag rows (customer_id, registered_ts, first_donation_ts)
+	 * for the 4.3 time-to-donate distribution. List-param — NOT cached.
+	 *
+	 * @return array<int, array{customer_id:int, registered_ts:int, first_donation_ts:int}>
+	 */
+	public function get_donation_conversion_lags(): array {
+		return $this->storage->get_donation_conversion_lags();
+	}
+
+	/**
+	 * Subscriber→donor lag rows (lag_days) for the 4.4 distribution. Pure Woo.
+	 * List-param — NOT cached.
+	 *
+	 * @return array<int, array{lag_days:int}>
+	 */
+	public function get_subscriber_to_donor_lags(): array {
+		return $this->storage->get_subscriber_to_donor_lags();
+	}
+
+	/**
 	 * NPPD-1685: prompt-attributed completed donation conversions for the window,
 	 * sourced from order meta (`_newspack_popup_id`) — the anonymous-inclusive,
 	 * join-free source for the DIRECT prompt-donation metrics, replacing the GA4

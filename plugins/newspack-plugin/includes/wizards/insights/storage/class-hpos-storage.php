@@ -140,7 +140,9 @@ class HPOS_Storage implements Storage_Interface {
 
 		// Customers whose earliest non-donation subscription's _schedule_start
 		// falls in the window. Inner aggregate computes first-start per
-		// customer; outer count filters that to the window.
+		// customer; outer count filters that to the window. The om.meta_value != ''
+		// guard matches the records method so the count and source-mix records
+		// agree on sites where a subscription has a blank _schedule_start.
 		$sql = $wpdb->prepare(
 			"SELECT COUNT(*) FROM (
 				SELECT o.customer_id, MIN(om.meta_value) AS first_start
@@ -153,6 +155,7 @@ class HPOS_Storage implements Storage_Interface {
 					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
 				WHERE o.type = 'shop_subscription'
 				  AND oim.meta_value NOT IN ($donations)
+				  AND om.meta_value != ''
 				GROUP BY o.customer_id
 			) AS first_subs
 			WHERE first_subs.first_start BETWEEN %s AND %s",
@@ -1173,6 +1176,232 @@ class HPOS_Storage implements Storage_Interface {
 			$map[ (int) $row['customer_id'] ] = new \DateTimeImmutable( $row['first_start'], new \DateTimeZone( 'UTC' ) );
 		}
 		return $map;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
+	 * @return array<int, array{customer_id:int, ts:int}>
+	 */
+	public function get_new_subscriber_records_in_window( DateTimeInterface $start, DateTimeInterface $end ): array {
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+
+		// Same inner aggregate as get_new_subscribers_in_window() (first
+		// non-donation _schedule_start per customer), filtered to the window.
+		// Guest orders (customer_id = 0) are excluded: a guest has no user
+		// account to match against BQ registration events.
+		//
+		// Source meta lives on the PARENT shop_order (the subscription's initial
+		// checkout order), NOT on the shop_subscription row itself. Each
+		// subscription's parent_order_id in {prefix}wc_orders points to the
+		// initial shop_order; we read _gate_post_id / _memberships_content_gate
+		// / _newspack_popup_id from that parent order's meta.
+		//
+		// To identify the first subscription per customer in the window we pick
+		// the subscription whose _schedule_start = the customer's MIN. Correlated
+		// subqueries (MySQL 5.7-safe, no window functions) then read meta from
+		// that first subscription's parent order. LIMIT 1 resolves same-timestamp
+		// ties (two subscriptions sharing the same MIN _schedule_start): any one
+		// tied first-subscription's parent order meta is used — the signal is a
+		// soft fallback, not an exact ID.
+		//
+		// gate_post_id: first non-empty _gate_post_id on the parent order,
+		// falling back to legacy _memberships_content_gate (both
+		// NOT IN ('','0')).
+		// popup_id:     non-empty _newspack_popup_id on the parent order.
+		// No parent order / no meta → '' for that column; the metric layer falls
+		// those records to the BQ temporal matcher (unchanged behaviour).
+		$sql = $wpdb->prepare(
+			"SELECT
+				first_subs.customer_id,
+				first_subs.first_start,
+				COALESCE((
+					SELECT om_gate.meta_value
+					FROM {$prefix}wc_orders o_sub
+					JOIN {$prefix}wc_orders_meta om_start_s
+						ON om_start_s.order_id = o_sub.id AND om_start_s.meta_key = '_schedule_start'
+					JOIN {$prefix}wc_orders_meta om_gate
+						ON om_gate.order_id = o_sub.parent_order_id AND om_gate.meta_key = '_gate_post_id'
+					JOIN {$prefix}woocommerce_order_items oi_s
+						ON oi_s.order_id = o_sub.id AND oi_s.order_item_type = 'line_item'
+					JOIN {$prefix}woocommerce_order_itemmeta oim_s
+						ON oim_s.order_item_id = oi_s.order_item_id AND oim_s.meta_key = '_product_id'
+					WHERE o_sub.type = 'shop_subscription'
+					  AND o_sub.customer_id = first_subs.customer_id
+					  AND oim_s.meta_value NOT IN ($donations)
+					  AND om_start_s.meta_value = first_subs.first_start
+					  AND om_gate.meta_value NOT IN ('', '0')
+					LIMIT 1
+				), (
+					SELECT om_legacy.meta_value
+					FROM {$prefix}wc_orders o_sub
+					JOIN {$prefix}wc_orders_meta om_start_s
+						ON om_start_s.order_id = o_sub.id AND om_start_s.meta_key = '_schedule_start'
+					JOIN {$prefix}wc_orders_meta om_legacy
+						ON om_legacy.order_id = o_sub.parent_order_id AND om_legacy.meta_key = '_memberships_content_gate'
+					JOIN {$prefix}woocommerce_order_items oi_s
+						ON oi_s.order_id = o_sub.id AND oi_s.order_item_type = 'line_item'
+					JOIN {$prefix}woocommerce_order_itemmeta oim_s
+						ON oim_s.order_item_id = oi_s.order_item_id AND oim_s.meta_key = '_product_id'
+					WHERE o_sub.type = 'shop_subscription'
+					  AND o_sub.customer_id = first_subs.customer_id
+					  AND oim_s.meta_value NOT IN ($donations)
+					  AND om_start_s.meta_value = first_subs.first_start
+					  AND om_legacy.meta_value NOT IN ('', '0')
+					LIMIT 1
+				), '') AS gate_post_id,
+				COALESCE((
+					SELECT om_popup.meta_value
+					FROM {$prefix}wc_orders o_sub
+					JOIN {$prefix}wc_orders_meta om_start_s
+						ON om_start_s.order_id = o_sub.id AND om_start_s.meta_key = '_schedule_start'
+					JOIN {$prefix}wc_orders_meta om_popup
+						ON om_popup.order_id = o_sub.parent_order_id AND om_popup.meta_key = '_newspack_popup_id'
+					JOIN {$prefix}woocommerce_order_items oi_s
+						ON oi_s.order_id = o_sub.id AND oi_s.order_item_type = 'line_item'
+					JOIN {$prefix}woocommerce_order_itemmeta oim_s
+						ON oim_s.order_item_id = oi_s.order_item_id AND oim_s.meta_key = '_product_id'
+					WHERE o_sub.type = 'shop_subscription'
+					  AND o_sub.customer_id = first_subs.customer_id
+					  AND oim_s.meta_value NOT IN ($donations)
+					  AND om_start_s.meta_value = first_subs.first_start
+					  AND om_popup.meta_value NOT IN ('', '0')
+					LIMIT 1
+				), '') AS popup_id
+			FROM (
+				SELECT o.customer_id, MIN(om.meta_value) AS first_start
+				FROM {$prefix}wc_orders o
+				JOIN {$prefix}wc_orders_meta om
+					ON om.order_id = o.id AND om.meta_key = '_schedule_start'
+				JOIN {$prefix}woocommerce_order_items oi
+					ON oi.order_id = o.id AND oi.order_item_type = 'line_item'
+				JOIN {$prefix}woocommerce_order_itemmeta oim
+					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+				WHERE o.type = 'shop_subscription'
+				  AND o.customer_id > 0
+				  AND oim.meta_value NOT IN ($donations)
+				  AND om.meta_value != ''
+				GROUP BY o.customer_id
+			) AS first_subs
+			WHERE first_subs.first_start BETWEEN %s AND %s",
+			$this->fmt( $start ),
+			$this->fmt( $end )
+		);
+
+		return $this->rows_to_subscriber_records( $wpdb->get_results( $sql, ARRAY_A ) );
+	}
+
+	/**
+	 * Map (customer_id, first_start, gate_post_id, popup_id) rows to subscriber
+	 * source records with UTC epoch seconds. Blank dates are skipped. UTC parse
+	 * keeps the epoch correct regardless of MySQL session timezone.
+	 *
+	 * @param mixed $rows wpdb->get_results( …, ARRAY_A ) output.
+	 * @return array<int, array{customer_id:int, ts:int, gate_post_id:string, popup_id:string}>
+	 */
+	private function rows_to_subscriber_records( $rows ): array {
+		$utc     = new \DateTimeZone( 'UTC' );
+		$records = [];
+		foreach ( (array) $rows as $row ) {
+			if ( empty( $row['first_start'] ) ) {
+				continue;
+			}
+			$records[] = [
+				'customer_id'  => (int) $row['customer_id'],
+				'ts'           => ( new \DateTimeImmutable( $row['first_start'], $utc ) )->getTimestamp(),
+				'gate_post_id' => (string) ( $row['gate_post_id'] ?? '' ),
+				'popup_id'     => (string) ( $row['popup_id'] ?? '' ),
+			];
+		}
+		return $records;
+	}
+
+	/**
+	 * Map (customer_id, <date column>) rows to [ ['customer_id'=>int,'ts'=>int], … ]
+	 * with ts as UTC epoch seconds. Blank dates are skipped. The UTC parse keeps
+	 * the epoch correct regardless of MySQL session timezone.
+	 *
+	 * @param mixed  $rows     wpdb->get_results( …, ARRAY_A ) output.
+	 * @param string $date_key Row key holding the UTC `Y-m-d H:i:s` value.
+	 * @return array<int, array{customer_id:int, ts:int}>
+	 */
+	private function rows_to_records( $rows, string $date_key ): array {
+		$utc     = new \DateTimeZone( 'UTC' );
+		$records = [];
+		foreach ( (array) $rows as $row ) {
+			if ( empty( $row[ $date_key ] ) ) {
+				continue;
+			}
+			$records[] = [
+				'customer_id' => (int) $row['customer_id'],
+				'ts'          => ( new \DateTimeImmutable( $row[ $date_key ], $utc ) )->getTimestamp(),
+			];
+		}
+		return $records;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @return array<int, array{customer_id:int, registered_ts:int, first_sub_ts:int}>
+	 */
+	public function get_subscription_conversion_lags(): array {
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+
+		// First non-donation subscription per customer, joined to wp_users for
+		// the registration date. All-history (snapshot). Guests (no users row)
+		// are excluded by the join, which is correct: a lag needs a registration.
+		$sql = "SELECT first_subs.customer_id, u.user_registered, first_subs.first_start
+			FROM (
+				SELECT o.customer_id, MIN(om.meta_value) AS first_start
+				FROM {$prefix}wc_orders o
+				JOIN {$prefix}wc_orders_meta om
+					ON om.order_id = o.id AND om.meta_key = '_schedule_start'
+				JOIN {$prefix}woocommerce_order_items oi
+					ON oi.order_id = o.id AND oi.order_item_type = 'line_item'
+				JOIN {$prefix}woocommerce_order_itemmeta oim
+					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+				WHERE o.type = 'shop_subscription'
+				  AND oim.meta_value NOT IN ($donations)
+				  AND om.meta_value != ''
+				GROUP BY o.customer_id
+			) AS first_subs
+			JOIN {$prefix}users u ON u.ID = first_subs.customer_id";
+
+		return $this->rows_to_lags( $wpdb->get_results( $sql, ARRAY_A ), 'first_start', 'first_sub_ts' );
+	}
+
+	/**
+	 * Map (customer_id, user_registered, <first date>) rows to lag records with
+	 * UTC epoch seconds. Rows with a blank date are skipped. UTC parse keeps the
+	 * epochs correct regardless of MySQL session timezone. user_registered is
+	 * treated as UTC (WordPress stores it as the GMT registration instant).
+	 *
+	 * @param mixed  $rows         wpdb rows (ARRAY_A).
+	 * @param string $first_key    Row key holding the first-conversion date.
+	 * @param string $first_ts_out Output key for the first-conversion epoch.
+	 * @return array<int, array<string,int>>
+	 */
+	private function rows_to_lags( $rows, string $first_key, string $first_ts_out ): array {
+		$utc  = new \DateTimeZone( 'UTC' );
+		$out  = [];
+		foreach ( (array) $rows as $row ) {
+			if ( empty( $row[ $first_key ] ) || empty( $row['user_registered'] ) ) {
+				continue;
+			}
+			$out[] = [
+				'customer_id'   => (int) $row['customer_id'],
+				'registered_ts' => ( new \DateTimeImmutable( $row['user_registered'], $utc ) )->getTimestamp(),
+				$first_ts_out   => ( new \DateTimeImmutable( $row[ $first_key ], $utc ) )->getTimestamp(),
+			];
+		}
+		return $out;
 	}
 
 	/**

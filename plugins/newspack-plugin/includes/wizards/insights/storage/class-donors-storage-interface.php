@@ -334,6 +334,42 @@ interface Donors_Storage_Interface {
 	public function get_first_donation_order_dates( array $customer_ids ): array;
 
 	/**
+	 * New donors in the window, each with the epoch timestamp (UTC seconds) of
+	 * their FIRST completed/processing donation order, plus order-meta source
+	 * signals. Same population as {@see get_new_donors_in_window()} but returns
+	 * one record per customer with the anchor timestamp for Source_Matcher
+	 * (Tab 3 source-mix 3.3) and order-level meta for primary attribution.
+	 *
+	 * Field notes: gate_post_id = first non-empty _gate_post_id on the first-
+	 * donation order (falls back to _memberships_content_gate if absent); '' if
+	 * none. popup_id = first non-empty _newspack_popup_id; '' if none.
+	 *
+	 * @param DateTimeInterface $start Inclusive window start.
+	 * @param DateTimeInterface $end   Inclusive window end.
+	 * @return array<int, array{customer_id:int, ts:int, gate_post_id:string, popup_id:string}>
+	 */
+	public function get_new_donor_records_in_window( DateTimeInterface $start, DateTimeInterface $end ): array;
+
+	/**
+	 * All-history: every customer with a completed/processing donation order AND
+	 * a wp_users row, with their registration epoch and first-donation epoch
+	 * (both UTC seconds). Drives the 4.3 time-to-donate distribution.
+	 *
+	 * @return array<int, array{customer_id:int, registered_ts:int, first_donation_ts:int}>
+	 */
+	public function get_donation_conversion_lags(): array;
+
+	/**
+	 * All-history cross-converters: customers with a first non-donation
+	 * subscription and a STRICTLY-LATER first donation. Returns the lag in whole
+	 * days (DATEDIFF(first_donation, first_sub)). Pure Woo — no wp_users join, so
+	 * it counts cross-converters regardless of registration record. Drives 4.4.
+	 *
+	 * @return array<int, array{lag_days:int}>
+	 */
+	public function get_subscriber_to_donor_lags(): array;
+
+	/**
 	 * Prompt-attributed completed donation conversions in a window, sourced from
 	 * order meta (`_newspack_popup_id`) rather than the GA4 attempt → customer_id
 	 * join (NPPD-1685). The originating prompt id is written onto the order at

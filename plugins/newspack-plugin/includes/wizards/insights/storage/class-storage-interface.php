@@ -327,6 +327,33 @@ interface Storage_Interface {
 	public function get_first_subscription_order_dates( array $customer_ids ): array;
 
 	/**
+	 * New non-donation subscribers in the window, each with the epoch timestamp
+	 * (UTC seconds) of their FIRST subscription start plus order-meta sourced from
+	 * the subscription's parent shop_order. Same population as
+	 * {@see get_new_subscribers_in_window()} but returns one record per customer
+	 * enriched with parent-order source attribution for Tab 3 source-mix 3.2.
+	 * gate_post_id: non-empty _gate_post_id (or legacy _memberships_content_gate)
+	 * from the first subscription's parent order; '' if absent. popup_id:
+	 * non-empty _newspack_popup_id from the parent order; '' if absent. Records
+	 * with both '' fall to the BQ temporal matcher in compute_source_mix.
+	 *
+	 * @param DateTimeInterface $start Inclusive window start.
+	 * @param DateTimeInterface $end   Inclusive window end.
+	 * @return array<int, array{customer_id:int, ts:int, gate_post_id:string, popup_id:string}>
+	 */
+	public function get_new_subscriber_records_in_window( DateTimeInterface $start, DateTimeInterface $end ): array;
+
+	/**
+	 * All-history: every customer with a non-donation subscription AND a
+	 * wp_users row, with their registration epoch and first-subscription epoch
+	 * (both UTC seconds). Drives the 4.2 time-to-subscribe distribution
+	 * (lag = first_sub_ts − registered_ts) and its user_registered source anchor.
+	 *
+	 * @return array<int, array{customer_id:int, registered_ts:int, first_sub_ts:int}>
+	 */
+	public function get_subscription_conversion_lags(): array;
+
+	/**
 	 * Prompt/gate-attributed subscription conversion orders in a window, sourced
 	 * from order meta rather than the GA4 attempt → customer_id join (NPPD-1746,
 	 * the subscription counterpart to the donation reader in

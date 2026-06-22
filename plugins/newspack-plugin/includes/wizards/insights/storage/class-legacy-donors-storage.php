@@ -948,6 +948,128 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 	}
 
 	/**
+	 * {@inheritDoc}
+	 *
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
+	 * @return array<int, array{customer_id:int, ts:int, gate_post_id:string, popup_id:string}>
+	 */
+	public function get_new_donor_records_in_window( DateTimeInterface $start, DateTimeInterface $end ): array {
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+
+		// Legacy CPT equivalent of HPOS get_new_donor_records_in_window().
+		// Guest orders (blank _customer_user → 0 when cast) are excluded from
+		// source attribution — see the HPOS variant for the rationale.
+		//
+		// Order-meta subqueries: correlated against the FIRST donation order for each
+		// customer (the order whose post_date_gmt = the outer MIN). MySQL 5.7-safe.
+		// Legacy orders use postmeta for order meta, keyed by post ID.
+		// gate_post_id: first non-empty _gate_post_id, falling back to legacy
+		// _memberships_content_gate (both NOT IN ('','0')).
+		// popup_id:     non-empty _newspack_popup_id.
+		// Empty / missing → '' for that column.
+		//
+		// Same-timestamp tie handling: GROUP BY customer in the inner aggregate; the
+		// outer meta subqueries use LIMIT 1 so any tied first-order's meta is used.
+		$sql = $wpdb->prepare(
+			"SELECT
+				fd.customer_id,
+				fd.first_donation_date,
+				COALESCE((
+					SELECT pm_gate.meta_value
+					FROM {$prefix}posts p_first
+					JOIN {$prefix}postmeta cust_first
+						ON cust_first.post_id = p_first.ID AND cust_first.meta_key = '_customer_user'
+					JOIN {$prefix}postmeta pm_gate
+						ON pm_gate.post_id = p_first.ID AND pm_gate.meta_key = '_gate_post_id'
+					JOIN {$prefix}wc_order_product_lookup opl_first ON opl_first.order_id = p_first.ID
+					WHERE p_first.post_type = 'shop_order'
+					  AND p_first.post_status IN ('wc-completed', 'wc-processing')
+					  AND opl_first.product_id IN ($donations)
+					  AND CAST(cust_first.meta_value AS UNSIGNED) = fd.customer_id
+					  AND p_first.post_date_gmt = fd.first_donation_date
+					  AND pm_gate.meta_value NOT IN ('', '0')
+					LIMIT 1
+				), (
+					SELECT pm_legacy.meta_value
+					FROM {$prefix}posts p_first
+					JOIN {$prefix}postmeta cust_first
+						ON cust_first.post_id = p_first.ID AND cust_first.meta_key = '_customer_user'
+					JOIN {$prefix}postmeta pm_legacy
+						ON pm_legacy.post_id = p_first.ID AND pm_legacy.meta_key = '_memberships_content_gate'
+					JOIN {$prefix}wc_order_product_lookup opl_first ON opl_first.order_id = p_first.ID
+					WHERE p_first.post_type = 'shop_order'
+					  AND p_first.post_status IN ('wc-completed', 'wc-processing')
+					  AND opl_first.product_id IN ($donations)
+					  AND CAST(cust_first.meta_value AS UNSIGNED) = fd.customer_id
+					  AND p_first.post_date_gmt = fd.first_donation_date
+					  AND pm_legacy.meta_value NOT IN ('', '0')
+					LIMIT 1
+				), '') AS gate_post_id,
+				COALESCE((
+					SELECT pm_popup.meta_value
+					FROM {$prefix}posts p_first
+					JOIN {$prefix}postmeta cust_first
+						ON cust_first.post_id = p_first.ID AND cust_first.meta_key = '_customer_user'
+					JOIN {$prefix}postmeta pm_popup
+						ON pm_popup.post_id = p_first.ID AND pm_popup.meta_key = '_newspack_popup_id'
+					JOIN {$prefix}wc_order_product_lookup opl_first ON opl_first.order_id = p_first.ID
+					WHERE p_first.post_type = 'shop_order'
+					  AND p_first.post_status IN ('wc-completed', 'wc-processing')
+					  AND opl_first.product_id IN ($donations)
+					  AND CAST(cust_first.meta_value AS UNSIGNED) = fd.customer_id
+					  AND p_first.post_date_gmt = fd.first_donation_date
+					  AND pm_popup.meta_value NOT IN ('', '0')
+					LIMIT 1
+				), '') AS popup_id
+			FROM (
+				SELECT CAST(cust.meta_value AS UNSIGNED) AS customer_id, MIN(p.post_date_gmt) AS first_donation_date
+				FROM {$prefix}posts p
+				JOIN {$prefix}postmeta cust
+					ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
+				JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = p.ID
+				WHERE p.post_type = 'shop_order'
+				  AND p.post_status IN ('wc-completed', 'wc-processing')
+				  AND opl.product_id IN ($donations)
+				  AND CAST(cust.meta_value AS UNSIGNED) > 0
+				GROUP BY CAST(cust.meta_value AS UNSIGNED)
+			) AS fd
+			WHERE fd.first_donation_date BETWEEN %s AND %s",
+			$this->fmt( $start ),
+			$this->fmt( $end )
+		);
+
+		return $this->rows_to_donor_records( $wpdb->get_results( $sql, ARRAY_A ) );
+	}
+
+	/**
+	 * Map (customer_id, first_donation_date, gate_post_id, popup_id) rows to
+	 * donor source records with UTC epoch seconds. Blank dates are skipped.
+	 * UTC parse keeps the epoch correct regardless of MySQL session timezone.
+	 *
+	 * @param mixed $rows wpdb->get_results( …, ARRAY_A ) output.
+	 * @return array<int, array{customer_id:int, ts:int, gate_post_id:string, popup_id:string}>
+	 */
+	private function rows_to_donor_records( $rows ): array {
+		$utc     = new \DateTimeZone( 'UTC' );
+		$records = [];
+		foreach ( (array) $rows as $row ) {
+			if ( empty( $row['first_donation_date'] ) ) {
+				continue;
+			}
+			$records[] = [
+				'customer_id'  => (int) $row['customer_id'],
+				'ts'           => ( new \DateTimeImmutable( $row['first_donation_date'], $utc ) )->getTimestamp(),
+				'gate_post_id' => (string) ( $row['gate_post_id'] ?? '' ),
+				'popup_id'     => (string) ( $row['popup_id'] ?? '' ),
+			];
+		}
+		return $records;
+	}
+
+	/**
 	 * Aggregate flat per-variation rows into parent + nested variations.
 	 * Duplicated from {@see HPOS_Donors_Storage} — pure PHP transform
 	 * keeping each storage class self-contained.
@@ -1048,6 +1170,110 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 			}
 		);
 		return array_slice( $out, 0, 50 );
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @return array<int, array{customer_id:int, registered_ts:int, first_donation_ts:int}>
+	 */
+	public function get_donation_conversion_lags(): array {
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+
+		$sql = "SELECT first_d.customer_id, u.user_registered, first_d.first_donation_date
+			FROM (
+				SELECT CAST(cust.meta_value AS UNSIGNED) AS customer_id, MIN(p.post_date_gmt) AS first_donation_date
+				FROM {$prefix}posts p
+				JOIN {$prefix}postmeta cust
+					ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
+				JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = p.ID
+				WHERE p.post_type = 'shop_order'
+				  AND p.post_status IN ('wc-completed', 'wc-processing')
+				  AND opl.product_id IN ($donations)
+				GROUP BY CAST(cust.meta_value AS UNSIGNED)
+			) AS first_d
+			JOIN {$prefix}users u ON u.ID = first_d.customer_id";
+
+		return $this->rows_to_lags( $wpdb->get_results( $sql, ARRAY_A ), 'first_donation_date', 'first_donation_ts' );
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @return array<int, array{lag_days:int}>
+	 */
+	public function get_subscriber_to_donor_lags(): array {
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+
+		// Legacy CPT equivalent of HPOS get_subscriber_to_donor_lags().
+		$sql = "SELECT DATEDIFF(df.first_donation_date, sb.first_sub_date) AS lag_days
+			FROM (
+				SELECT CAST(cust.meta_value AS UNSIGNED) AS customer_id, MIN(start.meta_value) AS first_sub_date
+				FROM {$prefix}posts p
+				JOIN {$prefix}postmeta cust
+					ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
+				JOIN {$prefix}postmeta start
+					ON start.post_id = p.ID AND start.meta_key = '_schedule_start'
+				JOIN {$prefix}woocommerce_order_items oi
+					ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
+				JOIN {$prefix}woocommerce_order_itemmeta oim
+					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+				WHERE p.post_type = 'shop_subscription'
+				  AND oim.meta_value NOT IN ($donations)
+				  AND start.meta_value != ''
+				GROUP BY CAST(cust.meta_value AS UNSIGNED)
+			) AS sb
+			JOIN (
+				SELECT CAST(cust.meta_value AS UNSIGNED) AS customer_id, MIN(p.post_date_gmt) AS first_donation_date
+				FROM {$prefix}posts p
+				JOIN {$prefix}postmeta cust
+					ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
+				JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = p.ID
+				WHERE p.post_type = 'shop_order'
+				  AND p.post_status IN ('wc-completed', 'wc-processing')
+				  AND opl.product_id IN ($donations)
+				GROUP BY CAST(cust.meta_value AS UNSIGNED)
+			) AS df ON df.customer_id = sb.customer_id
+			WHERE df.first_donation_date > sb.first_sub_date";
+
+		$rows = $wpdb->get_results( $sql, ARRAY_A );
+		return array_map(
+			static function ( $row ) {
+				return [ 'lag_days' => (int) $row['lag_days'] ];
+			},
+			(array) $rows
+		);
+	}
+
+	/**
+	 * Map (customer_id, user_registered, <first date>) rows to lag records with
+	 * UTC epoch seconds. Rows with a blank date are skipped. UTC parse keeps the
+	 * epochs correct regardless of MySQL session timezone. user_registered is
+	 * treated as UTC (WordPress stores it as the GMT registration instant).
+	 *
+	 * @param mixed  $rows         wpdb rows (ARRAY_A).
+	 * @param string $first_key    Row key holding the first-conversion date.
+	 * @param string $first_ts_out Output key for the first-conversion epoch.
+	 * @return array<int, array<string,int>>
+	 */
+	private function rows_to_lags( $rows, string $first_key, string $first_ts_out ): array {
+		$utc  = new \DateTimeZone( 'UTC' );
+		$out  = [];
+		foreach ( (array) $rows as $row ) {
+			if ( empty( $row[ $first_key ] ) || empty( $row['user_registered'] ) ) {
+				continue;
+			}
+			$out[] = [
+				'customer_id'   => (int) $row['customer_id'],
+				'registered_ts' => ( new \DateTimeImmutable( $row['user_registered'], $utc ) )->getTimestamp(),
+				$first_ts_out   => ( new \DateTimeImmutable( $row[ $first_key ], $utc ) )->getTimestamp(),
+			];
+		}
+		return $out;
 	}
 
 	/**
