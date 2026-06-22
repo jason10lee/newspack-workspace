@@ -117,11 +117,73 @@ class Theme_Json_Builder {
 			],
 		];
 
+		// Emit an email-safe button border-radius when the WC renderer is active.
+		// The WC email package drops CSS-var and rem values it cannot resolve,
+		// so we resolve the theme's button radius to a px literal here.
+		if ( Feature_Flag::is_enabled() ) {
+			$styles['elements']['button'] = [
+				'border' => [
+					'radius' => self::resolve_button_border_radius(),
+				],
+			];
+		}
+
 		return [
 			'version'  => 3,
 			'settings' => $settings,
 			'styles'   => $styles,
 		];
+	}
+
+	/**
+	 * Resolve the active theme's button border-radius to an email-safe px string.
+	 *
+	 * Reads `styles.elements.button.border.radius` from the merged theme.json.
+	 * If the value is a `var( --wp--custom--... )` reference, it is resolved via
+	 * `settings.custom`. rem/em values are converted to px (× 16). Values that
+	 * are already in px, unitless, or otherwise unrecognised are returned as-is.
+	 * Falls back to `Email_Defaults::DEFAULT_BUTTON_BORDER_RADIUS` when the theme
+	 * defines nothing.
+	 *
+	 * @return string Email-safe border-radius value (e.g. "6px", "4px").
+	 */
+	private static function resolve_button_border_radius(): string {
+		$merged = \WP_Theme_JSON_Resolver::get_merged_data();
+		$raw    = $merged->get_raw_data();
+		$radius = $raw['styles']['elements']['button']['border']['radius'] ?? null;
+
+		if ( empty( $radius ) ) {
+			return Email_Defaults::DEFAULT_BUTTON_BORDER_RADIUS;
+		}
+
+		// Resolve a `var( --wp--custom--... )` reference via settings.custom.
+		if ( preg_match( '/^var\(\s*--wp--custom--([a-z0-9_-]+(?:--[a-z0-9_-]+)*)\s*\)$/i', $radius, $matches ) ) {
+			// Convert CSS-var segments to the PHP array path used in settings.custom.
+			// e.g. "--wp--custom--border--radius-medium" → segments ["border", "radius-medium"].
+			$segments = explode( '--', $matches[1] );
+			$custom   = $raw['settings']['custom'] ?? [];
+			foreach ( $segments as $segment ) {
+				if ( ! \is_array( $custom ) || ! \array_key_exists( $segment, $custom ) ) {
+					// Cannot resolve — fall back to default.
+					return Email_Defaults::DEFAULT_BUTTON_BORDER_RADIUS;
+				}
+				$custom = $custom[ $segment ];
+			}
+			if ( \is_string( $custom ) && '' !== $custom ) {
+				$radius = $custom;
+			} else {
+				return Email_Defaults::DEFAULT_BUTTON_BORDER_RADIUS;
+			}
+		}
+
+		// Convert rem/em to px (assume 1rem = 16px, standard for email clients).
+		if ( preg_match( '/^([\d.]+)r?em$/i', $radius, $m ) ) {
+			$px = (int) round( (float) $m[1] * 16 );
+			return $px . 'px';
+		}
+
+		// Already px or another unit — return as-is.
+		return $radius;
 	}
 
 	/**

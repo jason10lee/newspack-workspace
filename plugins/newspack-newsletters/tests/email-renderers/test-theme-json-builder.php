@@ -196,12 +196,45 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The builder no longer injects a forced button; the button is theme-driven.
+	 * Flag on: builder emits styles.elements.button.border.radius as a px string.
+	 *
+	 * The test environment runs with the default (classic) theme which defines no
+	 * button border-radius, so the fallback Email_Defaults::DEFAULT_BUTTON_BORDER_RADIUS
+	 * ("4px") is expected.
 	 */
-	public function test_does_not_inject_button() {
+	public function test_flag_on_emits_button_border_radius_as_px() {
 		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
 		$theme = Theme_Json_Builder::build( get_post( self::factory()->post->create() ) );
 		remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
+
+		$radius = $theme['styles']['elements']['button']['border']['radius'] ?? null;
+		$this->assertNotNull( $radius, 'button border-radius must be present when flag is on' );
+		// Must be a px string.
+		$this->assertMatchesRegularExpression( '/^\d+px$/', $radius, 'border-radius must be a px value' );
+		// Classic/default theme has no button radius → fallback is 4px.
+		$this->assertSame( '4px', $radius );
+	}
+
+	/**
+	 * Flag on: builder emits no button color or padding (only border.radius).
+	 */
+	public function test_flag_on_does_not_emit_button_color_or_padding() {
+		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
+		$theme = Theme_Json_Builder::build( get_post( self::factory()->post->create() ) );
+		remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
+
+		$button = $theme['styles']['elements']['button'] ?? [];
+		$this->assertArrayNotHasKey( 'color', $button, 'button color must not be emitted by the builder' );
+		$this->assertArrayNotHasKey( 'spacing', $button, 'button spacing/padding must not be emitted by the builder' );
+	}
+
+	/**
+	 * Flag off: builder emits no button element at all (unchanged behavior).
+	 */
+	public function test_flag_off_does_not_inject_button() {
+		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_false' );
+		$theme = Theme_Json_Builder::build( get_post( self::factory()->post->create() ) );
+		remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_false' );
 		$this->assertArrayNotHasKey( 'button', $theme['styles']['elements'] ?? [] );
 	}
 }
