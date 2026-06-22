@@ -117,6 +117,16 @@ final class Conversion_Metric {
 	private array $paid_attempt_cache = [];
 
 	/**
+	 * Per-request memo for registration_source_events() BQ round-trip.
+	 *
+	 * Computed once on first call; subsequent calls within the same request
+	 * return the cached result. Nullable so null = not-yet-fetched.
+	 *
+	 * @var array<int, array{ts:int, source:string}>|null
+	 */
+	private ?array $registration_source_events_cache = null;
+
+	/**
 	 * Subscribers_Metric collaborator for Section 8 opportunity counts and
 	 * the Registered → Subscriber / Subscriber → Donor funnels.
 	 *
@@ -784,23 +794,29 @@ final class Conversion_Metric {
 	 * @return array<int, array{ts:int, source:string}>
 	 */
 	private function registration_source_events(): array {
+		if ( null !== $this->registration_source_events_cache ) {
+			return $this->registration_source_events_cache;
+		}
 		$utc   = new \DateTimeZone( 'UTC' );
 		$end   = new \DateTimeImmutable( 'now', $utc );
 		$start = $end->modify( '-365 days' );
 
 		$probe = $this->proxy->query( 'conversion_journey_has_registrations_in_window', $start, $end );
 		if ( is_wp_error( $probe ) || ! is_array( $probe ) || empty( $probe[0] ) || ! is_array( $probe[0] ) ) {
-			return [];
+			$this->registration_source_events_cache = [];
+			return $this->registration_source_events_cache;
 		}
 		$first_row = $probe[0];
 		$count     = (int) reset( $first_row ); // Single COUNT column; read defensively regardless of alias.
 		if ( $count <= 0 ) {
-			return [];
+			$this->registration_source_events_cache = [];
+			return $this->registration_source_events_cache;
 		}
 
 		$reg = $this->proxy->query( 'conversion_journey_registrations_with_source', $start, $end );
 		if ( is_wp_error( $reg ) || ! is_array( $reg ) ) {
-			return [];
+			$this->registration_source_events_cache = [];
+			return $this->registration_source_events_cache;
 		}
 		$events = [];
 		foreach ( $reg as $row ) {
@@ -812,7 +828,8 @@ final class Conversion_Metric {
 				'source' => (string) ( $row['source'] ?? Source_Matcher::SOURCE_DIRECT ),
 			];
 		}
-		return $events;
+		$this->registration_source_events_cache = $events;
+		return $this->registration_source_events_cache;
 	}
 
 	/**
@@ -827,10 +844,19 @@ final class Conversion_Metric {
 	 * @return array{state:string, groups:array}
 	 */
 	private function build_time_to_convert_distribution( array $rows, string $first_ts_key ): array {
-		$events          = $this->registration_source_events();
+		$events = $this->registration_source_events();
+		// Bound the cohort to the same trailing-365-day window that
+		// registration_source_events() covers. Converters who registered
+		// more than 365 days ago would be silently attributed 'direct'
+		// (their registration event fell outside the BQ window), biasing
+		// older cohorts. Filtering them out keeps source attribution honest.
+		$reg_cutoff      = ( new \DateTimeImmutable( 'now', new \DateTimeZone( 'UTC' ) ) )->modify( '-365 days' )->getTimestamp();
 		$records         = [];
 		$lag_by_customer = [];
 		foreach ( $rows as $row ) {
+			if ( (int) $row['registered_ts'] < $reg_cutoff ) {
+				continue;
+			}
 			$lag = intdiv( (int) $row[ $first_ts_key ] - (int) $row['registered_ts'], 86400 );
 			if ( $lag < 0 || $lag > 365 ) {
 				continue;
@@ -843,6 +869,10 @@ final class Conversion_Metric {
 			$lag_by_customer[ $cid ] = $lag;
 		}
 
+		// Greedy single-consume nearest-match: on a busy site, two readers registering
+		// within WINDOW_REGISTRATION_SECONDS of each other can have their sources swapped
+		// (each consumes the event nearest to them, but which event is "nearest" is
+		// order-sensitive). This is an accepted accuracy nuance, not a bug.
 		$map         = Source_Matcher::attach_sources( $records, $events, Source_Matcher::WINDOW_REGISTRATION_SECONDS, Source_Matcher::WINDOW_REGISTRATION_SECONDS );
 		$days_by_src = [
 			'gate'   => [],
@@ -893,7 +923,15 @@ final class Conversion_Metric {
 			];
 		}
 
-		$bq = $this->proxy->query( $query_name, $start, $end );
+		// Widen the event fetch by one day before $start so that a conversion
+		// occurring just after midnight on the window's first day can still be
+		// matched to an exposure event that occurred just before midnight the
+		// preceding night. Source_Matcher::WINDOW_ORDER_SECONDS (1800 s) allows
+		// lookback up to 30 min before the conversion; a day-granular date
+		// boundary can cut off valid events without this guard.
+		// createFromInterface() produces a DateTimeImmutable so modify() returns a new instance.
+		$events_start = \DateTimeImmutable::createFromInterface( $start )->modify( '-1 day' );
+		$bq           = $this->proxy->query( $query_name, $events_start, $end );
 		if ( is_wp_error( $bq ) ) {
 			return $this->error_collection( 'slices', $bq );
 		}

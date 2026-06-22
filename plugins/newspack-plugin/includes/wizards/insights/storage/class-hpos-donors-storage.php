@@ -996,6 +996,9 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 
 		// Same inner aggregate as get_new_donors_in_window() (first completed/
 		// processing donation per customer), filtered to the window, returning rows.
+		// Guest orders (customer_id = 0) are excluded: a guest has no user
+		// account to match against BQ registration events, so they would always
+		// collapse to 'direct' and inflate that bucket artificially.
 		$sql = $wpdb->prepare(
 			"SELECT first_donations.customer_id, first_donations.first_donation_date FROM (
 				SELECT o.customer_id, MIN(o.date_created_gmt) AS first_donation_date
@@ -1004,6 +1007,7 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 				WHERE o.type = 'shop_order'
 				  AND o.status IN ('wc-completed', 'wc-processing')
 				  AND opl.product_id IN ($donations)
+				  AND o.customer_id > 0
 				GROUP BY o.customer_id
 			) AS first_donations
 			WHERE first_donations.first_donation_date BETWEEN %s AND %s",

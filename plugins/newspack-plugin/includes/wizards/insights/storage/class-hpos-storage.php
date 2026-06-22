@@ -140,7 +140,9 @@ class HPOS_Storage implements Storage_Interface {
 
 		// Customers whose earliest non-donation subscription's _schedule_start
 		// falls in the window. Inner aggregate computes first-start per
-		// customer; outer count filters that to the window.
+		// customer; outer count filters that to the window. The om.meta_value != ''
+		// guard matches the records method so the count and source-mix records
+		// agree on sites where a subscription has a blank _schedule_start.
 		$sql = $wpdb->prepare(
 			"SELECT COUNT(*) FROM (
 				SELECT o.customer_id, MIN(om.meta_value) AS first_start
@@ -153,6 +155,7 @@ class HPOS_Storage implements Storage_Interface {
 					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
 				WHERE o.type = 'shop_subscription'
 				  AND oim.meta_value NOT IN ($donations)
+				  AND om.meta_value != ''
 				GROUP BY o.customer_id
 			) AS first_subs
 			WHERE first_subs.first_start BETWEEN %s AND %s",
@@ -1190,7 +1193,10 @@ class HPOS_Storage implements Storage_Interface {
 		// Same inner aggregate as get_new_subscribers_in_window() (first
 		// non-donation _schedule_start per customer), filtered to the window,
 		// but returns the rows so the metric layer can anchor Source_Matcher on
-		// each customer's first-sub timestamp.
+		// each customer's first-sub timestamp. Guest orders (customer_id = 0)
+		// are excluded: a guest has no user account to match against BQ
+		// registration events, so they would always collapse to 'direct' and
+		// inflate that bucket artificially.
 		$sql = $wpdb->prepare(
 			"SELECT first_subs.customer_id, first_subs.first_start FROM (
 				SELECT o.customer_id, MIN(om.meta_value) AS first_start
@@ -1202,6 +1208,7 @@ class HPOS_Storage implements Storage_Interface {
 				JOIN {$prefix}woocommerce_order_itemmeta oim
 					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
 				WHERE o.type = 'shop_subscription'
+				  AND o.customer_id > 0
 				  AND oim.meta_value NOT IN ($donations)
 				  AND om.meta_value != ''
 				GROUP BY o.customer_id

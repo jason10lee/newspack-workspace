@@ -161,6 +161,9 @@ class Legacy_Storage implements Storage_Interface {
 		$prefix    = $wpdb->prefix;
 		$donations = $this->id_list( $this->donation_product_ids );
 
+		// The start.meta_value != '' guard matches the records method so the
+		// count and source-mix records agree on sites where a subscription has
+		// a blank _schedule_start.
 		$sql = $wpdb->prepare(
 			"SELECT COUNT(*) FROM (
 				SELECT cust.meta_value AS customer_id, MIN(start.meta_value) AS first_start
@@ -175,6 +178,7 @@ class Legacy_Storage implements Storage_Interface {
 					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
 				WHERE p.post_type = 'shop_subscription'
 				  AND oim.meta_value NOT IN ($donations)
+				  AND start.meta_value != ''
 				GROUP BY cust.meta_value
 			) AS first_subs
 			WHERE first_subs.first_start BETWEEN %s AND %s",
@@ -1122,6 +1126,8 @@ class Legacy_Storage implements Storage_Interface {
 		$donations = $this->id_list( $this->donation_product_ids );
 
 		// Legacy CPT equivalent of HPOS get_new_subscriber_records_in_window().
+		// Guest orders (blank _customer_user → 0 when cast) are excluded from
+		// source attribution — see the HPOS variant for the rationale.
 		$sql = $wpdb->prepare(
 			"SELECT first_subs.customer_id, first_subs.first_start FROM (
 				SELECT CAST(cust.meta_value AS UNSIGNED) AS customer_id, MIN(start.meta_value) AS first_start
@@ -1135,6 +1141,7 @@ class Legacy_Storage implements Storage_Interface {
 				JOIN {$prefix}woocommerce_order_itemmeta oim
 					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
 				WHERE p.post_type = 'shop_subscription'
+				  AND CAST(cust.meta_value AS UNSIGNED) > 0
 				  AND oim.meta_value NOT IN ($donations)
 				  AND start.meta_value != ''
 				GROUP BY CAST(cust.meta_value AS UNSIGNED)

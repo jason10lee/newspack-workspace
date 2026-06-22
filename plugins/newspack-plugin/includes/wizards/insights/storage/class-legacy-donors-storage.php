@@ -960,6 +960,8 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 		$donations = $this->id_list( $this->donation_product_ids );
 
 		// Legacy CPT equivalent of HPOS get_new_donor_records_in_window().
+		// Guest orders (blank _customer_user → 0 when cast) are excluded from
+		// source attribution — see the HPOS variant for the rationale.
 		$sql = $wpdb->prepare(
 			"SELECT first_donations.customer_id, first_donations.first_donation_date FROM (
 				SELECT CAST(cust.meta_value AS UNSIGNED) AS customer_id, MIN(p.post_date_gmt) AS first_donation_date
@@ -970,6 +972,7 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 				WHERE p.post_type = 'shop_order'
 				  AND p.post_status IN ('wc-completed', 'wc-processing')
 				  AND opl.product_id IN ($donations)
+				  AND CAST(cust.meta_value AS UNSIGNED) > 0
 				GROUP BY CAST(cust.meta_value AS UNSIGNED)
 			) AS first_donations
 			WHERE first_donations.first_donation_date BETWEEN %s AND %s",

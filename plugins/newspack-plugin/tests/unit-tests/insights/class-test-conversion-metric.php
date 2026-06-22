@@ -2124,21 +2124,24 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 * within ±120s; unmatched reg → direct; lag > 365 truncated.
 	 */
 	public function test_time_to_subscribe_distribution_buckets_and_truncates(): void {
-		$reg1 = 1_700_000_000;
+		// Use current-time-relative registration timestamps so rows fall inside
+		// the trailing-365-day cohort window (registrations older than 365 days
+		// are excluded because their BQ source events are outside the window).
+		$reg1 = time() - 10 * 86400; // Registered 10 days ago.
 		$rows = [
-			// Registered, subscribed 10 days later, has a 'gate' reg event 30s after registering.
+			// Registered 10 days ago, subscribed 10 days later (today), has a 'gate' reg event 30s after registering.
 			[
 				'customer_id'   => 1,
 				'registered_ts' => $reg1,
 				'first_sub_ts'  => $reg1 + 86400 * 10,
 			],
-			// Registered, subscribed 20 days later, no BQ reg event → direct.
+			// Registered 10 days ago (offset 100000s), subscribed 20 days later, no BQ reg event → direct.
 			[
 				'customer_id'   => 2,
 				'registered_ts' => $reg1 + 100000,
 				'first_sub_ts'  => $reg1 + 100000 + 86400 * 20,
 			],
-			// Registered, subscribed 400 days later → truncated out.
+			// Registered recently but subscribed 400 days later → lag truncated out (lag > 365 days).
 			[
 				'customer_id'   => 3,
 				'registered_ts' => $reg1 + 200000,
@@ -2200,7 +2203,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 * 4.2 degradation: probe returns 0 → no expensive query → every reg → direct.
 	 */
 	public function test_time_to_subscribe_distribution_probe_zero_all_direct(): void {
-		$reg1 = 1_700_000_000;
+		$reg1 = time() - 10 * 86400; // Registered 10 days ago; inside the 365-day cohort window.
 		$rows = [
 			[
 				'customer_id'   => 1,
@@ -2236,7 +2239,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 * attributed to direct (graceful degradation).
 	 */
 	public function test_time_to_subscribe_distribution_registrations_error_all_direct(): void {
-		$reg1 = 1_700_000_000;
+		$reg1 = time() - 10 * 86400; // Registered 10 days ago; inside the 365-day cohort window.
 		$rows = [
 			[
 				'customer_id'   => 1,
@@ -2295,21 +2298,24 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 * test with Donors_Metric and first_donation_ts.
 	 */
 	public function test_time_to_donate_distribution_buckets_and_truncates(): void {
-		$reg1 = 1_700_000_000;
+		// Use current-time-relative registration timestamps so rows fall inside
+		// the trailing-365-day cohort window (registrations older than 365 days
+		// are excluded because their BQ source events are outside the window).
+		$reg1 = time() - 10 * 86400; // Registered 10 days ago.
 		$rows = [
-			// Registered, donated 15 days later, has a 'prompt' reg event 50s before registering.
+			// Registered 10 days ago, donated 15 days later, has a 'prompt' reg event 50s before registering.
 			[
 				'customer_id'       => 10,
 				'registered_ts'     => $reg1,
 				'first_donation_ts' => $reg1 + 86400 * 15,
 			],
-			// Registered, donated 30 days later, no BQ reg event → direct.
+			// Registered 10 days ago (offset 100000s), donated 30 days later, no BQ reg event → direct.
 			[
 				'customer_id'       => 11,
 				'registered_ts'     => $reg1 + 100000,
 				'first_donation_ts' => $reg1 + 100000 + 86400 * 30,
 			],
-			// Registered, donated 400 days later → truncated out.
+			// Registered recently but donated 400 days later → lag truncated out (lag > 365 days).
 			[
 				'customer_id'       => 12,
 				'registered_ts'     => $reg1 + 200000,
