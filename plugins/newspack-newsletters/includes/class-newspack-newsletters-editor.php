@@ -769,7 +769,7 @@ final class Newspack_Newsletters_Editor {
 					'context' => [
 						'edit',
 					],
-					'type'    => 'string',
+					'type'    => [ 'string', 'null' ],
 				],
 			]
 		);
@@ -950,7 +950,9 @@ final class Newspack_Newsletters_Editor {
 	 * @return array Formatted data for all sponsors associated with the post.
 	 */
 	public static function newspack_get_sponsors_info( $post ) {
-		return \Newspack_Sponsors\get_all_sponsors( $post['id'], null, 'post' );
+		// Cast to array: get_all_sponsors() returns false when none exist, but the
+		// REST schema (and callers) expect an array.
+		return (array) \Newspack_Sponsors\get_all_sponsors( $post['id'], null, 'post' );
 	}
 
 	/**
