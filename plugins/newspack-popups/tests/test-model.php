@@ -256,47 +256,31 @@ class ModelTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Creates an autosave revision for a prompt with the given content and
-	 * modified timestamp, mirroring what the editor's autosave() produces.
+	 * Creates an autosave revision for a prompt with the given content and date.
 	 *
-	 * @param int    $popup_id    Parent prompt ID.
-	 * @param string $content     Autosave post_content.
-	 * @param string $modified_gmt GMT datetime string for the autosave.
+	 * WordPress's wp_insert_post() sets a new post's post_modified to its post_date, so the
+	 * date passed here also becomes the autosave's modified time — letting tests
+	 * control autosave-vs-saved ordering deterministically without sleeping or
+	 * writing to the database directly.
+	 *
+	 * @param int    $popup_id Parent prompt ID.
+	 * @param string $content  Autosave post_content.
+	 * @param string $date_gmt GMT datetime string for the autosave.
 	 * @return int Autosave revision ID.
 	 */
-	private function create_autosave( $popup_id, $content, $modified_gmt ) {
-		$autosave_id = wp_insert_post(
+	private function create_autosave( $popup_id, $content, $date_gmt ) {
+		return wp_insert_post(
 			[
-				'post_type'    => 'revision',
-				'post_status'  => 'inherit',
-				'post_parent'  => $popup_id,
-				'post_name'    => "{$popup_id}-autosave-v1",
-				'post_content' => $content,
-				'post_author'  => get_current_user_id(),
+				'post_type'     => 'revision',
+				'post_status'   => 'inherit',
+				'post_parent'   => $popup_id,
+				'post_name'     => "{$popup_id}-autosave-v1",
+				'post_content'  => $content,
+				'post_author'   => get_current_user_id(),
+				'post_date'     => $date_gmt,
+				'post_date_gmt' => $date_gmt,
 			]
 		);
-		$this->set_modified_gmt( $autosave_id, $modified_gmt );
-		return $autosave_id;
-	}
-
-	/**
-	 * Force a post's modified timestamps so autosave-vs-saved ordering is
-	 * deterministic without sleeping in the test.
-	 *
-	 * @param int    $post_id      Post ID.
-	 * @param string $modified_gmt GMT datetime string.
-	 */
-	private function set_modified_gmt( $post_id, $modified_gmt ) {
-		global $wpdb;
-		$wpdb->update(
-			$wpdb->posts,
-			[
-				'post_modified'     => $modified_gmt,
-				'post_modified_gmt' => $modified_gmt,
-			],
-			[ 'ID' => $post_id ]
-		);
-		clean_post_cache( $post_id );
 	}
 
 	/**
@@ -309,17 +293,18 @@ class ModelTest extends WP_UnitTestCase {
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
 		$popup_id = self::factory()->post->create(
 			[
-				'post_type'    => Newspack_Popups::NEWSPACK_POPUPS_CPT,
-				'post_content' => '<!-- wp:paragraph --><p>Kept body.</p><!-- /wp:paragraph -->',
+				'post_type'     => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_content'  => '<!-- wp:paragraph --><p>Kept body.</p><!-- /wp:paragraph -->',
+				'post_date'     => '2021-01-02 00:00:00',
+				'post_date_gmt' => '2021-01-02 00:00:00',
 			]
 		);
 
 		$this->create_autosave(
 			$popup_id,
 			'<!-- wp:heading --><h3>Removed heading</h3><!-- /wp:heading --><!-- wp:paragraph --><p>Kept body.</p><!-- /wp:paragraph -->',
-			'2020-01-01 00:00:00'
+			'2021-01-01 00:00:00'
 		);
-		$this->set_modified_gmt( $popup_id, '2030-01-01 00:00:00' );
 
 		$preview = Newspack_Popups_Model::retrieve_preview_popup( $popup_id );
 		self::assertStringNotContainsString(
@@ -337,16 +322,17 @@ class ModelTest extends WP_UnitTestCase {
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
 		$popup_id = self::factory()->post->create(
 			[
-				'post_type'    => Newspack_Popups::NEWSPACK_POPUPS_CPT,
-				'post_content' => '<!-- wp:paragraph --><p>Saved body.</p><!-- /wp:paragraph -->',
+				'post_type'     => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_content'  => '<!-- wp:paragraph --><p>Saved body.</p><!-- /wp:paragraph -->',
+				'post_date'     => '2021-01-01 00:00:00',
+				'post_date_gmt' => '2021-01-01 00:00:00',
 			]
 		);
 
-		$this->set_modified_gmt( $popup_id, '2020-01-01 00:00:00' );
 		$this->create_autosave(
 			$popup_id,
 			'<!-- wp:paragraph --><p>Unsaved edit.</p><!-- /wp:paragraph -->',
-			'2030-01-01 00:00:00'
+			'2021-01-02 00:00:00'
 		);
 
 		$preview = Newspack_Popups_Model::retrieve_preview_popup( $popup_id );
