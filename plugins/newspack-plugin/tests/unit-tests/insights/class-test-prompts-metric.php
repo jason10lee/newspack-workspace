@@ -693,6 +693,24 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * NPPD-1745 #3: a malformed impressions response (the hub succeeded but returned a
+	 * non-array shape) must error, NOT collapse to a fabricated "0 impressions → em-
+	 * dash". Mirrors the sibling per-prompt table's malformed_collection so a hub
+	 * fault counts toward the banner instead of hiding.
+	 */
+	public function test_donation_conversion_direct_errors_on_malformed_impressions() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( 'not-an-array' ); // Malformed (non-array) hub response.
+
+		$metric = $this->make_direct_donation_metric( $proxy, $this->donors_with_conversions( 5 ), true );
+
+		$rate = $metric->get_donation_conversion_direct( $this->start(), $this->end() );
+
+		$this->assertSame( 'error', $rate['state'], 'malformed impressions errors, not a fabricated 0%' );
+		$this->assertSame( 'bigquery_proxy_malformed_rows', $rate['error_code'] );
+	}
+
+	/**
 	 * Non-WC publisher: empty state (not a fake 0%); the order-meta numerator is
 	 * never queried.
 	 */

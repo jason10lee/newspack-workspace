@@ -123,13 +123,14 @@ class Test_Prompts_REST_Controller extends WP_UnitTestCase {
 		$this->assertArrayNotHasKey( 'tab_pending', $data );
 		$this->assertArrayHasKey( 'tab_error', $data );
 		// NPPD-1745: tab_error is scoped to hub-backed metrics. The test env has an
-		// unconfigured proxy (every hub metric errors) AND no WooCommerce, so the two
-		// migrated donation cards return a NON-error empty state (revenue: local;
-		// rate: hybrid, short-circuited on non-WC). A hub-backed card
-		// (donation_conversion_direct) is therefore not in 'error', so the window is
-		// not "all hub-backed errored" → no banner. The banner-fires-on-hub-outage
-		// path is pinned directly in test_tab_error_* below.
-		$this->assertFalse( $data['tab_error'] );
+		// unconfigured proxy (every hub metric errors) AND no WooCommerce. The two
+		// migrated donation cards still render a NON-error empty state (revenue: local;
+		// rate: hybrid, short-circuited on non-WC) — but a non-WC hybrid card never
+		// reaches the hub, so it is NOT a hub-backed survivor and must not mask the
+		// outage. Every genuinely hub-backed (pure-hub) card errored, so the banner
+		// fires. Before the banner-hole fix this asserted false — that was asserting
+		// the bug, where the empty hybrid card silently suppressed the banner.
+		$this->assertTrue( $data['tab_error'] );
 		$this->assertArrayHasKey( 'current', $data );
 		$this->assertNull( $data['previous'] );
 		$this->assertSame( 'populated', $data['current']['donation_revenue_direct']['state'], 'local card is non-error' );
@@ -441,13 +442,14 @@ class Test_Prompts_REST_Controller extends WP_UnitTestCase {
 	/**
 	 * Invoke the private static is_window_all_error() on a synthetic window.
 	 *
-	 * @param array $window Window payload.
+	 * @param array $window             Window payload.
+	 * @param bool  $woocommerce_active Whether WC is active (defaults to the WC-active path).
 	 * @return bool
 	 */
-	private function invoke_is_window_all_error( array $window ): bool {
+	private function invoke_is_window_all_error( array $window, bool $woocommerce_active = true ): bool {
 		$method = new \ReflectionMethod( Prompts_REST_Controller::class, 'is_window_all_error' );
 		$method->setAccessible( true );
-		return (bool) $method->invoke( null, $window );
+		return (bool) $method->invoke( null, $window, $woocommerce_active );
 	}
 
 	/**
@@ -495,5 +497,88 @@ class Test_Prompts_REST_Controller extends WP_UnitTestCase {
 		$window['total_prompt_impressions'] = [ 'state' => 'populated' ]; // one hub card recovers.
 
 		$this->assertFalse( $this->invoke_is_window_all_error( $window ) );
+	}
+
+	/**
+	 * Build the non-WC hub-outage window: every pure-hub card errors, while the
+	 * hybrid cards short-circuit to a populated empty state (they never reach the
+	 * hub on a non-WC publisher) and the local cards render. The banner-hole case.
+	 *
+	 * @return array
+	 */
+	private function window_non_wc_hub_down(): array {
+		$window = [
+			'window' => [
+				'start' => '2026-03-22',
+				'end'   => '2026-04-21',
+			],
+		];
+		foreach ( Prompts_Metric::METRIC_SOURCES as $key => $source ) {
+			// hub → error (outage); hybrid + local → populated (non-WC: a hybrid card
+			// empties out before it reaches the hub; local is always local).
+			$window[ $key ] = [ 'state' => 'hub' === $source ? 'error' : 'populated' ];
+		}
+		return $window;
+	}
+
+	/**
+	 * NPPD-1745 banner-hole fix: on a non-WC publisher a hybrid card short-circuits
+	 * to a populated empty state without ever calling the hub, so it must NOT count
+	 * as a hub-backed survivor. With every pure-hub card erroring, the banner fires
+	 * even though the hybrid + local cards render. (Pre-fix, the populated hybrid
+	 * card returned false here, silently suppressing the banner.)
+	 */
+	public function test_tab_error_fires_on_non_wc_hub_outage() {
+		$window = $this->window_non_wc_hub_down();
+
+		// Sanity: a hybrid card is genuinely populated (not error) in this window.
+		$this->assertSame( 'hybrid', Prompts_Metric::METRIC_SOURCES['donation_conversion_direct'] );
+		$this->assertSame( 'populated', $window['donation_conversion_direct']['state'] );
+
+		$this->assertTrue(
+			$this->invoke_is_window_all_error( $window, false ),
+			'non-WC: the hybrid card is skipped, so all-pure-hub-errored fires the banner'
+		);
+		// Guard: were WC active, the same populated hybrid card would be a genuine
+		// hub-backed survivor and (correctly) suppress the banner.
+		$this->assertFalse(
+			$this->invoke_is_window_all_error( $window, true ),
+			'WC-active: a populated hybrid card is a real survivor → no banner'
+		);
+	}
+
+	/**
+	 * NPPD-1745 #5 drift guard: every state-bearing metric that build_window()
+	 * emits must have a METRIC_SOURCES entry. is_window_all_error() iterates
+	 * METRIC_SOURCES, so a card added to the window but never classified in the map
+	 * would silently drop out of the tab-error banner with no test to catch it. The
+	 * cleaner long-term fix is to carry the source on the metric envelope itself
+	 * (tracked as a follow-up); this guard closes the silent-failure path now.
+	 */
+	public function test_every_window_metric_is_classified_in_metric_sources() {
+		$data = $this->dispatch(
+			[
+				'start' => '2026-03-22',
+				'end'   => '2026-04-21',
+			]
+		)->get_data()['data'];
+
+		$missing = [];
+		foreach ( $data['current'] as $key => $value ) {
+			// Skip date metadata and non-metric scalar section-totals (int|null); only
+			// state-bearing metric envelopes participate in the banner decision.
+			if ( 'window' === $key || ! is_array( $value ) || ! isset( $value['state'] ) ) {
+				continue;
+			}
+			if ( ! array_key_exists( $key, Prompts_Metric::METRIC_SOURCES ) ) {
+				$missing[] = $key;
+			}
+		}
+
+		$this->assertSame(
+			[],
+			$missing,
+			'every state-bearing build_window metric must be classified in Prompts_Metric::METRIC_SOURCES'
+		);
 	}
 }
