@@ -1,5 +1,5 @@
 import { registerCriteria } from '../../criteria/utils';
-import { getBestPrioritySegment, getMatchingSegmentIds, getOverride, shouldPromptBeDisplayed, periods } from './index.js';
+import { getBestPrioritySegment, getMatchingSegmentIds, syncMatchedSegments, getOverride, shouldPromptBeDisplayed, periods } from './index.js';
 
 // Mock the window.location object. See: https://developer.mozilla.org/en-US/docs/Web/API/Location
 const setWindowLocation = ( domain = 'example.com', search = '' ) => {
@@ -244,6 +244,30 @@ describe( 'segmentation API', () => {
 	it( 'getMatchingSegmentIds returns an empty array when nothing matches', () => {
 		ras.store.set( 'simple', 'no-match' );
 		expect( getMatchingSegmentIds( segments ) ).toEqual( [] );
+	} );
+
+	it( 'syncMatchedSegments writes the set for an authenticated reader on change', () => {
+		ras.store.set( 'reader', { authenticated: true } );
+		ras.store.set( 'simple', 'simple-match' );
+		syncMatchedSegments( ras, segments );
+		expect( ras.store.get( 'matched_segments' ) ).toEqual( [ 'segment2', 'segment3' ] );
+	} );
+
+	it( 'syncMatchedSegments does not write for an anonymous reader', () => {
+		ras.store.set( 'reader', { authenticated: false } );
+		ras.store.set( 'simple', 'simple-match' );
+		syncMatchedSegments( ras, segments );
+		expect( ras.store.get( 'matched_segments' ) ).toBeUndefined();
+	} );
+
+	it( 'syncMatchedSegments does not rewrite when the set is unchanged', () => {
+		ras.store.set( 'reader', { authenticated: true } );
+		ras.store.set( 'simple', 'simple-match' );
+		ras.store.set( 'matched_segments', [ 'segment2', 'segment3' ] );
+		const setSpy = jest.spyOn( ras.store, 'set' );
+		syncMatchedSegments( ras, segments );
+		expect( setSpy ).not.toHaveBeenCalledWith( 'matched_segments', expect.anything() );
+		setSpy.mockRestore();
 	} );
 
 	it( 'should return false if the reader has or had the UTM Suppression value in utm_source params', () => {
