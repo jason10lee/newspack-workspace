@@ -21,9 +21,10 @@ import {
 /**
  * Internal dependencies
  */
+import { AutocompleteTokenField } from '../../../../../packages/components/src';
 import { tsToLocalInput, localInputToTs } from './datetime';
 
-type ConditionsMap = { [ id: string ]: boolean | number | null };
+type ConditionsMap = { [ id: string ]: boolean | number | number[] | null };
 type DateMode = 'none' | 'publish' | 'custom';
 
 // A stored datetime within this many seconds of the rule's publish date reads back
@@ -117,6 +118,33 @@ function DatetimeCondition( {
 	);
 }
 
+function SegmentCondition( {
+	matcher,
+	value,
+	onChange,
+}: {
+	matcher: PricingRuleConditionVocab;
+	value: number[];
+	onChange: ( v: number[] ) => void;
+} ) {
+	const options = matcher.options || [];
+	const fetchSuggestions = ( search: string ) =>
+		Promise.resolve( options.filter( o => o.label.toLowerCase().includes( ( search || '' ).toLowerCase() ) ) );
+	const fetchSavedInfo = ( ids: number[] ) => Promise.resolve( options.filter( o => ids.includes( o.value ) ) );
+	return (
+		<AutocompleteTokenField
+			tokens={ value }
+			onChange={ onChange }
+			fetchSuggestions={ fetchSuggestions }
+			fetchSavedInfo={ fetchSavedInfo }
+			label={ matcher.label }
+			help={ matcher.help }
+			placeholder={ __( 'Search segments…', 'newspack-plugin' ) }
+			__next40pxDefaultSize
+		/>
+	);
+}
+
 interface ConditionsProps {
 	vocab: PricingRuleConditionVocab[];
 	value: ConditionsMap;
@@ -130,7 +158,7 @@ export default function Conditions( { vocab, value, publishedAt, isNew, onChange
 		return null;
 	}
 
-	const setOne = ( id: string, v: boolean | number | null ) => onChange( { ...value, [ id ]: v } );
+	const setOne = ( id: string, v: boolean | number | number[] | null ) => onChange( { ...value, [ id ]: v } );
 
 	// Boolean (toggle) conditions always render last, below the richer datetime
 	// controls. Array.sort is stable, so order within each group is preserved.
@@ -149,6 +177,17 @@ export default function Conditions( { vocab, value, publishedAt, isNew, onChange
 							publishedAt={ publishedAt }
 							isNew={ isNew }
 							onChange={ v => setOne( matcher.id, v ) }
+						/>
+					);
+				}
+				if ( 'select' === matcher.field_type ) {
+					const selected = Array.isArray( value[ matcher.id ] ) ? ( value[ matcher.id ] as number[] ) : [];
+					return (
+						<SegmentCondition
+							key={ matcher.id }
+							matcher={ matcher }
+							value={ selected }
+							onChange={ v => setOne( matcher.id, v.length ? v : null ) }
 						/>
 					);
 				}

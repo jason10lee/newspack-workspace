@@ -40,7 +40,7 @@ interface PricingRuleRow {
 	max_cancellation_pct: number | null;
 	is_stepped: boolean;
 	has_conditions: boolean;
-	conditions: { [ id: string ]: boolean | number | null };
+	conditions: { [ id: string ]: boolean | number | number[] | null };
 	simple: PricingRuleSimpleParams | null;
 	steps: PricingRuleStep[] | null;
 	edit_link: string;
@@ -60,9 +60,11 @@ interface PricingRulesVocabItem {
 
 interface PricingRuleConditionVocab {
 	id: string;
-	field_type: 'boolean' | 'datetime' | string;
+	field_type: 'boolean' | 'datetime' | 'select' | string;
 	label: string;
 	help: string;
+	multiple?: boolean;
+	options?: { value: number; label: string }[];
 }
 
 interface PricingRulesResponse {
