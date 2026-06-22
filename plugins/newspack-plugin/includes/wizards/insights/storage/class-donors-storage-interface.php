@@ -335,13 +335,18 @@ interface Donors_Storage_Interface {
 
 	/**
 	 * New donors in the window, each with the epoch timestamp (UTC seconds) of
-	 * their FIRST completed/processing donation order. Same population as
-	 * {@see get_new_donors_in_window()} but returns one record per customer with
-	 * the anchor timestamp for Source_Matcher (Tab 3 source-mix 3.3).
+	 * their FIRST completed/processing donation order, plus order-meta source
+	 * signals. Same population as {@see get_new_donors_in_window()} but returns
+	 * one record per customer with the anchor timestamp for Source_Matcher
+	 * (Tab 3 source-mix 3.3) and order-level meta for primary attribution.
+	 *
+	 * Field notes: gate_post_id = first non-empty _gate_post_id on the first-
+	 * donation order (falls back to _memberships_content_gate if absent); '' if
+	 * none. popup_id = first non-empty _newspack_popup_id; '' if none.
 	 *
 	 * @param DateTimeInterface $start Inclusive window start.
 	 * @param DateTimeInterface $end   Inclusive window end.
-	 * @return array<int, array{customer_id:int, ts:int}>
+	 * @return array<int, array{customer_id:int, ts:int, gate_post_id:string, popup_id:string}>
 	 */
 	public function get_new_donor_records_in_window( DateTimeInterface $start, DateTimeInterface $end ): array;
 

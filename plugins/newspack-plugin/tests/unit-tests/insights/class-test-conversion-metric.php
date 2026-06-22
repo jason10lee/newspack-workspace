@@ -2411,4 +2411,224 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 			$result['points']
 		);
 	}
+
+	// --- C13 order-meta-primary tests (3.3) -----------------------------------
+	// Donor records now carry gate_post_id / popup_id from order meta.
+	// The BQ proxy must NOT be called when every record has usable order meta.
+
+	/**
+	 * C13 order-meta gate: donor records with gate_post_id set → classified as
+	 * 'gate' WITHOUT any BQ proxy call. A proxy whose query() throws an exception
+	 * would fail the test, proving no BQ round-trip was made.
+	 */
+	public function test_source_mix_donors_gate_from_order_meta_skips_bq(): void {
+		$records = [
+			[
+				'customer_id'  => 201,
+				'ts'           => 1_700_000_000,
+				'gate_post_id' => '55',
+				'popup_id'     => '',
+			],
+			[
+				'customer_id'  => 202,
+				'ts'           => 1_700_001_000,
+				'gate_post_id' => '55',
+				'popup_id'     => '',
+			],
+		];
+
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_new_donor_records_in_window' )->willReturn( $records );
+
+		// Proxy whose query() would fail the test if called.
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->never() )->method( 'query' );
+
+		$metric          = new Conversion_Metric( $proxy, null, null, $donors );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_donors( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 2, $result['total'] );
+		$by = array_column( $result['slices'], null, 'source' );
+		$this->assertSame( 2, $by['gate']['count'] );
+		$this->assertSame( 0, $by['prompt']['count'] );
+		$this->assertSame( 0, $by['direct']['count'] );
+	}
+
+	/**
+	 * C13 order-meta prompt: donor records with popup_id (and no gate_post_id)
+	 * set → classified as 'prompt' WITHOUT any BQ proxy call.
+	 */
+	public function test_source_mix_donors_prompt_from_order_meta_skips_bq(): void {
+		$records = [
+			[
+				'customer_id'  => 301,
+				'ts'           => 1_700_000_000,
+				'gate_post_id' => '',
+				'popup_id'     => '42',
+			],
+		];
+
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_new_donor_records_in_window' )->willReturn( $records );
+
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->never() )->method( 'query' );
+
+		$metric          = new Conversion_Metric( $proxy, null, null, $donors );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_donors( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 1, $result['total'] );
+		$by = array_column( $result['slices'], null, 'source' );
+		$this->assertSame( 0, $by['gate']['count'] );
+		$this->assertSame( 1, $by['prompt']['count'] );
+		$this->assertSame( 0, $by['direct']['count'] );
+	}
+
+	/**
+	 * C13 order-meta fallback to BQ: donor records WITHOUT order meta
+	 * (gate_post_id='' AND popup_id='') fall to the temporal BQ matcher;
+	 * BQ IS called and drives the attribution.
+	 */
+	public function test_source_mix_donors_no_meta_falls_to_bq_matcher(): void {
+		$order_ts = 1_700_000_000;
+		$records  = [
+			[
+				'customer_id'  => 401,
+				'ts'           => $order_ts,
+				'gate_post_id' => '',
+				'popup_id'     => '',
+			],
+		];
+
+		// BQ returns a gate event 60s before the order.
+		$bq_rows = [
+			[
+				'attempt_ts'   => (string) ( ( $order_ts - 60 ) * 1_000_000 ),
+				'gate_post_id' => '99',
+				'popup_id'     => '',
+			],
+		];
+
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_new_donor_records_in_window' )->willReturn( $records );
+
+		// Proxy MUST be called once.
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->once() )
+			->method( 'query' )
+			->with( 'conversion_journey_source_mix_donors' )
+			->willReturn( $bq_rows );
+
+		$metric          = new Conversion_Metric( $proxy, null, null, $donors );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_donors( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 1, $result['total'] );
+		$by = array_column( $result['slices'], null, 'source' );
+		$this->assertSame( 1, $by['gate']['count'] ); // BQ-matched as gate.
+		$this->assertSame( 0, $by['prompt']['count'] );
+		$this->assertSame( 0, $by['direct']['count'] );
+	}
+
+	/**
+	 * C13 mixed: some records have order meta (classified without BQ), others
+	 * do not (go to matcher). BQ is called once; totals combine correctly.
+	 * 1 gate from meta + 1 prompt from BQ + 1 direct from BQ = 3 total.
+	 */
+	public function test_source_mix_donors_mixed_meta_and_bq(): void {
+		$order_ts = 1_700_000_000;
+		$records  = [
+			// Has gate meta → classified from order meta; BQ not needed for this one.
+			[
+				'customer_id'  => 501,
+				'ts'           => $order_ts,
+				'gate_post_id' => '77',
+				'popup_id'     => '',
+			],
+			// No meta → goes to BQ matcher; BQ returns a prompt event.
+			[
+				'customer_id'  => 502,
+				'ts'           => $order_ts + 1000,
+				'gate_post_id' => '',
+				'popup_id'     => '',
+			],
+			// No meta → goes to BQ matcher; BQ has no event → direct.
+			[
+				'customer_id'  => 503,
+				'ts'           => $order_ts + 9000,
+				'gate_post_id' => '',
+				'popup_id'     => '',
+			],
+		];
+
+		// BQ returns a prompt event 60s before customer 502's order only.
+		$bq_rows = [
+			[
+				'attempt_ts'   => (string) ( ( $order_ts + 1000 - 60 ) * 1_000_000 ),
+				'gate_post_id' => '',
+				'popup_id'     => '33',
+			],
+		];
+
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_new_donor_records_in_window' )->willReturn( $records );
+
+		// BQ must be called exactly once (for the 2 records lacking order meta).
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->once() )
+			->method( 'query' )
+			->with( 'conversion_journey_source_mix_donors' )
+			->willReturn( $bq_rows );
+
+		$metric          = new Conversion_Metric( $proxy, null, null, $donors );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_donors( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 3, $result['total'] ); // 1 gate + 1 prompt + 1 direct.
+		$by = array_column( $result['slices'], null, 'source' );
+		$this->assertSame( 1, $by['gate']['count'] );   // from order meta.
+		$this->assertSame( 1, $by['prompt']['count'] ); // from BQ matcher.
+		$this->assertSame( 1, $by['direct']['count'] ); // BQ-unmatched.
+	}
+
+	/**
+	 * 3.2 subscribers still use the BQ temporal matcher even when the proxy
+	 * returns an empty event list. Subscriber records carry no gate_post_id /
+	 * popup_id keys, so they all fall to the matcher (unchanged behaviour).
+	 */
+	public function test_source_mix_subscribers_still_uses_bq_matcher(): void {
+		$records = [
+			[
+				'customer_id' => 601,
+				'ts'          => 1_700_000_000,
+			],
+		];
+
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_new_subscriber_records_in_window' )->willReturn( $records );
+
+		// BQ must be called (subscriber records have no meta → all go to matcher).
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->once() )
+			->method( 'query' )
+			->with( 'conversion_journey_source_mix_subscribers' )
+			->willReturn( [] ); // No events → subscriber goes to direct.
+
+		$metric          = new Conversion_Metric( $proxy, null, $subs, null );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_subscribers( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 1, $result['total'] );
+		$by = array_column( $result['slices'], null, 'source' );
+		$this->assertSame( 0, $by['gate']['count'] );
+		$this->assertSame( 0, $by['prompt']['count'] );
+		$this->assertSame( 1, $by['direct']['count'] ); // No BQ event → direct.
+	}
 }

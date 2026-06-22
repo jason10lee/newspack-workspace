@@ -987,20 +987,76 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array<int, array{customer_id:int, ts:int}>
+	 * @return array<int, array{customer_id:int, ts:int, gate_post_id:string, popup_id:string}>
 	 */
 	public function get_new_donor_records_in_window( DateTimeInterface $start, DateTimeInterface $end ): array {
 		global $wpdb;
 		$prefix    = $wpdb->prefix;
 		$donations = $this->id_list( $this->donation_product_ids );
 
-		// Same inner aggregate as get_new_donors_in_window() (first completed/
-		// processing donation per customer), filtered to the window, returning rows.
-		// Guest orders (customer_id = 0) are excluded: a guest has no user
-		// account to match against BQ registration events, so they would always
-		// collapse to 'direct' and inflate that bucket artificially.
+		// Same first-donation-per-customer population as get_new_donors_in_window()
+		// (earliest completed/processing donation order, first occurrence in window).
+		// Guest orders (customer_id = 0) excluded: no user account to match against
+		// BQ registration events — same rationale as the old implementation.
+		//
+		// Order-meta subqueries: correlated against the FIRST donation order for each
+		// customer (the order whose date_created_gmt = the outer MIN). MySQL 5.7-safe —
+		// no window functions.
+		// gate_post_id: first non-empty _gate_post_id, falling back to legacy
+		// _memberships_content_gate (both NOT IN ('','0')).
+		// popup_id:     non-empty _newspack_popup_id.
+		// Empty / missing → '' returned for that column; the metric layer uses
+		// classify_source() which treats '' as "no meta" and falls to the matcher.
+		//
+		// Same-timestamp ties (two orders with the same MIN date) are resolved by the
+		// outer GROUP BY: MySQL picks an arbitrary first-order ID for each customer,
+		// which is acceptable — the meta is only a fallback signal, not an exact ID.
 		$sql = $wpdb->prepare(
-			"SELECT first_donations.customer_id, first_donations.first_donation_date FROM (
+			"SELECT
+				fd.customer_id,
+				fd.first_donation_date,
+				COALESCE((
+					SELECT om_gate.meta_value
+					FROM {$prefix}wc_orders o_first
+					JOIN {$prefix}wc_orders_meta om_gate
+						ON om_gate.order_id = o_first.id AND om_gate.meta_key = '_gate_post_id'
+					JOIN {$prefix}wc_order_product_lookup opl_first ON opl_first.order_id = o_first.id
+					WHERE o_first.type = 'shop_order'
+					  AND o_first.status IN ('wc-completed', 'wc-processing')
+					  AND opl_first.product_id IN ($donations)
+					  AND o_first.customer_id = fd.customer_id
+					  AND o_first.date_created_gmt = fd.first_donation_date
+					  AND om_gate.meta_value NOT IN ('', '0')
+					LIMIT 1
+				), (
+					SELECT om_legacy.meta_value
+					FROM {$prefix}wc_orders o_first
+					JOIN {$prefix}wc_orders_meta om_legacy
+						ON om_legacy.order_id = o_first.id AND om_legacy.meta_key = '_memberships_content_gate'
+					JOIN {$prefix}wc_order_product_lookup opl_first ON opl_first.order_id = o_first.id
+					WHERE o_first.type = 'shop_order'
+					  AND o_first.status IN ('wc-completed', 'wc-processing')
+					  AND opl_first.product_id IN ($donations)
+					  AND o_first.customer_id = fd.customer_id
+					  AND o_first.date_created_gmt = fd.first_donation_date
+					  AND om_legacy.meta_value NOT IN ('', '0')
+					LIMIT 1
+				), '') AS gate_post_id,
+				COALESCE((
+					SELECT om_popup.meta_value
+					FROM {$prefix}wc_orders o_first
+					JOIN {$prefix}wc_orders_meta om_popup
+						ON om_popup.order_id = o_first.id AND om_popup.meta_key = '_newspack_popup_id'
+					JOIN {$prefix}wc_order_product_lookup opl_first ON opl_first.order_id = o_first.id
+					WHERE o_first.type = 'shop_order'
+					  AND o_first.status IN ('wc-completed', 'wc-processing')
+					  AND opl_first.product_id IN ($donations)
+					  AND o_first.customer_id = fd.customer_id
+					  AND o_first.date_created_gmt = fd.first_donation_date
+					  AND om_popup.meta_value NOT IN ('', '0')
+					LIMIT 1
+				), '') AS popup_id
+			FROM (
 				SELECT o.customer_id, MIN(o.date_created_gmt) AS first_donation_date
 				FROM {$prefix}wc_orders o
 				JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = o.id
@@ -1009,34 +1065,35 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 				  AND opl.product_id IN ($donations)
 				  AND o.customer_id > 0
 				GROUP BY o.customer_id
-			) AS first_donations
-			WHERE first_donations.first_donation_date BETWEEN %s AND %s",
+			) AS fd
+			WHERE fd.first_donation_date BETWEEN %s AND %s",
 			$this->fmt( $start ),
 			$this->fmt( $end )
 		);
 
-		return $this->rows_to_records( $wpdb->get_results( $sql, ARRAY_A ), 'first_donation_date' );
+		return $this->rows_to_donor_records( $wpdb->get_results( $sql, ARRAY_A ) );
 	}
 
 	/**
-	 * Map (customer_id, <date column>) rows to [ ['customer_id'=>int,'ts'=>int], … ]
-	 * with ts as UTC epoch seconds. Blank dates skipped; UTC parse keeps the epoch
-	 * correct regardless of MySQL session timezone.
+	 * Map (customer_id, first_donation_date, gate_post_id, popup_id) rows to
+	 * donor source records with UTC epoch seconds. Blank dates are skipped.
+	 * UTC parse keeps the epoch correct regardless of MySQL session timezone.
 	 *
-	 * @param mixed  $rows     wpdb->get_results( …, ARRAY_A ) output.
-	 * @param string $date_key Row key holding the UTC `Y-m-d H:i:s` value.
-	 * @return array<int, array{customer_id:int, ts:int}>
+	 * @param mixed $rows wpdb->get_results( …, ARRAY_A ) output.
+	 * @return array<int, array{customer_id:int, ts:int, gate_post_id:string, popup_id:string}>
 	 */
-	private function rows_to_records( $rows, string $date_key ): array {
+	private function rows_to_donor_records( $rows ): array {
 		$utc     = new \DateTimeZone( 'UTC' );
 		$records = [];
 		foreach ( (array) $rows as $row ) {
-			if ( empty( $row[ $date_key ] ) ) {
+			if ( empty( $row['first_donation_date'] ) ) {
 				continue;
 			}
 			$records[] = [
-				'customer_id' => (int) $row['customer_id'],
-				'ts'          => ( new \DateTimeImmutable( $row[ $date_key ], $utc ) )->getTimestamp(),
+				'customer_id'  => (int) $row['customer_id'],
+				'ts'           => ( new \DateTimeImmutable( $row['first_donation_date'], $utc ) )->getTimestamp(),
+				'gate_post_id' => (string) ( $row['gate_post_id'] ?? '' ),
+				'popup_id'     => (string) ( $row['popup_id'] ?? '' ),
 			];
 		}
 		return $records;

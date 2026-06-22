@@ -899,10 +899,18 @@ final class Conversion_Metric {
 	}
 
 	/**
-	 * Source-mix via the Woo identity spine. The BQ query supplies exposure
-	 * events (attempt_ts in microseconds + gate/popup params); each Woo
-	 * conversion record is matched to the nearest preceding event within
-	 * Source_Matcher::WINDOW_ORDER_SECONDS, unmatched → direct.
+	 * Source-mix via the Woo identity spine. For records that carry order-meta
+	 * source signals (gate_post_id / popup_id from the donor storage layer),
+	 * classification is done directly from the meta — gate wins over prompt wins
+	 * over "no meta". Records without order-meta (all subscriber records, and
+	 * donor records with no meta on the first-donation order) fall through to
+	 * the BQ temporal matcher.
+	 *
+	 * BQ round-trip cost: the proxy query is only issued when ≥1 record lacks
+	 * order-meta. If every donor record was classified via order meta the BQ
+	 * call is skipped entirely, making 3.3 hub-independent for those donations.
+	 * Subscriber records (3.2) never carry gate_post_id / popup_id so they
+	 * always go through the matcher — unchanged behaviour.
 	 *
 	 * @param string                                     $query_name Hub catalog query name.
 	 * @param array<int, array{customer_id:int, ts:int}> $records    Woo conversion records.
@@ -923,6 +931,54 @@ final class Conversion_Metric {
 			];
 		}
 
+		// Pass 1: order-meta classification (donor records only).
+		// Subscriber records carry no gate_post_id / popup_id keys so they always
+		// fall to the matcher below — behaviour is unchanged for 3.2.
+		$meta_counts    = [
+			'gate'   => 0,
+			'prompt' => 0,
+			'direct' => 0,
+		];
+		$matcher_records = []; // Records without usable order-meta → to BQ matcher.
+
+		foreach ( $records as $record ) {
+			// array_key_exists differentiates "key present but empty-string" from
+			// "key absent" (subscriber records). Both '' and '0' count as "no meta"
+			// since the SQL already guards NOT IN ('','0').
+			$has_gate  = array_key_exists( 'gate_post_id', $record ) && '' !== (string) $record['gate_post_id'];
+			$has_popup = array_key_exists( 'popup_id', $record ) && '' !== (string) $record['popup_id'];
+
+			if ( $has_gate ) {
+				++$meta_counts['gate'];
+			} elseif ( $has_popup ) {
+				++$meta_counts['prompt'];
+			} else {
+				// No order-meta (or subscriber record with no meta keys): fall to matcher.
+				$matcher_records[] = $record;
+			}
+		}
+
+		// If every record was classified via order meta, skip the BQ round-trip.
+		if ( empty( $matcher_records ) ) {
+			$total  = array_sum( $meta_counts );
+			$safe   = $total > 0 ? $total : 1;
+			$slices = [];
+			foreach ( self::SOURCES as $source ) {
+				$count    = (int) ( $meta_counts[ $source ] ?? 0 );
+				$slices[] = [
+					'source' => $source,
+					'count'  => $count,
+					'pct'    => (float) ( $count / $safe ),
+				];
+			}
+			return [
+				'state'  => 'populated',
+				'total'  => $total,
+				'slices' => $slices,
+			];
+		}
+
+		// Pass 2: BQ temporal matcher for the remaining records.
 		// Widen the event fetch by one day before $start so that a conversion
 		// occurring just after midnight on the window's first day can still be
 		// matched to an exposure event that occurred just before midnight the
@@ -954,17 +1010,25 @@ final class Conversion_Metric {
 		}
 
 		$match_input = [];
-		foreach ( $records as $record ) {
+		foreach ( $matcher_records as $record ) {
 			$match_input[] = [
 				'key' => (int) $record['customer_id'],
 				'ts'  => (int) $record['ts'],
 			];
 		}
 
-		$map    = Source_Matcher::attach_sources( $match_input, $events, Source_Matcher::WINDOW_ORDER_SECONDS, 0 );
-		$counts = Source_Matcher::count_by_source( $map );
-		$total  = array_sum( $counts );
-		$safe   = $total > 0 ? $total : 1;
+		$map            = Source_Matcher::attach_sources( $match_input, $events, Source_Matcher::WINDOW_ORDER_SECONDS, 0 );
+		$matcher_counts = Source_Matcher::count_by_source( $map );
+
+		// Merge order-meta counts with BQ matcher counts.
+		$counts = [
+			'gate'   => $meta_counts['gate'] + (int) ( $matcher_counts['gate'] ?? 0 ),
+			'prompt' => $meta_counts['prompt'] + (int) ( $matcher_counts['prompt'] ?? 0 ),
+			'direct' => $meta_counts['direct'] + (int) ( $matcher_counts['direct'] ?? 0 ),
+		];
+
+		$total = array_sum( $counts );
+		$safe  = $total > 0 ? $total : 1;
 
 		$slices = [];
 		foreach ( self::SOURCES as $source ) {
