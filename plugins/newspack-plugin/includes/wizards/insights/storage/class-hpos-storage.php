@@ -1403,4 +1403,108 @@ class HPOS_Storage implements Storage_Interface {
 		}
 		return $out;
 	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @param DateTimeInterface $start Inclusive window start.
+	 * @param DateTimeInterface $end   Inclusive window end.
+	 * @return array<int, array{order_id:int, gate_id:?string, popup_id:?string, order_total:float}>
+	 */
+	public function get_attributed_subscription_orders( DateTimeInterface $start, DateTimeInterface $end ): array {
+		global $wpdb;
+		$prefix        = $wpdb->prefix;
+		$donations     = $this->id_list( $this->donation_product_ids );
+		$subscriptions = $this->subscription_product_ids_sql();
+
+		// NPPD-1746: structurally mirrors the legacy reader — both `_gate_post_id`
+		// and `_newspack_popup_id` can be written more than once per order, so each
+		// is derived via correlated MIN() and matched with EXISTS (never a
+		// multiplying JOIN); `total_amount` is a column on the orders table (no meta
+		// multiplication). One row per attributed order; gate-precedence is applied
+		// in Subscribers_Metric. Initial orders only; renewals excluded via
+		// `_subscription_renewal`; scoped to non-donation subscription products.
+		//
+		// UNVERIFIED AGAINST LIVE HPOS DATA (NPPD-1746): both Phase-1 subscription
+		// publishers measured are legacy-storage, so this HPOS query has not
+		// executed against real HPOS subscription orders. It is mirrored from the
+		// legacy shape and exercised by the DDL integration test; confirm the count +
+		// revenue at first HPOS-publisher contact. Same posture as the NPPD-1685
+		// donation HPOS reader.
+		$sql = $wpdb->prepare(
+			"SELECT
+				ord.id AS order_id,
+				(
+					SELECT MIN(g.meta_value)
+					FROM {$prefix}wc_orders_meta g
+					WHERE g.order_id = ord.id AND g.meta_key = '_gate_post_id'
+					  AND g.meta_value NOT IN ('', '0')
+				) AS gate_id,
+				(
+					SELECT MIN(pop.meta_value)
+					FROM {$prefix}wc_orders_meta pop
+					WHERE pop.order_id = ord.id AND pop.meta_key = '_newspack_popup_id'
+					  AND pop.meta_value NOT IN ('', '0')
+				) AS popup_id,
+				ord.total_amount AS order_total
+			FROM {$prefix}wc_orders ord
+			WHERE ord.type = 'shop_order'
+			  AND ord.status IN ('wc-completed', 'wc-processing')
+			  AND ord.date_created_gmt BETWEEN %s AND %s
+			  AND NOT EXISTS (
+			      SELECT 1 FROM {$prefix}wc_orders_meta rn
+			      WHERE rn.order_id = ord.id AND rn.meta_key = '_subscription_renewal'
+			        AND rn.meta_value NOT IN ('', '0')
+			  )
+			  AND EXISTS (
+			      SELECT 1 FROM {$prefix}wc_order_product_lookup opl
+			      WHERE opl.order_id = ord.id
+			        AND opl.product_id IN ($subscriptions)
+			        AND opl.product_id NOT IN ($donations)
+			  )
+			  AND (
+			      EXISTS (
+			          SELECT 1 FROM {$prefix}wc_orders_meta g
+			          WHERE g.order_id = ord.id AND g.meta_key = '_gate_post_id'
+			            AND g.meta_value NOT IN ('', '0')
+			      )
+			      OR EXISTS (
+			          SELECT 1 FROM {$prefix}wc_orders_meta pop
+			          WHERE pop.order_id = ord.id AND pop.meta_key = '_newspack_popup_id'
+			            AND pop.meta_value NOT IN ('', '0')
+			      )
+			  )",
+			$this->fmt( $start ),
+			$this->fmt( $end )
+		);
+
+		return $this->shape_attributed_subscription_rows( (array) $wpdb->get_results( $sql, ARRAY_A ) );
+	}
+
+	/**
+	 * Normalize raw attributed-subscription-order rows to the typed per-order shape.
+	 * A null gate/popup id (no such meta on the order) stays null so the orchestrator
+	 * can apply gate precedence; `order_total` is coerced to float. Shared row shape
+	 * with Legacy_Storage so both backends return identically-typed rows.
+	 *
+	 * @param array<int, array<string, mixed>> $rows Raw `$wpdb` rows.
+	 * @return array<int, array{order_id:int, gate_id:?string, popup_id:?string, order_total:float}>
+	 */
+	private function shape_attributed_subscription_rows( array $rows ): array {
+		$out = [];
+		foreach ( $rows as $row ) {
+			$gate_id  = isset( $row['gate_id'] ) && '' !== (string) $row['gate_id'] ? (string) $row['gate_id'] : null;
+			$popup_id = isset( $row['popup_id'] ) && '' !== (string) $row['popup_id'] ? (string) $row['popup_id'] : null;
+			if ( null === $gate_id && null === $popup_id ) {
+				continue;
+			}
+			$out[] = [
+				'order_id'    => (int) ( $row['order_id'] ?? 0 ),
+				'gate_id'     => $gate_id,
+				'popup_id'    => $popup_id,
+				'order_total' => (float) ( $row['order_total'] ?? 0 ),
+			];
+		}
+		return $out;
+	}
 }

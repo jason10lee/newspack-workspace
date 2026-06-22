@@ -24,6 +24,7 @@ defined( 'ABSPATH' ) || exit;
 use DateTimeInterface;
 use DateTimeZone;
 use Newspack\Insights\BigQuery_Proxy_Client;
+use Newspack\Insights\Subscribers_Metric;
 use Newspack\Insights\Woo_Order_Resolver;
 
 /**
@@ -51,6 +52,38 @@ final class Gates_Metric {
 	const CACHE_PREFIX = 'newspack_insights_tab4_v1:';
 
 	/**
+	 * Data-source classification per metric key (NPPD-1746), the Gates-tab twin of
+	 * {@see Prompts_Metric::METRIC_SOURCES}:
+	 *
+	 *  - 'hub'    — fully hub-backed; errors when the proxy is down.
+	 *  - 'local'  — fully local (Woo order meta); survives a hub outage.
+	 *  - 'hybrid' — local numerator + hub denominator; a hub failure makes it
+	 *               genuinely uncomputable, so it counts as hub-backed for the banner.
+	 *
+	 * Read by {@see \Newspack\Insights\Gates_REST_Controller::is_window_all_error()}
+	 * so the "whole tab failed" banner fires when all hub-backed metrics error, even
+	 * though a surviving local card (paywall revenue, sourced from order meta) still
+	 * renders. Keys mirror {@see Gates_REST_Controller::build_window()}.
+	 *
+	 * @var array<string, string>
+	 */
+	public const METRIC_SOURCES = [
+		'total_gate_impressions'             => 'hub',
+		'unique_readers_reached'             => 'hub',
+		'avg_exposures_per_reader'           => 'hub',
+		'sessions_with_gate'                 => 'hub',
+		'regwall_conversion_direct'          => 'hub',
+		'regwall_conversion_influenced_7d'   => 'hub',
+		'paywall_conversion_direct'          => 'hybrid', // NPPD-1746: local order-meta (gate) numerator + hub per-gate-impressions denominator.
+		'paywall_conversion_influenced_14d'  => 'hub',
+		'total_paywall_revenue_direct'       => 'local',  // NPPD-1746: pure Woo order meta (gate surface); survives a hub outage.
+		'avg_revenue_per_paywall_conversion' => 'local',  // NPPD-1746: derived from the same order-meta source as total revenue.
+		'conversion_funnel'                  => 'hub',
+		'exposures_distribution'             => 'hub',
+		'performance_by_gate'                => 'hub',
+	];
+
+	/**
 	 * Proxy client used to dispatch catalog queries to the hub.
 	 *
 	 * @var BigQuery_Proxy_Client
@@ -65,29 +98,94 @@ final class Gates_Metric {
 	private Woo_Order_Resolver $woo_resolver;
 
 	/**
-	 * Per-request memoization for `fetch_paywall_direct_woo_join`.
+	 * Per-request memo for `gates_performance_by_gate` hub rows, keyed by `Ymd|Ymd`
+	 * window (NPPD-1746). The direct paywall-rate denominator
+	 * ({@see self::fetch_gate_impressions_by_gate()}) and the per-gate table
+	 * ({@see self::get_performance_by_gate()}) both read this query for the same
+	 * window in one request; memoizing avoids the duplicate hub round-trip (the same
+	 * fix NPPD-1745 applied to the prompts performance query).
 	 *
-	 * Keyed by `Ymd|Ymd` of the (start, end) UTC dates. The two revenue methods
-	 * (`get_total_paywall_revenue_direct` and `get_avg_revenue_per_paywall_conversion`)
-	 * both source from `gates_paywall_revenue_direct`; this cache avoids issuing
-	 * two identical HTTP round-trips to the hub for the same window.
-	 *
-	 * @var array<string, array{rows:array, conversions:int, revenue:float}|\WP_Error>
+	 * @var array<string, array|\WP_Error>
 	 */
-	private array $paywall_direct_cache = [];
+	private array $performance_by_gate_cache = [];
+
+	/**
+	 * Subscribers_Metric collaborator (NPPD-1746). Owns the WC-native subscription
+	 * storage used to source the DIRECT paywall conversion + revenue metrics (gate
+	 * surface) from order meta instead of the GA4 attempt → Woo_Order_Resolver join.
+	 * Lazily built on first direct-paywall call ({@see self::subscribers_metric()}).
+	 * Influenced (14d) paywall metrics still use the resolver.
+	 *
+	 * @var Subscribers_Metric|null
+	 */
+	private ?Subscribers_Metric $subscribers_metric;
 
 	/**
 	 * Constructor. Optionally inject collaborators (used in tests).
 	 *
-	 * @param BigQuery_Proxy_Client|null $proxy        Injected proxy client, or null to lazy-resolve.
-	 * @param Woo_Order_Resolver|null    $woo_resolver Injected Woo resolver, or null to lazy-create.
+	 * @param BigQuery_Proxy_Client|null $proxy              Injected proxy client, or null to lazy-resolve.
+	 * @param Woo_Order_Resolver|null    $woo_resolver       Injected Woo resolver, or null to lazy-create.
+	 * @param Subscribers_Metric|null    $subscribers_metric Injected subscribers collaborator (NPPD-1746), or null to lazy-create.
 	 */
 	public function __construct(
 		?BigQuery_Proxy_Client $proxy = null,
-		?Woo_Order_Resolver $woo_resolver = null
+		?Woo_Order_Resolver $woo_resolver = null,
+		?Subscribers_Metric $subscribers_metric = null
 	) {
-		$this->proxy        = $proxy ?? new BigQuery_Proxy_Client();
-		$this->woo_resolver = $woo_resolver ?? new Woo_Order_Resolver();
+		$this->proxy              = $proxy ?? new BigQuery_Proxy_Client();
+		$this->woo_resolver       = $woo_resolver ?? new Woo_Order_Resolver();
+		$this->subscribers_metric = $subscribers_metric;
+	}
+
+	/**
+	 * Lazily resolve the Subscribers_Metric collaborator (NPPD-1746).
+	 *
+	 * @return Subscribers_Metric
+	 */
+	private function subscribers_metric(): Subscribers_Metric {
+		if ( null === $this->subscribers_metric ) {
+			$this->subscribers_metric = new Subscribers_Metric();
+		}
+		return $this->subscribers_metric;
+	}
+
+	/**
+	 * Whether WooCommerce is active. The direct paywall conversion/revenue metrics
+	 * read local Woo orders (NPPD-1746), so they no-op to an empty state on non-WC
+	 * publishers. Filterable so tests can exercise both paths without toggling a
+	 * global class (the class is `final`, so it can't be doubled). Mirrors
+	 * {@see Prompts_Metric::woocommerce_active()}. Public because the REST controller
+	 * reads it to scope the tab-error banner (a non-WC hybrid card short-circuits
+	 * before reaching the hub, so it must not count as a hub-backed survivor).
+	 *
+	 * @return bool
+	 */
+	public function woocommerce_active(): bool {
+		/** This filter is documented in includes/wizards/insights/metrics/class-prompts-metric.php */
+		return (bool) apply_filters( 'newspack_insights_woocommerce_active', class_exists( 'WooCommerce' ) );
+	}
+
+	/**
+	 * Coherence-guarded conversion-rate value (NPPD-1746), the gate-surface twin of
+	 * {@see Prompts_Metric::rate_value()}. Numerator is an order-meta (local,
+	 * anonymous-inclusive) conversion count; denominator is the anonymous-inclusive
+	 * hub impressions of the SAME gates. Returns a float (a genuine 0.0 when there
+	 * are impressions but no conversions) or null when not computable: no impressions
+	 * (em-dash), or conversions > impressions (a cross-surface incoherence that must
+	 * not render as a >100% rate).
+	 *
+	 * @param int $conversions Gate-attributed subscription conversions (order meta).
+	 * @param int $impressions Matched-population gate impressions (hub).
+	 * @return float|null
+	 */
+	private function rate_value( int $conversions, int $impressions ): ?float {
+		if ( $impressions <= 0 ) {
+			return null;
+		}
+		if ( $conversions > $impressions ) {
+			return null;
+		}
+		return (float) $conversions / $impressions;
 	}
 
 	/**
@@ -353,48 +451,74 @@ final class Gates_Metric {
 		return $this->populated_scalar( $denominator > 0 ? $numerator / $denominator : 0.0, true, $denominator, 'rate', $numerator );
 	}
 
+
 	/**
-	 * Fetch paywall direct rows and return matched-order count + summed revenue.
-	 *
-	 * Used by both `get_total_paywall_revenue_direct` and
-	 * `get_avg_revenue_per_paywall_conversion` (derived).
+	 * Fetch (memoized per window) the `gates_performance_by_gate` hub rows, so the
+	 * direct paywall-rate denominator and the per-gate table share one round-trip
+	 * per request (NPPD-1746).
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{rows:array, conversions:int, revenue:float}|\WP_Error WP_Error on proxy failure.
+	 * @return array|\WP_Error Rows, or the proxy error.
 	 */
-	private function fetch_paywall_direct_woo_join(
-		DateTimeInterface $start,
-		DateTimeInterface $end
-	) {
-		// Normalize both bounds to UTC Ymd so callers passing different timezone
-		// objects don't bust the cache for the same logical window. Matches the
-		// proxy client's own UTC normalization.
-		$utc       = new \DateTimeZone( 'UTC' );
+	private function fetch_performance_by_gate_rows( DateTimeInterface $start, DateTimeInterface $end ) {
+		$utc       = new DateTimeZone( 'UTC' );
 		$cache_key = \DateTimeImmutable::createFromInterface( $start )->setTimezone( $utc )->format( 'Ymd' )
 			. '|'
 			. \DateTimeImmutable::createFromInterface( $end )->setTimezone( $utc )->format( 'Ymd' );
-
-		if ( array_key_exists( $cache_key, $this->paywall_direct_cache ) ) {
-			return $this->paywall_direct_cache[ $cache_key ];
+		if ( ! array_key_exists( $cache_key, $this->performance_by_gate_cache ) ) {
+			$this->performance_by_gate_cache[ $cache_key ] = $this->proxy->query( 'gates_performance_by_gate', $start, $end );
 		}
+		return $this->performance_by_gate_cache[ $cache_key ];
+	}
 
-		$rows = $this->proxy->query( 'gates_paywall_revenue_direct', $start, $end );
+	/**
+	 * Per-gate impressions map from the hub's `gates_performance_by_gate` rows
+	 * (NPPD-1746), keyed by gate_post_id (string). Used as the per-gate-keyed
+	 * denominator source for the direct paywall rate: the rate restricts its
+	 * denominator to the impressions of the gates that actually converted (see
+	 * {@see self::get_paywall_conversion_direct()}).
+	 *
+	 * NOTE (denominator precision): the hub query computes `checkout_impressions`
+	 * (impressions on gates carrying a checkout button — the paywall-capable subset)
+	 * but does NOT expose it as an output column; it is consumed only inside the
+	 * hub's `paywall_attempt_rate`. The exposed per-gate `impressions` IS true gate
+	 * impressions (anonymous-inclusive `np_gate_interaction(seen)` count) and equals
+	 * `checkout_impressions` exactly for a pure paywall gate; the two diverge only
+	 * for a gate that sometimes shows a checkout button and sometimes doesn't (where
+	 * `impressions` runs slightly larger → the rate reads slightly lower, i.e.
+	 * conservative). Until the hub follow-up NPPD-1749 exposes `checkout_impressions`
+	 * as an output column, `impressions` is the precise available denominator; the
+	 * swap is then one line here. Anonymous-inclusive either way, so no anonymous-at-
+	 * attempt bias is reintroduced.
+	 *
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
+	 * @return array<string, int>|\WP_Error gate_post_id => impressions, or the proxy error.
+	 */
+	private function fetch_gate_impressions_by_gate( DateTimeInterface $start, DateTimeInterface $end ) {
+		$rows = $this->fetch_performance_by_gate_rows( $start, $end );
 		if ( is_wp_error( $rows ) ) {
-			$this->paywall_direct_cache[ $cache_key ] = $rows;
 			return $rows;
 		}
-
-		// A successful but empty response is real "no conversions", not an error:
-		// zero conversions / zero revenue, which the callers render as $0.00.
-		$rows   = is_array( $rows ) ? $rows : [];
-		$result = [
-			'rows'        => $rows,
-			'conversions' => $this->woo_resolver->count_completed_orders( $rows ),
-			'revenue'     => $this->woo_resolver->sum_completed_revenue( $rows ),
-		];
-		$this->paywall_direct_cache[ $cache_key ] = $result;
-		return $result;
+		if ( ! is_array( $rows ) ) {
+			// Malformed hub response (not an array of rows): surface it so the paywall
+			// rate errors instead of silently dividing by a fabricated 0 denominator
+			// (NPPD-1745 #3, mirrored proactively to the paywall rate).
+			return new \WP_Error( 'bigquery_proxy_malformed_rows', __( 'The query returned an unexpected shape.', 'newspack-plugin' ) );
+		}
+		$map = [];
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$gate_id = (string) ( $row['gate_post_id'] ?? '' );
+			if ( '' === $gate_id || '0' === $gate_id ) {
+				continue;
+			}
+			$map[ $gate_id ] = (int) ( $row['impressions'] ?? 0 );
+		}
+		return $map;
 	}
 
 	// --- Section 1: Gate exposure ---------------------------------------
@@ -477,7 +601,39 @@ final class Gates_Metric {
 	 * @return array
 	 */
 	public function get_paywall_conversion_direct( DateTimeInterface $start, DateTimeInterface $end ): array {
-		return $this->compute_paywall_rate_from_proxy( 'gates_paywall_conversion_direct', $start, $end );
+		// NPPD-1746: rate = gate-attributed subscription conversions (Woo order meta,
+		// anonymous-inclusive) ÷ impressions of the SAME gates (hub,
+		// `gates_performance_by_gate`). PER-GATE keyed: the denominator is restricted
+		// to the gates that actually converted, keeping numerator and denominator on
+		// the same population. Numerator local, denominator hub → 'hybrid' (see the
+		// Gates controller METRIC_SOURCES): a hub impressions failure makes the rate
+		// genuinely uncomputable and counts toward the tab-error banner. Same
+		// coherence guard as the prompts subscription/donation rate-direct. Replaces
+		// the prior attempt-row denominator (`gates_paywall_conversion_direct`), which
+		// undercounted via the GA4 cookie → customer_id join.
+		if ( ! $this->woocommerce_active() ) {
+			// Non-WC publisher: no local conversions to count. Empty state, not a fake
+			// 0% (NPPD-1737 Option A scoping).
+			return $this->populated_scalar( 0.0, false, 0, 'rate', 0 );
+		}
+
+		$impressions_by_gate = $this->fetch_gate_impressions_by_gate( $start, $end );
+		if ( is_wp_error( $impressions_by_gate ) ) {
+			return $this->error_scalar( 'rate', $impressions_by_gate );
+		}
+
+		$by_gate     = $this->subscribers_metric()->get_attributed_subscription_conversions( $start, $end )['by_gate'];
+		$conversions = 0;
+		$impressions = 0;
+		foreach ( $by_gate as $gate_id => $row ) {
+			$conversions += (int) $row['conversions'];
+			$impressions += (int) ( $impressions_by_gate[ (string) $gate_id ] ?? 0 );
+		}
+
+		$rate = $this->rate_value( $conversions, $impressions );
+		return null === $rate
+			? $this->populated_scalar( 0.0, false, $impressions, 'rate', $conversions )
+			: $this->populated_scalar( $rate, true, $impressions, 'rate', $conversions );
 	}
 
 	/**
@@ -499,11 +655,40 @@ final class Gates_Metric {
 	 * @return array
 	 */
 	public function get_total_paywall_revenue_direct( DateTimeInterface $start, DateTimeInterface $end ): array {
-		$joined = $this->fetch_paywall_direct_woo_join( $start, $end );
-		if ( is_wp_error( $joined ) ) {
-			return $this->error_scalar( 'currency', $joined );
+		// NPPD-1746: source DIRECT paywall revenue from order meta (gate surface —
+		// `_gate_post_id` on initial subscription orders) instead of the GA4 attempt
+		// → customer_id join. Mirrors the prompts subscription revenue-direct. Local /
+		// hub-resilient: the em-dash is conversions-based ("no gate-attributed
+		// subscriptions"), not impressions-based — revenue does not fetch impressions
+		// by design, so its em-dash semantics differ on purpose from the sibling
+		// (hybrid) rate card.
+		if ( ! $this->woocommerce_active() ) {
+			// Non-WC publisher: no orders to read. Empty state, not a real $0.
+			return $this->populated_scalar( 0.0, false, 0, 'currency' );
 		}
-		return $this->populated_scalar( $joined['revenue'], true, $joined['conversions'], 'currency' );
+		[ $conversions, $revenue ] = $this->sum_gate_attributed_subscriptions( $start, $end );
+		return $this->populated_scalar( $revenue, $conversions > 0, $conversions, 'currency' );
+	}
+
+	/**
+	 * Sum gate-attributed subscription conversions + revenue (order meta) for the
+	 * window — the shared local numerator behind both paywall revenue-direct cards
+	 * (NPPD-1746), so total revenue and average-per-conversion read one source and
+	 * reconcile (total = avg × conversions).
+	 *
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
+	 * @return array{0:int, 1:float} [ conversions, revenue ].
+	 */
+	private function sum_gate_attributed_subscriptions( DateTimeInterface $start, DateTimeInterface $end ): array {
+		$by_gate     = $this->subscribers_metric()->get_attributed_subscription_conversions( $start, $end )['by_gate'];
+		$conversions = 0;
+		$revenue     = 0.0;
+		foreach ( $by_gate as $row ) {
+			$conversions += (int) $row['conversions'];
+			$revenue     += (float) $row['revenue'];
+		}
+		return [ $conversions, $revenue ];
 	}
 
 	/**
@@ -514,14 +699,16 @@ final class Gates_Metric {
 	 * @return array
 	 */
 	public function get_avg_revenue_per_paywall_conversion( DateTimeInterface $start, DateTimeInterface $end ): array {
-		$joined = $this->fetch_paywall_direct_woo_join( $start, $end );
-		if ( is_wp_error( $joined ) ) {
-			return $this->error_scalar( 'currency', $joined );
+		// NPPD-1746: derived from the SAME order-meta source as
+		// get_total_paywall_revenue_direct() so the two reconcile (total = avg ×
+		// conversions). On a non-WC publisher there are no orders → empty state.
+		if ( ! $this->woocommerce_active() ) {
+			return $this->populated_scalar( 0.0, false, 0, 'currency' );
 		}
-		$conversions = $joined['conversions'];
+		[ $conversions, $revenue ] = $this->sum_gate_attributed_subscriptions( $start, $end );
 		// No conversions → a real $0.00 average, flagged non-computable.
 		return $this->populated_scalar(
-			$conversions > 0 ? $joined['revenue'] / $conversions : 0.0,
+			$conversions > 0 ? $revenue / $conversions : 0.0,
 			$conversions > 0,
 			$conversions,
 			'currency'
@@ -728,7 +915,7 @@ final class Gates_Metric {
 	 * @return array{state: string, rows: array, error_code?: string, error_message?: string}
 	 */
 	public function get_performance_by_gate( DateTimeInterface $start, DateTimeInterface $end ): array {
-		$rows = $this->proxy->query( 'gates_performance_by_gate', $start, $end );
+		$rows = $this->fetch_performance_by_gate_rows( $start, $end );
 		if ( is_wp_error( $rows ) ) {
 			return $this->error_collection( 'rows', $rows );
 		}

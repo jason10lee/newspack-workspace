@@ -352,4 +352,34 @@ interface Storage_Interface {
 	 * @return array<int, array{customer_id:int, registered_ts:int, first_sub_ts:int}>
 	 */
 	public function get_subscription_conversion_lags(): array;
+
+	/**
+	 * Prompt/gate-attributed subscription conversion orders in a window, sourced
+	 * from order meta rather than the GA4 attempt → customer_id join (NPPD-1746,
+	 * the subscription counterpart to the donation reader in
+	 * {@see Donors_Storage_Interface::get_prompt_attributed_donation_conversions()}).
+	 *
+	 * A subscription/paywall order can carry `_gate_post_id` (it stemmed from a
+	 * paywall gate) OR `_newspack_popup_id` (it stemmed from a popup) OR neither
+	 * (the subscriptions landing page / organic). This is therefore a TWO-KEY
+	 * surface: the method returns, per order, the one gate id and the one popup id
+	 * resolved off the order, leaving gate-vs-popup precedence and bucketing to the
+	 * orchestrator ({@see \Newspack\Insights\Subscribers_Metric}). Meta-absence is
+	 * not a coverage gap — organic orders carry neither key and are correctly
+	 * excluded from a prompt/gate conversion metric. No fallback, no union.
+	 *
+	 * Scope: INITIAL completed/processing orders containing a NON-donation
+	 * subscription product — renewal orders inherit the parent's meta and are
+	 * excluded via `_subscription_renewal`. Both `_gate_post_id` and
+	 * `_newspack_popup_id` can be written more than once per order (and through
+	 * different code paths), so each id is derived via a correlated `MIN()` and the
+	 * order is matched with `EXISTS` — never a multiplying JOIN — so duplicate meta
+	 * cannot re-inflate counts or revenue (the NPPD-1685 2x defect). Only orders
+	 * carrying at least one of the two keys are returned.
+	 *
+	 * @param DateTimeInterface $start Inclusive window start.
+	 * @param DateTimeInterface $end   Inclusive window end.
+	 * @return array<int, array{order_id:int, gate_id:?string, popup_id:?string, order_total:float}>
+	 */
+	public function get_attributed_subscription_orders( DateTimeInterface $start, DateTimeInterface $end ): array;
 }
