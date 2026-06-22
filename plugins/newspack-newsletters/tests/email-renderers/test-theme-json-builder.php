@@ -237,4 +237,87 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 		remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_false' );
 		$this->assertArrayNotHasKey( 'button', $theme['styles']['elements'] ?? [] );
 	}
+
+	/**
+	 * Helper: call the protected resolve_button_border_radius_from_raw() method.
+	 *
+	 * @param array $raw Raw theme.json data to pass to the resolver.
+	 * @return string Resolved radius string.
+	 */
+	private function resolve_radius( array $raw ): string {
+		$method = new \ReflectionMethod( Theme_Json_Builder::class, 'resolve_button_border_radius_from_raw' );
+		$method->setAccessible( true );
+		return $method->invoke( null, $raw );
+	}
+
+	/**
+	 * Resolver: var( --wp--custom--border--radius-medium ) → 0.375rem → 6px.
+	 *
+	 * Exercises the full var-resolution + rem→px path without needing a live theme.
+	 */
+	public function test_resolver_resolves_var_rem_to_px() {
+		$raw = [
+			'styles'   => [
+				'elements' => [
+					'button' => [
+						'border' => [
+							'radius' => 'var( --wp--custom--border--radius-medium )',
+						],
+					],
+				],
+			],
+			'settings' => [
+				'custom' => [
+					'border' => [
+						'radius-medium' => '0.375rem',
+					],
+				],
+			],
+		];
+
+		$this->assertSame( '6px', $this->resolve_radius( $raw ) );
+	}
+
+	/**
+	 * A non-px value like "50%" is not email-safe and must fall back to the default.
+	 *
+	 * Covers the Important fix: the final guard that prevents pass-through of
+	 * non-px values (percentages, vw, unresolvable vars, etc.).
+	 */
+	public function test_resolver_falls_back_for_non_px_value() {
+		$raw = [
+			'styles' => [
+				'elements' => [
+					'button' => [
+						'border' => [
+							'radius' => '50%',
+						],
+					],
+				],
+			],
+		];
+
+		$this->assertSame( '4px', $this->resolve_radius( $raw ) );
+	}
+
+	/**
+	 * A genuine px value from a theme must pass through unchanged.
+	 *
+	 * Verifies the final guard allows real px values (e.g. "8px", "4.5px").
+	 */
+	public function test_resolver_passes_through_px_value() {
+		$raw = [
+			'styles' => [
+				'elements' => [
+					'button' => [
+						'border' => [
+							'radius' => '8px',
+						],
+					],
+				],
+			],
+		];
+
+		$this->assertSame( '8px', $this->resolve_radius( $raw ) );
+	}
 }

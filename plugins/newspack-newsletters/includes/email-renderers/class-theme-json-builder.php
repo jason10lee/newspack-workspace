@@ -139,9 +139,6 @@ class Theme_Json_Builder {
 	 * Resolve the active theme's button border-radius to an email-safe px string.
 	 *
 	 * Reads `styles.elements.button.border.radius` from the merged theme.json.
-	 * If the value is a `var( --wp--custom--... )` reference, it is resolved via
-	 * `settings.custom`. rem/em values are converted to px (× 16). Values that
-	 * are already in px, unitless, or otherwise unrecognised are returned as-is.
 	 * Falls back to `Email_Defaults::DEFAULT_BUTTON_BORDER_RADIUS` when the theme
 	 * defines nothing.
 	 *
@@ -149,7 +146,21 @@ class Theme_Json_Builder {
 	 */
 	private static function resolve_button_border_radius(): string {
 		$merged = \WP_Theme_JSON_Resolver::get_merged_data();
-		$raw    = $merged->get_raw_data();
+		return self::resolve_button_border_radius_from_raw( $merged->get_raw_data() );
+	}
+
+	/**
+	 * Resolve a button border-radius from a raw theme.json data array.
+	 *
+	 * If the value is a `var( --wp--custom--... )` reference, it is resolved via
+	 * `settings.custom`. rem/em values are converted to px (× 16). Values already
+	 * in px pass through unchanged. Any non-px result (e.g. `50%`, `vw` units, or
+	 * an unresolvable var) falls back to the email-safe default.
+	 *
+	 * @param array $raw Raw theme.json data array (from WP_Theme_JSON::get_raw_data()).
+	 * @return string Email-safe border-radius px value (e.g. "6px", "4px").
+	 */
+	protected static function resolve_button_border_radius_from_raw( array $raw ): string {
 		$radius = $raw['styles']['elements']['button']['border']['radius'] ?? null;
 
 		if ( empty( $radius ) ) {
@@ -182,7 +193,12 @@ class Theme_Json_Builder {
 			return $px . 'px';
 		}
 
-		// Already px or another unit — return as-is.
+		// Final guard: only plain px values are email-safe. Anything else
+		// (percentages, vw, unresolvable vars, etc.) falls back to the default.
+		if ( ! preg_match( '/^\d+(?:\.\d+)?px$/', $radius ) ) {
+			return Email_Defaults::DEFAULT_BUTTON_BORDER_RADIUS;
+		}
+
 		return $radius;
 	}
 
