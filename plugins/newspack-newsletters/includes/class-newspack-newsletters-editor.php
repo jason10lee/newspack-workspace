@@ -682,6 +682,25 @@ final class Newspack_Newsletters_Editor {
 			);
 		}
 
+		// Theme-native editor (WC renderer, classic theme only): WP core's
+		// `wp_enqueue_classic_theme_styles()` runs on this same hook (priority 10,
+		// registered before this plugin) and enqueues `classic-theme-styles`
+		// (classic-themes.css) when the active theme has no theme.json. That
+		// stylesheet paints `.wp-block-button__link` with `border-radius: 9999px`
+		// and `background-color: #32373c`, producing a pill button that does not
+		// match the email render (no such stylesheet on the front-end). Dequeue it
+		// so the canvas falls back to theme.json + the 4 px default, matching the
+		// email output. Block themes never load this stylesheet (they have
+		// theme.json), so the guard `! wp_is_block_theme()` is belt-and-suspenders.
+		if (
+			self::is_email_editor_request() &&
+			class_exists( \Newspack\Newsletters\Email_Renderers\Feature_Flag::class ) &&
+			\Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled() &&
+			! wp_is_block_theme()
+		) {
+			wp_dequeue_style( 'classic-theme-styles' );
+		}
+
 		// If it's a reusable block, register this plugin's blocks.
 		if ( 'wp_block' === get_post_type() ) {
 			$editor_blocks_asset = include NEWSPACK_NEWSLETTERS_PLUGIN_FILE . 'dist/editorBlocks.asset.php';
