@@ -155,46 +155,46 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	// --- C20: get_time_to_subscribe_distribution --------------------------
 
 	/**
-	 * C20 coming_soon: returns state 'coming_soon' with an empty 'groups'
-	 * collection and no 'pending' key.
+	 * C20 wired: returns a state-envelope with a 'groups' key (three groups
+	 * always present) and no 'pending' key. With no Woo data → empty state.
 	 */
-	public function test_time_to_subscribe_distribution_is_coming_soon() {
+	public function test_time_to_subscribe_distribution_returns_groups_envelope() {
 		[ $start, $end ] = $this->window();
 		$result          = $this->metric->get_time_to_subscribe_distribution( $start, $end );
 
-		$this->assertSame( 'coming_soon', $result['state'] );
+		$this->assertArrayHasKey( 'state', $result );
 		$this->assertArrayHasKey( 'groups', $result );
-		$this->assertSame( [], $result['groups'] );
 		$this->assertArrayNotHasKey( 'pending', $result );
 	}
 
 	// --- C21: get_time_to_donate_distribution ------------------------------
 
 	/**
-	 * C21 coming_soon: returns state 'coming_soon' with an empty 'groups'
-	 * collection and no 'pending' key.
+	 * C21 wired: returns a state-envelope with a 'groups' key (three groups
+	 * always present) and no 'pending' key. With no Woo data → empty state.
 	 */
-	public function test_time_to_donate_distribution_is_coming_soon() {
+	public function test_time_to_donate_distribution_returns_groups_envelope() {
 		[ $start, $end ] = $this->window();
 		$result          = $this->metric->get_time_to_donate_distribution( $start, $end );
 
-		$this->assertSame( 'coming_soon', $result['state'] );
+		$this->assertArrayHasKey( 'state', $result );
 		$this->assertArrayHasKey( 'groups', $result );
-		$this->assertSame( [], $result['groups'] );
 		$this->assertArrayNotHasKey( 'pending', $result );
 	}
 
 	// --- C22: get_subscriber_to_donor_lag_distribution ---------------------
 
 	/**
-	 * C22 coming_soon: returns state 'coming_soon' with an empty 'points'
-	 * collection, preserved visibility keys, and no 'pending' key.
+	 * C22 (4.4): envelope is populated + hidden (insufficient_data) for the
+	 * default below-threshold cohort. Checks that state is 'populated', points
+	 * is empty, visibility is 'hidden', and visibility_reason is
+	 * 'insufficient_data' — and that no 'pending' key leaks through.
 	 */
-	public function test_lag_distribution_is_coming_soon_with_visibility_keys() {
+	public function test_lag_distribution_is_populated_and_hidden_below_threshold() {
 		[ $start, $end ] = $this->window();
 		$result          = $this->metric->get_subscriber_to_donor_lag_distribution( $start, $end );
 
-		$this->assertSame( 'coming_soon', $result['state'] );
+		$this->assertSame( 'populated', $result['state'] );
 		$this->assertArrayHasKey( 'points', $result );
 		$this->assertSame( [], $result['points'] );
 		$this->assertSame( 'hidden', $result['visibility'] );
@@ -820,22 +820,54 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * C12 populated: proxy returns attempt rows; resolver assigns 1 order per
-	 * non-empty source bucket → correct total, slices, pct values.
+	 * C12 populated: Subscribers_Metric returns three records; BQ supplies one
+	 * gate event and one prompt event timed within 1800 s before two of them;
+	 * the third record has no matching event → direct. Source_Matcher attributes
+	 * gate=1, prompt=1, direct=1 → total=3, pct=1/3 each.
 	 */
 	public function test_source_mix_subscribers_returns_populated_slices_on_success() {
-		$rows  = $this->source_mix_rows();
+		$order_ts = 1_717_000_000;
+
+		$records = [
+			[
+				'customer_id' => 101,
+				'ts'          => $order_ts,
+			],
+			[
+				'customer_id' => 102,
+				'ts'          => $order_ts + 1000,
+			],
+			[
+				'customer_id' => 103,
+				'ts'          => $order_ts + 2000,
+			],
+		];
+
+		// Event 1: gate event 60 s before record 101.
+		// Event 2: prompt event 60 s before record 102.
+		// Record 103 has no matching event → attributed to direct.
+		$bq_rows = [
+			[
+				'attempt_ts'   => (string) ( ( $order_ts - 60 ) * 1_000_000 ),
+				'gate_post_id' => '55',
+				'popup_id'     => '',
+			],
+			[
+				'attempt_ts'   => (string) ( ( $order_ts + 1000 - 60 ) * 1_000_000 ),
+				'gate_post_id' => '',
+				'popup_id'     => '42',
+			],
+		];
+
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_new_subscriber_records_in_window' )->willReturn( $records );
+
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
 		$proxy->method( 'query' )
 			->with( 'conversion_journey_source_mix_subscribers' )
-			->willReturn( $rows );
+			->willReturn( $bq_rows );
 
-		// Each bucket gets count_completed_orders called once; return 1 for gate
-		// (2 rows), 1 for prompt (1 row), 1 for direct (1 row).
-		$resolver = $this->createMock( Woo_Order_Resolver::class );
-		$resolver->method( 'count_completed_orders' )->willReturn( 1 );
-
-		$metric          = new Conversion_Metric( $proxy, $resolver );
+		$metric          = new Conversion_Metric( $proxy, null, $subs );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_source_mix_subscribers( $start, $end );
 
@@ -877,8 +909,17 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$proxy    = $this->createMock( BigQuery_Proxy_Client::class );
 		$proxy->method( 'query' )->willReturn( $wp_error );
 
-		$resolver        = $this->createMock( Woo_Order_Resolver::class );
-		$metric          = new Conversion_Metric( $proxy, $resolver );
+		// Records exist (conversions happened); the BQ source layer fails → 'error'.
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_new_subscriber_records_in_window' )->willReturn(
+			[
+				[
+					'customer_id' => 1,
+					'ts'          => 1700000000,
+				],
+			] 
+		);
+		$metric          = new Conversion_Metric( $proxy, null, $subs );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_source_mix_subscribers( $start, $end );
 
@@ -889,44 +930,93 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * C12 populated: zero-total guard — when all buckets resolve to 0 orders,
-	 * total=0 and pct=0.0 for all slices (no div-by-zero).
+	 * C12 zero-count-slice guard — a single record with no matching BQ event
+	 * is attributed to direct; gate and prompt buckets have count=0 and must
+	 * produce pct=0.0 (no division-by-zero via the $safe guard in compute_source_mix).
+	 *
+	 * Note: the original test asserted total=0 with pct=0 on all slices. Under
+	 * the Source_Matcher mechanism total always equals the record count (every
+	 * record gets exactly one source), so a zero-total with non-empty records is
+	 * impossible; the equivalent guard is that zero-count source buckets yield
+	 * pct=0.0 rather than NaN or a division error.
 	 */
 	public function test_source_mix_subscribers_guards_zero_total() {
-		$rows  = $this->source_mix_rows();
-		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		$proxy->method( 'query' )->willReturn( $rows );
+		// One record, no matching BQ events → entire total goes to direct.
+		$records = [
+			[
+				'customer_id' => 101,
+				'ts'          => 1_717_000_000,
+			],
+		];
 
-		$resolver = $this->createMock( Woo_Order_Resolver::class );
-		$resolver->method( 'count_completed_orders' )->willReturn( 0 );
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_new_subscriber_records_in_window' )->willReturn( $records );
 
-		$metric          = new Conversion_Metric( $proxy, $resolver );
+		$metric          = new Conversion_Metric(
+			$this->proxy_by_query( [ 'conversion_journey_source_mix_subscribers' => [] ] ),
+			null,
+			$subs
+		);
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_source_mix_subscribers( $start, $end );
 
 		$this->assertSame( 'populated', $result['state'] );
-		$this->assertSame( 0, $result['total'] );
-		foreach ( $result['slices'] as $slice ) {
-			$this->assertSame( 0.0, $slice['pct'] );
-		}
+		$this->assertSame( 1, $result['total'] ); // 1 record, all direct.
+		$by_source = array_column( $result['slices'], null, 'source' );
+		// Zero-count buckets must produce 0.0 pct, not a division error.
+		$this->assertSame( 0.0, $by_source['gate']['pct'] );
+		$this->assertSame( 0.0, $by_source['prompt']['pct'] );
+		$this->assertSame( 0, $by_source['gate']['count'] );
+		$this->assertSame( 0, $by_source['prompt']['count'] );
 	}
 
 	// --- C13: get_source_mix_donors -----------------------------------------
 
 	/**
-	 * C13 populated: identical logic to C12, different query name.
+	 * C13 populated: identical logic to C12 using Donors_Metric and the donors
+	 * query name. Two records match BQ gate/prompt events; one is unmatched →
+	 * direct. Total=3, gate=1, prompt=1, direct=1.
 	 */
 	public function test_source_mix_donors_returns_populated_slices_on_success() {
-		$rows  = $this->source_mix_rows();
+		$order_ts = 1_717_000_000;
+
+		$records = [
+			[
+				'customer_id' => 201,
+				'ts'          => $order_ts,
+			],
+			[
+				'customer_id' => 202,
+				'ts'          => $order_ts + 1000,
+			],
+			[
+				'customer_id' => 203,
+				'ts'          => $order_ts + 2000,
+			],
+		];
+
+		$bq_rows = [
+			[
+				'attempt_ts'   => (string) ( ( $order_ts - 60 ) * 1_000_000 ),
+				'gate_post_id' => '77',
+				'popup_id'     => '',
+			],
+			[
+				'attempt_ts'   => (string) ( ( $order_ts + 1000 - 60 ) * 1_000_000 ),
+				'gate_post_id' => '',
+				'popup_id'     => '33',
+			],
+		];
+
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_new_donor_records_in_window' )->willReturn( $records );
+
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
 		$proxy->method( 'query' )
 			->with( 'conversion_journey_source_mix_donors' )
-			->willReturn( $rows );
+			->willReturn( $bq_rows );
 
-		$resolver = $this->createMock( Woo_Order_Resolver::class );
-		$resolver->method( 'count_completed_orders' )->willReturn( 1 );
-
-		$metric          = new Conversion_Metric( $proxy, $resolver );
+		$metric          = new Conversion_Metric( $proxy, null, null, $donors );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_source_mix_donors( $start, $end );
 
@@ -934,6 +1024,11 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertArrayNotHasKey( 'pending', $result );
 		$this->assertSame( 3, $result['total'] );
 		$this->assertCount( 3, $result['slices'] );
+
+		$by_source = array_column( $result['slices'], null, 'source' );
+		$this->assertSame( 1, $by_source['gate']['count'] );
+		$this->assertSame( 1, $by_source['prompt']['count'] );
+		$this->assertSame( 1, $by_source['direct']['count'] );
 	}
 
 	/**
@@ -961,8 +1056,17 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$proxy    = $this->createMock( BigQuery_Proxy_Client::class );
 		$proxy->method( 'query' )->willReturn( $wp_error );
 
-		$resolver        = $this->createMock( Woo_Order_Resolver::class );
-		$metric          = new Conversion_Metric( $proxy, $resolver );
+		// Records exist (conversions happened); the BQ source layer fails → 'error'.
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_new_donor_records_in_window' )->willReturn(
+			[
+				[
+					'customer_id' => 1,
+					'ts'          => 1700000000,
+				],
+			] 
+		);
+		$metric          = new Conversion_Metric( $proxy, null, null, $donors );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_source_mix_donors( $start, $end );
 
@@ -1809,20 +1913,21 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Deferred (Phase-B) sections are 'coming_soon' in the populated variant and
-	 * carry their preserved extra keys.
+	 * Phase-B section states in the populated fixture variant. 4.2/4.3/4.4 are
+	 * implemented (all-history snapshots → 'populated'); 5.1/5.2 cohorts remain
+	 * 'coming_soon' stubs. Each carries its preserved extra keys.
 	 */
-	public function test_fixture_populated_deferred_sections_are_coming_soon() {
+	public function test_fixture_populated_phase_b_section_states() {
 		$current = Conversion_Metric::get_fixture( 'populated', false )['current'];
 
-		// 4.2 and 4.3 — time distributions (groups key).
-		$this->assertSame( 'coming_soon', $current['time_to_subscribe_distribution']['state'] );
-		$this->assertSame( [], $current['time_to_subscribe_distribution']['groups'] );
-		$this->assertSame( 'coming_soon', $current['time_to_donate_distribution']['state'] );
-		$this->assertSame( [], $current['time_to_donate_distribution']['groups'] );
+		// 4.2 and 4.3 — implemented; the fixture carries representative curves.
+		$this->assertSame( 'populated', $current['time_to_subscribe_distribution']['state'] );
+		$this->assertArrayHasKey( 'groups', $current['time_to_subscribe_distribution'] );
+		$this->assertSame( 'populated', $current['time_to_donate_distribution']['state'] );
+		$this->assertArrayHasKey( 'groups', $current['time_to_donate_distribution'] );
 
-		// 4.4 — lag distribution (points + visibility keys).
-		$this->assertSame( 'coming_soon', $current['subscriber_to_donor_lag_distribution']['state'] );
+		// 4.4 — lag distribution (points + visibility keys); populated but hidden when below threshold.
+		$this->assertSame( 'populated', $current['subscriber_to_donor_lag_distribution']['state'] );
 		$this->assertSame( [], $current['subscriber_to_donor_lag_distribution']['points'] );
 		$this->assertSame( 'hidden', $current['subscriber_to_donor_lag_distribution']['visibility'] );
 		$this->assertSame( 'insufficient_data', $current['subscriber_to_donor_lag_distribution']['visibility_reason'] );
@@ -1874,8 +1979,8 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'empty', $current['top_pages_no_conversion']['state'] );
 		$this->assertSame( [], $current['top_pages_no_conversion']['rows'] );
 
-		// Deferred sections stay 'coming_soon'.
-		$this->assertSame( 'coming_soon', $current['time_to_subscribe_distribution']['state'] );
+		// 4.2 is an all-history snapshot → populated; the 5.1 cohort stays coming_soon.
+		$this->assertSame( 'populated', $current['time_to_subscribe_distribution']['state'] );
 		$this->assertSame( 'coming_soon', $current['registration_to_conversion_cohort']['state'] );
 	}
 
@@ -1911,9 +2016,139 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'populated', $current['at_risk_subscriber_count']['state'] );
 		$this->assertSame( 'populated', $current['lapsed_donor_count']['state'] );
 
-		// Deferred sections stay 'coming_soon'.
-		$this->assertSame( 'coming_soon', $current['time_to_subscribe_distribution']['state'] );
+		// 4.2 is an all-history snapshot → populated; the 5.1 cohort stays coming_soon.
+		$this->assertSame( 'populated', $current['time_to_subscribe_distribution']['state'] );
 		$this->assertSame( 'coming_soon', $current['registration_to_conversion_cohort']['state'] );
+	}
+
+	/**
+	 * Mock proxy whose query() returns a value selected by query name.
+	 *
+	 * @param array<string,mixed> $map query_name => rows|WP_Error.
+	 * @return BigQuery_Proxy_Client
+	 */
+	private function proxy_by_query( array $map ): BigQuery_Proxy_Client {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturnCallback(
+			static function ( $query_name ) use ( $map ) {
+				return $map[ $query_name ] ?? [];
+			}
+		);
+		return $proxy;
+	}
+
+	/**
+	 * 3.2 source mix: each Woo record is attributed to the BQ event that precedes
+	 * its order within 1800s; unmatched → direct.
+	 */
+	public function test_source_mix_subscribers_attributes_by_timestamp(): void {
+		$order_ts = 1_700_000_000;
+		// Two subscribers; one has a gate event 60s before their order, one has none.
+		$records = [
+			[
+				'customer_id' => 1,
+				'ts'          => $order_ts,
+			],
+			[
+				'customer_id' => 2,
+				'ts'          => $order_ts + 5000,
+			],
+		];
+		$bq_rows = [
+			[
+				'attempt_ts'   => (string) ( ( $order_ts - 60 ) * 1_000_000 ),
+				'gate_post_id' => '99',
+				'popup_id'     => '',
+			],
+		];
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_new_subscriber_records_in_window' )->willReturn( $records );
+		$metric = new Conversion_Metric(
+			$this->proxy_by_query( [ 'conversion_journey_source_mix_subscribers' => $bq_rows ] ),
+			null,
+			$subs,
+			null
+		);
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_subscribers( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 2, $result['total'] );
+		$by = [];
+		foreach ( $result['slices'] as $slice ) {
+			$by[ $slice['source'] ] = $slice['count'];
+		}
+		$this->assertSame( 1, $by['gate'] );
+		$this->assertSame( 0, $by['prompt'] );
+		$this->assertSame( 1, $by['direct'] ); // customer 2 unmatched → direct.
+	}
+
+	/**
+	 * 3.2 source mix: a proxy WP_Error yields the error envelope.
+	 */
+	public function test_source_mix_subscribers_proxy_error(): void {
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_new_subscriber_records_in_window' )->willReturn(
+			[
+				[
+					'customer_id' => 1,
+					'ts'          => 1700000000,
+				],
+			]
+		);
+		$metric = new Conversion_Metric(
+			$this->proxy_returning( new \WP_Error( 'boom', 'nope' ) ),
+			null,
+			$subs,
+			null
+		);
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_subscribers( $start, $end );
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'boom', $result['error_code'] );
+		$this->assertSame( [], $result['slices'] );
+	}
+
+	/**
+	 * 3.2 source mix: no Woo records → empty envelope (no division by zero).
+	 */
+	public function test_source_mix_subscribers_empty_records(): void {
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_new_subscriber_records_in_window' )->willReturn( [] );
+		$metric = new Conversion_Metric(
+			$this->proxy_returning( [] ),
+			null,
+			$subs,
+			null
+		);
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_subscribers( $start, $end );
+		$this->assertSame( 'empty', $result['state'] );
+		$this->assertSame( 0, $result['total'] );
+		$this->assertSame( [], $result['slices'] );
+	}
+
+	/**
+	 * 3.2 source mix: a non-array BigQuery success body is a malformed response
+	 * and surfaces as an 'error' envelope (not silent all-direct) when Woo
+	 * records exist.
+	 */
+	public function test_source_mix_subscribers_malformed_bq_body(): void {
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_new_subscriber_records_in_window' )->willReturn(
+			[
+				[
+					'customer_id' => 1,
+					'ts'          => 1700000000,
+				],
+			] 
+		);
+		$metric          = new Conversion_Metric( $this->proxy_returning( 'not-an-array' ), null, $subs );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_subscribers( $start, $end );
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_malformed_rows', $result['error_code'] );
+		$this->assertSame( [], $result['slices'] );
 	}
 
 	/**
@@ -1935,5 +2170,656 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	public function test_fixture_current_window_has_24_keys() {
 		$current = Conversion_Metric::get_fixture( 'populated', false )['current'];
 		$this->assertCount( 24, $current );
+	}
+
+	/**
+	 * 4.2: per-source cumulative distribution; reg matched to a BQ source event
+	 * within ±120s; unmatched reg → direct; lag > 365 truncated.
+	 */
+	public function test_time_to_subscribe_distribution_buckets_and_truncates(): void {
+		// Use current-time-relative registration timestamps so rows fall inside
+		// the trailing-365-day cohort window (registrations older than 365 days
+		// are excluded because their BQ source events are outside the window).
+		$reg1 = time() - 10 * 86400; // Registered 10 days ago.
+		$rows = [
+			// Registered 10 days ago, subscribed 10 days later (today), has a 'gate' reg event 30s after registering.
+			[
+				'customer_id'   => 1,
+				'registered_ts' => $reg1,
+				'first_sub_ts'  => $reg1 + 86400 * 10,
+			],
+			// Registered 10 days ago (offset 100000s), subscribed 20 days later, no BQ reg event → direct.
+			[
+				'customer_id'   => 2,
+				'registered_ts' => $reg1 + 100000,
+				'first_sub_ts'  => $reg1 + 100000 + 86400 * 20,
+			],
+			// Registered recently but subscribed 400 days later → lag truncated out (lag > 365 days).
+			[
+				'customer_id'   => 3,
+				'registered_ts' => $reg1 + 200000,
+				'first_sub_ts'  => $reg1 + 200000 + 86400 * 400,
+			],
+		];
+		$probe = [ [ 'registration_events' => 5 ] ];
+		$reg_events = [
+			[
+				'reg_ts' => (string) ( ( $reg1 + 30 ) * 1_000_000 ),
+				'source' => 'gate',
+			],
+		];
+
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_subscription_conversion_lags' )->willReturn( $rows );
+		$metric = new Conversion_Metric(
+			$this->proxy_by_query(
+				[
+					'conversion_journey_has_registrations_in_window' => $probe,
+					'conversion_journey_registrations_with_source'   => $reg_events,
+				]
+			),
+			null,
+			$subs,
+			null
+		);
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_time_to_subscribe_distribution( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertCount( 3, $result['groups'] );
+		$labels = array_column( $result['groups'], 'label' );
+		$this->assertSame( [ 'gate', 'prompt', 'direct' ], $labels );
+
+		$gate   = $result['groups'][0];
+		$direct = $result['groups'][2];
+		$this->assertSame(
+			[
+				[
+					'day'            => 10,
+					'cumulative_pct' => 1.0,
+				],
+			],
+			$gate['points']
+		); // customer 1.
+		$this->assertSame(
+			[
+				[
+					'day'            => 20,
+					'cumulative_pct' => 1.0,
+				],
+			],
+			$direct['points']
+		); // customer 2; customer 3 truncated.
+	}
+
+	/**
+	 * 4.2 degradation: probe returns 0 → no expensive query → every reg → direct.
+	 */
+	public function test_time_to_subscribe_distribution_probe_zero_all_direct(): void {
+		$reg1 = time() - 10 * 86400; // Registered 10 days ago; inside the 365-day cohort window.
+		$rows = [
+			[
+				'customer_id'   => 1,
+				'registered_ts' => $reg1,
+				'first_sub_ts'  => $reg1 + 86400 * 7,
+			],
+		];
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_subscription_conversion_lags' )->willReturn( $rows );
+		$metric = new Conversion_Metric(
+			$this->proxy_by_query( [ 'conversion_journey_has_registrations_in_window' => [ [ 'registration_events' => 0 ] ] ] ),
+			null,
+			$subs,
+			null
+		);
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_time_to_subscribe_distribution( $start, $end );
+		$this->assertSame(
+			[
+				[
+					'day'            => 7,
+					'cumulative_pct' => 1.0,
+				],
+			],
+			$result['groups'][2]['points']
+		); // direct.
+		$this->assertSame( [], $result['groups'][0]['points'] ); // gate empty.
+	}
+
+	/**
+	 * 4.2 degradation: probe positive but second BQ query (registrations_with_source)
+	 * returns WP_Error → registration_source_events() returns [] → every reader
+	 * attributed to direct (graceful degradation).
+	 */
+	public function test_time_to_subscribe_distribution_registrations_error_all_direct(): void {
+		$reg1 = time() - 10 * 86400; // Registered 10 days ago; inside the 365-day cohort window.
+		$rows = [
+			[
+				'customer_id'   => 1,
+				'registered_ts' => $reg1,
+				'first_sub_ts'  => $reg1 + 86400 * 7,
+			],
+		];
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_subscription_conversion_lags' )->willReturn( $rows );
+		$metric = new Conversion_Metric(
+			$this->proxy_by_query(
+				[
+					'conversion_journey_has_registrations_in_window' => [ [ 'registration_events' => 5 ] ],
+					'conversion_journey_registrations_with_source'   => new \WP_Error( 'bq_down', 'nope' ),
+				]
+			),
+			null,
+			$subs,
+			null
+		);
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_time_to_subscribe_distribution( $start, $end );
+		// Second-query error degrades to all-direct: gate group empty, direct has the single point.
+		$this->assertSame( [], $result['groups'][0]['points'] ); // gate.
+		$this->assertSame(
+			[
+				[
+					'day'            => 7,
+					'cumulative_pct' => 1.0,
+				],
+			],
+			$result['groups'][2]['points']
+		); // direct.
+	}
+
+	/**
+	 * 4.2: no converters → empty state, still three groups.
+	 */
+	public function test_time_to_subscribe_distribution_empty(): void {
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_subscription_conversion_lags' )->willReturn( [] );
+		$metric = new Conversion_Metric(
+			$this->proxy_by_query( [ 'conversion_journey_has_registrations_in_window' => [ [ 'registration_events' => 0 ] ] ] ),
+			null,
+			$subs,
+			null
+		);
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_time_to_subscribe_distribution( $start, $end );
+		$this->assertSame( 'empty', $result['state'] );
+		$this->assertCount( 3, $result['groups'] );
+	}
+
+	/**
+	 * 4.3: per-source cumulative distribution for donations; mirrors 4.2 bucketing
+	 * test with Donors_Metric and first_donation_ts.
+	 */
+	public function test_time_to_donate_distribution_buckets_and_truncates(): void {
+		// Use current-time-relative registration timestamps so rows fall inside
+		// the trailing-365-day cohort window (registrations older than 365 days
+		// are excluded because their BQ source events are outside the window).
+		$reg1 = time() - 10 * 86400; // Registered 10 days ago.
+		$rows = [
+			// Registered 10 days ago, donated 15 days later, has a 'prompt' reg event 50s before registering.
+			[
+				'customer_id'       => 10,
+				'registered_ts'     => $reg1,
+				'first_donation_ts' => $reg1 + 86400 * 15,
+			],
+			// Registered 10 days ago (offset 100000s), donated 30 days later, no BQ reg event → direct.
+			[
+				'customer_id'       => 11,
+				'registered_ts'     => $reg1 + 100000,
+				'first_donation_ts' => $reg1 + 100000 + 86400 * 30,
+			],
+			// Registered recently but donated 400 days later → lag truncated out (lag > 365 days).
+			[
+				'customer_id'       => 12,
+				'registered_ts'     => $reg1 + 200000,
+				'first_donation_ts' => $reg1 + 200000 + 86400 * 400,
+			],
+		];
+		$probe      = [ [ 'registration_events' => 3 ] ];
+		$reg_events = [
+			[
+				'reg_ts' => (string) ( ( $reg1 - 50 ) * 1_000_000 ),
+				'source' => 'prompt',
+			],
+		];
+
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_donation_conversion_lags' )->willReturn( $rows );
+		$metric = new Conversion_Metric(
+			$this->proxy_by_query(
+				[
+					'conversion_journey_has_registrations_in_window' => $probe,
+					'conversion_journey_registrations_with_source'   => $reg_events,
+				]
+			),
+			null,
+			null,
+			$donors
+		);
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_time_to_donate_distribution( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertCount( 3, $result['groups'] );
+		$labels = array_column( $result['groups'], 'label' );
+		$this->assertSame( [ 'gate', 'prompt', 'direct' ], $labels );
+
+		$prompt = $result['groups'][1];
+		$direct = $result['groups'][2];
+		$this->assertSame(
+			[
+				[
+					'day'            => 15,
+					'cumulative_pct' => 1.0,
+				],
+			],
+			$prompt['points']
+		); // customer 10.
+		$this->assertSame(
+			[
+				[
+					'day'            => 30,
+					'cumulative_pct' => 1.0,
+				],
+			],
+			$direct['points']
+		); // customer 11; customer 12 truncated.
+	}
+
+	/**
+	 * 4.4: below the 50-cross-converter gate → hidden.
+	 */
+	public function test_sub_to_donor_lag_hidden_below_threshold(): void {
+		$rows = array_map( static fn( $i ) => [ 'lag_days' => $i ], range( 1, 49 ) );
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_subscriber_to_donor_lags' )->willReturn( $rows );
+		$metric = new Conversion_Metric( $this->proxy_returning( [] ), null, null, $donors );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_subscriber_to_donor_lag_distribution( $start, $end );
+		$this->assertSame( 'hidden', $result['visibility'] );
+		$this->assertSame( 'insufficient_data', $result['visibility_reason'] );
+		$this->assertSame( [], $result['points'] );
+	}
+
+	/**
+	 * 4.4: at/above the gate → visible single-series CDF; lag > 365 truncated.
+	 */
+	public function test_sub_to_donor_lag_visible_at_threshold(): void {
+		$rows   = array_map( static fn( $i ) => [ 'lag_days' => 10 ], range( 1, 50 ) );
+		$rows[] = [ 'lag_days' => 400 ]; // truncated out, so 50 remain.
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_subscriber_to_donor_lags' )->willReturn( $rows );
+		$metric = new Conversion_Metric( $this->proxy_returning( [] ), null, null, $donors );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_subscriber_to_donor_lag_distribution( $start, $end );
+		$this->assertSame( 'visible', $result['visibility'] );
+		$this->assertNull( $result['visibility_reason'] );
+		$this->assertSame(
+			[
+				[
+					'day'            => 10,
+					'cumulative_pct' => 1.0,
+				],
+			],
+			$result['points']
+		);
+	}
+
+	// --- C13 order-meta-primary tests (3.3) -----------------------------------
+	// Donor records now carry gate_post_id / popup_id from order meta.
+	// The BQ proxy must NOT be called when every record has usable order meta.
+
+	/**
+	 * C13 order-meta gate: donor records with gate_post_id set → classified as
+	 * 'gate' WITHOUT any BQ proxy call. A proxy whose query() throws an exception
+	 * would fail the test, proving no BQ round-trip was made.
+	 */
+	public function test_source_mix_donors_gate_from_order_meta_skips_bq(): void {
+		$records = [
+			[
+				'customer_id'  => 201,
+				'ts'           => 1_700_000_000,
+				'gate_post_id' => '55',
+				'popup_id'     => '',
+			],
+			[
+				'customer_id'  => 202,
+				'ts'           => 1_700_001_000,
+				'gate_post_id' => '55',
+				'popup_id'     => '',
+			],
+		];
+
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_new_donor_records_in_window' )->willReturn( $records );
+
+		// Proxy whose query() would fail the test if called.
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->never() )->method( 'query' );
+
+		$metric          = new Conversion_Metric( $proxy, null, null, $donors );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_donors( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 2, $result['total'] );
+		$by = array_column( $result['slices'], null, 'source' );
+		$this->assertSame( 2, $by['gate']['count'] );
+		$this->assertSame( 0, $by['prompt']['count'] );
+		$this->assertSame( 0, $by['direct']['count'] );
+	}
+
+	/**
+	 * C13 order-meta prompt: donor records with popup_id (and no gate_post_id)
+	 * set → classified as 'prompt' WITHOUT any BQ proxy call.
+	 */
+	public function test_source_mix_donors_prompt_from_order_meta_skips_bq(): void {
+		$records = [
+			[
+				'customer_id'  => 301,
+				'ts'           => 1_700_000_000,
+				'gate_post_id' => '',
+				'popup_id'     => '42',
+			],
+		];
+
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_new_donor_records_in_window' )->willReturn( $records );
+
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->never() )->method( 'query' );
+
+		$metric          = new Conversion_Metric( $proxy, null, null, $donors );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_donors( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 1, $result['total'] );
+		$by = array_column( $result['slices'], null, 'source' );
+		$this->assertSame( 0, $by['gate']['count'] );
+		$this->assertSame( 1, $by['prompt']['count'] );
+		$this->assertSame( 0, $by['direct']['count'] );
+	}
+
+	/**
+	 * C13 order-meta fallback to BQ: donor records WITHOUT order meta
+	 * (gate_post_id='' AND popup_id='') fall to the temporal BQ matcher;
+	 * BQ IS called and drives the attribution.
+	 */
+	public function test_source_mix_donors_no_meta_falls_to_bq_matcher(): void {
+		$order_ts = 1_700_000_000;
+		$records  = [
+			[
+				'customer_id'  => 401,
+				'ts'           => $order_ts,
+				'gate_post_id' => '',
+				'popup_id'     => '',
+			],
+		];
+
+		// BQ returns a gate event 60s before the order.
+		$bq_rows = [
+			[
+				'attempt_ts'   => (string) ( ( $order_ts - 60 ) * 1_000_000 ),
+				'gate_post_id' => '99',
+				'popup_id'     => '',
+			],
+		];
+
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_new_donor_records_in_window' )->willReturn( $records );
+
+		// Proxy MUST be called once.
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->once() )
+			->method( 'query' )
+			->with( 'conversion_journey_source_mix_donors' )
+			->willReturn( $bq_rows );
+
+		$metric          = new Conversion_Metric( $proxy, null, null, $donors );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_donors( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 1, $result['total'] );
+		$by = array_column( $result['slices'], null, 'source' );
+		$this->assertSame( 1, $by['gate']['count'] ); // BQ-matched as gate.
+		$this->assertSame( 0, $by['prompt']['count'] );
+		$this->assertSame( 0, $by['direct']['count'] );
+	}
+
+	/**
+	 * C13 mixed: some records have order meta (classified without BQ), others
+	 * do not (go to matcher). BQ is called once; totals combine correctly.
+	 * 1 gate from meta + 1 prompt from BQ + 1 direct from BQ = 3 total.
+	 */
+	public function test_source_mix_donors_mixed_meta_and_bq(): void {
+		$order_ts = 1_700_000_000;
+		$records  = [
+			// Has gate meta → classified from order meta; BQ not needed for this one.
+			[
+				'customer_id'  => 501,
+				'ts'           => $order_ts,
+				'gate_post_id' => '77',
+				'popup_id'     => '',
+			],
+			// No meta → goes to BQ matcher; BQ returns a prompt event.
+			[
+				'customer_id'  => 502,
+				'ts'           => $order_ts + 1000,
+				'gate_post_id' => '',
+				'popup_id'     => '',
+			],
+			// No meta → goes to BQ matcher; BQ has no event → direct.
+			[
+				'customer_id'  => 503,
+				'ts'           => $order_ts + 9000,
+				'gate_post_id' => '',
+				'popup_id'     => '',
+			],
+		];
+
+		// BQ returns a prompt event 60s before customer 502's order only.
+		$bq_rows = [
+			[
+				'attempt_ts'   => (string) ( ( $order_ts + 1000 - 60 ) * 1_000_000 ),
+				'gate_post_id' => '',
+				'popup_id'     => '33',
+			],
+		];
+
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_new_donor_records_in_window' )->willReturn( $records );
+
+		// BQ must be called exactly once (for the 2 records lacking order meta).
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->once() )
+			->method( 'query' )
+			->with( 'conversion_journey_source_mix_donors' )
+			->willReturn( $bq_rows );
+
+		$metric          = new Conversion_Metric( $proxy, null, null, $donors );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_donors( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 3, $result['total'] ); // 1 gate + 1 prompt + 1 direct.
+		$by = array_column( $result['slices'], null, 'source' );
+		$this->assertSame( 1, $by['gate']['count'] );   // from order meta.
+		$this->assertSame( 1, $by['prompt']['count'] ); // from BQ matcher.
+		$this->assertSame( 1, $by['direct']['count'] ); // BQ-unmatched.
+	}
+
+	/**
+	 * 3.2 subscribers still use the BQ temporal matcher even when the proxy
+	 * returns an empty event list. Subscriber records carry no gate_post_id /
+	 * popup_id keys, so they all fall to the matcher (unchanged behaviour).
+	 */
+	public function test_source_mix_subscribers_still_uses_bq_matcher(): void {
+		$records = [
+			[
+				'customer_id' => 601,
+				'ts'          => 1_700_000_000,
+			],
+		];
+
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_new_subscriber_records_in_window' )->willReturn( $records );
+
+		// BQ must be called (subscriber records have no meta → all go to matcher).
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->once() )
+			->method( 'query' )
+			->with( 'conversion_journey_source_mix_subscribers' )
+			->willReturn( [] ); // No events → subscriber goes to direct.
+
+		$metric          = new Conversion_Metric( $proxy, null, $subs, null );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_subscribers( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 1, $result['total'] );
+		$by = array_column( $result['slices'], null, 'source' );
+		$this->assertSame( 0, $by['gate']['count'] );
+		$this->assertSame( 0, $by['prompt']['count'] );
+		$this->assertSame( 1, $by['direct']['count'] ); // No BQ event → direct.
+	}
+
+	// --- C12 order-meta-primary tests (3.2) ------------------------------------
+	// Subscriber records now carry gate_post_id / popup_id from the parent order.
+	// BQ must NOT be called when every record has usable order meta.
+
+	/**
+	 * C12 order-meta gate: subscriber records with gate_post_id set → classified
+	 * as 'gate' WITHOUT any BQ proxy call. Mirrors C13 donor gate test.
+	 */
+	public function test_source_mix_subscribers_gate_from_order_meta_skips_bq(): void {
+		$records = [
+			[
+				'customer_id'  => 701,
+				'ts'           => 1_700_000_000,
+				'gate_post_id' => '55',
+				'popup_id'     => '',
+			],
+			[
+				'customer_id'  => 702,
+				'ts'           => 1_700_001_000,
+				'gate_post_id' => '55',
+				'popup_id'     => '',
+			],
+		];
+
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_new_subscriber_records_in_window' )->willReturn( $records );
+
+		// Proxy whose query() would fail the test if called.
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->never() )->method( 'query' );
+
+		$metric          = new Conversion_Metric( $proxy, null, $subs, null );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_subscribers( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 2, $result['total'] );
+		$by = array_column( $result['slices'], null, 'source' );
+		$this->assertSame( 2, $by['gate']['count'] );
+		$this->assertSame( 0, $by['prompt']['count'] );
+		$this->assertSame( 0, $by['direct']['count'] );
+	}
+
+	/**
+	 * C12 order-meta prompt: subscriber records with popup_id (and no
+	 * gate_post_id) set → classified as 'prompt' WITHOUT any BQ proxy call.
+	 */
+	public function test_source_mix_subscribers_prompt_from_order_meta_skips_bq(): void {
+		$records = [
+			[
+				'customer_id'  => 801,
+				'ts'           => 1_700_000_000,
+				'gate_post_id' => '',
+				'popup_id'     => '42',
+			],
+		];
+
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_new_subscriber_records_in_window' )->willReturn( $records );
+
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->never() )->method( 'query' );
+
+		$metric          = new Conversion_Metric( $proxy, null, $subs, null );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_subscribers( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 1, $result['total'] );
+		$by = array_column( $result['slices'], null, 'source' );
+		$this->assertSame( 0, $by['gate']['count'] );
+		$this->assertSame( 1, $by['prompt']['count'] );
+		$this->assertSame( 0, $by['direct']['count'] );
+	}
+
+	/**
+	 * C12 mixed: some subscriber records have parent-order meta (classified
+	 * without BQ), others do not (go to matcher). BQ is called once for the
+	 * unmetered records; totals combine correctly.
+	 * 1 gate from meta + 1 prompt from BQ + 1 direct from BQ = 3 total.
+	 */
+	public function test_source_mix_subscribers_mixed_meta_and_bq(): void {
+		$order_ts = 1_700_000_000;
+		$records  = [
+			// Has gate meta → classified from parent order meta; BQ not needed.
+			[
+				'customer_id'  => 901,
+				'ts'           => $order_ts,
+				'gate_post_id' => '77',
+				'popup_id'     => '',
+			],
+			// No meta → goes to BQ matcher; BQ returns a prompt event.
+			[
+				'customer_id'  => 902,
+				'ts'           => $order_ts + 1000,
+				'gate_post_id' => '',
+				'popup_id'     => '',
+			],
+			// No meta → goes to BQ matcher; BQ has no matching event → direct.
+			[
+				'customer_id'  => 903,
+				'ts'           => $order_ts + 9000,
+				'gate_post_id' => '',
+				'popup_id'     => '',
+			],
+		];
+
+		// BQ returns a prompt event 60s before customer 902's subscription start.
+		$bq_rows = [
+			[
+				'attempt_ts'   => (string) ( ( $order_ts + 1000 - 60 ) * 1_000_000 ),
+				'gate_post_id' => '',
+				'popup_id'     => '33',
+			],
+		];
+
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_new_subscriber_records_in_window' )->willReturn( $records );
+
+		// BQ must be called exactly once (for the 2 records lacking parent-order meta).
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->once() )
+			->method( 'query' )
+			->with( 'conversion_journey_source_mix_subscribers' )
+			->willReturn( $bq_rows );
+
+		$metric          = new Conversion_Metric( $proxy, null, $subs, null );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_source_mix_subscribers( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 3, $result['total'] ); // 1 gate + 1 prompt + 1 direct.
+		$by = array_column( $result['slices'], null, 'source' );
+		$this->assertSame( 1, $by['gate']['count'] );   // from parent order meta.
+		$this->assertSame( 1, $by['prompt']['count'] ); // from BQ matcher.
+		$this->assertSame( 1, $by['direct']['count'] ); // BQ-unmatched.
 	}
 }

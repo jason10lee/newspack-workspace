@@ -4,15 +4,16 @@
  *
  * Realistic mock data for UI smoke testing without a BigQuery proxy connection,
  * served by Conversion_REST_Controller when NEWSPACK_INSIGHTS_FIXTURE_MODE is on.
+ * The implemented Phase-B snapshot sections (4.2/4.3 distributions, 4.4 lag) are
+ * 'populated' across every variant (they are all-history, window-independent); the
+ * still-deferred 5.1/5.2 cohorts report 'coming_soon' with their preserved keys.
  * The optional `_fixture_state` request param selects a render path:
- *   - 'populated' (default) — every Phase-A metric has data; deferred Phase-B
- *     sections report `state: 'coming_soon'` with their preserved extra keys.
- *   - 'empty'    — every collection reports the empty state (succeeded, no rows);
- *     scalars report non-computable zero; deferred sections stay 'coming_soon'.
+ *   - 'populated' (default) — every Phase-A metric has data.
+ *   - 'empty'    — every windowed collection reports the empty state (succeeded,
+ *     no rows); scalars report non-computable zero.
  *   - 'error'    — every BQ-backed metric reports the error state (tab banner
  *     would show if every metric were error; snapshot counts stay 'populated'
- *     as they are local-only, matching the real controller behaviour); deferred
- *     sections stay 'coming_soon'.
+ *     as they are local-only, matching the real controller behaviour).
  *
  * Returns a closure so the single required file can build any variant. Never
  * enable fixture mode in production.
@@ -38,23 +39,152 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 		'end'   => $prev_end->format( 'Y-m-d' ),
 	];
 
-	// Deferred Phase-B sections — always 'coming_soon' regardless of variant.
+	// Phase-B sections — 4.2/4.3/4.4 are 'populated' (implemented; all-history
+	// snapshots, so identical across variants); 5.1/5.2 remain 'coming_soon'.
 	// Each preserves the extra keys React reads unconditionally.
 	$deferred = static function () {
 		return [
-			// 4.2 — time-to-subscribe (multi-series).
+			// 4.2 — time-to-subscribe (multi-series, per-source cumulative).
 			'time_to_subscribe_distribution'       => [
-				'state'  => 'coming_soon',
-				'groups' => [],
+				'state'  => 'populated',
+				'groups' => [
+					[
+						'label'  => 'gate',
+						'points' => [
+							[
+								'day'            => 0,
+								'cumulative_pct' => 0.34,
+							],
+							[
+								'day'            => 7,
+								'cumulative_pct' => 0.62,
+							],
+							[
+								'day'            => 30,
+								'cumulative_pct' => 0.89,
+							],
+							[
+								'day'            => 90,
+								'cumulative_pct' => 1.0,
+							],
+						],
+					],
+					[
+						'label'  => 'prompt',
+						'points' => [
+							[
+								'day'            => 0,
+								'cumulative_pct' => 0.19,
+							],
+							[
+								'day'            => 14,
+								'cumulative_pct' => 0.48,
+							],
+							[
+								'day'            => 60,
+								'cumulative_pct' => 0.83,
+							],
+							[
+								'day'            => 150,
+								'cumulative_pct' => 1.0,
+							],
+						],
+					],
+					[
+						'label'  => 'direct',
+						'points' => [
+							[
+								'day'            => 0,
+								'cumulative_pct' => 0.22,
+							],
+							[
+								'day'            => 21,
+								'cumulative_pct' => 0.55,
+							],
+							[
+								'day'            => 90,
+								'cumulative_pct' => 0.9,
+							],
+							[
+								'day'            => 200,
+								'cumulative_pct' => 1.0,
+							],
+						],
+					],
+				],
 			],
-			// 4.3 — time-to-donate (multi-series).
+			// 4.3 — time-to-donate (multi-series, per-source cumulative).
 			'time_to_donate_distribution'          => [
-				'state'  => 'coming_soon',
-				'groups' => [],
+				'state'  => 'populated',
+				'groups' => [
+					[
+						'label'  => 'gate',
+						'points' => [
+							[
+								'day'            => 0,
+								'cumulative_pct' => 0.41,
+							],
+							[
+								'day'            => 7,
+								'cumulative_pct' => 0.7,
+							],
+							[
+								'day'            => 30,
+								'cumulative_pct' => 0.92,
+							],
+							[
+								'day'            => 75,
+								'cumulative_pct' => 1.0,
+							],
+						],
+					],
+					[
+						'label'  => 'prompt',
+						'points' => [
+							[
+								'day'            => 0,
+								'cumulative_pct' => 0.28,
+							],
+							[
+								'day'            => 10,
+								'cumulative_pct' => 0.57,
+							],
+							[
+								'day'            => 45,
+								'cumulative_pct' => 0.86,
+							],
+							[
+								'day'            => 120,
+								'cumulative_pct' => 1.0,
+							],
+						],
+					],
+					[
+						'label'  => 'direct',
+						'points' => [
+							[
+								'day'            => 0,
+								'cumulative_pct' => 0.3,
+							],
+							[
+								'day'            => 14,
+								'cumulative_pct' => 0.6,
+							],
+							[
+								'day'            => 60,
+								'cumulative_pct' => 0.88,
+							],
+							[
+								'day'            => 180,
+								'cumulative_pct' => 1.0,
+							],
+						],
+					],
+				],
 			],
-			// 4.4 — subscriber-to-donor lag (visibility-gated).
+			// 4.4 — subscriber-to-donor lag (visibility-gated single-series CDF).
 			'subscriber_to_donor_lag_distribution' => [
-				'state'             => 'coming_soon',
+				'state'             => 'populated',
 				'points'            => [],
 				'visibility'        => 'hidden',
 				'visibility_reason' => 'insufficient_data',

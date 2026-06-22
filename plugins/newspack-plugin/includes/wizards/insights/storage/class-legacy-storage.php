@@ -161,6 +161,9 @@ class Legacy_Storage implements Storage_Interface {
 		$prefix    = $wpdb->prefix;
 		$donations = $this->id_list( $this->donation_product_ids );
 
+		// The start.meta_value != '' guard matches the records method so the
+		// count and source-mix records agree on sites where a subscription has
+		// a blank _schedule_start.
 		$sql = $wpdb->prepare(
 			"SELECT COUNT(*) FROM (
 				SELECT cust.meta_value AS customer_id, MIN(start.meta_value) AS first_start
@@ -175,6 +178,7 @@ class Legacy_Storage implements Storage_Interface {
 					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
 				WHERE p.post_type = 'shop_subscription'
 				  AND oim.meta_value NOT IN ($donations)
+				  AND start.meta_value != ''
 				GROUP BY cust.meta_value
 			) AS first_subs
 			WHERE first_subs.first_start BETWEEN %s AND %s",
@@ -1107,6 +1111,225 @@ class Legacy_Storage implements Storage_Interface {
 			$map[ (int) $row['customer_id'] ] = new \DateTimeImmutable( $row['first_start'], new \DateTimeZone( 'UTC' ) );
 		}
 		return $map;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
+	 * @return array<int, array{customer_id:int, ts:int}>
+	 */
+	public function get_new_subscriber_records_in_window( DateTimeInterface $start, DateTimeInterface $end ): array {
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+
+		// Legacy CPT equivalent of HPOS get_new_subscriber_records_in_window().
+		// Guest orders (blank _customer_user → 0 when cast) are excluded from
+		// source attribution — see the HPOS variant for the rationale.
+		//
+		// Source meta lives on the PARENT shop_order (post_parent of the
+		// shop_subscription post), NOT on the shop_subscription post itself.
+		// Correlated subqueries (MySQL 5.7-safe) read _gate_post_id /
+		// _memberships_content_gate / _newspack_popup_id from {prefix}postmeta
+		// WHERE post_id = p_sub.post_parent. LIMIT 1 resolves same-timestamp
+		// ties — any one tied first-subscription's parent-order meta is used.
+		$sql = $wpdb->prepare(
+			"SELECT
+				first_subs.customer_id,
+				first_subs.first_start,
+				COALESCE((
+					SELECT pm_gate.meta_value
+					FROM {$prefix}posts p_sub
+					JOIN {$prefix}postmeta cust_s
+						ON cust_s.post_id = p_sub.ID AND cust_s.meta_key = '_customer_user'
+					JOIN {$prefix}postmeta start_s
+						ON start_s.post_id = p_sub.ID AND start_s.meta_key = '_schedule_start'
+					JOIN {$prefix}postmeta pm_gate
+						ON pm_gate.post_id = p_sub.post_parent AND pm_gate.meta_key = '_gate_post_id'
+					JOIN {$prefix}woocommerce_order_items oi_s
+						ON oi_s.order_id = p_sub.ID AND oi_s.order_item_type = 'line_item'
+					JOIN {$prefix}woocommerce_order_itemmeta oim_s
+						ON oim_s.order_item_id = oi_s.order_item_id AND oim_s.meta_key = '_product_id'
+					WHERE p_sub.post_type = 'shop_subscription'
+					  AND CAST(cust_s.meta_value AS UNSIGNED) = first_subs.customer_id
+					  AND oim_s.meta_value NOT IN ($donations)
+					  AND start_s.meta_value = first_subs.first_start
+					  AND pm_gate.meta_value NOT IN ('', '0')
+					LIMIT 1
+				), (
+					SELECT pm_legacy.meta_value
+					FROM {$prefix}posts p_sub
+					JOIN {$prefix}postmeta cust_s
+						ON cust_s.post_id = p_sub.ID AND cust_s.meta_key = '_customer_user'
+					JOIN {$prefix}postmeta start_s
+						ON start_s.post_id = p_sub.ID AND start_s.meta_key = '_schedule_start'
+					JOIN {$prefix}postmeta pm_legacy
+						ON pm_legacy.post_id = p_sub.post_parent AND pm_legacy.meta_key = '_memberships_content_gate'
+					JOIN {$prefix}woocommerce_order_items oi_s
+						ON oi_s.order_id = p_sub.ID AND oi_s.order_item_type = 'line_item'
+					JOIN {$prefix}woocommerce_order_itemmeta oim_s
+						ON oim_s.order_item_id = oi_s.order_item_id AND oim_s.meta_key = '_product_id'
+					WHERE p_sub.post_type = 'shop_subscription'
+					  AND CAST(cust_s.meta_value AS UNSIGNED) = first_subs.customer_id
+					  AND oim_s.meta_value NOT IN ($donations)
+					  AND start_s.meta_value = first_subs.first_start
+					  AND pm_legacy.meta_value NOT IN ('', '0')
+					LIMIT 1
+				), '') AS gate_post_id,
+				COALESCE((
+					SELECT pm_popup.meta_value
+					FROM {$prefix}posts p_sub
+					JOIN {$prefix}postmeta cust_s
+						ON cust_s.post_id = p_sub.ID AND cust_s.meta_key = '_customer_user'
+					JOIN {$prefix}postmeta start_s
+						ON start_s.post_id = p_sub.ID AND start_s.meta_key = '_schedule_start'
+					JOIN {$prefix}postmeta pm_popup
+						ON pm_popup.post_id = p_sub.post_parent AND pm_popup.meta_key = '_newspack_popup_id'
+					JOIN {$prefix}woocommerce_order_items oi_s
+						ON oi_s.order_id = p_sub.ID AND oi_s.order_item_type = 'line_item'
+					JOIN {$prefix}woocommerce_order_itemmeta oim_s
+						ON oim_s.order_item_id = oi_s.order_item_id AND oim_s.meta_key = '_product_id'
+					WHERE p_sub.post_type = 'shop_subscription'
+					  AND CAST(cust_s.meta_value AS UNSIGNED) = first_subs.customer_id
+					  AND oim_s.meta_value NOT IN ($donations)
+					  AND start_s.meta_value = first_subs.first_start
+					  AND pm_popup.meta_value NOT IN ('', '0')
+					LIMIT 1
+				), '') AS popup_id
+			FROM (
+				SELECT CAST(cust.meta_value AS UNSIGNED) AS customer_id, MIN(start.meta_value) AS first_start
+				FROM {$prefix}posts p
+				JOIN {$prefix}postmeta cust
+					ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
+				JOIN {$prefix}postmeta start
+					ON start.post_id = p.ID AND start.meta_key = '_schedule_start'
+				JOIN {$prefix}woocommerce_order_items oi
+					ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
+				JOIN {$prefix}woocommerce_order_itemmeta oim
+					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+				WHERE p.post_type = 'shop_subscription'
+				  AND CAST(cust.meta_value AS UNSIGNED) > 0
+				  AND oim.meta_value NOT IN ($donations)
+				  AND start.meta_value != ''
+				GROUP BY CAST(cust.meta_value AS UNSIGNED)
+			) AS first_subs
+			WHERE first_subs.first_start BETWEEN %s AND %s",
+			$this->fmt( $start ),
+			$this->fmt( $end )
+		);
+
+		return $this->rows_to_subscriber_records( $wpdb->get_results( $sql, ARRAY_A ) );
+	}
+
+	/**
+	 * Map (customer_id, first_start, gate_post_id, popup_id) rows to subscriber
+	 * source records with UTC epoch seconds. Blank dates are skipped. UTC parse
+	 * keeps the epoch correct regardless of MySQL session timezone.
+	 *
+	 * @param mixed $rows wpdb->get_results( …, ARRAY_A ) output.
+	 * @return array<int, array{customer_id:int, ts:int, gate_post_id:string, popup_id:string}>
+	 */
+	private function rows_to_subscriber_records( $rows ): array {
+		$utc     = new \DateTimeZone( 'UTC' );
+		$records = [];
+		foreach ( (array) $rows as $row ) {
+			if ( empty( $row['first_start'] ) ) {
+				continue;
+			}
+			$records[] = [
+				'customer_id'  => (int) $row['customer_id'],
+				'ts'           => ( new \DateTimeImmutable( $row['first_start'], $utc ) )->getTimestamp(),
+				'gate_post_id' => (string) ( $row['gate_post_id'] ?? '' ),
+				'popup_id'     => (string) ( $row['popup_id'] ?? '' ),
+			];
+		}
+		return $records;
+	}
+
+	/**
+	 * Map (customer_id, <date column>) rows to [ ['customer_id'=>int,'ts'=>int], … ]
+	 * with ts as UTC epoch seconds. Blank dates skipped; UTC parse keeps the epoch
+	 * correct regardless of MySQL session timezone.
+	 *
+	 * @param mixed  $rows     wpdb->get_results( …, ARRAY_A ) output.
+	 * @param string $date_key Row key holding the UTC `Y-m-d H:i:s` value.
+	 * @return array<int, array{customer_id:int, ts:int}>
+	 */
+	private function rows_to_records( $rows, string $date_key ): array {
+		$utc     = new \DateTimeZone( 'UTC' );
+		$records = [];
+		foreach ( (array) $rows as $row ) {
+			if ( empty( $row[ $date_key ] ) ) {
+				continue;
+			}
+			$records[] = [
+				'customer_id' => (int) $row['customer_id'],
+				'ts'          => ( new \DateTimeImmutable( $row[ $date_key ], $utc ) )->getTimestamp(),
+			];
+		}
+		return $records;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @return array<int, array{customer_id:int, registered_ts:int, first_sub_ts:int}>
+	 */
+	public function get_subscription_conversion_lags(): array {
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+
+		// Legacy CPT equivalent of HPOS get_subscription_conversion_lags().
+		$sql = "SELECT first_subs.customer_id, u.user_registered, first_subs.first_start
+			FROM (
+				SELECT CAST(cust.meta_value AS UNSIGNED) AS customer_id, MIN(start.meta_value) AS first_start
+				FROM {$prefix}posts p
+				JOIN {$prefix}postmeta cust
+					ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
+				JOIN {$prefix}postmeta start
+					ON start.post_id = p.ID AND start.meta_key = '_schedule_start'
+				JOIN {$prefix}woocommerce_order_items oi
+					ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
+				JOIN {$prefix}woocommerce_order_itemmeta oim
+					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+				WHERE p.post_type = 'shop_subscription'
+				  AND oim.meta_value NOT IN ($donations)
+				  AND start.meta_value != ''
+				GROUP BY CAST(cust.meta_value AS UNSIGNED)
+			) AS first_subs
+			JOIN {$prefix}users u ON u.ID = first_subs.customer_id";
+
+		return $this->rows_to_lags( $wpdb->get_results( $sql, ARRAY_A ), 'first_start', 'first_sub_ts' );
+	}
+
+	/**
+	 * Map (customer_id, user_registered, <first date>) rows to lag records with
+	 * UTC epoch seconds. Rows with a blank date are skipped. UTC parse keeps the
+	 * epochs correct regardless of MySQL session timezone. user_registered is
+	 * treated as UTC (WordPress stores it as the GMT registration instant).
+	 *
+	 * @param mixed  $rows         wpdb rows (ARRAY_A).
+	 * @param string $first_key    Row key holding the first-conversion date.
+	 * @param string $first_ts_out Output key for the first-conversion epoch.
+	 * @return array<int, array<string,int>>
+	 */
+	private function rows_to_lags( $rows, string $first_key, string $first_ts_out ): array {
+		$utc  = new \DateTimeZone( 'UTC' );
+		$out  = [];
+		foreach ( (array) $rows as $row ) {
+			if ( empty( $row[ $first_key ] ) || empty( $row['user_registered'] ) ) {
+				continue;
+			}
+			$out[] = [
+				'customer_id'   => (int) $row['customer_id'],
+				'registered_ts' => ( new \DateTimeImmutable( $row['user_registered'], $utc ) )->getTimestamp(),
+				$first_ts_out   => ( new \DateTimeImmutable( $row[ $first_key ], $utc ) )->getTimestamp(),
+			];
+		}
+		return $out;
 	}
 
 	/**

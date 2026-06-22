@@ -54,6 +54,7 @@ defined( 'ABSPATH' ) || exit;
 use DateTimeInterface;
 use Newspack\Insights\BigQuery_Proxy_Client;
 use Newspack\Insights\Donors_Metric;
+use Newspack\Insights\Source_Matcher;
 use Newspack\Insights\Subscribers_Metric;
 use Newspack\Insights\Woo_Order_Resolver;
 
@@ -169,6 +170,16 @@ final class Conversion_Metric {
 	 * @var array<string, array{rows:array, conversions:int, revenue:float}|\WP_Error>
 	 */
 	private array $paid_attempt_cache = [];
+
+	/**
+	 * Per-request memo for registration_source_events() BQ round-trip.
+	 *
+	 * Computed once on first call; subsequent calls within the same request
+	 * return the cached result. Nullable so null = not-yet-fetched.
+	 *
+	 * @var array<int, array{ts:int, source:string}>|null
+	 */
+	private ?array $registration_source_events_cache = null;
 
 	/**
 	 * Subscribers_Metric collaborator for Section 8 opportunity counts and
@@ -894,59 +905,220 @@ final class Conversion_Metric {
 	/**
 	 * Source mix for new subscribers (C12 / 3.2) — gate / prompt / direct.
 	 *
-	 * Fetches `conversion_journey_source_mix_subscribers` checkout-attempt rows
-	 * from the hub, buckets them by source (gate if `gate_post_id` is non-empty;
-	 * else prompt if `popup_id` non-empty; else direct), and Woo-joins each
-	 * non-empty bucket via {@see Woo_Order_Resolver::count_completed_orders()} to
-	 * get the actual subscriber count attributable to that surface. The
-	 * `fetch_paid_attempts_woo_join` memoized cache is shared with C14
-	 * (influenced subscription rate), which reads the same rows for its
-	 * denominator.
+	 * Fetches Woo conversion records via Subscribers_Metric and BQ exposure
+	 * events via the proxy, then delegates to compute_source_mix to attribute
+	 * each record to a source via Source_Matcher timestamp proximity.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array{state: string, total: int, slices: array<int, array{source: string, count: int, pct: float}>}
 	 */
 	public function get_source_mix_subscribers( DateTimeInterface $start, DateTimeInterface $end ): array {
-		return $this->compute_source_mix( 'conversion_journey_source_mix_subscribers', $start, $end );
+		$records = $this->subscribers_metric->get_new_subscriber_records_in_window( $start, $end );
+		return $this->compute_source_mix( 'conversion_journey_source_mix_subscribers', $records, $start, $end );
 	}
 
 	/**
 	 * Source mix for new donors (C13 / 3.3) — gate / prompt / direct.
 	 *
-	 * Identical logic to C12 using the `conversion_journey_source_mix_donors`
-	 * query. The memoized cache is shared with C15 (influenced donation rate),
-	 * which reads the same rows for its denominator.
+	 * Fetches Woo conversion records via Donors_Metric and BQ exposure events
+	 * via the proxy, then delegates to compute_source_mix to attribute each
+	 * record to a source via Source_Matcher timestamp proximity.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array{state: string, total: int, slices: array<int, array{source: string, count: int, pct: float}>}
 	 */
 	public function get_source_mix_donors( DateTimeInterface $start, DateTimeInterface $end ): array {
-		return $this->compute_source_mix( 'conversion_journey_source_mix_donors', $start, $end );
+		$records = $this->donors_metric->get_new_donor_records_in_window( $start, $end );
+		return $this->compute_source_mix( 'conversion_journey_source_mix_donors', $records, $start, $end );
 	}
 
 	/**
-	 * Shared source-mix computation for C12 and C13.
+	 * Classify a BQ source-mix row to gate / prompt / direct.
 	 *
-	 * Fetches attempt rows via `fetch_paid_attempts_woo_join` (memoized), buckets
-	 * by source (gate → prompt → direct), Woo-joins each bucket independently,
-	 * and builds the { state, total, slices } collection.
-	 *
-	 * @param string            $query_name Hub catalog query name.
-	 * @param DateTimeInterface $start      Window start.
-	 * @param DateTimeInterface $end        Window end.
-	 * @return array
+	 * @param array<string,mixed> $row BQ row.
+	 * @return string One of self::SOURCES.
 	 */
-	private function compute_source_mix( string $query_name, DateTimeInterface $start, DateTimeInterface $end ): array {
-		$joined = $this->fetch_paid_attempts_woo_join( $query_name, $start, $end );
-		if ( is_wp_error( $joined ) ) {
-			return $this->error_collection( 'slices', $joined );
+	private function classify_source( array $row ): string {
+		if ( ! empty( $row['gate_post_id'] ) ) {
+			return 'gate';
+		}
+		if ( ! empty( $row['popup_id'] ) ) {
+			return 'prompt';
+		}
+		return Source_Matcher::SOURCE_DIRECT;
+	}
+
+	/**
+	 * Empirical CDF over a list of day-lags: one point per distinct day that has
+	 * conversions, with the running fraction of the cohort converted by that day.
+	 *
+	 * @param int[] $days_values Day lags (already truncated to the lookback).
+	 * @return array<int, array{day:int, cumulative_pct:float}>
+	 */
+	private function cumulative_distribution( array $days_values ): array {
+		$total = count( $days_values );
+		if ( 0 === $total ) {
+			return [];
+		}
+		$per_day = [];
+		foreach ( $days_values as $day ) {
+			$day             = (int) $day;
+			$per_day[ $day ] = ( $per_day[ $day ] ?? 0 ) + 1;
+		}
+		ksort( $per_day );
+		$running = 0;
+		$points  = [];
+		foreach ( $per_day as $day => $count ) {
+			$running += $count;
+			$points[] = [
+				'day'            => (int) $day,
+				'cumulative_pct' => round( $running / $total, 4 ),
+			];
+		}
+		return $points;
+	}
+
+	/**
+	 * Registration source events for the time-to-convert distributions, behind
+	 * the BQ probe gate. Window is a trailing 365 days ending now (snapshot).
+	 * Returns [ ['ts'=>int seconds, 'source'=>string], … ], or [] when the probe
+	 * reports no registrations or any BQ call fails (degrade to all-direct).
+	 *
+	 * @return array<int, array{ts:int, source:string}>
+	 */
+	private function registration_source_events(): array {
+		if ( null !== $this->registration_source_events_cache ) {
+			return $this->registration_source_events_cache;
+		}
+		$utc   = new \DateTimeZone( 'UTC' );
+		$end   = new \DateTimeImmutable( 'now', $utc );
+		$start = $end->modify( '-365 days' );
+
+		$probe = $this->proxy->query( 'conversion_journey_has_registrations_in_window', $start, $end );
+		if ( is_wp_error( $probe ) || ! is_array( $probe ) || empty( $probe[0] ) || ! is_array( $probe[0] ) ) {
+			$this->registration_source_events_cache = [];
+			return $this->registration_source_events_cache;
+		}
+		$first_row = $probe[0];
+		$count     = (int) reset( $first_row ); // Single COUNT column; read defensively regardless of alias.
+		if ( $count <= 0 ) {
+			$this->registration_source_events_cache = [];
+			return $this->registration_source_events_cache;
 		}
 
-		$rows = $joined['rows'];
+		$reg = $this->proxy->query( 'conversion_journey_registrations_with_source', $start, $end );
+		if ( is_wp_error( $reg ) || ! is_array( $reg ) ) {
+			$this->registration_source_events_cache = [];
+			return $this->registration_source_events_cache;
+		}
+		$events = [];
+		foreach ( $reg as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$events[] = [
+				'ts'     => intdiv( (int) ( $row['reg_ts'] ?? 0 ), 1000000 ),
+				'source' => (string) ( $row['source'] ?? Source_Matcher::SOURCE_DIRECT ),
+			];
+		}
+		$this->registration_source_events_cache = $events;
+		return $this->registration_source_events_cache;
+	}
 
-		if ( empty( $rows ) ) {
+	/**
+	 * Build a multi-series time-to-convert distribution. Lag = first_ts −
+	 * registered_ts in whole days, kept to [0,365]. Each reader's source comes
+	 * from matching their user_registered to a BQ registration event within
+	 * ±WINDOW_REGISTRATION_SECONDS; unmatched → direct. Always emits the three
+	 * source groups (zero-filled when empty).
+	 *
+	 * @param array<int, array<string,int>> $rows         Conversion-lag rows.
+	 * @param string                        $first_ts_key Row key for the first-conversion epoch.
+	 * @return array{state:string, groups:array}
+	 */
+	private function build_time_to_convert_distribution( array $rows, string $first_ts_key ): array {
+		$events = $this->registration_source_events();
+		// Bound the cohort to the same trailing-365-day window that
+		// registration_source_events() covers. Converters who registered
+		// more than 365 days ago would be silently attributed 'direct'
+		// (their registration event fell outside the BQ window), biasing
+		// older cohorts. Filtering them out keeps source attribution honest.
+		$reg_cutoff      = ( new \DateTimeImmutable( 'now', new \DateTimeZone( 'UTC' ) ) )->modify( '-365 days' )->getTimestamp();
+		$records         = [];
+		$lag_by_customer = [];
+		foreach ( $rows as $row ) {
+			if ( (int) $row['registered_ts'] < $reg_cutoff ) {
+				continue;
+			}
+			$lag = intdiv( (int) $row[ $first_ts_key ] - (int) $row['registered_ts'], 86400 );
+			if ( $lag < 0 || $lag > 365 ) {
+				continue;
+			}
+			$cid                     = (int) $row['customer_id'];
+			$records[]               = [
+				'key' => $cid,
+				'ts'  => (int) $row['registered_ts'],
+			];
+			$lag_by_customer[ $cid ] = $lag;
+		}
+
+		// Greedy single-consume nearest-match: on a busy site, two readers registering
+		// within WINDOW_REGISTRATION_SECONDS of each other can have their sources swapped
+		// (each consumes the event nearest to them, but which event is "nearest" is
+		// order-sensitive). This is an accepted accuracy nuance, not a bug.
+		$map         = Source_Matcher::attach_sources( $records, $events, Source_Matcher::WINDOW_REGISTRATION_SECONDS, Source_Matcher::WINDOW_REGISTRATION_SECONDS );
+		$days_by_src = [
+			'gate'   => [],
+			'prompt' => [],
+			'direct' => [],
+		];
+		foreach ( $lag_by_customer as $cid => $lag ) {
+			$source                   = $map[ $cid ] ?? Source_Matcher::SOURCE_DIRECT;
+			$days_by_src[ $source ][] = $lag;
+		}
+
+		$groups = [];
+		foreach ( self::SOURCES as $source ) {
+			$groups[] = [
+				'label'  => $source,
+				'points' => $this->cumulative_distribution( $days_by_src[ $source ] ),
+			];
+		}
+
+		return [
+			'state'  => empty( $lag_by_customer ) ? 'empty' : 'populated',
+			'groups' => $groups,
+		];
+	}
+
+	/**
+	 * Source-mix via the Woo identity spine. For records that carry order-meta
+	 * source signals (gate_post_id / popup_id from the donor storage layer),
+	 * classification is done directly from the meta — gate wins over prompt wins
+	 * over "no meta". Records without order-meta (all subscriber records, and
+	 * donor records with no meta on the first-donation order) fall through to
+	 * the BQ temporal matcher.
+	 *
+	 * BQ round-trip cost: the proxy query is only issued when ≥1 record lacks
+	 * order-meta. If every donor record was classified via order meta the BQ
+	 * call is skipped entirely, making 3.3 hub-independent for those donations.
+	 * Subscriber records (3.2) never carry gate_post_id / popup_id so they
+	 * always go through the matcher — unchanged behaviour.
+	 *
+	 * @param string                                     $query_name Hub catalog query name.
+	 * @param array<int, array{customer_id:int, ts:int}> $records    Woo conversion records.
+	 * @param DateTimeInterface                          $start      Window start.
+	 * @param DateTimeInterface                          $end        Window end.
+	 * @return array
+	 */
+	private function compute_source_mix( string $query_name, array $records, DateTimeInterface $start, DateTimeInterface $end ): array {
+		// No conversions in the window → the metric is 'empty' regardless of the
+		// source layer, so skip the BQ round-trip entirely. BigQuery only attributes
+		// a source to conversions that already exist in Woo; with none there is
+		// nothing to attribute, and a proxy error here would be a false 'error'.
+		if ( empty( $records ) ) {
 			return [
 				'state'  => 'empty',
 				'total'  => 0,
@@ -954,43 +1126,108 @@ final class Conversion_Metric {
 			];
 		}
 
-		// Bucket rows by source. Each row's source is classified:
-		// gate   — gate_post_id is non-empty.
-		// prompt — gate_post_id is empty but popup_id is non-empty.
-		// direct — both are empty.
-		$buckets = [
-			'gate'   => [],
-			'prompt' => [],
-			'direct' => [],
+		// Pass 1: order-meta classification (donor records only).
+		// Subscriber records carry no gate_post_id / popup_id keys so they always
+		// fall to the matcher below — behaviour is unchanged for 3.2.
+		$meta_counts    = [
+			'gate'   => 0,
+			'prompt' => 0,
+			'direct' => 0,
 		];
-		foreach ( $rows as $row ) {
+		$matcher_records = []; // Records without usable order-meta → to BQ matcher.
+
+		foreach ( $records as $record ) {
+			// array_key_exists differentiates "key present but empty-string" from
+			// "key absent" (subscriber records). Both '' and '0' count as "no meta"
+			// since the SQL already guards NOT IN ('','0').
+			$has_gate  = array_key_exists( 'gate_post_id', $record ) && '' !== (string) $record['gate_post_id'];
+			$has_popup = array_key_exists( 'popup_id', $record ) && '' !== (string) $record['popup_id'];
+
+			if ( $has_gate ) {
+				++$meta_counts['gate'];
+			} elseif ( $has_popup ) {
+				++$meta_counts['prompt'];
+			} else {
+				// No order-meta (or subscriber record with no meta keys): fall to matcher.
+				$matcher_records[] = $record;
+			}
+		}
+
+		// If every record was classified via order meta, skip the BQ round-trip.
+		if ( empty( $matcher_records ) ) {
+			$total  = array_sum( $meta_counts );
+			$safe   = $total > 0 ? $total : 1;
+			$slices = [];
+			foreach ( self::SOURCES as $source ) {
+				$count    = (int) ( $meta_counts[ $source ] ?? 0 );
+				$slices[] = [
+					'source' => $source,
+					'count'  => $count,
+					'pct'    => (float) ( $count / $safe ),
+				];
+			}
+			return [
+				'state'  => 'populated',
+				'total'  => $total,
+				'slices' => $slices,
+			];
+		}
+
+		// Pass 2: BQ temporal matcher for the remaining records.
+		// Widen the event fetch by one day before $start so that a conversion
+		// occurring just after midnight on the window's first day can still be
+		// matched to an exposure event that occurred just before midnight the
+		// preceding night. Source_Matcher::WINDOW_ORDER_SECONDS (1800 s) allows
+		// lookback up to 30 min before the conversion; a day-granular date
+		// boundary can cut off valid events without this guard.
+		// createFromInterface() produces a DateTimeImmutable so modify() returns a new instance.
+		$events_start = \DateTimeImmutable::createFromInterface( $start )->modify( '-1 day' );
+		$bq           = $this->proxy->query( $query_name, $events_start, $end );
+		if ( is_wp_error( $bq ) ) {
+			return $this->error_collection( 'slices', $bq );
+		}
+		// A non-array success body, or any non-array row, is a malformed response
+		// (consistent with the other BQ-backed metrics) — surface 'error' rather
+		// than silently degrading to all-direct.
+		if ( ! is_array( $bq ) ) {
+			return $this->malformed_collection( 'slices' );
+		}
+
+		$events = [];
+		foreach ( $bq as $row ) {
 			if ( ! is_array( $row ) ) {
 				return $this->malformed_collection( 'slices' );
 			}
-			if ( ! empty( $row['gate_post_id'] ) ) {
-				$buckets['gate'][] = $row;
-			} elseif ( ! empty( $row['popup_id'] ) ) {
-				$buckets['prompt'][] = $row;
-			} else {
-				$buckets['direct'][] = $row;
-			}
+			$events[] = [
+				'ts'     => intdiv( (int) ( $row['attempt_ts'] ?? 0 ), 1000000 ),
+				'source' => $this->classify_source( $row ),
+			];
 		}
 
-		// For each non-empty bucket, Woo-join to get the completed-order count.
-		$counts = [];
-		$total  = 0;
-		foreach ( self::SOURCES as $source ) {
-			$count          = empty( $buckets[ $source ] )
-				? 0
-				: $this->woo_resolver->count_completed_orders( $buckets[ $source ] );
-			$counts[ $source ] = $count;
-			$total            += $count;
+		$match_input = [];
+		foreach ( $matcher_records as $record ) {
+			$match_input[] = [
+				'key' => (int) $record['customer_id'],
+				'ts'  => (int) $record['ts'],
+			];
 		}
 
-		$safe   = $total > 0 ? $total : 1;
+		$map            = Source_Matcher::attach_sources( $match_input, $events, Source_Matcher::WINDOW_ORDER_SECONDS, 0 );
+		$matcher_counts = Source_Matcher::count_by_source( $map );
+
+		// Merge order-meta counts with BQ matcher counts.
+		$counts = [
+			'gate'   => $meta_counts['gate'] + (int) ( $matcher_counts['gate'] ?? 0 ),
+			'prompt' => $meta_counts['prompt'] + (int) ( $matcher_counts['prompt'] ?? 0 ),
+			'direct' => $meta_counts['direct'] + (int) ( $matcher_counts['direct'] ?? 0 ),
+		];
+
+		$total = array_sum( $counts );
+		$safe  = $total > 0 ? $total : 1;
+
 		$slices = [];
 		foreach ( self::SOURCES as $source ) {
-			$count    = $counts[ $source ];
+			$count    = (int) ( $counts[ $source ] ?? 0 );
 			$slices[] = [
 				'source' => $source,
 				'count'  => $count,
@@ -1085,55 +1322,74 @@ final class Conversion_Metric {
 	}
 
 	/**
-	 * Time-to-subscribe cumulative distribution (4.2) — three series by
-	 * source (gate / prompt / direct).
+	 * Time-to-subscribe cumulative distribution (4.2) — three series by source.
+	 * Snapshot: ignores the window (all-history). May become windowed later
+	 * (e.g. holiday-season period comparison).
 	 *
-	 * Phase B `coming_soon` placeholder. Not yet wired to BigQuery.
-	 *
-	 * @param DateTimeInterface $start Window start.
-	 * @param DateTimeInterface $end   Window end.
+	 * @param DateTimeInterface $start Window start (ignored — snapshot).
+	 * @param DateTimeInterface $end   Window end (ignored — snapshot).
 	 * @return array{state: string, groups: array}
 	 */
 	public function get_time_to_subscribe_distribution( DateTimeInterface $start, DateTimeInterface $end ): array {
 		unset( $start, $end );
-		return $this->coming_soon_collection( 'groups' );
+		return $this->build_time_to_convert_distribution(
+			$this->subscribers_metric->get_subscription_conversion_lags(),
+			'first_sub_ts'
+		);
 	}
 
 	/**
 	 * Time-to-donate cumulative distribution (4.3) — three series by source.
+	 * Snapshot: ignores the window (all-history). May become windowed later.
 	 *
-	 * Phase B `coming_soon` placeholder. Not yet wired to BigQuery.
-	 *
-	 * @param DateTimeInterface $start Window start.
-	 * @param DateTimeInterface $end   Window end.
+	 * @param DateTimeInterface $start Window start (ignored — snapshot).
+	 * @param DateTimeInterface $end   Window end (ignored — snapshot).
 	 * @return array{state: string, groups: array}
 	 */
 	public function get_time_to_donate_distribution( DateTimeInterface $start, DateTimeInterface $end ): array {
 		unset( $start, $end );
-		return $this->coming_soon_collection( 'groups' );
+		return $this->build_time_to_convert_distribution(
+			$this->donors_metric->get_donation_conversion_lags(),
+			'first_donation_ts'
+		);
 	}
 
 	/**
 	 * Subscriber → donor lag cumulative distribution (4.4) — single series,
-	 * visibility-gated.
+	 * visibility-gated at self::MIN_COHORT_FOR_SUB_TO_DONOR cross-converters.
+	 * Pure Woo. Snapshot: ignores the window (all-history). May become windowed
+	 * later.
 	 *
-	 * Local-only (Woo-only): does NOT belong in the BQ catalog. Gated at 50
-	 * cross-converters. Phase B `coming_soon` placeholder; preserves the
-	 * `visibility` / `visibility_reason` keys React reads unconditionally.
-	 *
-	 * @param DateTimeInterface $start Window start.
-	 * @param DateTimeInterface $end   Window end.
+	 * @param DateTimeInterface $start Window start (ignored — snapshot).
+	 * @param DateTimeInterface $end   Window end (ignored — snapshot).
 	 * @return array{state: string, points: array, visibility: string, visibility_reason: string|null}
 	 */
 	public function get_subscriber_to_donor_lag_distribution( DateTimeInterface $start, DateTimeInterface $end ): array {
 		unset( $start, $end );
-		return array_merge(
-			$this->coming_soon_collection( 'points' ),
-			[
+		$days = [];
+		foreach ( $this->donors_metric->get_subscriber_to_donor_lags() as $row ) {
+			$lag = (int) $row['lag_days'];
+			if ( $lag < 0 || $lag > 365 ) {
+				continue;
+			}
+			$days[] = $lag;
+		}
+
+		if ( count( $days ) < self::MIN_COHORT_FOR_SUB_TO_DONOR ) {
+			return [
+				'state'             => 'populated',
+				'points'            => [],
 				'visibility'        => 'hidden',
 				'visibility_reason' => 'insufficient_data',
-			]
-		);
+			];
+		}
+
+		return [
+			'state'             => 'populated',
+			'points'            => $this->cumulative_distribution( $days ),
+			'visibility'        => 'visible',
+			'visibility_reason' => null,
+		];
 	}
 
 	// --- Section 5: Cohort retention ------------------------------------
