@@ -77,7 +77,9 @@ trait Insights_Woo_Order_Fixtures {
 	 *
 	 * @param array $args Order spec: `product_id`, `total` (`_order_total`),
 	 *                    `popup_ids` (one `_newspack_popup_id` row per element,
-	 *                    duplicates allowed), `renewal` (`_subscription_renewal`),
+	 *                    duplicates allowed), `gate_ids` (one `_gate_post_id` row per
+	 *                    element, duplicates allowed — NPPD-1746),
+	 *                    `renewal` (`_subscription_renewal`),
 	 *                    `status` (default 'wc-completed'), `date` (GMT 'Y-m-d H:i:s').
 	 * @return int The created order's post ID.
 	 */
@@ -86,6 +88,10 @@ trait Insights_Woo_Order_Fixtures {
 		$date     = $args['date'] ?? $this->default_order_date_gmt();
 		$order_id = wp_insert_post(
 			[
+				// Honor an explicit order_id (via import_id) so legacy and HPOS fixtures
+				// share the same order id — readers that key results by order id can then
+				// assert identically across both backends. import_id 0 = auto-assign.
+				'import_id'   => (int) ( $args['order_id'] ?? 0 ),
 				'post_type'   => 'shop_order',
 				'post_status' => $args['status'] ?? 'wc-completed',
 				'post_title'  => 'Order',
@@ -103,6 +109,9 @@ trait Insights_Woo_Order_Fixtures {
 		);
 		foreach ( (array) ( $args['popup_ids'] ?? [] ) as $pid ) {
 			add_post_meta( $order_id, '_newspack_popup_id', $pid ); // unique = false → duplicates allowed.
+		}
+		foreach ( (array) ( $args['gate_ids'] ?? [] ) as $gid ) {
+			add_post_meta( $order_id, '_gate_post_id', $gid ); // unique = false → duplicates allowed (NPPD-1746).
 		}
 		if ( isset( $args['total'] ) ) {
 			add_post_meta( $order_id, '_order_total', $args['total'] );
@@ -147,6 +156,16 @@ trait Insights_Woo_Order_Fixtures {
 					'order_id'   => $order_id,
 					'meta_key'   => '_newspack_popup_id',
 					'meta_value' => $pid,
+				]
+			);
+		}
+		foreach ( (array) ( $args['gate_ids'] ?? [] ) as $gid ) {
+			$wpdb->insert(
+				"{$p}wc_orders_meta",
+				[
+					'order_id'   => $order_id,
+					'meta_key'   => '_gate_post_id',
+					'meta_value' => $gid,
 				]
 			);
 		}
