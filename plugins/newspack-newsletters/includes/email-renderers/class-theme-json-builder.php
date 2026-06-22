@@ -117,12 +117,6 @@ class Theme_Json_Builder {
 			],
 		];
 
-		// Mirror the editor's canonical button into the render, but only under the
-		// WC renderer. Flag off keeps the legacy MJML output untouched.
-		if ( Feature_Flag::is_enabled() ) {
-			$styles['elements']['button'] = Email_Theme::canonical( $post )['styles']['elements']['button'];
-		}
-
 		return [
 			'version'  => 3,
 			'settings' => $settings,

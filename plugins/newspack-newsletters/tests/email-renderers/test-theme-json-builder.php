@@ -196,29 +196,12 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 	}
 
 	/**
-	 * With the WC renderer ON, the built theme carries the canonical button.
+	 * The builder no longer injects a forced button; the button is theme-driven.
 	 */
-	public function test_includes_button_when_flag_on() {
+	public function test_does_not_inject_button() {
 		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
-
 		$theme = Theme_Json_Builder::build( get_post( self::factory()->post->create() ) );
-
 		remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
-
-		$this->assertArrayHasKey( 'button', $theme['styles']['elements'] );
-		$this->assertSame( '5px', $theme['styles']['elements']['button']['border']['radius'] );
-	}
-
-	/**
-	 * With the WC renderer OFF, the built theme has no button (legacy unchanged).
-	 */
-	public function test_omits_button_when_flag_off() {
-		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_false' );
-
-		$theme = Theme_Json_Builder::build( get_post( self::factory()->post->create() ) );
-
-		remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_false' );
-
-		$this->assertArrayNotHasKey( 'button', $theme['styles']['elements'] );
+		$this->assertArrayNotHasKey( 'button', $theme['styles']['elements'] ?? [] );
 	}
 }
