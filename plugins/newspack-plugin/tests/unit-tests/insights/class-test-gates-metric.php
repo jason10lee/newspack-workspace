@@ -11,7 +11,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use Newspack\Insights\BigQuery_Proxy_Client;
 use Newspack\Insights\Gates_Metric;
-use Newspack\Insights\Woo_Order_Resolver;
+use Newspack\Insights\Subscribers_Metric;
 use WP_UnitTestCase;
 
 /**
@@ -190,58 +190,112 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'bigquery_proxy_malformed_value', $result['error_code'] );
 	}
 
+	// --- NPPD-1746: direct paywall rate + revenue from order meta (gate surface) ---
+
 	/**
-	 * Paywall direct conversion rate: matched orders / BQ row count.
+	 * Remove the WC-active seam filter set by the direct-paywall test helpers.
 	 */
-	public function test_paywall_conversion_direct_uses_woo_join() {
-		$bq_rows = [
-			[
-				'user_pseudo_id' => '1',
-				'session_id'     => 's1',
-				'attempt_ts'     => '1000000000000000',
-			],
-			[
-				'user_pseudo_id' => '2',
-				'session_id'     => 's2',
-				'attempt_ts'     => '1000001000000000',
-			],
-			[
-				'user_pseudo_id' => '3',
-				'session_id'     => 's3',
-				'attempt_ts'     => '1000002000000000',
-			],
-			[
-				'user_pseudo_id' => '4',
-				'session_id'     => 's4',
-				'attempt_ts'     => '1000003000000000',
-			],
-		];
-
-		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		$proxy->expects( $this->once() )
-			->method( 'query' )
-			->with( 'gates_paywall_conversion_direct', $this->isInstanceOf( DateTimeImmutable::class ), $this->isInstanceOf( DateTimeImmutable::class ) )
-			->willReturn( $bq_rows );
-
-		$resolver = $this->createMock( Woo_Order_Resolver::class );
-		$resolver->method( 'count_completed_orders' )->willReturn( 1 ); // 1 of 4 attempts converted.
-
-		$metric = new Gates_Metric( $proxy, $resolver );
-		$result = $metric->get_paywall_conversion_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
-
-		$this->assertSame( 0.25, $result['value'] );
-		$this->assertSame( 'populated', $result['state'] );
-		$this->assertSame( 4, $result['denominator'] );
+	public function tear_down(): void {
+		remove_all_filters( 'newspack_insights_woocommerce_active' );
+		parent::tear_down();
 	}
 
 	/**
-	 * Paywall direct conversion rate: no attempts -> non-computable 0% (not error).
+	 * Build a Gates_Metric for the direct paywall cards with an injected proxy +
+	 * Subscribers_Metric and a forced `woocommerce_active()` (via filter — the class
+	 * is final). The proxy feeds the rate card's per-gate impressions denominator;
+	 * revenue passes null. Filter removed in tear_down().
+	 *
+	 * @param BigQuery_Proxy_Client|null $proxy       Injected proxy (rate) or null (revenue).
+	 * @param Subscribers_Metric         $subscribers Injected subscribers collaborator.
+	 * @param bool                       $wc          What woocommerce_active() should return.
+	 * @return Gates_Metric
 	 */
-	public function test_paywall_conversion_direct_with_zero_denominator() {
-		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		$proxy->method( 'query' )->willReturn( [] );
+	private function make_direct_paywall_metric( ?BigQuery_Proxy_Client $proxy, Subscribers_Metric $subscribers, bool $wc ): Gates_Metric {
+		add_filter( 'newspack_insights_woocommerce_active', $wc ? '__return_true' : '__return_false' );
+		return new Gates_Metric( $proxy, null, $subscribers );
+	}
 
-		$metric = new Gates_Metric( $proxy );
+	/**
+	 * Stub Subscribers_Metric whose gate surface holds one gate (id 77) with the
+	 * given conversions + revenue, and an empty popup surface.
+	 *
+	 * @param int   $conversions Gate-attributed subscription conversions.
+	 * @param float $revenue     Gate-attributed subscription revenue.
+	 * @return Subscribers_Metric
+	 */
+	private function subscribers_with_gate( int $conversions, float $revenue ): Subscribers_Metric {
+		$subscribers = $this->createMock( Subscribers_Metric::class );
+		$subscribers->method( 'get_attributed_subscription_conversions' )->willReturn(
+			[
+				'by_gate'  => [
+					'77' => [
+						'conversions' => $conversions,
+						'revenue'     => $revenue,
+					],
+				],
+				'by_popup' => [],
+			]
+		);
+		return $subscribers;
+	}
+
+	/**
+	 * Proxy whose `gates_performance_by_gate` reports impressions for gate 77 (the
+	 * converting gate) PLUS an unrelated gate 88. Gate 88 must NOT enter the
+	 * denominator — the rate is per-gate keyed to the gates that actually converted.
+	 *
+	 * @param int $gate_77_impressions Impressions to report for gate 77.
+	 * @return BigQuery_Proxy_Client
+	 */
+	private function proxy_with_gate_impressions( int $gate_77_impressions ): BigQuery_Proxy_Client {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn(
+			[
+				[
+					'gate_post_id' => 77,
+					'impressions'  => $gate_77_impressions,
+				],
+				[
+					'gate_post_id' => 88,
+					'impressions'  => 500,
+				],
+			]
+		);
+		return $proxy;
+	}
+
+	/**
+	 * Direct paywall rate = gate-attributed conversions ÷ impressions of the SAME
+	 * gates. Gate 88's 500 impressions are excluded (no conversions there) — proving
+	 * the per-gate keying (denominator 4, not 504).
+	 */
+	public function test_paywall_conversion_direct_per_gate_over_impressions() {
+		$metric = $this->make_direct_paywall_metric(
+			$this->proxy_with_gate_impressions( 4 ),
+			$this->subscribers_with_gate( 1, 0.0 ),
+			true
+		);
+
+		$result = $metric->get_paywall_conversion_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 0.25, $result['value'] );
+		$this->assertTrue( $result['computable'] );
+		$this->assertSame( 4, $result['denominator'], 'denominator is gate 77 only, not the unrelated gate 88' );
+		$this->assertSame( 1, $result['numerator'] );
+	}
+
+	/**
+	 * No impressions for the converting gate → no denominator → not computable.
+	 */
+	public function test_paywall_conversion_direct_not_computable_without_impressions() {
+		$metric = $this->make_direct_paywall_metric(
+			$this->proxy_with_gate_impressions( 0 ),
+			$this->subscribers_with_gate( 3, 0.0 ),
+			true
+		);
+
 		$result = $metric->get_paywall_conversion_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
 		$this->assertSame( 'populated', $result['state'] );
@@ -249,69 +303,118 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Total paywall revenue (Direct): sum_completed_revenue passthrough.
+	 * Coherence guard: gate-surface conversions exceeding that gate's impressions
+	 * must not fabricate a >100% rate — suppress to not-computable.
 	 */
-	public function test_total_paywall_revenue_direct_sums_woo() {
-		$bq_rows = [
-			[
-				'user_pseudo_id' => '1',
-				'session_id'     => 's1',
-				'attempt_ts'     => '1000000000000000',
-			],
-		];
+	public function test_paywall_conversion_direct_coherence_guard_suppresses_over_100() {
+		$metric = $this->make_direct_paywall_metric(
+			$this->proxy_with_gate_impressions( 2 ),
+			$this->subscribers_with_gate( 10, 0.0 ),
+			true
+		);
 
+		$result = $metric->get_paywall_conversion_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertFalse( $result['computable'], 'a >100% cross-surface ratio is suppressed, not shown' );
+	}
+
+	/**
+	 * Hybrid card: if the hub impressions call errors, the rate is genuinely
+	 * uncomputable → error state (counts toward the tab-error banner).
+	 */
+	public function test_paywall_conversion_direct_errors_when_impressions_hub_errors() {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		$proxy->method( 'query' )->willReturn( $bq_rows );
+		$proxy->method( 'query' )->willReturn( new \WP_Error( 'bigquery_proxy_error', 'down' ) );
 
-		$resolver = $this->createMock( Woo_Order_Resolver::class );
-		$resolver->method( 'sum_completed_revenue' )->willReturn( 99.99 );
+		$metric = $this->make_direct_paywall_metric( $proxy, $this->subscribers_with_gate( 1, 0.0 ), true );
 
-		$metric = new Gates_Metric( $proxy, $resolver );
+		$result = $metric->get_paywall_conversion_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertSame( 'error', $result['state'] );
+	}
+
+	/**
+	 * NPPD-1745 #3 (mirrored to paywall): a malformed impressions response (the hub
+	 * succeeded but returned a non-array shape) errors the rate rather than collapsing
+	 * to a fabricated "0 impressions → em-dash".
+	 */
+	public function test_paywall_conversion_direct_errors_on_malformed_impressions() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( 'not-an-array' ); // Malformed (non-array) hub response.
+
+		$metric = $this->make_direct_paywall_metric( $proxy, $this->subscribers_with_gate( 1, 0.0 ), true );
+
+		$result = $metric->get_paywall_conversion_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertSame( 'error', $result['state'], 'malformed impressions errors, not a fabricated 0%' );
+		$this->assertSame( 'bigquery_proxy_malformed_rows', $result['error_code'] );
+	}
+
+	/**
+	 * Non-WC publisher: the paywall rate is an empty state (not a fake 0%), and the
+	 * order-meta numerator is never queried.
+	 */
+	public function test_paywall_conversion_direct_empty_state_when_not_woocommerce() {
+		$subscribers = $this->createMock( Subscribers_Metric::class );
+		$subscribers->expects( $this->never() )->method( 'get_attributed_subscription_conversions' );
+
+		$metric = $this->make_direct_paywall_metric( null, $subscribers, false );
+		$result = $metric->get_paywall_conversion_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertFalse( $result['computable'] );
+	}
+
+	/**
+	 * Total paywall revenue sums the gate surface of the two-key order-meta map.
+	 */
+	public function test_total_paywall_revenue_direct_sums_order_meta() {
+		$metric = $this->make_direct_paywall_metric( null, $this->subscribers_with_gate( 2, 99.99 ), true );
+
 		$result = $metric->get_total_paywall_revenue_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
-		$this->assertSame( 99.99, $result['value'] );
 		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 99.99, $result['value'] );
+		$this->assertTrue( $result['computable'] );
+		$this->assertSame( 2, $result['denominator'] );
 	}
 
 	/**
-	 * Avg revenue per conversion is derived from the two queries it depends on.
+	 * Non-WC publisher: total paywall revenue is a not-computable empty state.
 	 */
-	public function test_avg_revenue_per_paywall_conversion_derives_from_two_queries() {
-		$bq_rows = [
-			[
-				'user_pseudo_id' => '1',
-				'session_id'     => 's1',
-				'attempt_ts'     => '1000000000000000',
-			],
-			[
-				'user_pseudo_id' => '2',
-				'session_id'     => 's2',
-				'attempt_ts'     => '1000001000000000',
-			],
-		];
+	public function test_total_paywall_revenue_direct_empty_state_when_not_woocommerce() {
+		$subscribers = $this->createMock( Subscribers_Metric::class );
+		$subscribers->expects( $this->never() )->method( 'get_attributed_subscription_conversions' );
 
-		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		$proxy->method( 'query' )->willReturn( $bq_rows );
+		$metric = $this->make_direct_paywall_metric( null, $subscribers, false );
+		$result = $metric->get_total_paywall_revenue_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
-		$resolver = $this->createMock( Woo_Order_Resolver::class );
-		$resolver->method( 'count_completed_orders' )->willReturn( 2 );
-		$resolver->method( 'sum_completed_revenue' )->willReturn( 200.00 );
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertFalse( $result['computable'] );
+		$this->assertSame( 0.0, $result['value'] );
+	}
 
-		$metric = new Gates_Metric( $proxy, $resolver );
+	/**
+	 * Avg revenue per paywall conversion is revenue ÷ conversions from the same
+	 * order-meta gate surface.
+	 */
+	public function test_avg_revenue_per_paywall_conversion_from_order_meta() {
+		$metric = $this->make_direct_paywall_metric( null, $this->subscribers_with_gate( 2, 200.00 ), true );
+
 		$result = $metric->get_avg_revenue_per_paywall_conversion( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
-		$this->assertSame( 100.0, $result['value'] );
 		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 100.0, $result['value'] );
+		$this->assertTrue( $result['computable'] );
 	}
 
 	/**
-	 * Avg revenue per conversion: zero conversions -> non-computable $0.00, not divide-by-zero.
+	 * Avg revenue: zero conversions → non-computable $0.00, not divide-by-zero.
 	 */
 	public function test_avg_revenue_per_paywall_conversion_with_zero_conversions() {
-		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		$proxy->method( 'query' )->willReturn( [] );
+		$metric = $this->make_direct_paywall_metric( null, $this->subscribers_with_gate( 0, 0.0 ), true );
 
-		$metric = new Gates_Metric( $proxy );
 		$result = $metric->get_avg_revenue_per_paywall_conversion( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
 		$this->assertSame( 'populated', $result['state'] );
@@ -319,77 +422,23 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Avg revenue per conversion: non-empty BQ rows but zero matched orders -> placeholder.
-	 *
-	 * The realistic production case: paywall impressions led to checkout attempts,
-	 * but none completed within the 30-min window. Distinct from the empty-rows
-	 * path (no impressions at all).
+	 * Total revenue and avg-per-conversion read ONE order-meta source, so they
+	 * reconcile: total === avg × conversions. Replaces the prior "share a single
+	 * proxy call" regression — both now source from the cached Subscribers_Metric
+	 * gate surface, not a hub query.
 	 */
-	public function test_avg_revenue_per_paywall_conversion_with_zero_matched_orders() {
-		$bq_rows = [
-			[
-				'user_pseudo_id' => '1',
-				'session_id'     => 's1',
-				'attempt_ts'     => '1000000000000000',
-			],
-			[
-				'user_pseudo_id' => '2',
-				'session_id'     => 's2',
-				'attempt_ts'     => '1000001000000000',
-			],
-		];
+	public function test_revenue_methods_reconcile_from_one_source() {
+		$start = $this->make_date( '2026-03-22' );
+		$end   = $this->make_date( '2026-04-21' );
 
-		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		$proxy->method( 'query' )->willReturn( $bq_rows );
-
-		$resolver = $this->createMock( Woo_Order_Resolver::class );
-		$resolver->method( 'count_completed_orders' )->willReturn( 0 );
-		$resolver->method( 'sum_completed_revenue' )->willReturn( 0.0 );
-
-		$metric = new Gates_Metric( $proxy, $resolver );
-		$result = $metric->get_avg_revenue_per_paywall_conversion( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
-
-		$this->assertSame( 'populated', $result['state'] );
-		$this->assertFalse( $result['computable'] );
-	}
-
-	/**
-	 * Two revenue-side methods in the same request share a single BQ proxy call.
-	 *
-	 * Regression test: `get_total_paywall_revenue_direct` and
-	 * `get_avg_revenue_per_paywall_conversion` both source from
-	 * `gates_paywall_revenue_direct`. The orchestrator memoizes the join result
-	 * so we never round-trip the hub twice per request for identical data.
-	 */
-	public function test_revenue_methods_share_single_proxy_call() {
-		$bq_rows = [
-			[
-				'user_pseudo_id' => '1',
-				'session_id'     => 's1',
-				'attempt_ts'     => '1000000000000000',
-			],
-		];
-
-		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		// `expects($this->once())` is the regression guard: a second call fails the test.
-		$proxy->expects( $this->once() )
-			->method( 'query' )
-			->with( 'gates_paywall_revenue_direct', $this->isInstanceOf( DateTimeImmutable::class ), $this->isInstanceOf( DateTimeImmutable::class ) )
-			->willReturn( $bq_rows );
-
-		$resolver = $this->createMock( Woo_Order_Resolver::class );
-		$resolver->method( 'count_completed_orders' )->willReturn( 1 );
-		$resolver->method( 'sum_completed_revenue' )->willReturn( 50.00 );
-
-		$metric = new Gates_Metric( $proxy, $resolver );
-		$start  = $this->make_date( '2026-03-22' );
-		$end    = $this->make_date( '2026-04-21' );
+		$metric = $this->make_direct_paywall_metric( null, $this->subscribers_with_gate( 2, 150.00 ), true );
 
 		$total = $metric->get_total_paywall_revenue_direct( $start, $end );
 		$avg   = $metric->get_avg_revenue_per_paywall_conversion( $start, $end );
 
-		$this->assertSame( 50.00, $total['value'] );
-		$this->assertSame( 50.0, $avg['value'] );
+		$this->assertSame( 150.00, $total['value'] );
+		$this->assertSame( 75.0, $avg['value'] );
+		$this->assertSame( $total['value'], $avg['value'] * $total['denominator'], 'total === avg × conversions' );
 	}
 
 	/**
@@ -663,44 +712,55 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 	// --- NPPD-1694: envelope additions for the empty-state pattern ----------
 
 	/**
-	 * A paywall rate scorecard surfaces both numerator (matched Woo orders) and
-	 * denominator (attempts) so the card can render "0 of N".
+	 * Stub Subscribers_Metric with empty surfaces — for the no-conversions paywall
+	 * cases (the gate map only ever contains gates that converted).
+	 *
+	 * @return Subscribers_Metric
+	 */
+	private function empty_subscribers(): Subscribers_Metric {
+		$subscribers = $this->createMock( Subscribers_Metric::class );
+		$subscribers->method( 'get_attributed_subscription_conversions' )->willReturn(
+			[
+				'by_gate'  => [],
+				'by_popup' => [],
+			]
+		);
+		return $subscribers;
+	}
+
+	/**
+	 * A populated paywall rate scorecard surfaces both numerator (gate-attributed
+	 * conversions) and denominator (impressions of those gates) so the card can
+	 * render "N of M" (NPPD-1694).
 	 */
 	public function test_paywall_rate_surfaces_numerator_and_denominator() {
-		$bq_rows = array_map(
-			static function ( $i ) {
-				return [
-					'user_pseudo_id' => (string) $i,
-					'session_id'     => 's' . $i,
-					'attempt_ts'     => (string) ( 1000000000000000 + $i ),
-				];
-			},
-			range( 1, 17 )
+		$metric = $this->make_direct_paywall_metric(
+			$this->proxy_with_gate_impressions( 17 ),
+			$this->subscribers_with_gate( 3, 0.0 ),
+			true
 		);
 
-		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		$proxy->method( 'query' )->willReturn( $bq_rows );
-
-		$resolver = $this->createMock( Woo_Order_Resolver::class );
-		$resolver->method( 'count_completed_orders' )->willReturn( 0 ); // 0 of 17 attempts converted.
-
-		$metric = new Gates_Metric( $proxy, $resolver );
 		$result = $metric->get_paywall_conversion_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
-		$this->assertSame( 0, $result['numerator'] );
+		$this->assertSame( 3, $result['numerator'] );
 		$this->assertSame( 17, $result['denominator'] );
 		$this->assertTrue( $result['computable'] );
 	}
 
 	/**
-	 * No paywall attempts → numerator and denominator are both an explicit 0 (not
-	 * null), so the card distinguishes "no attempts" (—) from "0 of N".
+	 * No gate-attributed conversions → the gate map is empty, so numerator and
+	 * denominator are both an explicit 0 and the rate is not computable (the em-dash
+	 * "no paywall conversions" state). In the per-gate-keyed model there is no
+	 * attempt-based "0 of N": the denominator is impressions of CONVERTING gates,
+	 * and with none converting there is nothing to divide by.
 	 */
-	public function test_paywall_rate_zero_attempts_sets_zero_counts() {
-		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		$proxy->method( 'query' )->willReturn( [] );
+	public function test_paywall_rate_not_computable_when_no_conversions() {
+		$metric = $this->make_direct_paywall_metric(
+			$this->proxy_with_gate_impressions( 17 ),
+			$this->empty_subscribers(),
+			true
+		);
 
-		$metric = new Gates_Metric( $proxy );
 		$result = $metric->get_paywall_conversion_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
 		$this->assertSame( 0, $result['numerator'] );
@@ -709,13 +769,14 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The error scalar carries a null numerator alongside the null denominator.
+	 * The error scalar carries a null numerator alongside the null denominator: when
+	 * the hub impressions denominator errors, the hybrid rate is an error state.
 	 */
 	public function test_error_scalar_includes_null_numerator() {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
 		$proxy->method( 'query' )->willReturn( new \WP_Error( 'bigquery_query_failed', 'BQ down' ) );
 
-		$metric = new Gates_Metric( $proxy );
+		$metric = $this->make_direct_paywall_metric( $proxy, $this->subscribers_with_gate( 1, 0.0 ), true );
 		$result = $metric->get_paywall_conversion_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
 		$this->assertSame( 'error', $result['state'] );

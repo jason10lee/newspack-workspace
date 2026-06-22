@@ -39,6 +39,7 @@ defined( 'ABSPATH' ) || exit;
 use DateTimeInterface;
 use Newspack\Insights\BigQuery_Proxy_Client;
 use Newspack\Insights\Donors_Metric;
+use Newspack\Insights\Subscribers_Metric;
 use Newspack\Insights\Woo_Order_Resolver;
 
 /**
@@ -168,11 +169,11 @@ final class Prompts_Metric {
 		'newsletter_signup_conversion_influenced_7d' => 'hub',
 		'donation_conversion_direct'                 => 'hybrid', // Local order-meta numerator + hub donation-impressions denominator.
 		'donation_conversion_influenced_14d'         => 'hub',
-		'subscription_conversion_direct'             => 'hub',     // NPPD-1745 follow-up ticket migrates this.
+		'subscription_conversion_direct'             => 'hybrid', // NPPD-1746: local order-meta (popup) numerator + hub per-popup-impressions denominator.
 		'subscription_conversion_influenced_14d'     => 'hub',
 		'donation_revenue_direct'                    => 'local',   // Pure Woo order meta; survives a hub outage.
 		'donation_revenue_influenced_14d'            => 'hub',
-		'subscription_revenue_direct'                => 'hub',     // NPPD-1745 follow-up ticket migrates this.
+		'subscription_revenue_direct'                => 'local',   // NPPD-1746: pure Woo order meta (popup surface); survives a hub outage.
 		'subscription_revenue_influenced_14d'        => 'hub',
 		'conversion_funnel'                          => 'hub',
 		'exposures_distribution'                     => 'hub',
@@ -207,6 +208,19 @@ final class Prompts_Metric {
 	 * @var Donors_Metric|null
 	 */
 	private ?Donors_Metric $donors_metric;
+
+	/**
+	 * Subscribers_Metric collaborator (NPPD-1746). Owns the WC-native subscription
+	 * storage + caching used to source the DIRECT prompt-subscription metrics
+	 * (popup surface) from order meta instead of the GA4 attempt → Woo_Order_Resolver
+	 * join — the subscription counterpart to {@see self::$donors_metric}. Lazily
+	 * built on first direct-subscription call ({@see self::subscribers_metric()}).
+	 * Influenced (14d) subscription metrics still use the resolver and do NOT use
+	 * this collaborator.
+	 *
+	 * @var Subscribers_Metric|null
+	 */
+	private ?Subscribers_Metric $subscribers_metric;
 
 	/**
 	 * Per-request memoization for paid-conversion BQ row fetches.
@@ -258,17 +272,20 @@ final class Prompts_Metric {
 	 * @param callable|null              $prompt_provider Injected active-prompt provider (test seam),
 	 *                                                    or null to read published prompt content via get_posts().
 	 * @param Donors_Metric|null         $donors_metric   Injected donors collaborator (NPPD-1685), or null to lazy-create.
+	 * @param Subscribers_Metric|null    $subscribers_metric Injected subscribers collaborator (NPPD-1746), or null to lazy-create.
 	 */
 	public function __construct(
 		?BigQuery_Proxy_Client $proxy = null,
 		?Woo_Order_Resolver $woo_resolver = null,
 		?callable $prompt_provider = null,
-		?Donors_Metric $donors_metric = null
+		?Donors_Metric $donors_metric = null,
+		?Subscribers_Metric $subscribers_metric = null
 	) {
-		$this->proxy           = $proxy ?? new BigQuery_Proxy_Client();
-		$this->woo_resolver    = $woo_resolver ?? new Woo_Order_Resolver();
-		$this->prompt_provider = $prompt_provider;
-		$this->donors_metric   = $donors_metric;
+		$this->proxy              = $proxy ?? new BigQuery_Proxy_Client();
+		$this->woo_resolver       = $woo_resolver ?? new Woo_Order_Resolver();
+		$this->prompt_provider    = $prompt_provider;
+		$this->donors_metric      = $donors_metric;
+		$this->subscribers_metric = $subscribers_metric;
 	}
 
 	/**
@@ -283,6 +300,20 @@ final class Prompts_Metric {
 			$this->donors_metric = new Donors_Metric();
 		}
 		return $this->donors_metric;
+	}
+
+	/**
+	 * Lazily resolve the Subscribers_Metric collaborator (NPPD-1746). Built on first
+	 * use so requests that never hit a direct-subscription card don't pay for the
+	 * storage detector + donation-product classifier.
+	 *
+	 * @return Subscribers_Metric
+	 */
+	private function subscribers_metric(): Subscribers_Metric {
+		if ( null === $this->subscribers_metric ) {
+			$this->subscribers_metric = new Subscribers_Metric();
+		}
+		return $this->subscribers_metric;
 	}
 
 	/**
@@ -626,45 +657,6 @@ final class Prompts_Metric {
 		return $result;
 	}
 
-	/**
-	 * Compute per-popup Woo-completed counts for an intent's attempt rows.
-	 *
-	 * Fetches the intent's BQ attempt rows (cached via fetch_paid_attempts_woo_join),
-	 * groups them by popup_id, and returns a map<popup_id, completed_count>.
-	 * Returns an empty map on proxy failure so the per-prompt breakdown still
-	 * renders the engagement columns even if the Woo-join augmentation fails —
-	 * the engagement data is the load-bearing part of the table; the Woo
-	 * augmentation is a bonus.
-	 *
-	 * @param string            $query_name Catalog `query_name` (e.g. 'prompts_donation_conversion_direct').
-	 * @param DateTimeInterface $start      Window start.
-	 * @param DateTimeInterface $end        Window end.
-	 * @return array<int, int> popup_id => completed_count
-	 */
-	private function fetch_per_popup_woo_counts(
-		string $query_name,
-		DateTimeInterface $start,
-		DateTimeInterface $end
-	): array {
-		$joined = $this->fetch_paid_attempts_woo_join( $query_name, $start, $end );
-		if ( is_wp_error( $joined ) ) {
-			return []; // Graceful degradation: render zeros, not error the whole table.
-		}
-		$by_popup = [];
-		foreach ( $joined['rows'] as $row ) {
-			$popup_id = (int) ( $row['popup_id'] ?? 0 );
-			if ( $popup_id <= 0 ) {
-				continue;
-			}
-			$by_popup[ $popup_id ][] = $row;
-		}
-		$counts = [];
-		foreach ( $by_popup as $popup_id => $rows_for_popup ) {
-			$counts[ $popup_id ] = $this->woo_resolver->count_completed_orders( $rows_for_popup );
-		}
-		return $counts;
-	}
-
 	// --- Section 1: Prompt exposure -------------------------------------
 
 	/**
@@ -849,42 +841,44 @@ final class Prompts_Metric {
 		// donation_conversion_rate, so the two rates can't diverge). null = not
 		// computable (no impressions, or the >100% cross-surface case); a float
 		// (incl. a genuine 0.0) = a real rate.
-		$rate = $this->donation_rate_value( $conversions, $impressions );
+		$rate = $this->rate_value( $conversions, $impressions );
 		return null === $rate
 			? $this->populated_scalar( 0.0, false, $impressions, 'rate' )
 			: $this->populated_scalar( $rate, true, $impressions, 'rate' );
 	}
 
 	/**
-	 * The direct donation conversion-rate value (NPPD-1745). The tab-level card
-	 * ({@see self::get_donation_conversion_direct()}) and the per-prompt table
-	 * ({@see self::get_performance_by_prompt()}) both route through this one helper,
-	 * so they share the same formula, coherence guard, and em-dash semantics. Their
-	 * VALUES still differ by design — the tab card divides window-aggregate
-	 * conversions by aggregate impressions, while each table row uses that prompt's
-	 * own counts — but neither can drift to a different rule (e.g. one rendering a
-	 * >100% rate the other suppresses), which is the divergence that matters.
+	 * Coherence-guarded conversion-rate value, shared by the direct donation rate
+	 * (NPPD-1745) and the direct subscription rate (NPPD-1746) so a tab-level card
+	 * and its per-prompt table row route through one helper. The numerator is always
+	 * an order-meta (local, anonymous-inclusive) conversion count and the denominator
+	 * an anonymous-inclusive hub impressions count for the SAME population (the
+	 * donation-intent prompts, or — per-popup keyed for subscriptions — the popups
+	 * that converted). The tab card and its per-row table value still differ by design
+	 * (aggregate vs per-prompt inputs), but neither can drift to a different RULE —
+	 * e.g. one rendering a >100% rate the other suppresses — which is the divergence
+	 * that matters.
 	 *
 	 * Returns the rate as a float — a genuine 0.0 when there are impressions but no
 	 * conversions ("viewed but no conversion") — or null when not computable:
 	 *  - no impressions → no denominator (em-dash); or
 	 *  - conversions > impressions → a cross-surface incoherence (order-meta
-	 *    numerator vs GA4 impressions) that must not render as a >100% rate.
+	 *    numerator vs hub impressions) that must not render as a >100% rate.
 	 *
-	 * KNOWN LIMITATION (NPPD-1745 #2): the numerator is complete + server-side, but
-	 * the GA4 impressions denominator is consent/adblock-undercounted — different
+	 * KNOWN LIMITATION (NPPD-1745 #2): the numerator is complete + server-side, but the
+	 * hub impressions denominator is consent/adblock-undercounted — different
 	 * populations, so the denominator can legitimately be the smaller of the two. The
 	 * guard then nulls the rate to an em-dash, which is the honest render (a fabricated
 	 * >100% would be worse), but it means the headline rate is fragile by construction
 	 * when impressions run low. Same denominator-fidelity issue as the gate
 	 * `checkout_impressions` case; a more complete impressions source is a tracked
-	 * follow-up, out of scope for this PR.
+	 * follow-up.
 	 *
-	 * @param int $conversions Prompt-attributed donation conversions (order meta).
-	 * @param int $impressions Donation-intent prompt impressions (hub).
+	 * @param int $conversions Prompt-attributed conversions (order meta).
+	 * @param int $impressions Matched-population prompt impressions (hub).
 	 * @return float|null
 	 */
-	private function donation_rate_value( int $conversions, int $impressions ): ?float {
+	private function rate_value( int $conversions, int $impressions ): ?float {
 		if ( $impressions <= 0 ) {
 			return null;
 		}
@@ -925,6 +919,45 @@ final class Prompts_Metric {
 			}
 		}
 		return $impressions;
+	}
+
+	/**
+	 * Per-popup impressions map from the hub's `prompts_performance_by_prompt` rows
+	 * (NPPD-1746), keyed by popup id (string). Used as the per-popup-keyed
+	 * denominator source for the direct subscription rate: subscription-intent
+	 * popups share `action_type=registration` with pure-registration popups, so the
+	 * subscription rate restricts its denominator to the impressions of the SAME
+	 * popups that converted (see {@see self::get_subscription_conversion_direct()})
+	 * rather than summing a tab-level intent bucket. Impressions are anonymous-
+	 * inclusive `np_prompt_interaction(seen)` counts.
+	 *
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
+	 * @return array<string, int>|\WP_Error popup_id => impressions, or the proxy error.
+	 */
+	private function fetch_prompt_impressions_by_popup( DateTimeInterface $start, DateTimeInterface $end ) {
+		$rows = $this->fetch_performance_by_prompt_rows( $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $rows;
+		}
+		if ( ! is_array( $rows ) ) {
+			// Malformed hub response (not an array of rows): surface it so the
+			// subscription rate errors instead of silently dividing by a fabricated 0
+			// denominator (NPPD-1745 #3, mirrored proactively to the subscription rate).
+			return new \WP_Error( 'bigquery_proxy_malformed_rows', __( 'The query returned an unexpected shape.', 'newspack-plugin' ) );
+		}
+		$map = [];
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$popup_id = (string) ( $row['popup_id'] ?? '' );
+			if ( '' === $popup_id || '0' === $popup_id ) {
+				continue;
+			}
+			$map[ $popup_id ] = (int) ( $row['impressions'] ?? 0 );
+		}
+		return $map;
 	}
 
 	/**
@@ -977,18 +1010,40 @@ final class Prompts_Metric {
 	 * @return array
 	 */
 	public function get_subscription_conversion_direct( DateTimeInterface $start, DateTimeInterface $end ): array {
-		$joined = $this->fetch_paid_attempts_woo_join( 'prompts_subscription_conversion_direct', $start, $end );
-		if ( is_wp_error( $joined ) ) {
-			return $this->error_scalar( 'rate', $joined );
+		// NPPD-1746: rate = popup-attributed subscription conversions (Woo order meta,
+		// anonymous-inclusive) ÷ impressions of the SAME popups (hub,
+		// `prompts_performance_by_prompt`). PER-POPUP keyed, not tab-level:
+		// subscription-intent popups share `action_type=registration` with pure
+		// registration popups, so a tab-level denominator would mix in registration-
+		// only impressions and break numerator/denominator population matching (the
+		// spike's >100% incoherence class). Restricting the denominator to the popups
+		// that actually converted keeps both sides describing the same population.
+		// Numerator local, denominator hub → 'hybrid' (see METRIC_SOURCES): a hub
+		// impressions failure makes the rate genuinely uncomputable and counts toward
+		// the tab-error banner. Same coherence guard as the donation rate-direct.
+		if ( ! $this->woocommerce_active() ) {
+			// Non-WC publisher: no local conversions to count. Empty state, not a fake
+			// 0% (NPPD-1737 Option A scoping).
+			return $this->populated_scalar( 0.0, false, 0, 'rate' );
 		}
-		$denominator = count( $joined['rows'] );
-		$numerator   = $joined['conversions'];
-		return $this->populated_scalar(
-			$denominator > 0 ? $numerator / $denominator : 0.0,
-			$denominator > 0,
-			$denominator,
-			'rate'
-		);
+
+		$impressions_by_popup = $this->fetch_prompt_impressions_by_popup( $start, $end );
+		if ( is_wp_error( $impressions_by_popup ) ) {
+			return $this->error_scalar( 'rate', $impressions_by_popup );
+		}
+
+		$by_popup    = $this->subscribers_metric()->get_attributed_subscription_conversions( $start, $end )['by_popup'];
+		$conversions = 0;
+		$impressions = 0;
+		foreach ( $by_popup as $popup_id => $row ) {
+			$conversions += (int) $row['conversions'];
+			$impressions += (int) ( $impressions_by_popup[ (string) $popup_id ] ?? 0 );
+		}
+
+		$rate = $this->rate_value( $conversions, $impressions );
+		return null === $rate
+			? $this->populated_scalar( 0.0, false, $impressions, 'rate' )
+			: $this->populated_scalar( $rate, true, $impressions, 'rate' );
 	}
 
 	/**
@@ -1087,15 +1142,32 @@ final class Prompts_Metric {
 	 * @return array
 	 */
 	public function get_subscription_revenue_direct( DateTimeInterface $start, DateTimeInterface $end ): array {
-		$joined = $this->fetch_paid_attempts_woo_join( 'prompts_subscription_conversion_direct', $start, $end );
-		if ( is_wp_error( $joined ) ) {
-			return $this->error_scalar( 'currency', $joined );
+		// NPPD-1746: source DIRECT subscription revenue from order meta (popup
+		// surface — `_newspack_popup_id` on initial subscription orders) instead of
+		// the GA4 attempt → customer_id join, which silently dropped anonymous-at-
+		// attempt subscribers. Mirrors donation revenue-direct (NPPD-1685/1745).
+		// Influenced (14d) revenue still uses the join — see
+		// get_subscription_revenue_influenced_14d().
+		if ( ! $this->woocommerce_active() ) {
+			// Non-WC publisher: no orders to read. Empty state, not a real $0
+			// (NPPD-1737 Option A scoping).
+			return $this->populated_scalar( 0.0, false, 0, 'currency' );
 		}
-		// Computable only when at least one paid-intent prompt was viewed (mirrors
-		// the matching conversion-rate method's `count( rows ) > 0` gate). An empty
-		// window is "no in-intent prompts viewed", not a real $0 — so it renders the
-		// not-computable em-dash, consistent with its sibling rate card (NPPD-1704).
-		return $this->populated_scalar( $joined['revenue'], count( $joined['rows'] ) > 0, $joined['conversions'], 'currency' );
+
+		$by_popup    = $this->subscribers_metric()->get_attributed_subscription_conversions( $start, $end )['by_popup'];
+		$revenue     = 0.0;
+		$conversions = 0;
+		foreach ( $by_popup as $row ) {
+			$revenue     += (float) $row['revenue'];
+			$conversions += (int) $row['conversions'];
+		}
+
+		// Local / hub-resilient, like donation revenue-direct: the em-dash is
+		// conversions-based ("no popup-attributed subscriptions"), NOT impressions-
+		// based — revenue does not fetch impressions by design, so its em-dash
+		// semantics differ on purpose from the sibling (hybrid) rate card. Do not
+		// "fix" this to match the rate card without making revenue hub-dependent.
+		return $this->populated_scalar( $revenue, $conversions > 0, $conversions, 'currency' );
 	}
 
 	/**
@@ -1279,16 +1351,15 @@ final class Prompts_Metric {
 			];
 		}
 
-		// Per-popup conversion augmentation. Donations come from order meta
-		// (NPPD-1685/1745 — anonymous-inclusive, keyed by popup id, no GA4 join);
-		// subscriptions still use the Woo-resolver path until their own ticket
-		// migrates them. BOTH are gated on WooCommerce being active: the resolver
-		// path calls wc_get_orders(), so on a non-WC publisher the subscription
-		// fetch would fatal if the hub ever returned attempt rows. Both maps are
-		// empty on a non-WC publisher.
-		$wc                  = $this->woocommerce_active();
-		$donation_map        = $wc ? $this->donors_metric()->get_prompt_attributed_donation_conversions( $start, $end ) : [];
-		$subscription_counts = $wc ? $this->fetch_per_popup_woo_counts( 'prompts_subscription_conversion_direct', $start, $end ) : [];
+		// Per-popup conversion augmentation. Both donations (NPPD-1685/1745) and
+		// subscriptions (NPPD-1746) now come from order meta — anonymous-inclusive,
+		// keyed by popup id, no GA4 join. Subscriptions read the popup surface of the
+		// two-key reader (`by_popup`); gate-attributed subscriptions live on the Gates
+		// tab, not here. Both are gated on WooCommerce being active (the storage
+		// readers hit local Woo tables), so both maps are empty on a non-WC publisher.
+		$wc               = $this->woocommerce_active();
+		$donation_map     = $wc ? $this->donors_metric()->get_prompt_attributed_donation_conversions( $start, $end ) : [];
+		$subscription_map = $wc ? $this->subscribers_metric()->get_attributed_subscription_conversions( $start, $end )['by_popup'] : [];
 
 		$mapped = [];
 		foreach ( $rows as $row ) {
@@ -1303,15 +1374,22 @@ final class Prompts_Metric {
 			$impressions = (int) ( $row['impressions'] ?? 0 );
 
 			$donation_conversions = 'donation' === $intent ? (int) ( $donation_map[ $popup_id ]['conversions'] ?? 0 ) : 0;
-			// Subscription-intent prompts share `action_type=registration` at
-			// the data layer; the Woo product-type filter on the hub-side
-			// subscription query already scopes attempts correctly.
-			$subscription_conversions = 'registration' === $intent ? (int) ( $subscription_counts[ $popup_id ] ?? 0 ) : 0;
+			// Subscription conversions are sourced per-popup from order meta (NPPD-1746),
+			// keyed by popup id, anonymous-inclusive — and NOT gated on the popup's declared
+			// intent: the order carries `_newspack_popup_id` regardless of action_type, so an
+			// "Undefined"-intent prompt (e.g. a generic "50% off" promo) can still drive
+			// subscriptions. Gating on `intent=registration` hid those and contradicted the
+			// scalar subscription card (caught on live data; the scalar already sums the whole
+			// `by_popup` map). The donation column keeps its intent gate — donations on this
+			// tab are gated on a donation block being present, so the same case doesn't arise.
+			$subscription_conversions = (int) ( $subscription_map[ $popup_id ]['conversions'] ?? 0 );
 
-			// donation_conversion_rate shares the tab-level coherence guard + em-dash
-			// semantics via donation_rate_value() (null = not computable: no
-			// impressions or a >100% cross-surface ratio; a float incl. 0.0 = real
-			// rate). null also covers intent mismatch + non-WC (the column is N/A).
+			// Both rates share the tab-level coherence guard + em-dash semantics via
+			// rate_value() (null = not computable: no impressions or a >100% cross-surface
+			// ratio; a float incl. 0.0 = real rate). A rate is rendered only where the metric
+			// applies: donation for donation-intent prompts, subscription for prompts that
+			// actually drove a subscription (present in the map); null = N/A everywhere else,
+			// including non-WC.
 			$mapped[] = [
 				'popup_id'                     => $popup_id,
 				'prompt_title'                 => (string) ( $row['prompt_title'] ?? '' ),
@@ -1325,9 +1403,9 @@ final class Prompts_Metric {
 				'registrations'                => (int) ( $row['registrations'] ?? 0 ),
 				'newsletter_signups'           => (int) ( $row['newsletter_signups'] ?? 0 ),
 				'donation_conversions'         => $donation_conversions,
-				'donation_conversion_rate'     => ( 'donation' === $intent && $wc ) ? $this->donation_rate_value( $donation_conversions, $impressions ) : null,
+				'donation_conversion_rate'     => ( 'donation' === $intent && $wc ) ? $this->rate_value( $donation_conversions, $impressions ) : null,
 				'subscription_conversions'     => $subscription_conversions,
-				'subscription_conversion_rate' => ( 'registration' === $intent && $wc && $impressions > 0 ) ? $subscription_conversions / $impressions : null,
+				'subscription_conversion_rate' => ( $wc && isset( $subscription_map[ $popup_id ] ) ) ? $this->rate_value( $subscription_conversions, $impressions ) : null,
 			];
 		}
 

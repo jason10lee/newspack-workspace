@@ -32,6 +32,7 @@ use DateTimeZone;
 use Newspack\Insights\BigQuery_Proxy_Client;
 use Newspack\Insights\Donors_Metric;
 use Newspack\Insights\Prompts_Metric;
+use Newspack\Insights\Subscribers_Metric;
 use Newspack\Insights\Woo_Order_Resolver;
 use WP_UnitTestCase;
 
@@ -358,17 +359,18 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	/**
 	 * Data provider for the proxy-backed paid-conversion rate methods.
 	 *
-	 * NPPD-1745: `get_donation_conversion_direct` is intentionally absent — it no
-	 * longer dispatches `prompts_donation_conversion_direct`. It's now hybrid:
-	 * order-meta conversions ÷ hub donation-impressions (see
-	 * test_donation_conversion_direct_*). The other three are still proxy-backed.
+	 * NPPD-1745/1746: `get_donation_conversion_direct` AND
+	 * `get_subscription_conversion_direct` are intentionally absent — neither
+	 * dispatches a paid-attempt proxy query any more. Both are hybrid order-meta
+	 * conversions ÷ hub impressions (see test_donation_conversion_direct_* and
+	 * test_subscription_conversion_direct_*). Only the influenced pair is still
+	 * proxy-backed.
 	 *
 	 * @return array
 	 */
 	public function provide_paid_conversion_rate_methods(): array {
 		return [
 			'donation_influenced'     => [ 'get_donation_conversion_influenced_14d', 'prompts_donation_conversion_influenced_14d' ],
-			'subscription_direct'     => [ 'get_subscription_conversion_direct', 'prompts_subscription_conversion_direct' ],
 			'subscription_influenced' => [ 'get_subscription_conversion_influenced_14d', 'prompts_subscription_conversion_influenced_14d' ],
 		];
 	}
@@ -466,17 +468,18 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	 * underlying conversion-query name (revenue methods share the cache with their
 	 * rate counterparts; the hub's revenue alias is byte-identical).
 	 *
-	 * NPPD-1685: `get_donation_revenue_direct` is intentionally absent — it no
-	 * longer dispatches a proxy query; it sources from order meta via
-	 * Donors_Metric (see test_donation_revenue_direct_*). The other three are
-	 * still proxy/resolver-backed.
+	 * NPPD-1685/1746: `get_donation_revenue_direct` AND
+	 * `get_subscription_revenue_direct` are intentionally absent — neither
+	 * dispatches a proxy query; both source from order meta (Donors_Metric /
+	 * Subscribers_Metric — see test_donation_revenue_direct_* and
+	 * test_subscription_revenue_direct_*). Only the influenced pair is still
+	 * proxy/resolver-backed.
 	 *
 	 * @return array
 	 */
 	public function provide_paid_revenue_methods(): array {
 		return [
 			'donation_influenced'     => [ 'get_donation_revenue_influenced_14d', 'prompts_donation_conversion_influenced_14d' ],
-			'subscription_direct'     => [ 'get_subscription_revenue_direct', 'prompts_subscription_conversion_direct' ],
 			'subscription_influenced' => [ 'get_subscription_revenue_influenced_14d', 'prompts_subscription_conversion_influenced_14d' ],
 		];
 	}
@@ -727,6 +730,250 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		$this->assertSame( 0.0, $rate['value'] );
 	}
 
+	// --- NPPD-1746: direct subscription rate + revenue from order meta (popup surface) ---
+
+	/**
+	 * Build a Prompts_Metric for the direct subscription cards with an injected
+	 * proxy + Subscribers_Metric and a forced `woocommerce_active()` (via filter —
+	 * the class is final). The proxy feeds the rate card's per-popup hub impressions
+	 * denominator; revenue passes null. Filter removed in tear_down().
+	 *
+	 * @param BigQuery_Proxy_Client|null $proxy       Injected proxy (rate) or null (revenue).
+	 * @param Subscribers_Metric         $subscribers Injected subscribers collaborator.
+	 * @param bool                       $wc          What woocommerce_active() should return.
+	 * @return Prompts_Metric
+	 */
+	private function make_direct_subscription_metric( ?BigQuery_Proxy_Client $proxy, Subscribers_Metric $subscribers, bool $wc ): Prompts_Metric {
+		add_filter( 'newspack_insights_woocommerce_active', $wc ? '__return_true' : '__return_false' );
+		return new Prompts_Metric( $proxy, null, null, null, $subscribers );
+	}
+
+	/**
+	 * Stub Subscribers_Metric with empty surfaces — for tests that exercise the
+	 * donation columns on a WC-active publisher and need the subscription
+	 * augmentation to no-op without hitting a real storage backend.
+	 *
+	 * @return Subscribers_Metric
+	 */
+	private function empty_subscribers(): Subscribers_Metric {
+		$subscribers = $this->createMock( Subscribers_Metric::class );
+		$subscribers->method( 'get_attributed_subscription_conversions' )->willReturn(
+			[
+				'by_gate'  => [],
+				'by_popup' => [],
+			]
+		);
+		return $subscribers;
+	}
+
+	/**
+	 * Stub Subscribers_Metric whose popup surface holds one popup (id 1) with the
+	 * given conversions + revenue, and an empty gate surface.
+	 *
+	 * @param int   $conversions Popup-attributed subscription conversions.
+	 * @param float $revenue     Popup-attributed subscription revenue.
+	 * @return Subscribers_Metric
+	 */
+	private function subscribers_with_popup( int $conversions, float $revenue ): Subscribers_Metric {
+		$subscribers = $this->createMock( Subscribers_Metric::class );
+		$subscribers->method( 'get_attributed_subscription_conversions' )->willReturn(
+			[
+				'by_gate'  => [],
+				'by_popup' => [
+					'1' => [
+						'conversions' => $conversions,
+						'revenue'     => $revenue,
+					],
+				],
+			]
+		);
+		return $subscribers;
+	}
+
+	/**
+	 * Proxy whose `prompts_performance_by_prompt` reports impressions for popup 1
+	 * (the converting popup) PLUS an unrelated registration-intent popup 9. Popup 9
+	 * must NOT enter the denominator — the rate is per-popup keyed to the popups that
+	 * actually converted, which is the whole point of not using a tab-level bucket.
+	 *
+	 * @param int $popup_one_impressions Impressions to report for popup 1.
+	 * @return BigQuery_Proxy_Client
+	 */
+	private function proxy_with_popup_impressions( int $popup_one_impressions ): BigQuery_Proxy_Client {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn(
+			[
+				[
+					'popup_id'    => 1,
+					'intent'      => 'registration',
+					'impressions' => $popup_one_impressions,
+				],
+				[
+					'popup_id'    => 9,
+					'intent'      => 'registration',
+					'impressions' => 500,
+				],
+			]
+		);
+		return $proxy;
+	}
+
+	/**
+	 * Direct subscription revenue sums the popup surface of the two-key order-meta
+	 * map (anonymous-inclusive), NOT the GA4 attempt → resolver join.
+	 */
+	public function test_subscription_revenue_direct_sources_from_order_meta() {
+		$metric = $this->make_direct_subscription_metric( null, $this->subscribers_with_popup( 3, 75.0 ), true );
+
+		$revenue = $metric->get_subscription_revenue_direct( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $revenue['state'] );
+		$this->assertSame( 75.0, $revenue['value'], 'revenue is the summed popup-surface map' );
+		$this->assertTrue( $revenue['computable'] );
+		$this->assertSame( 3, $revenue['denominator'], 'denominator is the summed conversion count' );
+	}
+
+	/**
+	 * Non-WC publisher: direct subscription revenue is a not-computable empty state,
+	 * and the order-meta numerator is never queried.
+	 */
+	public function test_subscription_revenue_direct_empty_state_when_not_woocommerce() {
+		$subscribers = $this->createMock( Subscribers_Metric::class );
+		$subscribers->expects( $this->never() )->method( 'get_attributed_subscription_conversions' );
+
+		$metric  = $this->make_direct_subscription_metric( null, $subscribers, false );
+		$revenue = $metric->get_subscription_revenue_direct( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $revenue['state'] );
+		$this->assertFalse( $revenue['computable'] );
+		$this->assertSame( 0.0, $revenue['value'] );
+	}
+
+	/**
+	 * Direct subscription rate = popup-attributed conversions ÷ impressions of the
+	 * SAME popups. Popup 9's 500 impressions are excluded because popup 9 had no
+	 * subscription conversions — proving the per-popup keying (denominator 200, not
+	 * 700).
+	 */
+	public function test_subscription_conversion_direct_rate_per_popup_over_impressions() {
+		$metric = $this->make_direct_subscription_metric(
+			$this->proxy_with_popup_impressions( 200 ),
+			$this->subscribers_with_popup( 50, 0.0 ),
+			true
+		);
+
+		$rate = $metric->get_subscription_conversion_direct( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $rate['state'] );
+		$this->assertSame( 0.25, $rate['value'] );
+		$this->assertTrue( $rate['computable'] );
+		$this->assertSame( 200, $rate['denominator'], 'denominator is popup 1 only, not the unrelated popup 9' );
+	}
+
+	/**
+	 * No impressions for the converting popup → no denominator → not computable
+	 * (em-dash), distinct from a real 0%.
+	 */
+	public function test_subscription_conversion_direct_not_computable_without_impressions() {
+		$metric = $this->make_direct_subscription_metric(
+			$this->proxy_with_popup_impressions( 0 ),
+			$this->subscribers_with_popup( 5, 0.0 ),
+			true
+		);
+
+		$rate = $metric->get_subscription_conversion_direct( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $rate['state'] );
+		$this->assertFalse( $rate['computable'] );
+		$this->assertSame( 0.0, $rate['value'] );
+	}
+
+	/**
+	 * Impressions exist but zero conversions is a REAL 0% (computable), distinct
+	 * from the not-computable no-impressions case.
+	 */
+	public function test_subscription_conversion_direct_real_zero_percent_when_no_conversions() {
+		$metric = $this->make_direct_subscription_metric(
+			$this->proxy_with_popup_impressions( 200 ),
+			$this->subscribers_with_popup( 0, 0.0 ),
+			true
+		);
+
+		$rate = $metric->get_subscription_conversion_direct( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $rate['state'] );
+		$this->assertTrue( $rate['computable'], 'viewed-but-no-conversion is a real 0%, not an em-dash' );
+		$this->assertSame( 0.0, $rate['value'] );
+		$this->assertSame( 200, $rate['denominator'] );
+	}
+
+	/**
+	 * Coherence guard: popup-surface conversions exceeding that popup's impressions
+	 * must not fabricate a >100% rate — suppress to not-computable.
+	 */
+	public function test_subscription_conversion_direct_coherence_guard_suppresses_over_100() {
+		$metric = $this->make_direct_subscription_metric(
+			$this->proxy_with_popup_impressions( 10 ),
+			$this->subscribers_with_popup( 50, 0.0 ),
+			true
+		);
+
+		$rate = $metric->get_subscription_conversion_direct( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $rate['state'] );
+		$this->assertFalse( $rate['computable'], 'a >100% cross-surface ratio is suppressed, not shown' );
+		$this->assertSame( 0.0, $rate['value'] );
+	}
+
+	/**
+	 * Hybrid card: if the hub impressions call errors, the rate is genuinely
+	 * uncomputable → error state (counts toward the tab-error banner).
+	 */
+	public function test_subscription_conversion_direct_errors_when_impressions_hub_errors() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( new \WP_Error( 'bigquery_proxy_error', 'down' ) );
+
+		$metric = $this->make_direct_subscription_metric( $proxy, $this->subscribers_with_popup( 5, 0.0 ), true );
+
+		$rate = $metric->get_subscription_conversion_direct( $this->start(), $this->end() );
+
+		$this->assertSame( 'error', $rate['state'] );
+	}
+
+	/**
+	 * NPPD-1745 #3 (mirrored to subscriptions): a malformed impressions response (the
+	 * hub succeeded but returned a non-array shape) errors the rate rather than
+	 * collapsing to a fabricated "0 impressions → em-dash".
+	 */
+	public function test_subscription_conversion_direct_errors_on_malformed_impressions() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( 'not-an-array' ); // Malformed (non-array) hub response.
+
+		$metric = $this->make_direct_subscription_metric( $proxy, $this->subscribers_with_popup( 5, 0.0 ), true );
+
+		$rate = $metric->get_subscription_conversion_direct( $this->start(), $this->end() );
+
+		$this->assertSame( 'error', $rate['state'], 'malformed impressions errors, not a fabricated 0%' );
+		$this->assertSame( 'bigquery_proxy_malformed_rows', $rate['error_code'] );
+	}
+
+	/**
+	 * Non-WC publisher: empty state (not a fake 0%); the order-meta numerator is
+	 * never queried.
+	 */
+	public function test_subscription_conversion_direct_empty_state_when_not_woocommerce() {
+		$subscribers = $this->createMock( Subscribers_Metric::class );
+		$subscribers->expects( $this->never() )->method( 'get_attributed_subscription_conversions' );
+
+		$metric = $this->make_direct_subscription_metric( null, $subscribers, false );
+
+		$rate = $metric->get_subscription_conversion_direct( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $rate['state'] );
+		$this->assertFalse( $rate['computable'] );
+		$this->assertSame( 0.0, $rate['value'] );
+	}
+
 	/**
 	 * Remove the WC-active seam filter set by make_donation_revenue_metric().
 	 */
@@ -753,11 +1000,12 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		$resolver->method( 'sum_completed_revenue' )->willReturn( 25.0 );
 
 		$metric = new Prompts_Metric( $proxy, $resolver );
-		// NPPD-1745: get_donation_conversion_direct no longer dispatches a paid-attempt
-		// query (it's hybrid order-meta ÷ impressions). Use two still-proxy-backed
-		// intents with distinct query_names to exercise per-query_name cache keying.
+		// NPPD-1745/1746: the direct donation AND subscription rates no longer dispatch
+		// a paid-attempt query (both are hybrid order-meta ÷ impressions). Use two
+		// still-proxy-backed influenced intents with distinct query_names to exercise
+		// per-query_name cache keying.
 		$metric->get_donation_conversion_influenced_14d( $this->start(), $this->end() );
-		$metric->get_subscription_conversion_direct( $this->start(), $this->end() );
+		$metric->get_subscription_conversion_influenced_14d( $this->start(), $this->end() );
 	}
 
 	// --- Section 6: Conversion funnel + exposures distribution ---------
@@ -965,18 +1213,20 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	 * @param array|\WP_Error $donation_rows     Unused since NPPD-1745 (donations come
 	 *                                           from order meta, not the proxy); kept for
 	 *                                           call-site compatibility.
-	 * @param array|\WP_Error $subscription_rows Rows for `prompts_subscription_conversion_direct`.
-	 * @param int             $expected_queries  Expected proxy `query()` count: 2 on a
-	 *                                           WC-active publisher (perf + subscription),
-	 *                                           1 on a non-WC publisher (perf only).
+	 * @param array|\WP_Error $subscription_rows Unused since NPPD-1746 (subscriptions come
+	 *                                           from order meta, not the proxy); kept for
+	 *                                           call-site compatibility.
+	 * @param int             $expected_queries  Expected proxy `query()` count: 1 — only the
+	 *                                           perf table hits the proxy now; both donation
+	 *                                           (NPPD-1745) and subscription (NPPD-1746)
+	 *                                           augmentation read order meta off-proxy.
 	 * @return BigQuery_Proxy_Client
 	 */
-	protected function make_performance_proxy( array $perf_rows, $donation_rows, $subscription_rows, int $expected_queries = 2 ): BigQuery_Proxy_Client {
+	protected function make_performance_proxy( array $perf_rows, $donation_rows, $subscription_rows, int $expected_queries = 1 ): BigQuery_Proxy_Client {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		// On a WC-active publisher the perf table + the subscription augmentation run
-		// (2 queries); on a non-WC publisher the subscription augmentation is gated off,
-		// so only the perf query runs (1). Donations come from order meta via
-		// Donors_Metric (NPPD-1745), not the proxy.
+		// Only the perf table hits the proxy now. Donation (NPPD-1745) and subscription
+		// (NPPD-1746) per-popup counts both come from order meta (Donors_Metric /
+		// Subscribers_Metric), so neither augmentation dispatches a proxy query.
 		$proxy->expects( $this->exactly( $expected_queries ) )
 			->method( 'query' )
 			->willReturnCallback(
@@ -1029,13 +1279,10 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 
 		$proxy = $this->make_performance_proxy( $perf_rows, $donation_attempts, $subscription_attempts );
 
-		$resolver = $this->createMock( Woo_Order_Resolver::class );
-		// Subscriptions still use the resolver path; donations now come from order
-		// meta via an injected Donors_Metric (NPPD-1745).
-		$resolver->method( 'count_completed_orders' )->willReturn( 5 );
-		$resolver->method( 'sum_completed_revenue' )->willReturn( 0.0 );
-
 		add_filter( 'newspack_insights_woocommerce_active', '__return_true' ); // Removed in tearDown.
+		// NPPD-1745/1746: both donation AND subscription per-popup counts now come
+		// from order meta (Donors_Metric / Subscribers_Metric), not the resolver. The
+		// subscription count is the popup surface of the two-key map, keyed by popup id.
 		$donors = $this->createMock( Donors_Metric::class );
 		$donors->method( 'get_prompt_attributed_donation_conversions' )->willReturn(
 			[
@@ -1045,8 +1292,20 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 				],
 			]
 		);
+		$subscribers = $this->createMock( Subscribers_Metric::class );
+		$subscribers->method( 'get_attributed_subscription_conversions' )->willReturn(
+			[
+				'by_gate'  => [],
+				'by_popup' => [
+					'99' => [
+						'conversions' => 5,
+						'revenue'     => 0.0,
+					],
+				],
+			]
+		);
 
-		$metric = new Prompts_Metric( $proxy, $resolver, null, $donors );
+		$metric = new Prompts_Metric( $proxy, null, null, $donors, $subscribers );
 		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
 
 		$this->assertSame( 'populated', $result['state'] );
@@ -1076,6 +1335,46 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * NPPD-1746 (live-data fix): a prompt that drove subscriptions but is NOT
+	 * registration-intent (e.g. an "Undefined"-intent "50% off" promo) still shows
+	 * its subscription count + rate in the per-prompt table — matching the scalar
+	 * card, which sums the whole `by_popup` map regardless of intent. Pre-fix this
+	 * column gated on `intent=registration` and silently rendered 0, contradicting
+	 * the scalar (found on a live publisher whose converting popups were Undefined).
+	 */
+	public function test_performance_by_prompt_shows_subscriptions_for_non_registration_intent() {
+		$perf_rows = [ $this->performance_row( 77, '50% off promo', '', 1000 ) ]; // '' = Undefined intent.
+		$proxy     = $this->make_performance_proxy( $perf_rows, [], [] );
+
+		add_filter( 'newspack_insights_woocommerce_active', '__return_true' ); // Removed in tear_down.
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_prompt_attributed_donation_conversions' )->willReturn( [] );
+		$subscribers = $this->createMock( Subscribers_Metric::class );
+		$subscribers->method( 'get_attributed_subscription_conversions' )->willReturn(
+			[
+				'by_gate'  => [],
+				'by_popup' => [
+					'77' => [
+						'conversions' => 3,
+						'revenue'     => 150.0,
+					],
+				],
+			]
+		);
+
+		$metric = new Prompts_Metric( $proxy, null, null, $donors, $subscribers );
+		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
+
+		$this->assertSame( '', $result['rows'][0]['intent'], 'guard: the row really is non-registration intent' );
+		$this->assertSame( 3, $result['rows'][0]['subscription_conversions'], 'an Undefined-intent prompt still surfaces its subscriptions' );
+		$this->assertEqualsWithDelta( 0.003, $result['rows'][0]['subscription_conversion_rate'], 0.0001, '3 / 1000 impressions' );
+		// Donation column is N/A on this row (non-donation intent, not in the donation
+		// map): a null rate, not a misleading 0%.
+		$this->assertSame( 0, $result['rows'][0]['donation_conversions'] );
+		$this->assertNull( $result['rows'][0]['donation_conversion_rate'] );
+	}
+
+	/**
 	 * NPPD-1745: the per-prompt donation_conversion_rate shares the tab-level
 	 * coherence guard (donation_rate_value) — conversions exceeding a popup's
 	 * impressions suppress the rate to null, never a >100% value.
@@ -1093,7 +1392,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 			]
 		);
 
-		$metric = new Prompts_Metric( $proxy, null, null, $donors );
+		$metric = new Prompts_Metric( $proxy, null, null, $donors, $this->empty_subscribers() );
 		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
 
 		$this->assertSame( 50, $result['rows'][0]['donation_conversions'] );
@@ -1110,7 +1409,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		$donors = $this->createMock( Donors_Metric::class );
 		$donors->method( 'get_prompt_attributed_donation_conversions' )->willReturn( [] ); // No conversions for popup 42.
 
-		$metric = new Prompts_Metric( $proxy, null, null, $donors );
+		$metric = new Prompts_Metric( $proxy, null, null, $donors, $this->empty_subscribers() );
 		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
 
 		$this->assertSame( 0, $result['rows'][0]['donation_conversions'] );
@@ -1242,7 +1541,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		$donors = $this->createMock( Donors_Metric::class );
 		$donors->expects( $this->never() )->method( 'get_prompt_attributed_donation_conversions' );
 
-		$metric = new Prompts_Metric( $proxy, null, null, $donors );
+		$metric = new Prompts_Metric( $proxy, null, null, $donors, $this->empty_subscribers() );
 		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
 
 		// Table renders successfully — engagement data is load-bearing.
