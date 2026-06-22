@@ -204,29 +204,51 @@ class Teams_For_Memberships_Diagnostics {
 
 		$issue_count = 0;
 		foreach ( $duplicate_sets as $bucket ) {
-			// Oldest team with a _subscription_id wins. If none has one, fall back to oldest by post_date.
-			usort(
-				$bucket,
-				function ( $a, $b ) {
-					return strcmp( $a->post_date, $b->post_date );
-				}
+			// Read each team's _subscription_id once so the classifier can tell genuine
+			// renewal-bug orphans (no subscription of their own) apart from separate
+			// legitimate purchases that merely share a title + author.
+			$rows = array_map(
+				function ( $team ) {
+					return (object) [
+						'ID'              => (int) $team->ID,
+						'post_title'      => $team->post_title,
+						'post_author'     => (int) $team->post_author,
+						'post_date'       => $team->post_date,
+						'subscription_id' => (string) get_post_meta( $team->ID, '_subscription_id', true ),
+					];
+				},
+				$bucket
 			);
-			$original  = null;
-			$duplicates = [];
-			foreach ( $bucket as $team ) {
-				$sub_id = get_post_meta( $team->ID, '_subscription_id', true );
-				if ( null === $original && ! empty( $sub_id ) ) {
-					$original = $team;
-					continue;
-				}
-				$duplicates[] = $team;
-			}
-			if ( null === $original ) {
-				$original   = array_shift( $bucket );
-				$duplicates = $bucket;
+
+			$classification = self::classify_team_bucket( $rows );
+
+			// Teams that each own a distinct subscription are separate purchases, not the
+			// renewal-bug artifact. Report them so the collision is visible, but never merge
+			// or delete them – doing so would bind a live membership to a stale subscription
+			// and destroy a real team. See https://linear.app/a8c/issue/NPPM-2741.
+			if ( ! empty( $classification['separate_purchases'] ) ) {
+				$ids = implode(
+					', ',
+					array_map(
+						function ( $row ) {
+							return '#' . $row->ID;
+						},
+						$classification['separate_purchases']
+					)
+				);
+				WP_CLI::line(
+					sprintf(
+						'  SKIP: teams "%s" (author %d) each own a distinct subscription (%s) – separate purchases, not duplicates.',
+						$rows[0]->post_title,
+						$rows[0]->post_author,
+						$ids
+					)
+				);
+				continue;
 			}
 
-			foreach ( $duplicates as $dup ) {
+			$original = $classification['original'];
+			foreach ( $classification['duplicates'] as $dup ) {
 				$issue_count++;
 				WP_CLI::line(
 					sprintf(
@@ -238,12 +260,76 @@ class Teams_For_Memberships_Diagnostics {
 					)
 				);
 				if ( self::$fix ) {
-					self::fix_duplicate_team( $original, $dup );
+					self::fix_duplicate_team( get_post( $original->ID ), get_post( $dup->ID ) );
 				}
 			}
 		}
 
 		self::$counts['Duplicate teams'] = $issue_count;
+	}
+
+	/**
+	 * Partition a set of same-title, same-author teams into the canonical original and
+	 * the orphan duplicates that should be merged into it.
+	 *
+	 * The renewal bug this command repairs (see
+	 * https://github.com/Automattic/newspack-plugin/pull/4661) creates an *orphan* team
+	 * with no `_subscription_id` and moves the membership onto it, while the original team
+	 * keeps its `_subscription_id`. So a team that owns its own `_subscription_id` is a
+	 * distinct, legitimate purchase – never something to merge away. Only subscription-less
+	 * orphans are merge candidates. When two or more teams in the set each own a
+	 * subscription, they are separate purchases that merely share a title + author (e.g. a
+	 * reader who let one subscription lapse and bought again, or a real account plus a
+	 * throwaway test account); those are returned as `separate_purchases` and left untouched.
+	 *
+	 * @param object[] $teams Objects with at least ->ID, ->post_date and ->subscription_id
+	 *                        (the last empty when the team has no linked subscription).
+	 * @return array{original:?object,duplicates:object[],separate_purchases:object[]}
+	 */
+	public static function classify_team_bucket( array $teams ) {
+		// Oldest first, so the earliest-created team is preferred as the canonical original.
+		usort(
+			$teams,
+			function ( $a, $b ) {
+				return strcmp( (string) $a->post_date, (string) $b->post_date );
+			}
+		);
+
+		$subscribed = [];
+		$orphans    = [];
+		foreach ( $teams as $team ) {
+			if ( '' === (string) $team->subscription_id ) {
+				$orphans[] = $team;
+			} else {
+				$subscribed[] = $team;
+			}
+		}
+
+		// Two or more independently subscribed teams = separate purchases, not duplicates.
+		// Any orphans alongside them can't be safely attributed to a single purchase, so the
+		// whole set is left for manual review.
+		if ( count( $subscribed ) > 1 ) {
+			return [
+				'original'           => null,
+				'duplicates'         => [],
+				'separate_purchases' => $subscribed,
+			];
+		}
+
+		// Exactly one subscribed team is the canonical original and every orphan merges into
+		// it. With no subscribed team at all, fall back to the oldest orphan as the original
+		// (the behaviour for fully unlinked sets).
+		if ( 1 === count( $subscribed ) ) {
+			$original = $subscribed[0];
+		} else {
+			$original = array_shift( $orphans );
+		}
+
+		return [
+			'original'           => $original,
+			'duplicates'         => $orphans,
+			'separate_purchases' => [],
+		];
 	}
 
 	/**
