@@ -113,8 +113,9 @@ const Editor = compose( [
 			// Lock autosaving after a newsletter is sent.
 			lockPostAutosaving();
 
-			// Show an editor notice if the newsletter has been sent.
-			createNotice( 'success', successNote + dateTime, {
+			// Show an editor notice if the newsletter has been sent. The separating space lives here
+			// rather than in `successNote` so the translatable string carries no flanking whitespace.
+			createNotice( 'success', `${ successNote } ${ dateTime }`, {
 				id: 'newspack-newsletters-campaign-sent-notice',
 				isDismissible: false,
 			} );

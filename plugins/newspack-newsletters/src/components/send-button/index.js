@@ -341,7 +341,9 @@ export default compose( [
 			{ modalVisible && (
 				<Modal
 					className="newspack-newsletters__modal"
-					title={ isManual ? __( 'Publish your newsletter?', 'newspack-newsletters' ) : __( 'Send your newsletter?', 'newspack-newsletters' ) }
+					title={
+						isManual ? __( 'Publish your newsletter?', 'newspack-newsletters' ) : __( 'Send your newsletter?', 'newspack-newsletters' )
+					}
 					onRequestClose={ () => setModalVisible( false ) }
 					shouldCloseOnClickOutside={ false }
 					isFullScreen
