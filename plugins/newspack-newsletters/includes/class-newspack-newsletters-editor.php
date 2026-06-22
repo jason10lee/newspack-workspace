@@ -889,7 +889,11 @@ final class Newspack_Newsletters_Editor {
 
 
 		if ( function_exists( 'get_coauthors' ) ) {
-			$authors = get_coauthors();
+			// Pass the post ID explicitly: this runs as a REST collection callback
+			// without setup_postdata(), so get_coauthors() has no reliable global
+			// $post to fall back on. Now that the field is registered for Pages,
+			// Newsletters, Events, etc. (NPPM-2756), the global is unset here.
+			$authors = get_coauthors( $post['id'] );
 
 			foreach ( $authors as $author ) {
 				$author_link = null;

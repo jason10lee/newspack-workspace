@@ -178,4 +178,27 @@ class Test_Posts_Inserter_Rest_Fields extends WP_UnitTestCase {
 			$this->assertContains( self::VIEWABLE_CPT, $types, "$field must cover viewable CPTs" );
 		}
 	}
+
+	/**
+	 * The extra fields must stay scoped to the `edit` context. The safety case
+	 * for registering them across every viewable post type rests on this:
+	 * author/byline/sponsor data is only exposed to authenticated editors, never
+	 * in the public (`view`) REST response. A regression dropping `edit` context
+	 * would silently widen that exposure, so pin it explicitly.
+	 */
+	public function test_extra_fields_are_edit_context_only() {
+		global $wp_rest_additional_fields;
+
+		Newspack_Newsletters_Editor::add_newspack_extra_info();
+
+		foreach ( [ 'newspack_author_info', 'newspack_custom_byline', 'featured_media_info' ] as $field ) {
+			$args = $wp_rest_additional_fields['page'][ $field ] ?? null;
+			$this->assertNotNull( $args, "$field must be registered for page" );
+			$this->assertSame(
+				[ 'edit' ],
+				$args['schema']['context'] ?? null,
+				"$field must be exposed only in the edit context"
+			);
+		}
+	}
 }
