@@ -31,7 +31,7 @@ const DEFAULT_VIEW: View = {
 	perPage: 25,
 	sort: { field: 'title', direction: 'asc' },
 	search: '',
-	fields: [ 'strategy', 'scope', 'priority', 'status', 'goal' ],
+	fields: [ 'strategy', 'scope', 'priority', 'status', 'goal', 'reader_segments' ],
 	filters: [], // Show all statuses by default; the REST already excludes trash.
 	layout: {},
 	titleField: 'title',
@@ -39,12 +39,22 @@ const DEFAULT_VIEW: View = {
 
 const ACTIVE_STATE_LEVEL = { active: 'success', scheduled: 'info', ended: 'default' } as const;
 
+/** Map a rule's reader_segment condition (segment ids) to names via the vocab id→label map. */
+function readerSegmentNames( conditions: PricingRuleRow[ 'conditions' ], map: Record< number, string > ): string[] {
+	const ids = conditions.reader_segment;
+	if ( ! Array.isArray( ids ) ) {
+		return [];
+	}
+	return ids.map( id => map[ Number( id ) ] ?? `#${ id }` );
+}
+
 export default function PricingRulesList() {
 	const { setHeaderData, addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const history = useHistory();
 	const [ data, setData ] = useState< PricingRuleRow[] >( [] );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
+	const [ segmentMap, setSegmentMap ] = useState< Record< number, string > >( {} );
 
 	useEffect( () => {
 		setHeaderData( {
@@ -55,7 +65,16 @@ export default function PricingRulesList() {
 	const fetchData = useCallback( () => {
 		setIsLoading( true );
 		apiFetch< PricingRulesResponse >( { path: API_PATH } )
-			.then( response => setData( response.rules || [] ) )
+			.then( response => {
+				setData( response.rules || [] );
+				// Capture the reader_segment id→label options so the list can name segments.
+				const seg = ( response.conditions || [] ).find( c => c.id === 'reader_segment' );
+				const map: Record< number, string > = {};
+				( seg?.options || [] ).forEach( o => {
+					map[ o.value ] = o.label;
+				} );
+				setSegmentMap( map );
+			} )
 			.catch( () =>
 				addNotice( {
 					message: __( 'Failed to load pricing rules. Please refresh the page.', 'newspack-plugin' ),
@@ -154,6 +173,20 @@ export default function PricingRulesList() {
 				enableSorting: false,
 			},
 			{
+				id: 'reader_segments',
+				label: __( 'Reader segments', 'newspack-plugin' ),
+				getValue: ( { item } ) => readerSegmentNames( item.conditions, segmentMap ).join( ', ' ),
+				render: ( { item } ) => {
+					const names = readerSegmentNames( item.conditions, segmentMap );
+					return names.length ? (
+						<span>{ names.join( ', ' ) }</span>
+					) : (
+						<span className="newspack-pricing-rules__muted">{ __( 'Any reader', 'newspack-plugin' ) }</span>
+					);
+				},
+				enableSorting: false,
+			},
+			{
 				id: 'publicize',
 				label: __( 'Publicize', 'newspack-plugin' ),
 				getValue: ( { item } ) => ( item.publicize ? 'yes' : 'no' ),
@@ -161,7 +194,7 @@ export default function PricingRulesList() {
 				enableSorting: false,
 			},
 		],
-		[ statusElements, history ]
+		[ statusElements, history, segmentMap ]
 	);
 
 	const actions: Action< PricingRuleRow >[] = useMemo(
