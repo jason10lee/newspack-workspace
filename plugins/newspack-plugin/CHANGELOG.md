@@ -1,3 +1,10 @@
+## newspack [6.43.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.43.4...newspack@6.43.5) (2026-06-23)
+
+
+### Bug Fixes
+
+* **google-site-kit:** mirror GA4 reader params to dataLayer for GTM ([dde1a0b](https://github.com/Automattic/newspack-workspace/commit/dde1a0b50eb8abd8c28ff5e0a263fe031cda03a1))
+
 ## newspack [6.43.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.43.3...newspack@6.43.4) (2026-06-23)
 
 
