@@ -1335,6 +1335,46 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * NPPD-1746 (live-data fix): a prompt that drove subscriptions but is NOT
+	 * registration-intent (e.g. an "Undefined"-intent "50% off" promo) still shows
+	 * its subscription count + rate in the per-prompt table — matching the scalar
+	 * card, which sums the whole `by_popup` map regardless of intent. Pre-fix this
+	 * column gated on `intent=registration` and silently rendered 0, contradicting
+	 * the scalar (found on a live publisher whose converting popups were Undefined).
+	 */
+	public function test_performance_by_prompt_shows_subscriptions_for_non_registration_intent() {
+		$perf_rows = [ $this->performance_row( 77, '50% off promo', '', 1000 ) ]; // '' = Undefined intent.
+		$proxy     = $this->make_performance_proxy( $perf_rows, [], [] );
+
+		add_filter( 'newspack_insights_woocommerce_active', '__return_true' ); // Removed in tear_down.
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_prompt_attributed_donation_conversions' )->willReturn( [] );
+		$subscribers = $this->createMock( Subscribers_Metric::class );
+		$subscribers->method( 'get_attributed_subscription_conversions' )->willReturn(
+			[
+				'by_gate'  => [],
+				'by_popup' => [
+					'77' => [
+						'conversions' => 3,
+						'revenue'     => 150.0,
+					],
+				],
+			]
+		);
+
+		$metric = new Prompts_Metric( $proxy, null, null, $donors, $subscribers );
+		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
+
+		$this->assertSame( '', $result['rows'][0]['intent'], 'guard: the row really is non-registration intent' );
+		$this->assertSame( 3, $result['rows'][0]['subscription_conversions'], 'an Undefined-intent prompt still surfaces its subscriptions' );
+		$this->assertEqualsWithDelta( 0.003, $result['rows'][0]['subscription_conversion_rate'], 0.0001, '3 / 1000 impressions' );
+		// Donation column is N/A on this row (non-donation intent, not in the donation
+		// map): a null rate, not a misleading 0%.
+		$this->assertSame( 0, $result['rows'][0]['donation_conversions'] );
+		$this->assertNull( $result['rows'][0]['donation_conversion_rate'] );
+	}
+
+	/**
 	 * NPPD-1745: the per-prompt donation_conversion_rate shares the tab-level
 	 * coherence guard (donation_rate_value) — conversions exceeding a popup's
 	 * impressions suppress the rate to null, never a >100% value.
