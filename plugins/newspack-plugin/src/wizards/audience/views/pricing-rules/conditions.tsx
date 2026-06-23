@@ -23,6 +23,7 @@ import {
  */
 import { AutocompleteTokenField } from '../../../../../packages/components/src';
 import { tsToLocalInput, localInputToTs } from './datetime';
+import { isConditionVisible, type PricingPath } from './recipes';
 
 type ConditionsMap = { [ id: string ]: boolean | number | number[] | null };
 type DateMode = 'none' | 'publish' | 'custom';
@@ -151,18 +152,26 @@ interface ConditionsProps {
 	publishedAt: number | null;
 	isNew: boolean;
 	onChange: ( next: ConditionsMap ) => void;
+	path: string;
 }
 
-export default function Conditions( { vocab, value, publishedAt, isNew, onChange }: ConditionsProps ) {
+export default function Conditions( { vocab, value, publishedAt, isNew, onChange, path }: ConditionsProps ) {
 	if ( ! vocab?.length ) {
 		return null;
 	}
 
 	const setOne = ( id: string, v: boolean | number | number[] | null ) => onChange( { ...value, [ id ]: v } );
 
+	// Under a named path the recipe owns the lifecycle matcher (hidden); show only
+	// the editable segmentation conditions. Custom shows the full set.
+	const visible = vocab.filter( m => isConditionVisible( ( path || 'custom' ) as PricingPath, m.field_type ) );
+	if ( ! visible.length ) {
+		return null;
+	}
+
 	// Boolean (toggle) conditions always render last, below the richer datetime
 	// controls. Array.sort is stable, so order within each group is preserved.
-	const ordered = [ ...vocab ].sort( ( a, b ) => ( 'boolean' === a.field_type ? 1 : 0 ) - ( 'boolean' === b.field_type ? 1 : 0 ) );
+	const ordered = [ ...visible ].sort( ( a, b ) => ( 'boolean' === a.field_type ? 1 : 0 ) - ( 'boolean' === b.field_type ? 1 : 0 ) );
 
 	return (
 		<VStack spacing={ 4 }>
