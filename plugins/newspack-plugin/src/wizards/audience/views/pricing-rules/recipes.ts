@@ -21,8 +21,6 @@ export interface Recipe {
 	lifecycleCondition: string | null;
 	/** Application forced for this path, or null when the user picks it (custom). */
 	application: 'locked' | 'current' | null;
-	/** Whether a reader_segment selection is required (retention). */
-	requiresSegment: boolean;
 	/** Default scope applied when the path is chosen — subscription presets target all subscriptions. */
 	defaultScope: string;
 	/** Custom = the full advanced form (nothing preset or hidden). */
@@ -33,35 +31,30 @@ export const RECIPES: Record< PricingPath, Recipe > = {
 	new_subscriptions: {
 		lifecycleCondition: 'first_time_only',
 		application: 'locked',
-		requiresSegment: false,
 		defaultScope: 'all_subscriptions',
 		isCustom: false,
 	},
 	retention: {
 		lifecycleCondition: null,
 		application: 'current',
-		requiresSegment: true,
 		defaultScope: 'all_subscriptions',
 		isCustom: false,
 	},
 	save: {
 		lifecycleCondition: 'pending_cancellation',
 		application: 'locked',
-		requiresSegment: false,
 		defaultScope: 'all_subscriptions',
 		isCustom: false,
 	},
 	winback: {
 		lifecycleCondition: 'lapsed_subscriber',
 		application: 'locked',
-		requiresSegment: false,
 		defaultScope: 'all_subscriptions',
 		isCustom: false,
 	},
 	custom: {
 		lifecycleCondition: null,
 		application: null,
-		requiresSegment: false,
 		defaultScope: 'all_products',
 		isCustom: true,
 	},
@@ -103,18 +96,6 @@ export function isConditionVisible( path: PricingPath, fieldType: string ): bool
 	return RECIPES[ path ].isCustom ? true : 'select' === fieldType;
 }
 
-/**
- * Whether the chosen path's required segment is satisfied. Retention requires a
- * non-empty reader_segment selection; all other paths pass.
- */
-export function segmentSatisfied( path: PricingPath, conditions: ConditionsMap ): boolean {
-	if ( ! RECIPES[ path ].requiresSegment ) {
-		return true;
-	}
-	const seg = conditions.reader_segment;
-	return Array.isArray( seg ) && seg.length > 0;
-}
-
 /** Human label for a stored intent value (falls back to the raw value). */
 export function intentLabel( value: string ): string {
 	return pathOptions().find( o => o.value === value )?.label ?? value;
@@ -128,7 +109,7 @@ export function pathDescription( path: PricingPath ): string {
 			'newspack-plugin'
 		),
 		retention: __(
-			'A renewal discount to keep existing, at-risk subscribers. Stays “always current” so it re-applies at every renewal, targets all subscriptions, and needs a reader segment to define who is at risk.',
+			'A renewal discount to keep existing subscribers. Stays “always current” so it re-applies at every renewal and targets all subscriptions. Add a reader segment to target a specific at-risk audience.',
 			'newspack-plugin'
 		),
 		save: __(

@@ -31,7 +31,7 @@ import ScopeTargets from './scope-targets';
 import Conditions from './conditions';
 import RulePreview from './rule-preview';
 import { tsToLocalInput, localInputToTs } from './datetime';
-import { RECIPES, pathOptions, applyRecipeConditions, segmentSatisfied, intentLabel, pathDescription, type PricingPath } from './recipes';
+import { RECIPES, pathOptions, applyRecipeConditions, intentLabel, pathDescription, type PricingPath } from './recipes';
 
 const API_PATH = '/wc-dynamic-pricing/v1/rules';
 
@@ -169,14 +169,6 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 		}
 		if ( path === '' ) {
 			addNotice( { message: __( 'Choose a goal for this rule.', 'newspack-plugin' ), type: 'error', id: 'pricing-rule-path' } );
-			return;
-		}
-		if ( ! segmentSatisfied( path as PricingPath, conditions ) ) {
-			addNotice( {
-				message: __( 'Retention rules need at least one reader segment.', 'newspack-plugin' ),
-				type: 'error',
-				id: 'pricing-rule-segment',
-			} );
 			return;
 		}
 		setIsSaving( true );

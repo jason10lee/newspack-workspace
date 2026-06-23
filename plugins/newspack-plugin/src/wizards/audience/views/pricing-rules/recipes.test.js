@@ -1,7 +1,7 @@
 /**
  * Unit tests for the pricing-path recipe map.
  */
-import { RECIPES, LIFECYCLE_CONDITIONS, applyRecipeConditions, isConditionVisible, segmentSatisfied, intentLabel } from './recipes';
+import { RECIPES, LIFECYCLE_CONDITIONS, applyRecipeConditions, isConditionVisible, intentLabel } from './recipes';
 
 describe( 'recipes', () => {
 	it( 'save presets pending_cancellation + locked + all-subscriptions scope', () => {
@@ -10,10 +10,9 @@ describe( 'recipes', () => {
 		expect( RECIPES.save.defaultScope ).toBe( 'all_subscriptions' );
 	} );
 
-	it( 'retention has no lifecycle matcher, current application, requires a segment', () => {
+	it( 'retention has no lifecycle matcher and current application', () => {
 		expect( RECIPES.retention.lifecycleCondition ).toBeNull();
 		expect( RECIPES.retention.application ).toBe( 'current' );
-		expect( RECIPES.retention.requiresSegment ).toBe( true );
 	} );
 
 	it( 'custom presets nothing and defaults to all-products scope', () => {
@@ -41,13 +40,6 @@ describe( 'recipes', () => {
 		expect( isConditionVisible( 'save', 'boolean' ) ).toBe( false );
 		expect( isConditionVisible( 'save', 'datetime' ) ).toBe( false );
 		expect( isConditionVisible( 'custom', 'boolean' ) ).toBe( true );
-	} );
-
-	it( 'segmentSatisfied requires a non-empty reader_segment only for retention', () => {
-		expect( segmentSatisfied( 'retention', {} ) ).toBe( false );
-		expect( segmentSatisfied( 'retention', { reader_segment: [] } ) ).toBe( false );
-		expect( segmentSatisfied( 'retention', { reader_segment: [ 1 ] } ) ).toBe( true );
-		expect( segmentSatisfied( 'save', {} ) ).toBe( true );
 	} );
 
 	it( 'intentLabel maps known values and passes through unknown', () => {
