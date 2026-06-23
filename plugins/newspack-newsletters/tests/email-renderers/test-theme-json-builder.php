@@ -658,12 +658,15 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 		\WP_Theme_JSON_Resolver::clean_cached_data();
 		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
 
-		$theme = Theme_Json_Builder::build( get_post( self::factory()->post->create() ) );
-
-		remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
-		remove_filter( 'wp_theme_json_data_theme', $inject_padding );
-		// Restore clean state for subsequent tests.
-		\WP_Theme_JSON_Resolver::clean_cached_data();
+		// try/finally so the global filters + resolver cache are always cleaned up,
+		// even if build() throws — otherwise leaked state cascades into other tests.
+		try {
+			$theme = Theme_Json_Builder::build( get_post( self::factory()->post->create() ) );
+		} finally {
+			remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
+			remove_filter( 'wp_theme_json_data_theme', $inject_padding );
+			\WP_Theme_JSON_Resolver::clean_cached_data();
+		}
 
 		$padding = $theme['styles']['elements']['button']['spacing']['padding'] ?? null;
 

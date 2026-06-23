@@ -261,7 +261,10 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 	 * Restore globals and remove any flag filters added during tests.
 	 */
 	public function tear_down() {
-		remove_all_filters( 'newspack_newsletters_use_woo_renderer' );
+		// Remove only the flag callbacks these tests add — not every callback on the
+		// hook — so we don't strip production/other-test filters (order-independence).
+		remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
+		remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_false' );
 
 		if ( null === $this->strip_globals_backup['pagenow'] ) {
 			unset( $GLOBALS['pagenow'] );
