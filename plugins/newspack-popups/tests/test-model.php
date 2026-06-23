@@ -344,6 +344,70 @@ class ModelTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * NPPM-2940 boundary: when the autosave and the saved post share the same
+	 * (one-second-resolution) post_modified_gmt, the saved post wins. Preferring
+	 * the saved post on a tie is the conservative choice — it can never resurface
+	 * removed-then-saved content, which is the bug this fix targets.
+	 */
+	public function test_preview_prefers_saved_post_on_timestamp_tie() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		$popup_id = self::factory()->post->create(
+			[
+				'post_type'     => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_content'  => '<!-- wp:paragraph --><p>Saved tie body.</p><!-- /wp:paragraph -->',
+				'post_date'     => '2021-01-01 00:00:00',
+				'post_date_gmt' => '2021-01-01 00:00:00',
+			]
+		);
+
+		$this->create_autosave(
+			$popup_id,
+			'<!-- wp:heading --><h3>Tie autosave heading</h3><!-- /wp:heading -->',
+			'2021-01-01 00:00:00'
+		);
+
+		$preview = Newspack_Popups_Model::retrieve_preview_popup( $popup_id );
+		self::assertStringContainsString(
+			'Saved tie body.',
+			$preview['content'],
+			'On an equal post_modified_gmt tie, the preview must render the saved post.'
+		);
+		self::assertStringNotContainsString(
+			'Tie autosave heading',
+			$preview['content'],
+			'On a tie the autosave must not win, to avoid resurfacing removed-then-saved content (NPPM-2940).'
+		);
+	}
+
+	/**
+	 * NPPM-2940: when the saved post cannot be loaded but an autosave exists
+	 * (e.g. an orphaned autosave), the preview falls back to the autosave rather
+	 * than returning nothing.
+	 */
+	public function test_preview_uses_autosave_when_saved_post_missing() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		// Advance the auto-increment, then target an id with no corresponding post.
+		$existing_id = self::factory()->post->create( [ 'post_type' => Newspack_Popups::NEWSPACK_POPUPS_CPT ] );
+		$ghost_id    = $existing_id + 100000;
+
+		$this->create_autosave(
+			$ghost_id,
+			'<!-- wp:paragraph --><p>Orphan autosave body.</p><!-- /wp:paragraph -->',
+			'2021-01-01 00:00:00'
+		);
+
+		self::assertNull( get_post( $ghost_id ), 'Precondition: the saved post must not resolve.' );
+
+		$preview = Newspack_Popups_Model::retrieve_preview_popup( $ghost_id );
+		self::assertNotNull( $preview, 'A present autosave with no saved post must still yield a preview.' );
+		self::assertStringContainsString(
+			'Orphan autosave body.',
+			$preview['content'],
+			'With no saved post, the preview must fall back to the autosave.'
+		);
+	}
+
+	/**
 	 * Tests that an invalid `pp` query param does not produce a popup list with null entries,
 	 * which would cascade to "Trying to access array offset on null" warnings downstream.
 	 */
