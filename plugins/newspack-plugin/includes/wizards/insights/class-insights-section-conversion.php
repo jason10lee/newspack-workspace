@@ -77,6 +77,10 @@ class Insights_Section_Conversion {
 		// weekly recurring refresh; the recurring schedule is ensured on init.
 		add_action( Conversion_Metric::COHORT_REFRESH_ACTION, [ Conversion_Metric::class, 'run_cohort_refresh' ] );
 		add_action( Conversion_Metric::COHORT_REFRESH_WEEKLY_ACTION, [ Conversion_Metric::class, 'run_cohort_refresh' ] );
-		add_action( 'init', [ Conversion_Metric::class, 'maybe_schedule_cohort_prewarm' ] );
+		// register_hooks() is called from Wizards::init_wizards(), which itself
+		// runs on the 'init' action. Adding another 'init' callback here would
+		// be a no-op (the hook has already fired). Call directly — the method is
+		// idempotent (guards with function_exists + as_next_scheduled_action).
+		Conversion_Metric::maybe_schedule_cohort_prewarm();
 	}
 }

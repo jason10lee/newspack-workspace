@@ -3049,11 +3049,55 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'empty', $peeked['payload']['registration_to_conversion_cohort']['state'] );
 	}
 
+	// --- Cohort pre-warm scheduling ------------------------------------------
+
+	/**
+	 * Maybe_schedule_cohort_prewarm() schedules the weekly recurring action
+	 * when none exists yet.
+	 */
+	public function test_maybe_schedule_cohort_prewarm_schedules_when_none_exists() {
+		if ( ! function_exists( 'as_next_scheduled_action' ) || ! function_exists( 'as_schedule_recurring_action' ) ) {
+			$this->markTestSkipped( 'Action Scheduler not available in this test harness.' );
+		}
+		// Ensure no action is already scheduled (clean slate).
+		as_unschedule_all_actions( Conversion_Metric::COHORT_REFRESH_WEEKLY_ACTION, [], Conversion_Metric::COHORT_REFRESH_GROUP );
+		$this->assertFalse( as_next_scheduled_action( Conversion_Metric::COHORT_REFRESH_WEEKLY_ACTION, [], Conversion_Metric::COHORT_REFRESH_GROUP ) );
+
+		Conversion_Metric::maybe_schedule_cohort_prewarm();
+
+		$timestamp = as_next_scheduled_action( Conversion_Metric::COHORT_REFRESH_WEEKLY_ACTION, [], Conversion_Metric::COHORT_REFRESH_GROUP );
+		$this->assertNotFalse( $timestamp, 'Recurring weekly prewarm action should be scheduled.' );
+		$this->assertIsInt( $timestamp );
+	}
+
+	/**
+	 * Maybe_schedule_cohort_prewarm() is idempotent: a second call does not
+	 * schedule a duplicate action.
+	 */
+	public function test_maybe_schedule_cohort_prewarm_is_idempotent() {
+		if ( ! function_exists( 'as_next_scheduled_action' ) || ! function_exists( 'as_schedule_recurring_action' ) ) {
+			$this->markTestSkipped( 'Action Scheduler not available in this test harness.' );
+		}
+		as_unschedule_all_actions( Conversion_Metric::COHORT_REFRESH_WEEKLY_ACTION, [], Conversion_Metric::COHORT_REFRESH_GROUP );
+
+		Conversion_Metric::maybe_schedule_cohort_prewarm();
+		$first_timestamp = as_next_scheduled_action( Conversion_Metric::COHORT_REFRESH_WEEKLY_ACTION, [], Conversion_Metric::COHORT_REFRESH_GROUP );
+
+		// Second call must not throw and must not change the scheduled timestamp.
+		Conversion_Metric::maybe_schedule_cohort_prewarm();
+		$second_timestamp = as_next_scheduled_action( Conversion_Metric::COHORT_REFRESH_WEEKLY_ACTION, [], Conversion_Metric::COHORT_REFRESH_GROUP );
+
+		$this->assertSame( $first_timestamp, $second_timestamp, 'Second call must not reschedule the action.' );
+	}
+
 	/**
 	 * Clear the cohort snapshot transient between tests.
 	 */
 	public function tear_down() {
 		delete_transient( 'newspack_insights_conversion_' . md5( (string) wp_json_encode( [ 'cohorts' ] ) ) );
+		if ( function_exists( 'as_unschedule_all_actions' ) ) {
+			as_unschedule_all_actions( Conversion_Metric::COHORT_REFRESH_WEEKLY_ACTION, [], Conversion_Metric::COHORT_REFRESH_GROUP );
+		}
 		parent::tear_down();
 	}
 }
