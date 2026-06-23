@@ -20,6 +20,7 @@ import { DataViews, Badge, Router } from '../../../../../packages/components/src
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import CatalogImpact from './catalog-impact';
 import { intentLabel } from './recipes';
+import { pricingModelSentence } from './model-sentence';
 
 const { useHistory } = Router;
 
@@ -55,6 +56,7 @@ export default function PricingRulesList() {
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
 	const [ segmentMap, setSegmentMap ] = useState< Record< number, string > >( {} );
+	const [ currency, setCurrency ] = useState< PricingRulesCurrency >( { code: '', symbol: '', decimals: 2 } );
 
 	useEffect( () => {
 		setHeaderData( {
@@ -67,6 +69,7 @@ export default function PricingRulesList() {
 		apiFetch< PricingRulesResponse >( { path: API_PATH } )
 			.then( response => {
 				setData( response.rules || [] );
+				setCurrency( response.currency );
 				// Capture the reader_segment id→label options so the list can name segments.
 				const seg = ( response.conditions || [] ).find( c => c.id === 'reader_segment' );
 				const map: Record< number, string > = {};
@@ -133,8 +136,8 @@ export default function PricingRulesList() {
 			{
 				id: 'strategy',
 				label: __( 'Pricing model', 'newspack-plugin' ),
-				getValue: ( { item } ) => item.strategy_label,
-				render: ( { item } ) => <span>{ item.strategy_label }</span>,
+				getValue: ( { item } ) => pricingModelSentence( item, currency ),
+				render: ( { item } ) => <span>{ pricingModelSentence( item, currency ) }</span>,
 				enableSorting: false,
 			},
 			{
@@ -194,7 +197,7 @@ export default function PricingRulesList() {
 				enableSorting: false,
 			},
 		],
-		[ statusElements, history, segmentMap ]
+		[ statusElements, history, segmentMap, currency ]
 	);
 
 	const actions: Action< PricingRuleRow >[] = useMemo(
