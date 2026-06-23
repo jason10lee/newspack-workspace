@@ -2902,4 +2902,76 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 1, $by['prompt']['count'] ); // from BQ matcher.
 		$this->assertSame( 1, $by['direct']['count'] ); // BQ-unmatched.
 	}
+
+	// --- 5.2 compute_subscriber_retention_cohort ----------------------------
+
+	/**
+	 * 5.2 compute: active spanning the curve; cancellation drops at the offset.
+	 */
+	public function test_compute_retention_cohort_cancellation_drops() {
+		// Two customers, cohort 2026-01. Cust 10 stays active (no terminus).
+		// Cust 11 cancels at 2026-03 (active at N=0,1; gone by N=2).
+		$rows = [
+			[
+				'customer_id' => 10,
+				'start'       => '2026-01-10 00:00:00',
+				'cancelled'   => null,
+				'end'         => null,
+			],
+			[
+				'customer_id' => 11,
+				'start'       => '2026-01-10 00:00:00',
+				'cancelled'   => '2026-03-10 00:00:00',
+				'end'         => null,
+			],
+		];
+		$subs_metric = $this->createMock( Subscribers_Metric::class );
+		$subs_metric->method( 'get_new_subscriber_cohort_intervals' )->willReturn( $rows );
+
+		$metric = new Conversion_Metric( null, null, $subs_metric, null );
+		$result = $metric->compute_subscriber_retention_cohort();
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( '2026-01', $result['cohorts'][0]['label'] );
+		$points = array_column( $result['cohorts'][0]['points'], 'value', 'period' );
+		$this->assertSame( 1.0, $points[0] ); // both active at start.
+		$this->assertSame( 1.0, $points[1] ); // cust 11 cancel (Mar) > Feb → still active.
+		$this->assertSame( 0.5, $points[2] ); // cust 11 cancelled before Mar+ → only cust 10.
+		$this->assertSame( 0.70, $result['reference_line']['value'] );
+	}
+
+	/**
+	 * 5.2 compute: natural expiry (_schedule_end) also ends activity.
+	 */
+	public function test_compute_retention_cohort_expiry_drops() {
+		$rows = [
+			[
+				'customer_id' => 20,
+				'start'       => '2026-01-10 00:00:00',
+				'cancelled'   => null,
+				'end'         => '2026-02-10 00:00:00', // expires after 1 month.
+			],
+		];
+		$subs_metric = $this->createMock( Subscribers_Metric::class );
+		$subs_metric->method( 'get_new_subscriber_cohort_intervals' )->willReturn( $rows );
+
+		$metric = new Conversion_Metric( null, null, $subs_metric, null );
+		$points = array_column( $metric->compute_subscriber_retention_cohort()['cohorts'][0]['points'], 'value', 'period' );
+		$this->assertSame( 1.0, $points[0] ); // active at start.
+		$this->assertSame( 0.0, $points[1] ); // end (Feb 10) <= start+1mo (Feb 10) → not active.
+	}
+
+	/**
+	 * 5.2 compute: no cohort rows → empty, reference_line preserved.
+	 */
+	public function test_compute_retention_cohort_empty() {
+		$subs_metric = $this->createMock( Subscribers_Metric::class );
+		$subs_metric->method( 'get_new_subscriber_cohort_intervals' )->willReturn( [] );
+
+		$metric = new Conversion_Metric( null, null, $subs_metric, null );
+		$result = $metric->compute_subscriber_retention_cohort();
+		$this->assertSame( 'empty', $result['state'] );
+		$this->assertSame( [], $result['cohorts'] );
+		$this->assertSame( 0.70, $result['reference_line']['value'] );
+	}
 }

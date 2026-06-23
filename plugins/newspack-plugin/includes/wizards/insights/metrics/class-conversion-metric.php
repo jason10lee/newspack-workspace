@@ -1866,4 +1866,121 @@ final class Conversion_Metric {
 			'threshold_pageviews' => 100,
 		];
 	}
+
+	// --- Section 5: Cohorts (5.2 retention) --------------------------------
+
+	/**
+	 * 5.2 reference line (hardcoded per spec): 70% retention at 12 months.
+	 *
+	 * @return array{value: float, label: string}
+	 */
+	private function retention_reference_line(): array {
+		return [
+			'value' => 0.70,
+			'label' => __( '70% at 12 months', 'newspack-plugin' ),
+		];
+	}
+
+	/**
+	 * Compute the 5.2 subscriber retention cohort curve (expensive snapshot
+	 * work; called by the pre-warm handler, never on the request hot path).
+	 * Cohort = customers grouped by their first non-donation subscription month
+	 * (trailing 365 days). For offset N (0..age, capped 12), the value is the
+	 * fraction of the cohort with ANY subscription active at their own
+	 * (first_start + N months): start <= T AND not cancelled/ended before T.
+	 *
+	 * @return array{state:string, cohorts:array, reference_line:array{value:float, label:string}}
+	 */
+	public function compute_subscriber_retention_cohort(): array {
+		$rows = $this->subscribers_metric->get_new_subscriber_cohort_intervals();
+		if ( empty( $rows ) ) {
+			return array_merge(
+				[
+					'state'   => 'empty',
+					'cohorts' => [],
+				],
+				[ 'reference_line' => $this->retention_reference_line() ]
+			);
+		}
+
+		$utc = new \DateTimeZone( 'UTC' );
+
+		// Group intervals by customer. Each interval: start_ts and nullable terminus_ts.
+		$by_customer = [];
+		foreach ( $rows as $row ) {
+			$cid = (int) $row['customer_id'];
+			if ( empty( $row['start'] ) ) {
+				continue;
+			}
+			$start_ts = ( new \DateTimeImmutable( $row['start'], $utc ) )->getTimestamp();
+
+			$terminus_ts = null;
+			foreach ( [ $row['cancelled'] ?? null, $row['end'] ?? null ] as $raw ) {
+				if ( null === $raw || '' === $raw || '0' === $raw ) {
+					continue;
+				}
+				$ts = ( new \DateTimeImmutable( $raw, $utc ) )->getTimestamp();
+				if ( null === $terminus_ts || $ts < $terminus_ts ) {
+					$terminus_ts = $ts;
+				}
+			}
+			$by_customer[ $cid ][] = [
+				'start'    => $start_ts,
+				'terminus' => $terminus_ts,
+			];
+		}
+
+		$now_index = $this->month_index( new \DateTimeImmutable( 'now', $utc ) );
+
+		// Per cohort (by first-start month): the set of customers and, for each
+		// offset, the count still active.
+		$cohort_members = []; // cohort_index => [ customer_id => first_start_ts ].
+		$cohort_labels  = [];
+		foreach ( $by_customer as $cid => $intervals ) {
+			$first_start  = min( array_column( $intervals, 'start' ) );
+			$first_dt     = ( new \DateTimeImmutable( '@' . $first_start ) )->setTimezone( $utc );
+			$cohort_index = $this->month_index( $first_dt );
+			$cohort_labels[ $cohort_index ]        = $first_dt->format( 'Y-m' );
+			$cohort_members[ $cohort_index ][ $cid ] = $first_start;
+		}
+
+		ksort( $cohort_members );
+		$cohorts = [];
+		foreach ( $cohort_members as $cohort_index => $members ) {
+			$size   = count( $members );
+			$age    = max( 0, min( self::COHORT_MAX_MONTHS, $now_index - $cohort_index ) );
+			$points = [];
+			for ( $n = 0; $n <= $age; $n++ ) {
+				$active = 0;
+				foreach ( $members as $cid => $first_start ) {
+					$t = ( new \DateTimeImmutable( '@' . $first_start ) )
+						->setTimezone( $utc )
+						->modify( '+' . $n . ' months' )
+						->getTimestamp();
+					foreach ( $by_customer[ $cid ] as $interval ) {
+						if ( $interval['start'] <= $t && ( null === $interval['terminus'] || $interval['terminus'] > $t ) ) {
+							$active++;
+							break;
+						}
+					}
+				}
+				$points[] = [
+					'period' => $n,
+					'value'  => round( $active / $size, 4 ),
+				];
+			}
+			$cohorts[] = [
+				'label'  => $cohort_labels[ $cohort_index ],
+				'points' => $points,
+			];
+		}
+
+		return array_merge(
+			[
+				'state'   => empty( $cohorts ) ? 'empty' : 'populated',
+				'cohorts' => $cohorts,
+			],
+			[ 'reference_line' => $this->retention_reference_line() ]
+		);
+	}
 }
