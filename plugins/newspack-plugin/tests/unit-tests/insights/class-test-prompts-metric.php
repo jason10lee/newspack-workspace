@@ -1486,6 +1486,29 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * NPPD-1756/1757 (capability path): a donation-CAPABLE prompt (non-zero
+	 * `donation_impressions`) that converted nobody is a real 0% — over the
+	 * donation-capable impressions, not total — and is shown regardless of intent.
+	 * The sibling test above covers the same semantics on the legacy intent path.
+	 */
+	public function test_per_prompt_donation_rate_real_zero_percent_on_capability_path() {
+		$row = array_merge(
+			$this->performance_row( 42, 'Member campaign', 'undefined', 1000 ),
+			[ 'donation_impressions' => 300 ] // Capable (carries a donate block) despite non-donation intent.
+		);
+		$proxy = $this->make_performance_proxy( [ $row ], [], [] );
+		add_filter( 'newspack_insights_woocommerce_active', '__return_true' );
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_prompt_attributed_donation_conversions' )->willReturn( [] ); // No conversions for popup 42.
+
+		$metric = new Prompts_Metric( $proxy, null, null, $donors, $this->empty_subscribers() );
+		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
+
+		$this->assertSame( 0, $result['rows'][0]['donation_conversions'] );
+		$this->assertSame( 0.0, $result['rows'][0]['donation_conversion_rate'], 'capable-but-no-conversion is a real 0% over donation_impressions, not an em-dash' );
+	}
+
+	/**
 	 * Performance by prompt: locks the canonical row-key contract the React
 	 * layer consumes (`PromptPerformanceRow`). A column rename on either side
 	 * silently blanks the table, so assert the exact set + order.
