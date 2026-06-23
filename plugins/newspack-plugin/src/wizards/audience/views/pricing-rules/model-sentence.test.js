@@ -6,6 +6,7 @@ import { pricingModelSentence } from './model-sentence';
 const currency = { code: 'USD', symbol: '$', decimals: 2 };
 
 const flat = simple => ( { is_stepped: false, simple, steps: null, strategy_label: 'Flat adjustment' } );
+const stepped = steps => ( { is_stepped: true, simple: null, steps, strategy_label: 'Stepped by cycle' } );
 
 describe( 'pricingModelSentence', () => {
 	it( 'flat fixed price reads as "Set price to $X"', () => {
@@ -28,18 +29,31 @@ describe( 'pricingModelSentence', () => {
 		expect( pricingModelSentence( item, currency ) ).toBe( '$5.00 off regular price · first 3 cycles' );
 	} );
 
-	it( 'stepped reads as an arrow progression by cycle', () => {
-		const item = {
-			is_stepped: true,
-			simple: null,
-			strategy_label: 'Stepped by cycle',
-			steps: [
-				{ at: 1, calc_type: 'fixed_price', value: 80 },
-				{ at: 2, calc_type: 'fixed_price', value: 90 },
-				{ at: 3, calc_type: 'fixed_price', value: 100 },
-			],
-		};
-		expect( pricingModelSentence( item, currency ) ).toBe( '$80.00 → $90.00 → $100.00 by cycle' );
+	it( 'stepped names each step past the first by its starting cycle', () => {
+		const item = stepped( [
+			{ at: 1, calc_type: 'fixed_price', value: 80 },
+			{ at: 2, calc_type: 'fixed_price', value: 90 },
+			{ at: 3, calc_type: 'fixed_price', value: 100 },
+		] );
+		expect( pricingModelSentence( item, currency ) ).toBe( '$80.00 → $90.00 from cycle 2 → $100.00 from cycle 3' );
+	} );
+
+	it( 'stepped represents cycle skips by naming each starting cycle', () => {
+		const item = stepped( [
+			{ at: 1, calc_type: 'fixed_price', value: 80 },
+			{ at: 3, calc_type: 'fixed_price', value: 90 },
+			{ at: 6, calc_type: 'fixed_price', value: 100 },
+		] );
+		expect( pricingModelSentence( item, currency ) ).toBe( '$80.00 → $90.00 from cycle 3 → $100.00 from cycle 6' );
+	} );
+
+	it( 'stepped sorts steps by starting cycle before describing them', () => {
+		const item = stepped( [
+			{ at: 6, calc_type: 'fixed_price', value: 100 },
+			{ at: 1, calc_type: 'fixed_price', value: 80 },
+			{ at: 3, calc_type: 'fixed_price', value: 90 },
+		] );
+		expect( pricingModelSentence( item, currency ) ).toBe( '$80.00 → $90.00 from cycle 3 → $100.00 from cycle 6' );
 	} );
 
 	it( 'falls back to the strategy label for an unknown calc type', () => {
