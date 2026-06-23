@@ -102,7 +102,7 @@ final class Newspack_Newsletters_Editor {
 	 */
 	public static function is_editing_email( $post_id = null ) {
 		$post_id = empty( $post_id ) ? get_the_ID() : $post_id;
-		return in_array( get_post_type( $post_id ), self::get_email_editor_cpts() );
+		return in_array( get_post_type( $post_id ), self::get_email_editor_cpts(), true );
 	}
 
 	/**
@@ -119,7 +119,7 @@ final class Newspack_Newsletters_Editor {
 		global $pagenow;
 		$email_editor_cpts = self::get_email_editor_cpts();
 		$is_editing_email  = 'post.php' === $pagenow && isset( $_GET['post'] ) && self::is_editing_email( absint( $_GET['post'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$is_creating_email = 'post-new.php' === $pagenow && isset( $_GET['post_type'] ) && in_array( $_GET['post_type'], $email_editor_cpts ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$is_creating_email = 'post-new.php' === $pagenow && isset( $_GET['post_type'] ) && in_array( sanitize_key( wp_unslash( $_GET['post_type'] ) ), $email_editor_cpts, true ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		return $is_editing_email || $is_creating_email;
 	}
 
