@@ -38,6 +38,7 @@ final class Dynamic_Pricing_Bridges {
 		add_filter( 'woocommerce_dynamic_pricing_is_excluded', [ __CLASS__, 'exclude_group_subscriptions' ], 10, 3 );
 		add_filter( 'newspack_modal_checkout_price_summary', [ __CLASS__, 'annotate_modal_checkout_summary' ], 20, 2 );
 		add_action( 'woocommerce_dynamic_pricing_register', [ __CLASS__, 'register_conditions' ] );
+		add_filter( 'woocommerce_dynamic_pricing_preview_segment_groups', [ __CLASS__, 'preview_segment_groups' ], 10, 2 );
 	}
 
 	/**
@@ -139,6 +140,68 @@ final class Dynamic_Pricing_Bridges {
 			return sprintf( '%1$s (%2$s)', $summary, implode( ' — ', $parts ) );
 		}
 		return $summary;
+	}
+
+	/**
+	 * Supply the reader-segment groups for the impact preview: the union of
+	 * reader_segment ids across the previewed rule (when given) and all active
+	 * rules, each as a group the engine will price as-if a reader in it.
+	 *
+	 * @param array $groups Groups so far (engine default []).
+	 * @param mixed $rule   The previewed rule (engine Pricing_Rule) or null for the catalog.
+	 * @return array<int, array{id:int,label:string,assume_segments:int[]}>
+	 */
+	public static function preview_segment_groups( $groups, $rule = null ): array {
+		if ( ! is_array( $groups ) ) {
+			$groups = [];
+		}
+		if ( ! class_exists( '\Newspack_Segments_Model' ) ) {
+			return $groups;
+		}
+		$engine_class = '\Automattic\WooCommerce\DynamicPricing\Pricing_Engine';
+		if ( ! class_exists( $engine_class ) ) {
+			return $groups;
+		}
+
+		$rules = [];
+		if ( is_object( $rule ) && isset( $rule->conditions ) ) {
+			$rules[] = $rule;
+		}
+		$repo = call_user_func( [ $engine_class, 'instance' ] )->repository();
+		if ( $repo ) {
+			$rules = array_merge( $rules, $repo->active() );
+		}
+
+		$ids = [];
+		foreach ( $rules as $r ) {
+			foreach ( (array) ( $r->conditions ?? [] ) as $cond ) {
+				if ( is_array( $cond ) && ( $cond['type'] ?? '' ) === 'reader_segment' ) {
+					foreach ( (array) ( $cond['value'] ?? [] ) as $sid ) {
+						$ids[ (int) $sid ] = true;
+					}
+				}
+			}
+		}
+		if ( empty( $ids ) ) {
+			return $groups;
+		}
+
+		$labels = [];
+		foreach ( \Newspack_Segments_Model::get_segments() as $segment ) {
+			if ( isset( $segment['id'], $segment['name'] ) ) {
+				$labels[ (int) $segment['id'] ] = (string) $segment['name'];
+			}
+		}
+
+		foreach ( array_keys( $ids ) as $sid ) {
+			$groups[] = [
+				'id'              => $sid,
+				/* translators: %d: segment id, when the segment has no name. */
+				'label'           => $labels[ $sid ] ?? sprintf( __( 'Segment %d', 'newspack-plugin' ), $sid ),
+				'assume_segments' => [ $sid ],
+			];
+		}
+		return $groups;
 	}
 }
 
