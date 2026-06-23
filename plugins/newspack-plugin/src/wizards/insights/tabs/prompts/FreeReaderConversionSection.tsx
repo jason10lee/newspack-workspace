@@ -41,7 +41,7 @@ const FreeReaderConversionSection = ( { current, previous }: FreeReaderConversio
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Registration Conversion (Direct)', 'newspack-plugin' ),
 					description: __(
-						'Sessions with a registration after a registration-intent prompt impression ÷ sessions with a registration-intent prompt impression',
+						'Sessions with a registration after a prompt impression with a registration block ÷ sessions with a prompt impression with a registration block',
 						'newspack-plugin'
 					),
 					current: current.registration_conversion_direct,
@@ -67,7 +67,7 @@ const FreeReaderConversionSection = ( { current, previous }: FreeReaderConversio
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Newsletter Signup Conversion (Direct)', 'newspack-plugin' ),
 					description: __(
-						'Sessions with a newsletter signup after a newsletter-intent prompt impression ÷ sessions with a newsletter-intent prompt impression',
+						'Sessions with a newsletter signup after a prompt impression with a newsletter block ÷ sessions with a prompt impression with a newsletter block',
 						'newspack-plugin'
 					),
 					current: current.newsletter_signup_conversion_direct,
