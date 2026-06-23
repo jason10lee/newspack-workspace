@@ -627,4 +627,40 @@ class Test_Conversion_Journey_Storage extends WP_UnitTestCase {
 		$this->assertSame( $rows, $metric->get_subscriber_to_donor_lags() );
 		$this->assertSame( [], $metric->get_subscriber_to_donor_lags() );
 	}
+
+	// =========================================================================
+	// New-subscriber cohort intervals — Task 3 (5.2 retention input).
+	// =========================================================================
+
+	/**
+	 * HPOS + Legacy storage expose get_new_subscriber_cohort_intervals().
+	 */
+	public function test_storages_implement_cohort_intervals(): void {
+		$this->assertTrue( method_exists( new HPOS_Storage( [] ), 'get_new_subscriber_cohort_intervals' ) );
+		$this->assertTrue( method_exists( new Legacy_Storage( [] ), 'get_new_subscriber_cohort_intervals' ) );
+		$this->assertTrue(
+			( new \ReflectionClass( Storage_Interface::class ) )->hasMethod( 'get_new_subscriber_cohort_intervals' )
+		);
+	}
+
+	/**
+	 * Subscribers_Metric::get_new_subscriber_cohort_intervals() delegates.
+	 */
+	public function test_subscribers_metric_cohort_intervals_delegates(): void {
+		$rows = [
+			[
+				'customer_id' => 7,
+				'start'       => '2026-01-10 00:00:00',
+				'cancelled'   => null,
+				'end'         => null,
+			],
+		];
+		$mock = $this->createMock( Storage_Interface::class );
+		$mock->expects( $this->once() )
+			->method( 'get_new_subscriber_cohort_intervals' )
+			->willReturn( $rows );
+
+		$metric = $this->make_subscribers_metric( $mock );
+		$this->assertSame( $rows, $metric->get_new_subscriber_cohort_intervals() );
+	}
 }

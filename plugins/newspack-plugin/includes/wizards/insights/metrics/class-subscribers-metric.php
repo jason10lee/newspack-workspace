@@ -596,6 +596,16 @@ class Subscribers_Metric {
 	}
 
 	/**
+	 * Trailing-365-day new-subscriber cohort subscription intervals (5.2 input).
+	 * Uncached pass-through — caching is the weekly pre-warmed snapshot.
+	 *
+	 * @return array<int, array{customer_id:int, start:string, cancelled:?string, end:?string}>
+	 */
+	public function get_new_subscriber_cohort_intervals(): array {
+		return $this->storage->get_new_subscriber_cohort_intervals();
+	}
+
+	/**
 	 * Flush ALL Tab 6 metric caches. Use after a manual data correction
 	 * or from the future NPPD-1605 invalidation system; not wired to any
 	 * automatic trigger today because the WP transient API has no key
