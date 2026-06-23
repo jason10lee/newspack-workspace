@@ -30,11 +30,41 @@ export interface Recipe {
 }
 
 export const RECIPES: Record< PricingPath, Recipe > = {
-	new_subscriptions: { lifecycleCondition: 'first_time_only', application: 'locked', requiresSegment: false, defaultScope: 'all_subscriptions', isCustom: false },
-	retention: { lifecycleCondition: null, application: 'current', requiresSegment: true, defaultScope: 'all_subscriptions', isCustom: false },
-	save: { lifecycleCondition: 'pending_cancellation', application: 'locked', requiresSegment: false, defaultScope: 'all_subscriptions', isCustom: false },
-	winback: { lifecycleCondition: 'lapsed_subscriber', application: 'locked', requiresSegment: false, defaultScope: 'all_subscriptions', isCustom: false },
-	custom: { lifecycleCondition: null, application: null, requiresSegment: false, defaultScope: 'all_products', isCustom: true },
+	new_subscriptions: {
+		lifecycleCondition: 'first_time_only',
+		application: 'locked',
+		requiresSegment: false,
+		defaultScope: 'all_subscriptions',
+		isCustom: false,
+	},
+	retention: {
+		lifecycleCondition: null,
+		application: 'current',
+		requiresSegment: true,
+		defaultScope: 'all_subscriptions',
+		isCustom: false,
+	},
+	save: {
+		lifecycleCondition: 'pending_cancellation',
+		application: 'locked',
+		requiresSegment: false,
+		defaultScope: 'all_subscriptions',
+		isCustom: false,
+	},
+	winback: {
+		lifecycleCondition: 'lapsed_subscriber',
+		application: 'locked',
+		requiresSegment: false,
+		defaultScope: 'all_subscriptions',
+		isCustom: false,
+	},
+	custom: {
+		lifecycleCondition: null,
+		application: null,
+		requiresSegment: false,
+		defaultScope: 'all_products',
+		isCustom: true,
+	},
 };
 
 /** Path options for the editor's first SelectControl (ordered). */
