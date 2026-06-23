@@ -56,7 +56,6 @@ use Newspack\Insights\BigQuery_Proxy_Client;
 use Newspack\Insights\Donors_Metric;
 use Newspack\Insights\Source_Matcher;
 use Newspack\Insights\Subscribers_Metric;
-use Newspack\Insights\Woo_Order_Resolver;
 
 /**
  * Tab 3 metric orchestrator.
@@ -200,13 +199,6 @@ final class Conversion_Metric {
 	private BigQuery_Proxy_Client $proxy;
 
 	/**
-	 * Resolver used to match BQ paid-conversion attempts against Woo orders.
-	 *
-	 * @var Woo_Order_Resolver
-	 */
-	private Woo_Order_Resolver $woo_resolver;
-
-	/**
 	 * Per-request memo for registration_source_events() BQ round-trip.
 	 *
 	 * Computed once on first call; subsequent calls within the same request
@@ -268,18 +260,15 @@ final class Conversion_Metric {
 	 * Constructor. Optionally inject collaborators (used in tests).
 	 *
 	 * @param BigQuery_Proxy_Client|null $proxy              Injected proxy client, or null to lazy-resolve.
-	 * @param Woo_Order_Resolver|null    $woo_resolver       Injected Woo resolver, or null to lazy-create.
 	 * @param Subscribers_Metric|null    $subscribers_metric Injected Subscribers_Metric, or null to lazy-create.
 	 * @param Donors_Metric|null         $donors_metric      Injected Donors_Metric, or null to lazy-create.
 	 */
 	public function __construct(
 		?BigQuery_Proxy_Client $proxy = null,
-		?Woo_Order_Resolver $woo_resolver = null,
 		?Subscribers_Metric $subscribers_metric = null,
 		?Donors_Metric $donors_metric = null
 	) {
 		$this->proxy              = $proxy ?? new BigQuery_Proxy_Client();
-		$this->woo_resolver       = $woo_resolver ?? new Woo_Order_Resolver();
 		$this->subscribers_metric = $subscribers_metric ?? new Subscribers_Metric();
 		$this->donors_metric      = $donors_metric ?? new Donors_Metric();
 	}

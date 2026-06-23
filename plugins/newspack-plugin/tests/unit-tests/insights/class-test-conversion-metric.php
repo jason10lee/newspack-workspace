@@ -30,7 +30,6 @@ use Newspack\Insights\BigQuery_Proxy_Client;
 use Newspack\Insights\Conversion_Metric;
 use Newspack\Insights\Donors_Metric;
 use Newspack\Insights\Subscribers_Metric;
-use Newspack\Insights\Woo_Order_Resolver;
 use WP_UnitTestCase;
 
 /**
@@ -98,16 +97,6 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Constructor accepts an injected Woo resolver (test seam).
-	 */
-	public function test_constructor_accepts_injected_woo_resolver() {
-		$proxy        = $this->createMock( BigQuery_Proxy_Client::class );
-		$woo_resolver = $this->createMock( Woo_Order_Resolver::class );
-		$metric       = new Conversion_Metric( $proxy, $woo_resolver );
-		$this->assertInstanceOf( Conversion_Metric::class, $metric );
-	}
-
-	/**
 	 * Injected proxy is stored and actually used when a wired method is called.
 	 *
 	 * Verifies via reflection that $proxy is stored in the private property,
@@ -125,29 +114,14 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Injected Woo resolver is stored on the private property.
-	 */
-	public function test_injected_woo_resolver_is_stored_on_private_property() {
-		$proxy        = $this->createMock( BigQuery_Proxy_Client::class );
-		$woo_resolver = $this->createMock( Woo_Order_Resolver::class );
-		$metric       = new Conversion_Metric( $proxy, $woo_resolver );
-
-		$reflection = new \ReflectionProperty( Conversion_Metric::class, 'woo_resolver' );
-		$this->assertSame( $woo_resolver, $reflection->getValue( $metric ) );
-	}
-
-	/**
 	 * Default constructor (no injected deps) creates a BigQuery_Proxy_Client
-	 * and a Woo_Order_Resolver and stores them on the private properties.
+	 * and stores it on the private property.
 	 */
 	public function test_default_constructor_creates_default_deps() {
 		$metric = new Conversion_Metric();
 
 		$proxy_ref = new \ReflectionProperty( Conversion_Metric::class, 'proxy' );
 		$this->assertInstanceOf( BigQuery_Proxy_Client::class, $proxy_ref->getValue( $metric ) );
-
-		$woo_ref = new \ReflectionProperty( Conversion_Metric::class, 'woo_resolver' );
-		$this->assertInstanceOf( Woo_Order_Resolver::class, $woo_ref->getValue( $metric ) );
 	}
 
 	// --- Existing Phase 1 placeholder tests ----------------------------------
@@ -867,7 +841,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 			->with( 'conversion_journey_source_mix_subscribers' )
 			->willReturn( $bq_rows );
 
-		$metric          = new Conversion_Metric( $proxy, null, $subs );
+		$metric          = new Conversion_Metric( $proxy, $subs );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_source_mix_subscribers( $start, $end );
 
@@ -891,8 +865,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
 		$proxy->method( 'query' )->willReturn( [] );
 
-		$resolver        = $this->createMock( Woo_Order_Resolver::class );
-		$metric          = new Conversion_Metric( $proxy, $resolver );
+		$metric          = new Conversion_Metric( $proxy );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_source_mix_subscribers( $start, $end );
 
@@ -919,7 +892,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 				],
 			] 
 		);
-		$metric          = new Conversion_Metric( $proxy, null, $subs );
+		$metric          = new Conversion_Metric( $proxy, $subs );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_source_mix_subscribers( $start, $end );
 
@@ -954,7 +927,6 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 
 		$metric          = new Conversion_Metric(
 			$this->proxy_by_query( [ 'conversion_journey_source_mix_subscribers' => [] ] ),
-			null,
 			$subs
 		);
 		[ $start, $end ] = $this->window();
@@ -1016,7 +988,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 			->with( 'conversion_journey_source_mix_donors' )
 			->willReturn( $bq_rows );
 
-		$metric          = new Conversion_Metric( $proxy, null, null, $donors );
+		$metric          = new Conversion_Metric( $proxy, null, $donors );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_source_mix_donors( $start, $end );
 
@@ -1038,8 +1010,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
 		$proxy->method( 'query' )->willReturn( [] );
 
-		$resolver        = $this->createMock( Woo_Order_Resolver::class );
-		$metric          = new Conversion_Metric( $proxy, $resolver );
+		$metric          = new Conversion_Metric( $proxy );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_source_mix_donors( $start, $end );
 
@@ -1066,7 +1037,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 				],
 			] 
 		);
-		$metric          = new Conversion_Metric( $proxy, null, null, $donors );
+		$metric          = new Conversion_Metric( $proxy, null, $donors );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_source_mix_donors( $start, $end );
 
@@ -1277,7 +1248,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$proxy = $this->proxy_returning( $rows );
 		$subs  = $this->subscribers_metric_returning_count( 1 );
 
-		$metric          = new Conversion_Metric( $proxy, null, $subs );
+		$metric          = new Conversion_Metric( $proxy, $subs );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_subscriber_funnel( $start, $end );
 
@@ -1308,7 +1279,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 * C10 empty: proxy returns [] → state 'empty', empty stages.
 	 */
 	public function test_registered_to_subscriber_funnel_returns_empty_state_on_no_rows() {
-		$metric          = new Conversion_Metric( $this->proxy_returning( [] ), null, $this->subscribers_metric_returning_count( 0 ) );
+		$metric          = new Conversion_Metric( $this->proxy_returning( [] ), $this->subscribers_metric_returning_count( 0 ) );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_subscriber_funnel( $start, $end );
 
@@ -1323,7 +1294,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 */
 	public function test_registered_to_subscriber_funnel_returns_error_on_proxy_error() {
 		$wp_error        = new \WP_Error( 'bigquery_proxy_http_error', 'HTTP 500' );
-		$metric          = new Conversion_Metric( $this->proxy_returning( $wp_error ), null, $this->subscribers_metric_returning_count( 0 ) );
+		$metric          = new Conversion_Metric( $this->proxy_returning( $wp_error ), $this->subscribers_metric_returning_count( 0 ) );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_subscriber_funnel( $start, $end );
 
@@ -1336,7 +1307,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 * C10 malformed: proxy returns non-array first row → state 'error' (malformed).
 	 */
 	public function test_registered_to_subscriber_funnel_returns_error_on_malformed_rows() {
-		$metric          = new Conversion_Metric( $this->proxy_returning( [ 'not-an-array' ] ), null, $this->subscribers_metric_returning_count( 0 ) );
+		$metric          = new Conversion_Metric( $this->proxy_returning( [ 'not-an-array' ] ), $this->subscribers_metric_returning_count( 0 ) );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_subscriber_funnel( $start, $end );
 
@@ -1354,7 +1325,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 			'uid'                      => 1,
 			'saw_subscription_surface' => 1,
 		];
-		$metric          = new Conversion_Metric( $this->proxy_returning( [ $valid_row, 'not-an-array' ] ), null, $this->subscribers_metric_returning_count( 0 ) );
+		$metric          = new Conversion_Metric( $this->proxy_returning( [ $valid_row, 'not-an-array' ] ), $this->subscribers_metric_returning_count( 0 ) );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_subscriber_funnel( $start, $end );
 
@@ -1392,7 +1363,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$proxy  = $this->proxy_returning( $rows );
 		$donors = $this->donors_metric_returning_count( 2 );
 
-		$metric          = new Conversion_Metric( $proxy, null, null, $donors );
+		$metric          = new Conversion_Metric( $proxy, null, $donors );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_donor_funnel( $start, $end );
 
@@ -1422,7 +1393,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 * C11 empty: proxy returns [] → state 'empty', empty stages.
 	 */
 	public function test_registered_to_donor_funnel_returns_empty_state_on_no_rows() {
-		$metric          = new Conversion_Metric( $this->proxy_returning( [] ), null, null, $this->donors_metric_returning_count( 0 ) );
+		$metric          = new Conversion_Metric( $this->proxy_returning( [] ), null, $this->donors_metric_returning_count( 0 ) );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_donor_funnel( $start, $end );
 
@@ -1436,7 +1407,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 */
 	public function test_registered_to_donor_funnel_returns_error_on_proxy_error() {
 		$wp_error        = new \WP_Error( 'bigquery_proxy_http_error', 'HTTP 502' );
-		$metric          = new Conversion_Metric( $this->proxy_returning( $wp_error ), null, null, $this->donors_metric_returning_count( 0 ) );
+		$metric          = new Conversion_Metric( $this->proxy_returning( $wp_error ), null, $this->donors_metric_returning_count( 0 ) );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_donor_funnel( $start, $end );
 
@@ -1449,7 +1420,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 * C11 malformed: proxy returns non-array first row → state 'error' (malformed).
 	 */
 	public function test_registered_to_donor_funnel_returns_error_on_malformed_rows() {
-		$metric          = new Conversion_Metric( $this->proxy_returning( [ 'not-an-array' ] ), null, null, $this->donors_metric_returning_count( 0 ) );
+		$metric          = new Conversion_Metric( $this->proxy_returning( [ 'not-an-array' ] ), null, $this->donors_metric_returning_count( 0 ) );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_donor_funnel( $start, $end );
 
@@ -1467,7 +1438,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 			'uid'                  => 1,
 			'saw_donation_surface' => 1,
 		];
-		$metric          = new Conversion_Metric( $this->proxy_returning( [ $valid_row, 'not-an-array' ] ), null, null, $this->donors_metric_returning_count( 0 ) );
+		$metric          = new Conversion_Metric( $this->proxy_returning( [ $valid_row, 'not-an-array' ] ), null, $this->donors_metric_returning_count( 0 ) );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_donor_funnel( $start, $end );
 
@@ -1488,7 +1459,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$subs = $this->createMock( Subscribers_Metric::class );
 		$subs->method( 'get_active_non_donation_subscriber_customer_ids' )->willReturn( [] );
 
-		$metric          = new Conversion_Metric( $proxy, null, $subs );
+		$metric          = new Conversion_Metric( $proxy, $subs );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_subscriber_funnel( $start, $end );
 
@@ -1509,7 +1480,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$donors = $this->createMock( Donors_Metric::class );
 		$donors->method( 'get_active_donors' )->willReturn( 0 );
 
-		$metric          = new Conversion_Metric( $proxy, null, null, $donors );
+		$metric          = new Conversion_Metric( $proxy, null, $donors );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_donor_funnel( $start, $end );
 
@@ -1529,7 +1500,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$subs = $this->createMock( Subscribers_Metric::class );
 		$subs->method( 'get_at_risk_subscribers' )->willReturn( 42 );
 
-		$metric          = new Conversion_Metric( null, null, $subs );
+		$metric          = new Conversion_Metric( null, $subs );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_at_risk_subscriber_count( $start, $end );
 
@@ -1551,7 +1522,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$donors = $this->createMock( Donors_Metric::class );
 		$donors->method( 'get_lapsed_donors_in_window' )->willReturn( 17 );
 
-		$metric          = new Conversion_Metric( null, null, null, $donors );
+		$metric          = new Conversion_Metric( null, null, $donors );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_lapsed_donor_count( $start, $end );
 
@@ -1573,7 +1544,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$subs = $this->createMock( Subscribers_Metric::class );
 		$subs->method( 'get_stale_registered_users' )->willReturn( 123 );
 
-		$metric          = new Conversion_Metric( null, null, $subs );
+		$metric          = new Conversion_Metric( null, $subs );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_stale_registered_count( $start, $end );
 
@@ -1601,7 +1572,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$donors->method( 'get_active_donors' )->willReturn( 55 );
 		$donors->method( 'get_subscriber_donors_in_window' )->willReturn( 12 );
 
-		$metric          = new Conversion_Metric( null, null, $subs, $donors );
+		$metric          = new Conversion_Metric( null, $subs, $donors );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_subscriber_to_donor_funnel( $start, $end );
 
@@ -1634,7 +1605,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$donors = $this->createMock( Donors_Metric::class );
 		$donors->method( 'get_active_donors' )->willReturn( 80 ); // ≥ 50, but subs below.
 
-		$metric          = new Conversion_Metric( null, null, $subs, $donors );
+		$metric          = new Conversion_Metric( null, $subs, $donors );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_subscriber_to_donor_funnel( $start, $end );
 
@@ -1653,7 +1624,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$donors = $this->createMock( Donors_Metric::class );
 		$donors->method( 'get_active_donors' )->willReturn( 20 ); // 20 < 50.
 
-		$metric          = new Conversion_Metric( null, null, $subs, $donors );
+		$metric          = new Conversion_Metric( null, $subs, $donors );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_subscriber_to_donor_funnel( $start, $end );
 
@@ -1672,7 +1643,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$donors = $this->createMock( Donors_Metric::class );
 		$donors->method( 'get_active_donors' )->willReturn( 49 ); // exactly 49.
 
-		$metric          = new Conversion_Metric( null, null, $subs, $donors );
+		$metric          = new Conversion_Metric( null, $subs, $donors );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_subscriber_to_donor_funnel( $start, $end );
 
@@ -1993,7 +1964,6 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$subs->method( 'get_new_subscriber_records_in_window' )->willReturn( $records );
 		$metric = new Conversion_Metric(
 			$this->proxy_by_query( [ 'conversion_journey_source_mix_subscribers' => $bq_rows ] ),
-			null,
 			$subs,
 			null
 		);
@@ -2026,7 +1996,6 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		);
 		$metric = new Conversion_Metric(
 			$this->proxy_returning( new \WP_Error( 'boom', 'nope' ) ),
-			null,
 			$subs,
 			null
 		);
@@ -2045,7 +2014,6 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$subs->method( 'get_new_subscriber_records_in_window' )->willReturn( [] );
 		$metric = new Conversion_Metric(
 			$this->proxy_returning( [] ),
-			null,
 			$subs,
 			null
 		);
@@ -2071,7 +2039,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 				],
 			] 
 		);
-		$metric          = new Conversion_Metric( $this->proxy_returning( 'not-an-array' ), null, $subs );
+		$metric          = new Conversion_Metric( $this->proxy_returning( 'not-an-array' ), $subs );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_source_mix_subscribers( $start, $end );
 		$this->assertSame( 'error', $result['state'] );
@@ -2146,7 +2114,6 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 					'conversion_journey_registrations_with_source'   => $reg_events,
 				]
 			),
-			null,
 			$subs,
 			null
 		);
@@ -2196,7 +2163,6 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$subs->method( 'get_subscription_conversion_lags' )->willReturn( $rows );
 		$metric = new Conversion_Metric(
 			$this->proxy_by_query( [ 'conversion_journey_has_registrations_in_window' => [ [ 'registration_events' => 0 ] ] ] ),
-			null,
 			$subs,
 			null
 		);
@@ -2237,7 +2203,6 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 					'conversion_journey_registrations_with_source'   => new \WP_Error( 'bq_down', 'nope' ),
 				]
 			),
-			null,
 			$subs,
 			null
 		);
@@ -2264,7 +2229,6 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$subs->method( 'get_subscription_conversion_lags' )->willReturn( [] );
 		$metric = new Conversion_Metric(
 			$this->proxy_by_query( [ 'conversion_journey_has_registrations_in_window' => [ [ 'registration_events' => 0 ] ] ] ),
-			null,
 			$subs,
 			null
 		);
@@ -2321,7 +2285,6 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 				]
 			),
 			null,
-			null,
 			$donors
 		);
 		[ $start, $end ] = $this->window();
@@ -2361,7 +2324,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$rows = array_map( static fn( $i ) => [ 'lag_days' => $i ], range( 1, 49 ) );
 		$donors = $this->createMock( Donors_Metric::class );
 		$donors->method( 'get_subscriber_to_donor_lags' )->willReturn( $rows );
-		$metric = new Conversion_Metric( $this->proxy_returning( [] ), null, null, $donors );
+		$metric = new Conversion_Metric( $this->proxy_returning( [] ), null, $donors );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_subscriber_to_donor_lag_distribution( $start, $end );
 		$this->assertSame( 'hidden', $result['visibility'] );
@@ -2377,7 +2340,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$rows[] = [ 'lag_days' => 400 ]; // truncated out, so 50 remain.
 		$donors = $this->createMock( Donors_Metric::class );
 		$donors->method( 'get_subscriber_to_donor_lags' )->willReturn( $rows );
-		$metric = new Conversion_Metric( $this->proxy_returning( [] ), null, null, $donors );
+		$metric = new Conversion_Metric( $this->proxy_returning( [] ), null, $donors );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_subscriber_to_donor_lag_distribution( $start, $end );
 		$this->assertSame( 'visible', $result['visibility'] );
@@ -2425,7 +2388,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
 		$proxy->expects( $this->never() )->method( 'query' );
 
-		$metric          = new Conversion_Metric( $proxy, null, null, $donors );
+		$metric          = new Conversion_Metric( $proxy, null, $donors );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_source_mix_donors( $start, $end );
 
@@ -2457,7 +2420,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
 		$proxy->expects( $this->never() )->method( 'query' );
 
-		$metric          = new Conversion_Metric( $proxy, null, null, $donors );
+		$metric          = new Conversion_Metric( $proxy, null, $donors );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_source_mix_donors( $start, $end );
 
@@ -2504,7 +2467,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 			->with( 'conversion_journey_source_mix_donors' )
 			->willReturn( $bq_rows );
 
-		$metric          = new Conversion_Metric( $proxy, null, null, $donors );
+		$metric          = new Conversion_Metric( $proxy, null, $donors );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_source_mix_donors( $start, $end );
 
@@ -2566,7 +2529,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 			->with( 'conversion_journey_source_mix_donors' )
 			->willReturn( $bq_rows );
 
-		$metric          = new Conversion_Metric( $proxy, null, null, $donors );
+		$metric          = new Conversion_Metric( $proxy, null, $donors );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_source_mix_donors( $start, $end );
 
@@ -2601,7 +2564,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 			->with( 'conversion_journey_source_mix_subscribers' )
 			->willReturn( [] ); // No events → subscriber goes to direct.
 
-		$metric          = new Conversion_Metric( $proxy, null, $subs, null );
+		$metric          = new Conversion_Metric( $proxy, $subs, null );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_source_mix_subscribers( $start, $end );
 
@@ -2644,7 +2607,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
 		$proxy->expects( $this->never() )->method( 'query' );
 
-		$metric          = new Conversion_Metric( $proxy, null, $subs, null );
+		$metric          = new Conversion_Metric( $proxy, $subs, null );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_source_mix_subscribers( $start, $end );
 
@@ -2676,7 +2639,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
 		$proxy->expects( $this->never() )->method( 'query' );
 
-		$metric          = new Conversion_Metric( $proxy, null, $subs, null );
+		$metric          = new Conversion_Metric( $proxy, $subs, null );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_source_mix_subscribers( $start, $end );
 
@@ -2713,7 +2676,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$donors_metric = $this->createMock( Donors_Metric::class );
 		$donors_metric->method( 'get_first_donation_order_dates' )->willReturn( [] );
 
-		$metric = new Conversion_Metric( null, null, $subs_metric, $donors_metric );
+		$metric = new Conversion_Metric( null, $subs_metric, $donors_metric );
 		$result = $metric->compute_registration_to_conversion_cohort();
 
 		$this->assertSame( 'populated', $result['state'] );
@@ -2744,7 +2707,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$donors_metric = $this->createMock( Donors_Metric::class );
 		$donors_metric->method( 'get_first_donation_order_dates' )->willReturn( $dons );
 
-		$metric = new Conversion_Metric( null, null, $subs_metric, $donors_metric );
+		$metric = new Conversion_Metric( null, $subs_metric, $donors_metric );
 		$result = $metric->compute_registration_to_conversion_cohort();
 		$points = array_column( $result['cohorts'][0]['points'], 'value', 'period' );
 		$this->assertSame( 0.0, $points[1] );
@@ -2761,7 +2724,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$donors_metric = $this->createMock( Donors_Metric::class );
 		$donors_metric->method( 'get_first_donation_order_dates' )->willReturn( [] );
 
-		$metric = new Conversion_Metric( null, null, $subs_metric, $donors_metric );
+		$metric = new Conversion_Metric( null, $subs_metric, $donors_metric );
 		$result = $metric->compute_registration_to_conversion_cohort();
 		$this->assertSame( 'empty', $result['state'] );
 		$this->assertSame( [], $result['cohorts'] );
@@ -2819,7 +2782,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 			->with( 'conversion_journey_source_mix_subscribers' )
 			->willReturn( $bq_rows );
 
-		$metric          = new Conversion_Metric( $proxy, null, $subs, null );
+		$metric          = new Conversion_Metric( $proxy, $subs, null );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_source_mix_subscribers( $start, $end );
 
@@ -2856,7 +2819,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$subs_metric = $this->createMock( Subscribers_Metric::class );
 		$subs_metric->method( 'get_new_subscriber_cohort_intervals' )->willReturn( $rows );
 
-		$metric = new Conversion_Metric( null, null, $subs_metric, null );
+		$metric = new Conversion_Metric( null, $subs_metric, null );
 		$result = $metric->compute_subscriber_retention_cohort();
 
 		$this->assertSame( 'populated', $result['state'] );
@@ -2883,7 +2846,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$subs_metric = $this->createMock( Subscribers_Metric::class );
 		$subs_metric->method( 'get_new_subscriber_cohort_intervals' )->willReturn( $rows );
 
-		$metric = new Conversion_Metric( null, null, $subs_metric, null );
+		$metric = new Conversion_Metric( null, $subs_metric, null );
 		$points = array_column( $metric->compute_subscriber_retention_cohort()['cohorts'][0]['points'], 'value', 'period' );
 		$this->assertSame( 1.0, $points[0] ); // active at start.
 		$this->assertSame( 0.0, $points[1] ); // end (Feb 10) <= start+1mo (Feb 10) → not active.
@@ -2896,7 +2859,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$subs_metric = $this->createMock( Subscribers_Metric::class );
 		$subs_metric->method( 'get_new_subscriber_cohort_intervals' )->willReturn( [] );
 
-		$metric = new Conversion_Metric( null, null, $subs_metric, null );
+		$metric = new Conversion_Metric( null, $subs_metric, null );
 		$result = $metric->compute_subscriber_retention_cohort();
 		$this->assertSame( 'empty', $result['state'] );
 		$this->assertSame( [], $result['cohorts'] );
@@ -2929,7 +2892,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$subs_metric = $this->createMock( Subscribers_Metric::class );
 		$subs_metric->method( 'get_new_subscriber_cohort_intervals' )->willReturn( $rows );
 
-		$metric = new Conversion_Metric( null, null, $subs_metric, null );
+		$metric = new Conversion_Metric( null, $subs_metric, null );
 		$result = $metric->compute_subscriber_retention_cohort();
 
 		$this->assertSame( 'populated', $result['state'] );
@@ -3007,7 +2970,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$donors_metric = $this->createMock( Donors_Metric::class );
 		$donors_metric->method( 'get_first_donation_order_dates' )->willReturn( [] );
 
-		$metric = new Conversion_Metric( null, null, $subs_metric, $donors_metric );
+		$metric = new Conversion_Metric( null, $subs_metric, $donors_metric );
 		Conversion_Metric::store_cohort_snapshot( $metric );
 
 		$peeked = \Newspack\Insights\Cache::peek( 'conversion', \Newspack\Insights\Cache::SOURCE_SNAPSHOT, [ 'cohorts' ] );
