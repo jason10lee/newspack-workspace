@@ -15,26 +15,10 @@ import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */
-import { formatPrice, formatSegment } from './impact-format';
+import ImpactTable from './impact-table';
 
 const PREVIEW_PATH = '/wc-dynamic-pricing/v1/rules/preview';
 const DEBOUNCE_MS = 500;
-
-function SegmentsCell( { row, currency }: { row: CatalogImpactRow; currency: PricingRulesCurrency } ) {
-	if ( row.segments.length <= 1 ) {
-		return <>{ formatPrice( row.adjusted, currency ) }</>;
-	}
-	return (
-		<>
-			{ row.segments.map( ( seg, i ) => (
-				<span key={ i } className={ seg.changed ? 'is-changed' : undefined }>
-					{ i > 0 ? ' · ' : '' }
-					{ formatSegment( seg, currency ) }
-				</span>
-			) ) }
-		</>
-	);
-}
 
 function AudienceLine( { audience }: { audience: RuleAudienceData } ) {
 	const total = audience.count_limited ? `${ audience.total }+` : `${ audience.total }`;
@@ -104,6 +88,19 @@ export default function RulePreview( { body }: RulePreviewProps ) {
 
 	const { currency } = data;
 
+	const segmentGroups = ( data.segment_groups ?? [] ).map( group => (
+		<div key={ group.segment_id } className="newspack-pricing-rules__segment-group">
+			<p className="newspack-pricing-rules__muted">
+				{ sprintf(
+					/* translators: %s: reader segment name. */
+					__( 'Readers in %s:', 'newspack-plugin' ),
+					group.segment_label
+				) }
+			</p>
+			<ImpactTable rows={ group.sample } currency={ currency } />
+		</div>
+	) );
+
 	return (
 		<div className={ `newspack-pricing-rules__preview${ isLoading ? ' is-loading' : '' }` }>
 			{ data.total_matching > 0 ? (
@@ -121,29 +118,14 @@ export default function RulePreview( { body }: RulePreviewProps ) {
 							  )
 							: __( 'Resulting prices across affected products (best price wins; updates as you edit).', 'newspack-plugin' ) }
 					</p>
-					<table className="newspack-pricing-rules__impact-table">
-						<thead>
-							<tr>
-								<th>{ __( 'Product', 'newspack-plugin' ) }</th>
-								<th>{ __( 'Regular', 'newspack-plugin' ) }</th>
-								<th>{ __( 'Resulting price', 'newspack-plugin' ) }</th>
-							</tr>
-						</thead>
-						<tbody>
-							{ data.sample.map( row => (
-								<tr key={ row.product_id } className={ row.changed ? 'is-changed' : undefined }>
-									<td>{ row.edit_link ? <a href={ row.edit_link }>{ row.name }</a> : row.name }</td>
-									<td>{ formatPrice( row.regular, currency ) }</td>
-									<td>
-										<SegmentsCell row={ row } currency={ currency } />
-									</td>
-								</tr>
-							) ) }
-						</tbody>
-					</table>
+					<ImpactTable rows={ data.sample } currency={ currency } />
+					{ segmentGroups }
 				</>
 			) : (
-				<p className="newspack-pricing-rules__muted">{ __( 'This rule does not affect any products yet.', 'newspack-plugin' ) }</p>
+				<>
+					<p className="newspack-pricing-rules__muted">{ __( 'This rule does not affect any products yet.', 'newspack-plugin' ) }</p>
+					{ segmentGroups }
+				</>
 			) }
 			{ data.audience?.supported && <AudienceLine audience={ data.audience } /> }
 		</div>

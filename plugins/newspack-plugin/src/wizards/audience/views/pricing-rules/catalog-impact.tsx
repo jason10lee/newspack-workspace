@@ -15,7 +15,7 @@ import { Spinner } from '@wordpress/components';
 /**
  * Internal dependencies
  */
-import { formatPrice, describeResulting } from './impact-format';
+import ImpactTable from './impact-table';
 
 const API_PATH = '/wc-dynamic-pricing/v1/impact-preview';
 
@@ -64,6 +64,19 @@ export default function CatalogImpact() {
 				data.total_matching
 		  );
 
+	const segmentGroups = ( data.segment_groups ?? [] ).map( group => (
+		<div key={ group.segment_id } className="newspack-pricing-rules__segment-group">
+			<p className="newspack-pricing-rules__muted">
+				{ sprintf(
+					/* translators: %s: reader segment name. */
+					__( 'Readers in %s:', 'newspack-plugin' ),
+					group.segment_label
+				) }
+			</p>
+			<ImpactTable rows={ group.sample } currency={ data.currency } />
+		</div>
+	) );
+
 	return (
 		<div className="newspack-pricing-rules__impact">
 			<h3 className="newspack-pricing-rules__impact-title">
@@ -82,24 +95,8 @@ export default function CatalogImpact() {
 					) }
 				</p>
 			) }
-			<table className="newspack-pricing-rules__impact-table">
-				<thead>
-					<tr>
-						<th>{ __( 'Product', 'newspack-plugin' ) }</th>
-						<th>{ __( 'Regular', 'newspack-plugin' ) }</th>
-						<th>{ __( 'Resulting price', 'newspack-plugin' ) }</th>
-					</tr>
-				</thead>
-				<tbody>
-					{ data.sample.map( row => (
-						<tr key={ row.product_id }>
-							<td>{ row.edit_link ? <a href={ row.edit_link }>{ row.name }</a> : row.name }</td>
-							<td>{ formatPrice( row.regular, data.currency ) }</td>
-							<td>{ describeResulting( row, data.currency ) }</td>
-						</tr>
-					) ) }
-				</tbody>
-			</table>
+			<ImpactTable rows={ data.sample } currency={ data.currency } />
+			{ segmentGroups }
 		</div>
 	);
 }

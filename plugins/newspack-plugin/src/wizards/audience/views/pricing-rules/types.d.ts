@@ -103,6 +103,12 @@ interface CatalogImpactRow {
 	segments: ImpactSegment[];
 }
 
+interface SegmentImpactGroup {
+	segment_id: number;
+	segment_label: string;
+	sample: CatalogImpactRow[];
+}
+
 interface CatalogImpactResponse {
 	supported: boolean;
 	total_matching: number;
@@ -111,6 +117,7 @@ interface CatalogImpactResponse {
 	sample_count: number;
 	currency: PricingRulesCurrency;
 	sample: CatalogImpactRow[];
+	segment_groups?: SegmentImpactGroup[];
 }
 
 interface RuleAudienceData {
