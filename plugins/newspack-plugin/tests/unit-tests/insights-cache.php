@@ -468,7 +468,42 @@ class Newspack_Test_Insights_Cache extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Snapshot written via store() is also excluded from the index, so purge() leaves it.
+	 */
+	public function test_snapshot_store_survives_purge(): void {
+		Cache::store( 'conversion', Cache::SOURCE_SNAPSHOT, [ 'cohorts' ], fn() => [ 'y' => 2 ] );
+		Cache::purge( 'conversion' );
+		$peeked = Cache::peek( 'conversion', Cache::SOURCE_SNAPSHOT, [ 'cohorts' ] );
+		$this->assertIsArray( $peeked );
+		$this->assertSame( [ 'y' => 2 ], $peeked['payload'] );
+	}
+
+	/**
+	 * Snapshot source uses 9-day TTL.
+	 */
+	public function test_snapshot_source_uses_9day_ttl(): void {
+		Cache::refresh(
+			'conversion',
+			Cache::SOURCE_SNAPSHOT,
+			[ 'cohorts' ],
+			function () {
+				return [ 'value' => 1 ];
+			}
+		);
+
+		$key       = self::transient_key_for_test( 'conversion', [ 'cohorts' ] );
+		$timeout   = get_option( '_transient_timeout_' . $key );
+		$remaining = $timeout - time();
+
+		$this->assertGreaterThan( 8 * DAY_IN_SECONDS, $remaining, 'Snapshot TTL should be ~9 days.' );
+		$this->assertLessThanOrEqual( Cache::TTL_SNAPSHOT, $remaining );
+	}
+
+	/**
 	 * Peek returns null when caching is disabled.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
 	 */
 	public function test_snapshot_peek_null_when_disabled(): void {
 		Cache::refresh( 'conversion', Cache::SOURCE_SNAPSHOT, [ 'cohorts' ], fn() => [ 'x' => 1 ] );
