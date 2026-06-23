@@ -209,8 +209,8 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 
 		$radius = $theme['styles']['elements']['button']['border']['radius'] ?? null;
 		$this->assertNotNull( $radius, 'button border-radius must be present when flag is on' );
-		// Must be a px string.
-		$this->assertMatchesRegularExpression( '/^\d+px$/', $radius, 'border-radius must be a px value' );
+		// Must be a px string (integer or decimal, e.g. "4px" or "4.5px").
+		$this->assertMatchesRegularExpression( '/^\d+(?:\.\d+)?px$/', $radius, 'border-radius must be a px value' );
 		// Classic/default theme has no button radius → fallback is 4px.
 		$this->assertSame( '4px', $radius );
 	}
@@ -419,6 +419,75 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 			],
 		];
 		$this->assertSame( '24px', $this->resolve_length( 'var( --wp--preset--spacing--40 )', $raw ) );
+	}
+
+	/**
+	 * Length resolver: fractional rem converts to fractional px.
+	 *
+	 * `0.28125rem` = 4.5 px — the fractional result must be preserved, not truncated.
+	 */
+	public function test_length_resolver_converts_fractional_rem_to_fractional_px() {
+		$this->assertSame( '4.5px', $this->resolve_length( '0.28125rem' ) );
+	}
+
+	/**
+	 * Length resolver: preset spacing var whose theme size is a clamp() (fluid)
+	 * falls back to the email-safe SPACING_SIZES map, not null.
+	 *
+	 * Newspack-block-theme spacingSizes entries 60/70/80 use `clamp(...)` values.
+	 * Feeding such a size to the resolver must return the email-safe fallback px
+	 * value from SPACING_SIZES, not drop the side entirely.
+	 */
+	public function test_length_resolver_clamp_preset_falls_back_to_spacing_sizes() {
+		// Simulate a block-theme spacingSizes entry with a fluid clamp value.
+		$raw = [
+			'settings' => [
+				'spacing' => [
+					'spacingSizes' => [
+						[
+							'slug' => '60',
+							'size' => 'clamp( 2rem, 3vw + 1rem, 4rem )',
+							'name' => '6',
+						],
+					],
+				],
+			],
+		];
+
+		// Slug '60' maps to '32px' in SPACING_SIZES.
+		$this->assertSame(
+			Theme_Json_Builder::SPACING_SIZES['60'],
+			$this->resolve_length( 'var( --wp--preset--spacing--60 )', $raw ),
+			'A fluid clamp() theme size must fall back to the email-safe SPACING_SIZES value.'
+		);
+	}
+
+	/**
+	 * Length resolver: preset spacing var whose theme size has a missing 'size' key
+	 * falls back to the SPACING_SIZES map (no PHP notice).
+	 */
+	public function test_length_resolver_missing_size_key_falls_back_to_spacing_sizes() {
+		// Malformed entry: 'size' key absent.
+		$raw = [
+			'settings' => [
+				'spacing' => [
+					'spacingSizes' => [
+						[
+							'slug' => '40',
+							'name' => 'Forty',
+							// 'size' intentionally omitted.
+						],
+					],
+				],
+			],
+		];
+
+		// Should fall back to SPACING_SIZES['40'] = '24px'.
+		$this->assertSame(
+			Theme_Json_Builder::SPACING_SIZES['40'],
+			$this->resolve_length( 'var( --wp--preset--spacing--40 )', $raw ),
+			'Missing "size" key must fall back to the email-safe SPACING_SIZES value.'
+		);
 	}
 
 	/**

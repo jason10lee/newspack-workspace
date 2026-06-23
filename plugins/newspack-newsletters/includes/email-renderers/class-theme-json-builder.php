@@ -241,6 +241,10 @@ class Theme_Json_Builder {
 	 *   double-dash-delimited path segments.
 	 * - `var( --wp--preset--spacing--N )` → looks up the slug in
 	 *   `settings.spacing.spacingSizes` (theme.json preset array format).
+	 *   When the theme's size is a px-convertible value (px/rem/em), it is
+	 *   used directly; when it is a fluid `clamp(...)` or any other
+	 *   non-convertible value the email-safe `SPACING_SIZES` map is used as
+	 *   a fallback.
 	 * - `rem` / `em` → converts to px (× 16, standard email base font size).
 	 * - Plain `px` → passes through unchanged.
 	 * - Anything else (percentages, vw, unresolvable vars, etc.) → returns null.
@@ -260,14 +264,29 @@ class Theme_Json_Builder {
 			if ( preg_match( '/^--wp--preset--spacing--([a-z0-9_-]+)$/i', $var_name, $preset_matches ) ) {
 				$slug       = $preset_matches[1];
 				$size_items = $raw['settings']['spacing']['spacingSizes'] ?? [];
+
+				// Prefer the theme's own preset size — but ONLY when it is a value
+				// we can convert to px (px/rem/em literal). Fluid `clamp(...)` values
+				// (e.g. newspack-block-theme presets 60/70/80) are NOT email-safe and
+				// must be bypassed in favour of the email-safe SPACING_SIZES scale.
+				$theme_size = null;
 				foreach ( $size_items as $item ) {
-					if ( isset( $item['slug'] ) && (string) $item['slug'] === $slug ) {
-						$value = $item['size'];
+					if (
+						isset( $item['slug'], $item['size'] ) &&
+						is_string( $item['size'] ) &&
+						(string) $item['slug'] === $slug
+					) {
+						$theme_size = $item['size'];
 						break;
 					}
 				}
-				// If the slug wasn't in theme.json, fall back to our built-in scale.
-				if ( preg_match( '/^var\(/', $value ) ) {
+
+				// Use the theme size only when it is a directly-convertible literal.
+				if ( null !== $theme_size && preg_match( '/^[\d.]+r?em$|^\d+(?:\.\d+)?px$/i', $theme_size ) ) {
+					$value = $theme_size;
+				} else {
+					// Theme size is absent, clamp/fluid, or not a plain px/rem/em →
+					// fall back to the email-safe built-in scale.
 					$value = self::SPACING_SIZES[ $slug ] ?? null;
 					if ( null === $value ) {
 						return null;
@@ -295,9 +314,10 @@ class Theme_Json_Builder {
 		}
 
 		// Convert rem/em to px (assume 1rem = 16px, standard for email clients).
+		// Preserve fractional precision (e.g. 0.28125rem → 4.5px, 0.375rem → 6px).
 		if ( preg_match( '/^([\d.]+)r?em$/i', $value, $m ) ) {
-			$px = (int) round( (float) $m[1] * 16 );
-			return $px . 'px';
+			$px = round( (float) $m[1] * 16, 4 );
+			return rtrim( rtrim( sprintf( '%.4f', $px ), '0' ), '.' ) . 'px';
 		}
 
 		// Plain px passes through unchanged.
@@ -353,16 +373,38 @@ class Theme_Json_Builder {
 	/**
 	 * Convert a slug => size map into theme.json preset entries.
 	 *
+	 * Font-size presets get translatable display names so they surface correctly
+	 * in the editor typography panel (matching the labels the legacy MJML path used).
+	 * Spacing presets keep slug names (not user-facing).
+	 *
 	 * @param array $map Slug => CSS size.
 	 * @return array Theme.json preset entries ({ slug, size, name }).
 	 */
 	private static function build_presets( array $map ): array {
+		// Translatable display names for the editor-visible font-size presets.
+		// Only the slugs that appear in FONT_SIZES and surface in the typography panel.
+		$font_size_labels = [
+			'xx-small'     => _x( 'Extra Extra Small', 'font size name', 'newspack-newsletters' ),
+			'x-small'      => _x( 'Extra Small', 'font size name', 'newspack-newsletters' ),
+			'small'        => _x( 'Small', 'font size name', 'newspack-newsletters' ),
+			'normal'       => _x( 'Normal', 'font size name', 'newspack-newsletters' ),
+			'medium'       => _x( 'Medium', 'font size name', 'newspack-newsletters' ),
+			'large'        => _x( 'Large', 'font size name', 'newspack-newsletters' ),
+			'huge'         => _x( 'Huge', 'font size name', 'newspack-newsletters' ),
+			'x-large'      => _x( 'Extra Large', 'font size name', 'newspack-newsletters' ),
+			'xx-large'     => _x( 'Extra Extra Large', 'font size name', 'newspack-newsletters' ),
+			'xxx-large'    => _x( 'XXX Large', 'font size name', 'newspack-newsletters' ),
+			'xxxx-large'   => _x( 'XXXX Large', 'font size name', 'newspack-newsletters' ),
+			'xxxxx-large'  => _x( 'XXXXX Large', 'font size name', 'newspack-newsletters' ),
+			'xxxxxx-large' => _x( 'XXXXXX Large', 'font size name', 'newspack-newsletters' ),
+		];
+
 		$presets = [];
 		foreach ( $map as $slug => $size ) {
 			$presets[] = [
 				'slug' => (string) $slug,
 				'size' => $size,
-				'name' => (string) $slug,
+				'name' => $font_size_labels[ (string) $slug ] ?? (string) $slug,
 			];
 		}
 		return $presets;
