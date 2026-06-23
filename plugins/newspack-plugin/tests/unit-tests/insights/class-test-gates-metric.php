@@ -629,8 +629,7 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 						'unique_viewers'          => 1200,
 						'registrations'           => 0,
 						'regwall_conversion_rate' => null,
-						'paywall_attempts'        => 80,
-						'paywall_attempt_rate'    => 0.04,
+						'checkout_impressions'    => 200,
 					],
 					[
 						'gate_post_id'            => (string) $gate_b,
@@ -638,12 +637,14 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 						'unique_viewers'          => 900,
 						'registrations'           => 150,
 						'regwall_conversion_rate' => 0.07,
-						'paywall_attempts'        => 0,
-						'paywall_attempt_rate'    => null,
+						'checkout_impressions'    => 0,
 					],
 				]
 			);
 
+		// WC off → paywall columns are null (covered with WC on by the dedicated
+		// per-gate paywall tests below). Title enrichment is independent of WC.
+		add_filter( 'newspack_insights_woocommerce_active', '__return_false' );
 		$metric = new Gates_Metric( $proxy );
 		$result = $metric->get_performance_by_gate( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
@@ -652,8 +653,8 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 
 		// Lock the canonical row-key contract the React layer consumes
 		// (`GatesPerformanceRow` in src/wizards/insights/api/gates.ts). These keys
-		// mirror the `gates_performance_by_gate` catalog columns one-for-one; a
-		// rename on either side silently blanks the table, so assert the exact set.
+		// mirror the table's output one-for-one; a rename on either side silently
+		// blanks the table, so assert the exact set.
 		$this->assertSame(
 			[
 				'gate_post_id',
@@ -662,8 +663,8 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 				'unique_viewers',
 				'registrations',
 				'regwall_conversion_rate',
-				'paywall_attempts',
-				'paywall_attempt_rate',
+				'paywall_conversions',
+				'paywall_conversion_rate',
 			],
 			array_keys( $result['rows'][0] )
 		);
@@ -673,14 +674,14 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 		$this->assertSame( 1200, $result['rows'][0]['unique_viewers'] );
 		$this->assertSame( 0, $result['rows'][0]['registrations'] );
 		$this->assertNull( $result['rows'][0]['regwall_conversion_rate'] );
-		$this->assertSame( 80, $result['rows'][0]['paywall_attempts'] );
-		$this->assertSame( 0.04, $result['rows'][0]['paywall_attempt_rate'] );
+		$this->assertNull( $result['rows'][0]['paywall_conversions'], 'WC inactive → paywall columns null' );
+		$this->assertNull( $result['rows'][0]['paywall_conversion_rate'] );
 
 		$this->assertSame( 'Member regwall', $result['rows'][1]['gate_name'] );
 		$this->assertSame( 150, $result['rows'][1]['registrations'] );
 		$this->assertSame( 0.07, $result['rows'][1]['regwall_conversion_rate'] );
-		$this->assertSame( 0, $result['rows'][1]['paywall_attempts'] );
-		$this->assertNull( $result['rows'][1]['paywall_attempt_rate'] );
+		$this->assertNull( $result['rows'][1]['paywall_conversions'] );
+		$this->assertNull( $result['rows'][1]['paywall_conversion_rate'] );
 	}
 
 	/**
@@ -710,6 +711,92 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 
 		$this->assertSame( 'empty', $result['state'] );
 		$this->assertSame( [], $result['rows'] );
+	}
+
+	/**
+	 * NPPD-1686: per-gate PAYWALL CONVERSIONS — gate-attributed subscription conversions
+	 * (Woo order meta, `by_gate`) ÷ that gate's checkout-capable impressions. A
+	 * paywall-capable gate (checkout_impressions > 0) surfaces its conversions + rate; a
+	 * regwall-only gate (checkout_impressions 0) gets null paywall columns (em-dash).
+	 */
+	public function test_performance_by_gate_paywall_conversions_per_gate() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn(
+			[
+				[
+					'gate_post_id'         => 77, // Paywall-capable + converted (subscribers_with_gate keys gate 77).
+					'impressions'          => 5000,
+					'checkout_impressions' => 300,
+				],
+				[
+					'gate_post_id'         => 88, // Regwall-only: no checkout impressions.
+					'impressions'          => 3000,
+					'registrations'        => 150,
+					'checkout_impressions' => 0,
+				],
+			]
+		);
+		$metric = $this->make_direct_paywall_metric( $proxy, $this->subscribers_with_gate( 3, 150.0 ), true );
+		$result = $metric->get_performance_by_gate( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertSame( 'populated', $result['state'] );
+		// Gate 77: 3 order-meta conversions over 300 checkout impressions.
+		$this->assertSame( 3, $result['rows'][0]['paywall_conversions'] );
+		$this->assertEqualsWithDelta( 0.01, $result['rows'][0]['paywall_conversion_rate'], 0.0001, '3 / 300 checkout impressions, not / 5000 total' );
+		// Gate 88: regwall-only → paywall columns null, not a misleading 0.
+		$this->assertNull( $result['rows'][1]['paywall_conversions'] );
+		$this->assertNull( $result['rows'][1]['paywall_conversion_rate'] );
+	}
+
+	/**
+	 * NPPD-1686: a paywall-capable gate (checkout_impressions > 0) that converted nobody
+	 * is a real 0 / 0%, not an em-dash — distinct from the regwall-only null above.
+	 */
+	public function test_performance_by_gate_capable_gate_zero_completions_is_real_zero() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn(
+			[
+				[
+					'gate_post_id'         => 77,
+					'impressions'          => 5000,
+					'checkout_impressions' => 300,
+				],
+			]
+		);
+		// Gate 77 is paywall-capable but drove zero subscriptions.
+		$metric = $this->make_direct_paywall_metric( $proxy, $this->subscribers_with_gate( 0, 0.0 ), true );
+		$result = $metric->get_performance_by_gate( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertSame( 0, $result['rows'][0]['paywall_conversions'], 'capable gate shows a real 0, not null' );
+		$this->assertSame( 0.0, $result['rows'][0]['paywall_conversion_rate'], 'real 0%, not an em-dash' );
+	}
+
+	/**
+	 * NPPD-1686: the per-gate table and the scalar paywall denominator both read
+	 * `gates_performance_by_gate`; the per-window memo collapses them to a single
+	 * round-trip (no second hub call when both render on the same request).
+	 */
+	public function test_performance_by_gate_shares_hub_fetch_with_scalar() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->once() )
+			->method( 'query' )
+			->with( 'gates_performance_by_gate', $this->isInstanceOf( DateTimeImmutable::class ), $this->isInstanceOf( DateTimeImmutable::class ) )
+			->willReturn(
+				[
+					[
+						'gate_post_id'         => 77,
+						'impressions'          => 5000,
+						'checkout_impressions' => 300,
+					],
+				]
+			);
+		$metric = $this->make_direct_paywall_metric( $proxy, $this->subscribers_with_gate( 3, 150.0 ), true );
+		$start  = $this->make_date( '2026-03-22' );
+		$end    = $this->make_date( '2026-04-21' );
+
+		$metric->get_performance_by_gate( $start, $end );
+		$metric->get_paywall_conversion_direct( $start, $end );
+		// expects( $this->once() ) asserts the single shared fetch across both callers.
 	}
 
 	/**

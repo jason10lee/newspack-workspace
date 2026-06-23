@@ -80,7 +80,7 @@ final class Gates_Metric {
 		'avg_revenue_per_paywall_conversion' => 'local',  // NPPD-1746: derived from the same order-meta source as total revenue.
 		'conversion_funnel'                  => 'hub',
 		'exposures_distribution'             => 'hub',
-		'performance_by_gate'                => 'hub',
+		'performance_by_gate'                => 'hybrid', // NPPD-1686: hub per-gate rows + local order-meta paywall conversions.
 	];
 
 	/**
@@ -932,18 +932,37 @@ final class Gates_Metric {
 			];
 		}
 
+		// NPPD-1686: per-gate PAYWALL CONVERSIONS replace the old engagement-intent
+		// paywall_attempts. Numerator = gate-attributed subscription conversions from Woo
+		// order meta (`_gate_post_id`), anonymous-inclusive, keyed per gate; denominator = the
+		// gate's checkout-capable impressions (`checkout_impressions`, NPPD-1749). Same
+		// order-meta + capability model as the scalar paywall rate-direct and the prompts
+		// donation column (NPPD-1746/1757): a gate is paywall-capable when checkout_impressions
+		// > 0, so a regwall-only gate (0) gets null paywall columns (em-dash) while a capable
+		// gate with zero completions shows a real 0 / 0%. Both are WC-gated (order meta + Woo
+		// tables) → non-WC publishers get nulls. Unlike the scalar, the table does NOT fall back
+		// to total impressions when checkout_impressions is absent: a paywall rate over total
+		// (regwall-inclusive) impressions would badly overcount, so an absent column degrades to
+		// em-dash rather than a wrong number.
+		$wc      = $this->woocommerce_active();
+		$by_gate = $wc ? $this->subscribers_metric()->get_attributed_subscription_conversions( $start, $end )['by_gate'] : [];
+
 		$mapped = [];
 		foreach ( $rows as $row ) {
-			$gate_post_id = (int) ( $row['gate_post_id'] ?? 0 );
-			$mapped[]     = [
+			$gate_post_id        = (int) ( $row['gate_post_id'] ?? 0 );
+			$paywall_impressions = isset( $row['checkout_impressions'] ) ? (int) $row['checkout_impressions'] : null;
+			$paywall_capable     = $wc && null !== $paywall_impressions && $paywall_impressions > 0;
+			$paywall_conversions = $paywall_capable ? (int) ( $by_gate[ $gate_post_id ]['conversions'] ?? 0 ) : 0;
+
+			$mapped[] = [
 				'gate_post_id'            => $gate_post_id,
 				'gate_name'               => null, // filled below by enrich_with_gate_titles().
 				'impressions'             => (int) ( $row['impressions'] ?? 0 ),
 				'unique_viewers'          => (int) ( $row['unique_viewers'] ?? 0 ),
 				'registrations'           => (int) ( $row['registrations'] ?? 0 ),
 				'regwall_conversion_rate' => isset( $row['regwall_conversion_rate'] ) && null !== $row['regwall_conversion_rate'] ? (float) $row['regwall_conversion_rate'] : null,
-				'paywall_attempts'        => (int) ( $row['paywall_attempts'] ?? 0 ),
-				'paywall_attempt_rate'    => isset( $row['paywall_attempt_rate'] ) && null !== $row['paywall_attempt_rate'] ? (float) $row['paywall_attempt_rate'] : null,
+				'paywall_conversions'     => $paywall_capable ? $paywall_conversions : null,
+				'paywall_conversion_rate' => $paywall_capable ? $this->rate_value( $paywall_conversions, (int) $paywall_impressions ) : null,
 			];
 		}
 

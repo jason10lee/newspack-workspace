@@ -49,8 +49,8 @@ type SortKey =
 	| 'unique_viewers'
 	| 'registrations'
 	| 'regwall_conversion_rate'
-	| 'paywall_attempts'
-	| 'paywall_attempt_rate';
+	| 'paywall_conversions'
+	| 'paywall_conversion_rate';
 
 type SortDir = 'asc' | 'desc';
 
@@ -68,6 +68,10 @@ const NotApplicable = () => (
 
 const renderPercent = ( v: number | null ) => ( v === null ? <NotApplicable /> : formatPercent( v ) );
 
+// Counts that can be N/A (paywall conversions on a regwall-only gate / non-WC) render
+// an em-dash, matching the rate columns; a real 0 still renders as "0".
+const renderCount = ( v: number | null ) => ( v === null ? <NotApplicable /> : formatNumber( v ) );
+
 const renderRow = ( row: GatesPerformanceRow ) => (
 	<tr key={ row.gate_post_id }>
 		<td>
@@ -77,8 +81,8 @@ const renderRow = ( row: GatesPerformanceRow ) => (
 		<td className="newspack-insights__table-num">{ formatNumber( row.unique_viewers ) }</td>
 		<td className="newspack-insights__table-num">{ formatNumber( row.registrations ) }</td>
 		<td className="newspack-insights__table-num">{ renderPercent( row.regwall_conversion_rate ) }</td>
-		<td className="newspack-insights__table-num">{ formatNumber( row.paywall_attempts ) }</td>
-		<td className="newspack-insights__table-num">{ renderPercent( row.paywall_attempt_rate ) }</td>
+		<td className="newspack-insights__table-num">{ renderCount( row.paywall_conversions ) }</td>
+		<td className="newspack-insights__table-num">{ renderPercent( row.paywall_conversion_rate ) }</td>
 	</tr>
 );
 
@@ -150,8 +154,8 @@ const PerformanceByGateSection = ( { data }: PerformanceByGateSectionProps ) => 
 		{ key: 'unique_viewers', label: __( 'Unique viewers', 'newspack-plugin' ), numeric: true },
 		{ key: 'registrations', label: __( 'Registrations', 'newspack-plugin' ), numeric: true },
 		{ key: 'regwall_conversion_rate', label: __( 'Regwall conversion rate', 'newspack-plugin' ), numeric: true },
-		{ key: 'paywall_attempts', label: __( 'Paywall attempts', 'newspack-plugin' ), numeric: true },
-		{ key: 'paywall_attempt_rate', label: __( 'Paywall attempt rate', 'newspack-plugin' ), numeric: true },
+		{ key: 'paywall_conversions', label: __( 'Paywall conversions', 'newspack-plugin' ), numeric: true },
+		{ key: 'paywall_conversion_rate', label: __( 'Paywall conversion rate', 'newspack-plugin' ), numeric: true },
 	];
 
 	const [ sortKey, setSortKey ] = useState< SortKey >( 'impressions' );

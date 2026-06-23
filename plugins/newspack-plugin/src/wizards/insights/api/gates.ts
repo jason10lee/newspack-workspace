@@ -88,8 +88,11 @@ export interface GatesPerformanceRow {
 	unique_viewers: number;
 	registrations: number;
 	regwall_conversion_rate: number | null;
-	paywall_attempts: number;
-	paywall_attempt_rate: number | null;
+	// NPPD-1686: true paid OUTCOMES per gate (Woo order-meta conversions ÷ the gate's
+	// checkout-capable impressions), replacing the old engagement-intent paywall_attempts.
+	// null = not paywall-capable (regwall-only gate) or non-WC publisher → em-dash.
+	paywall_conversions: number | null;
+	paywall_conversion_rate: number | null;
 }
 
 export interface GatesPerformanceTable extends GatesErrorFields {
