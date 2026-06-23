@@ -27,6 +27,9 @@ class GoogleSiteKit {
 		add_filter( 'option_googlesitekit_analytics_settings', [ __CLASS__, 'filter_ga_settings' ] );
 		add_filter( 'option_googlesitekit_analytics-4_settings', [ __CLASS__, 'filter_ga_settings' ] );
 		add_filter( 'googlesitekit_gtag_opt', [ __CLASS__, 'add_ga_custom_parameters' ] );
+		// Priority 1 so the values are in the dataLayer before Site Kit prints the
+		// Tag Manager container snippet (registered on wp_head at the default priority).
+		add_action( 'wp_head', [ __CLASS__, 'print_data_layer_params' ], 1 );
 	}
 
 	/**
@@ -191,6 +194,10 @@ class GoogleSiteKit {
 	/**
 	 * Get custom parameters for a GA configuration or event body.
 	 *
+	 * If you add, rename, or remove a key here, update the companion GTM template
+	 * (Data Layer Variables + docs) at includes/plugins/google-site-kit/gtm-template/
+	 * so GTM-tagged sites keep reading the same params.
+	 *
 	 * @return array
 	 */
 	public static function get_custom_event_parameters() {
@@ -342,6 +349,95 @@ class GoogleSiteKit {
 		}
 		$custom_params = self::get_custom_event_parameters();
 		return array_merge( $custom_params, $gtag_opt );
+	}
+
+	/**
+	 * Push Newspack's GA4 custom parameters into the dataLayer on the front end.
+	 *
+	 * The `googlesitekit_gtag_opt` filter (see add_ga_custom_parameters) only reaches
+	 * Site Kit's own gtag config. A publisher's Google Tag Manager container - which Site
+	 * Kit can load via its Tag Manager module - fires its own GA4 tags that never see those
+	 * params, so any custom dimension reported through GTM shows up as `(not set)`. Mirroring
+	 * the same parameters into the dataLayer lets a publisher map them onto their GTM-managed
+	 * GA4 tags as Data Layer Variables, keeping both tagging paths in sync.
+	 *
+	 * Hooked early on wp_head so the values are in the dataLayer before Site Kit's container
+	 * snippet enqueues gtm.js. Emitted only when Site Kit is active and has a GA4 property
+	 * configured, and unless custom frontend params are disabled.
+	 */
+	public static function print_data_layer_params() {
+		if ( ! self::is_active() ) {
+			return;
+		}
+		// Only emit the push when Site Kit has a GA4 property configured. Gate on the measurement
+		// ID, not on useSnippet: a GTM-tagged site routes GA4 through its container with the gtag
+		// snippet off, and still needs these params mirrored into the dataLayer.
+		$sitekit_ga4_settings = self::get_sitekit_ga4_settings();
+		if ( false === $sitekit_ga4_settings || empty( $sitekit_ga4_settings['measurementID'] ) ) {
+			return;
+		}
+		// Arbitrary inline scripts are invalid on AMP pages and break AMP validation.
+		if ( function_exists( 'is_amp_endpoint' ) && is_amp_endpoint() ) {
+			return;
+		}
+		if ( defined( 'NEWSPACK_GA_DISABLE_CUSTOM_FE_PARAMS' ) && NEWSPACK_GA_DISABLE_CUSTOM_FE_PARAMS ) {
+			return;
+		}
+		$script = self::get_data_layer_inline_script( self::get_data_layer_params() );
+		if ( '' === $script ) {
+			return;
+		}
+		wp_print_inline_script_tag( $script );
+	}
+
+	/**
+	 * The reader/content parameters to mirror into the dataLayer for Google Tag Manager.
+	 *
+	 * Starts from the same set sent to Site Kit's gtag config, but drops `email_hash`:
+	 * the hashed email is only needed by Site Kit's own gtag config (which still receives
+	 * it), and pushing it to the dataLayer would expose it to every tag in the publisher's
+	 * GTM container, including third-party ones.
+	 *
+	 * @return array Parameters to push to window.dataLayer.
+	 */
+	public static function get_data_layer_params() {
+		/**
+		 * Filters the Newspack parameters pushed to the dataLayer for Google Tag Manager.
+		 *
+		 * Mirrors the `newspack_ga4_custom_parameters` set sent to Site Kit's gtag config.
+		 * Note that `email_hash` is always stripped afterwards (see below) and cannot be
+		 * re-added through this filter.
+		 *
+		 * @param array $params Parameters pushed to window.dataLayer.
+		 */
+		$params = apply_filters( 'newspack_ga4_data_layer_params', self::get_custom_event_parameters() );
+
+		// Always keep the hashed email out of the dataLayer - enforced after the filter so it
+		// cannot be re-added. It is only needed by Site Kit's own gtag config (which still
+		// receives it) and must not reach the third-party tags in a publisher's GTM container.
+		unset( $params['email_hash'] );
+
+		return $params;
+	}
+
+	/**
+	 * Build the inline script that pushes the given parameters into the dataLayer.
+	 *
+	 * Extracted from print_data_layer_params() so the encoding can be unit-tested without a
+	 * Site Kit runtime. Values are encoded with JSON_HEX_TAG|JSON_HEX_AMP so a parameter
+	 * containing `</script>` (e.g. an author name or category) cannot break out of the tag.
+	 *
+	 * @param array $params Parameters to push (the GA4 custom event parameters).
+	 * @return string Inline JS, or '' when there is nothing to push.
+	 */
+	public static function get_data_layer_inline_script( array $params ) {
+		if ( empty( $params ) ) {
+			return '';
+		}
+		return sprintf(
+			'window.dataLayer = window.dataLayer || []; window.dataLayer.push( %s );',
+			wp_json_encode( $params, JSON_HEX_TAG | JSON_HEX_AMP )
+		);
 	}
 }
 GoogleSiteKit::init();
