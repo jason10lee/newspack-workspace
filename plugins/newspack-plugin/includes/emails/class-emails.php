@@ -736,10 +736,89 @@ class Emails {
 	}
 
 	/**
-	 * Get all email configs.
+	 * Default values for email config fields shared across all providers.
+	 *
+	 * `chip` intentionally omitted — derived from `category` in
+	 * `apply_config_defaults()` because the category→chip mapping is 1:1
+	 * for every Newspack-side provider, and a global default of
+	 * 'auth-account' would silently misclassify any reader-revenue config
+	 * that didn't override it.
+	 *
+	 * `recommended` defaults to false (conservative): a third-party config
+	 * that doesn't opt in shouldn't surface with a "Recommended" treatment.
 	 */
-	private static function get_email_configs() {
-		return apply_filters( 'newspack_email_configs', [] );
+	const EMAIL_CONFIG_DEFAULTS = [
+		'trigger_description' => '',
+		'recipient'           => 'reader',
+		'recommended'         => false,
+	];
+
+	/**
+	 * Fill in default values for any email config field a provider omitted.
+	 *
+	 * @param array $config Single email config entry as registered via the
+	 *                      `newspack_email_configs` filter.
+	 * @return array Config with shared defaults applied for missing fields.
+	 */
+	public static function apply_config_defaults( array $config ): array {
+		$merged = array_merge( self::EMAIL_CONFIG_DEFAULTS, $config );
+		// Derive chip from category if not explicitly set. Category →
+		// chip mapping is 1:1 for every Newspack-side provider, so
+		// providers don't need to declare both.
+		if ( ! isset( $merged['chip'] ) ) {
+			$merged['chip'] = ( 'reader-revenue' === ( $merged['category'] ?? '' ) )
+				? 'reader-revenue'
+				: 'auth-account';
+		}
+		return $merged;
+	}
+
+	/**
+	 * Get all email configs.
+	 *
+	 * Returns the merged config set from the `newspack_email_configs`
+	 * filter with shared defaults applied to each entry. Public so
+	 * downstream consumers (e.g. the wizard response builder) can read
+	 * the unified set without re-running the filter.
+	 *
+	 * @return array<string, array{
+	 *     name?:                string,
+	 *     category?:            string,
+	 *     label?:               string,
+	 *     description?:         string,
+	 *     template?:            string,
+	 *     editor_notice?:       string,
+	 *     from_name?:           string,
+	 *     from_email?:          string,
+	 *     reply_to_email?:      string,
+	 *     available_placeholders?: array,
+	 *     trigger_description: string,
+	 *     recipient:           'reader'|'admin',
+	 *     recommended:         bool,
+	 *     chip:                'auth-account'|'reader-revenue',
+	 *     source?:             'newspack'|'woocommerce',
+	 * }> Configs keyed by type. The four fields without `?` are guaranteed
+	 *    by `apply_config_defaults()`; the rest are provider-specified and
+	 *    may be absent.
+	 */
+	public static function get_email_configs() {
+		$configs = apply_filters( 'newspack_email_configs', [] );
+		if ( ! is_array( $configs ) ) {
+			return [];
+		}
+		foreach ( $configs as $type => $config ) {
+			// Defensive: a third-party filter callback can return a non-array
+			// value at a key (e.g. ['mytype' => 'string']). apply_config_defaults
+			// is typed array, so an unguarded call would throw TypeError and
+			// take down every consumer of get_email_configs. Drop the bad row
+			// silently rather than fatal the whole endpoint.
+			if ( ! is_array( $config ) ) {
+				unset( $configs[ $type ] );
+				continue;
+			}
+			$configs[ $type ] = self::apply_config_defaults( $config );
+		}
+		return $configs;
 	}
 
 	/**
@@ -762,11 +841,15 @@ class Emails {
 			}
 			$email_config = $configs[ $type ];
 		} else {
-			$email_config = [
-				'label'       => '',
-				'description' => '',
-				'category'    => '',
-			];
+			// Fallback config for the null-type branch. Apply the shared
+			// defaults so the serialized output shape stays uniform.
+			$email_config = self::apply_config_defaults(
+				[
+					'label'       => '',
+					'description' => '',
+					'category'    => '',
+				]
+			);
 		}
 		$html_payload = get_post_meta( $post_id, \Newspack_Newsletters::EMAIL_HTML_META, true );
 		if ( ! $html_payload || empty( $html_payload ) ) {
@@ -779,18 +862,27 @@ class Emails {
 			$edit_link = str_replace( site_url(), '', $post_link );
 		}
 		$serialized_email = [
-			'type'           => $type,
-			'category'       => $email_config['category'],
-			'label'          => $email_config['label'],
-			'description'    => $email_config['description'],
-			'post_id'        => $post_id,
-			'edit_link'      => $edit_link,
-			'subject'        => get_the_title( $post_id ),
-			'from_name'      => isset( $email_config['from_name'] ) ? $email_config['from_name'] : self::get_from_name(),
-			'from_email'     => isset( $email_config['from_email'] ) ? $email_config['from_email'] : self::get_from_email(),
-			'reply_to_email' => isset( $email_config['reply_to_email'] ) ? $email_config['reply_to_email'] : self::get_reply_to_email(),
-			'status'         => get_post_status( $post_id ),
-			'html_payload'   => $html_payload,
+			'type'                => $type,
+			// `category`, `label`, and `description` are provider-specified
+			// and NOT among the keys `apply_config_defaults()` guarantees, so
+			// a third-party config can omit them. Reading them unguarded would
+			// raise an undefined-key warning under PHP 8.3; coalesce to ''.
+			'category'            => $email_config['category'] ?? '',
+			'label'               => $email_config['label'] ?? '',
+			'description'         => $email_config['description'] ?? '',
+			'post_id'             => $post_id,
+			'edit_link'           => $edit_link,
+			'subject'             => get_the_title( $post_id ),
+			'from_name'           => isset( $email_config['from_name'] ) ? $email_config['from_name'] : self::get_from_name(),
+			'from_email'          => isset( $email_config['from_email'] ) ? $email_config['from_email'] : self::get_from_email(),
+			'reply_to_email'      => isset( $email_config['reply_to_email'] ) ? $email_config['reply_to_email'] : self::get_reply_to_email(),
+			'status'              => get_post_status( $post_id ),
+			'html_payload'        => $html_payload,
+			'trigger_description' => $email_config['trigger_description'],
+			'recipient'           => $email_config['recipient'],
+			'recommended'         => $email_config['recommended'],
+			'chip'                => $email_config['chip'],
+			'source'              => isset( $email_config['source'] ) ? $email_config['source'] : 'newspack',
 		];
 
 		return $serialized_email;

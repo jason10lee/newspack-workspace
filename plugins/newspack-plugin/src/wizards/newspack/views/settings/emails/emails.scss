@@ -1,0 +1,78 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+// Full-width override for the emails tab.
+// The parent `.newspack-wizard__sections` constrains width via max-width.
+// Break out of that for the DataViews table, but set the inherited
+// horizontal padding explicitly here so cascade quirks can't leave the
+// grid edge-to-edge.
+.newspack-emails-tab.newspack-wizard__sections {
+	max-width: 100%;
+	padding-left: var(--newspack-wizard-section-space, 24px);
+	padding-right: var(--newspack-wizard-section-space, 24px);
+}
+
+// DataViews search/filter/icon alignment.
+// The Settings emails section is registered with `fullWidth: true` in
+// sections.tsx, which adds `.newspack-wizard__content--full-width` to the
+// parent and disables the with-wizard-screen negative-margin breakout.
+.newspack-emails-tab {
+	.dataviews__view-actions {
+		display: flex;
+		align-items: center;
+		margin-bottom: 16px;
+	}
+
+	.dataviews__search {
+		display: flex;
+		align-items: flex-start;
+		gap: 8px;
+	}
+
+	// DataViews v14 hides the per-card actions menu (kebab) by default and
+	// reveals it only on hover. Override so it's always visible at the
+	// top-right of each card's media tile. Matches the user-discoverability
+	// expectation from PR #4727 (v10's kebab was inline with title; v14
+	// places it on the media tile but the same affordance applies).
+	.dataviews-view-grid__media-actions {
+		opacity: 1;
+	}
+
+	// The shared Badge is `display: block` globally; in the Status column it
+	// would stretch to fill the cell. Scope `inline-block` to the Emails
+	// surface so the status badge hugs its label without shifting badges
+	// elsewhere in the app.
+	.newspack-badge {
+		display: inline-block;
+	}
+}
+
+// Clickable name link in grid/table view.
+// Scope under `.newspack-emails-tab` (2-class specificity) so the rule
+// wins against WP's default `a` link color, which would otherwise paint
+// these titles WP-admin blue.
+.newspack-emails-tab .newspack-emails__name-link {
+	color: wp-colors.$gray-900;
+	text-decoration: none;
+
+	&:hover,
+	&:focus-visible {
+		text-decoration: underline;
+	}
+
+	&:focus-visible {
+		outline: 2px solid;
+		outline-offset: 1px;
+	}
+}
+
+// Trigger description sub-text under the title.
+// Two-line clamp keeps grid cards uniform while still showing enough context.
+.newspack-emails__trigger-description {
+	color: wp-colors.$gray-900;
+	font-size: 12px;
+	margin-top: 4px;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
