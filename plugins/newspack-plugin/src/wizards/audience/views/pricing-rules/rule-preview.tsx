@@ -88,19 +88,6 @@ export default function RulePreview( { body }: RulePreviewProps ) {
 
 	const { currency } = data;
 
-	const segmentGroups = ( data.segment_groups ?? [] ).map( group => (
-		<div key={ group.segment_id } className="newspack-pricing-rules__segment-group">
-			<p className="newspack-pricing-rules__muted">
-				{ sprintf(
-					/* translators: %s: reader segment name. */
-					__( 'Readers in %s:', 'newspack-plugin' ),
-					group.segment_label
-				) }
-			</p>
-			<ImpactTable rows={ group.sample } currency={ currency } />
-		</div>
-	) );
-
 	return (
 		<div className={ `newspack-pricing-rules__preview${ isLoading ? ' is-loading' : '' }` }>
 			{ data.total_matching > 0 ? (
@@ -118,14 +105,10 @@ export default function RulePreview( { body }: RulePreviewProps ) {
 							  )
 							: __( 'Resulting prices across affected products (best price wins; updates as you edit).', 'newspack-plugin' ) }
 					</p>
-					<ImpactTable rows={ data.sample } currency={ currency } />
-					{ segmentGroups }
+					<ImpactTable baseline={ data.sample } segmentGroups={ data.segment_groups ?? [] } currency={ currency } />
 				</>
 			) : (
-				<>
-					<p className="newspack-pricing-rules__muted">{ __( 'This rule does not affect any products yet.', 'newspack-plugin' ) }</p>
-					{ segmentGroups }
-				</>
+				<p className="newspack-pricing-rules__muted">{ __( 'This rule does not affect any products yet.', 'newspack-plugin' ) }</p>
 			) }
 			{ data.audience?.supported && <AudienceLine audience={ data.audience } /> }
 		</div>

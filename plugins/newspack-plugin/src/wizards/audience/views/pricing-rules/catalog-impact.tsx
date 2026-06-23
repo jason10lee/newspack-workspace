@@ -64,19 +64,6 @@ export default function CatalogImpact() {
 				data.total_matching
 		  );
 
-	const segmentGroups = ( data.segment_groups ?? [] ).map( group => (
-		<div key={ group.segment_id } className="newspack-pricing-rules__segment-group">
-			<p className="newspack-pricing-rules__muted">
-				{ sprintf(
-					/* translators: %s: reader segment name. */
-					__( 'Readers in %s:', 'newspack-plugin' ),
-					group.segment_label
-				) }
-			</p>
-			<ImpactTable rows={ group.sample } currency={ data.currency } />
-		</div>
-	) );
-
 	return (
 		<div className="newspack-pricing-rules__impact">
 			<h3 className="newspack-pricing-rules__impact-title">
@@ -95,8 +82,7 @@ export default function CatalogImpact() {
 					) }
 				</p>
 			) }
-			<ImpactTable rows={ data.sample } currency={ data.currency } />
-			{ segmentGroups }
+			<ImpactTable baseline={ data.sample } segmentGroups={ data.segment_groups ?? [] } currency={ data.currency } />
 		</div>
 	);
 }
