@@ -41,6 +41,12 @@ final class Reader_Segment_Condition_Matcher implements Condition_Matcher {
 		if ( empty( $ids ) ) {
 			return true;
 		}
+		// Preview mode: the impact preview prices as-if a reader in a segment by
+		// passing an assume_segments signal — match against that instead of a real
+		// reader's snapshot.
+		if ( isset( $ctx->signals['assume_segments'] ) ) {
+			return Reader_Segment_Eligibility::matches_assumed( $ids, (array) $ctx->signals['assume_segments'] );
+		}
 		$user_id = $ctx->customer instanceof \WC_Customer ? (int) $ctx->customer->get_id() : 0;
 		return Reader_Segment_Eligibility::is_in_any( $user_id, $ids );
 	}

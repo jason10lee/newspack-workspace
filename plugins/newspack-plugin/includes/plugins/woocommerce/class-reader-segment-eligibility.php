@@ -30,4 +30,19 @@ final class Reader_Segment_Eligibility {
 		$selected = array_map( 'strval', $selected_ids );
 		return (bool) array_intersect( $selected, Reader_Data::get_matched_segments( $user_id ) );
 	}
+
+	/**
+	 * Preview-mode check: does any required segment appear in the assumed set?
+	 * Used by the impact preview, which prices as-if a reader in a given segment
+	 * instead of reading a real reader's snapshot. Engine-free; ids normalized to
+	 * ints on both sides so string vs int ids compare equal.
+	 *
+	 * @param array $required_ids Segment IDs the rule requires (any-of).
+	 * @param array $assumed_ids  Segment IDs the preview assumes the reader is in.
+	 */
+	public static function matches_assumed( array $required_ids, array $assumed_ids ): bool {
+		$required = array_map( 'intval', $required_ids );
+		$assumed  = array_map( 'intval', $assumed_ids );
+		return (bool) array_intersect( $required, $assumed );
+	}
 }
