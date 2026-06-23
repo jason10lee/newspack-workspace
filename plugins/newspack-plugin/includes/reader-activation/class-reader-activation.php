@@ -1656,6 +1656,9 @@ final class Reader_Activation {
 		ob_start();
 		?>
 		<div class="newspack-ui__box newspack-ui__box--text-center">
+			<span class="newspack-ui__icon newspack-ui__icon--neutral">
+				<?php Newspack_UI_Icons::print_svg( 'account' ); ?>
+			</span>
 			<p>
 				<?php
 				// The <strong> is rendered empty here; confirmation-modal.js fills it
@@ -1665,7 +1668,7 @@ final class Reader_Activation {
 				echo wp_kses_post(
 					sprintf(
 						// translators: %s is a placeholder that the JS helper replaces with the email the reader is about to register.
-						__( "You're about to create an account for %s.", 'newspack-plugin' ),
+						__( "We'll create a new account for %s.", 'newspack-plugin' ),
 						'<strong class="email-address"></strong>'
 					)
 				);
