@@ -37,6 +37,7 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 				return $types;
 			}
 		);
+		Emails::reset_email_configs_cache();
 	}
 
 	/**
@@ -44,6 +45,7 @@ class Newspack_Test_Emails extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		reset_phpmailer_instance();
+		Emails::reset_email_configs_cache();
 	}
 
 	/**

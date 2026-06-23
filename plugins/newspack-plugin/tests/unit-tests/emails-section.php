@@ -158,7 +158,9 @@ class Newspack_Test_Emails_Section extends WP_UnitTestCase {
 	 * Verifies the wizard endpoint response structure after the rewrite:
 	 * top-level keys are correct, each row carries the new fields,
 	 * registry_slug is the config key string, no view_category leakage,
-	 * no WC-source rows in slice 1, and category sort grouping holds.
+	 * and category sort grouping holds. (WooCommerce-source surfacing is
+	 * covered in emails-section-woocommerce.php; slice 2a no longer
+	 * excludes WC rows here.)
 	 */
 
 	/**
@@ -209,13 +211,77 @@ class Newspack_Test_Emails_Section extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Slice 1 filters out WooCommerce-source rows. Slice 2 lifts this filter.
+	 * Within-category tiebreaker is config-registration order, not
+	 * alphabetical. Providers register in deliberate order
+	 * (Reader_Revenue_Emails: receipt → welcome → cancellation;
+	 * Reader_Activation_Emails: verification → magic-link → otp →
+	 * reset-password → ...), so registration order = intended display
+	 * order. Lock that contract in.
 	 */
-	public function test_api_get_email_settings_excludes_woocommerce_source() {
+	public function test_api_get_email_settings_within_category_follows_registration_order() {
 		$result = Emails_Section::api_get_email_settings();
-		foreach ( $result['newspack_emails'] as $email ) {
-			$this->assertNotSame( 'woocommerce', $email['source'] ?? 'newspack', 'Row should not be WC-sourced in slice 1.' );
-		}
+
+		// Reader-revenue group: receipt → welcome → cancellation
+		// (per Reader_Revenue_Emails::add_email_configs() order), then
+		// group-subscription-invite (also reader-revenue category after
+		// the slice-1 fix flipped it from reader-activation).
+		$rr_types = array_values(
+			array_map(
+				fn( $email ) => $email['type'],
+				array_filter(
+					$result['newspack_emails'],
+					fn( $email ) => 'reader-revenue' === ( $email['category'] ?? '' )
+				)
+			)
+		);
+		$this->assertSame(
+			[
+				Reader_Revenue_Emails::EMAIL_TYPES['RECEIPT'],
+				Reader_Revenue_Emails::EMAIL_TYPES['WELCOME'],
+				Reader_Revenue_Emails::EMAIL_TYPES['CANCELLATION'],
+				'group-subscription-invite',
+			],
+			$rr_types,
+			'Reader-revenue rows must follow provider registration order.'
+		);
+
+		// Reader-activation group: verification → magic-link → otp →
+		// reset-password (the four sign-in flows that are always present,
+		// per the order in Reader_Activation_Emails::add_email_configs()).
+		$ra_types_all  = array_values(
+			array_map(
+				fn( $email ) => $email['type'],
+				array_filter(
+					$result['newspack_emails'],
+					fn( $email ) => 'reader-activation' === ( $email['category'] ?? '' )
+				)
+			)
+		);
+		$ra_core_types = array_values(
+			array_filter(
+				$ra_types_all,
+				fn( $type ) => in_array(
+					$type,
+					[
+						Reader_Activation_Emails::EMAIL_TYPES['VERIFICATION'],
+						Reader_Activation_Emails::EMAIL_TYPES['MAGIC_LINK'],
+						Reader_Activation_Emails::EMAIL_TYPES['OTP_AUTH'],
+						Reader_Activation_Emails::EMAIL_TYPES['RESET_PASSWORD'],
+					],
+					true
+				)
+			)
+		);
+		$this->assertSame(
+			[
+				Reader_Activation_Emails::EMAIL_TYPES['VERIFICATION'],
+				Reader_Activation_Emails::EMAIL_TYPES['MAGIC_LINK'],
+				Reader_Activation_Emails::EMAIL_TYPES['OTP_AUTH'],
+				Reader_Activation_Emails::EMAIL_TYPES['RESET_PASSWORD'],
+			],
+			$ra_core_types,
+			'Reader-activation rows must follow Reader_Activation_Emails provider registration order.'
+		);
 	}
 
 	/**
@@ -335,8 +401,10 @@ class Newspack_Test_Emails_Section extends WP_UnitTestCase {
 		};
 
 		add_filter( 'newspack_email_configs', $callback );
+		Emails::reset_email_configs_cache();
 		$configs = Emails::get_email_configs();
 		remove_filter( 'newspack_email_configs', $callback );
+		Emails::reset_email_configs_cache();
 
 		$this->assertArrayHasKey( $type, $configs );
 		$this->assertSame( '', $configs[ $type ]['trigger_description'] );
@@ -363,8 +431,10 @@ class Newspack_Test_Emails_Section extends WP_UnitTestCase {
 		};
 
 		add_filter( 'newspack_email_configs', $callback );
+		Emails::reset_email_configs_cache();
 		$configs = Emails::get_email_configs();
 		remove_filter( 'newspack_email_configs', $callback );
+		Emails::reset_email_configs_cache();
 
 		// Bad rows silently dropped.
 		$this->assertArrayNotHasKey( 'malformed-string', $configs );

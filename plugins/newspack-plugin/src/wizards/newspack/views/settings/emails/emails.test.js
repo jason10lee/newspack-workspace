@@ -3,7 +3,7 @@
 /**
  * External dependencies
  */
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 
 jest.mock( './emails.scss', () => ( {} ) );
 
@@ -33,8 +33,11 @@ jest.mock( '@wordpress/dataviews', () => ( {
 	} ),
 } ) );
 
-// Use mock-prefixed name so Jest's hoisted jest.mock can close over it.
+// Use mock-prefixed names so Jest's hoisted jest.mock can close over them.
 let mockCapturedActions = [];
+let mockCapturedView = null;
+let mockCapturedOnChangeView = null;
+let mockCapturedData = [];
 
 jest.mock( '../../../../../../packages/components/src', () => {
 	function renderField( field, item ) {
@@ -48,8 +51,11 @@ jest.mock( '../../../../../../packages/components/src', () => {
 	}
 	return {
 		Badge: ( { text } ) => <span>{ text }</span>,
-		DataViews: ( { data, fields, actions } ) => {
+		DataViews: ( { data, fields, actions, view, onChangeView } ) => {
 			mockCapturedActions = actions || [];
+			mockCapturedView = view;
+			mockCapturedOnChangeView = onChangeView;
+			mockCapturedData = data;
 			return (
 				<table data-testid="dataviews">
 					<tbody>
@@ -80,7 +86,8 @@ jest.mock(
 		}
 );
 
-// Slice 1 surfaces only Newspack-source emails. WC fixtures land with slice 2.
+// Fixtures span both chips and both sources so the chip-filter and
+// type-routing tests have meaningful data on either side of the toggle.
 const mockEmails = [
 	{
 		label: 'Payment receipt',
@@ -93,6 +100,7 @@ const mockEmails = [
 		registry_slug: 'receipt',
 		recipient: 'reader',
 		source: 'newspack',
+		chip: 'reader-revenue',
 	},
 	{
 		label: 'Cancellation confirmation',
@@ -105,6 +113,7 @@ const mockEmails = [
 		registry_slug: 'cancellation',
 		recipient: 'reader',
 		source: 'newspack',
+		chip: 'reader-revenue',
 	},
 	{
 		label: 'Reader verification',
@@ -117,6 +126,7 @@ const mockEmails = [
 		registry_slug: 'reader-activation-verification',
 		recipient: 'reader',
 		source: 'newspack',
+		chip: 'auth-account',
 	},
 	{
 		label: 'Account deletion',
@@ -129,6 +139,7 @@ const mockEmails = [
 		registry_slug: 'reader-activation-delete-account',
 		recipient: 'reader',
 		source: 'newspack',
+		chip: 'auth-account',
 	},
 	{
 		label: 'Welcome email',
@@ -141,6 +152,37 @@ const mockEmails = [
 		registry_slug: 'welcome',
 		recipient: 'reader',
 		source: 'newspack',
+		chip: 'reader-revenue',
+	},
+	// WC-source, reader-revenue chip, admin recipient, currently enabled —
+	// exercises the deactivate→toggleWcEmail route (string post_id).
+	{
+		label: 'New order',
+		post_id: 'wc:new_order',
+		edit_link: '/wp-admin/admin.php?page=wc-settings&tab=email&section=wc_email_new_order',
+		status: 'publish',
+		type: 'new_order',
+		category: 'woocommerce',
+		trigger_description: 'Sent to the admin when a new order is placed.',
+		registry_slug: 'new_order',
+		recipient: 'admin',
+		source: 'woocommerce',
+		chip: 'reader-revenue',
+	},
+	// WC-source, auth-account chip, currently disabled — exercises the
+	// activate→toggleWcEmail route (string post_id).
+	{
+		label: 'New account',
+		post_id: 'wc:customer_new_account',
+		edit_link: '/wp-admin/admin.php?page=wc-settings&tab=email&section=wc_email_customer_new_account',
+		status: 'draft',
+		type: 'customer_new_account',
+		category: 'woocommerce',
+		trigger_description: 'Sent when a customer creates a new account.',
+		registry_slug: 'customer_new_account',
+		recipient: 'reader',
+		source: 'woocommerce',
+		chip: 'auth-account',
 	},
 ];
 
@@ -148,6 +190,10 @@ describe( 'Emails', () => {
 	beforeEach( () => {
 		jest.clearAllMocks();
 		mockErrorMessage = null;
+		mockCapturedActions = [];
+		mockCapturedView = null;
+		mockCapturedOnChangeView = null;
+		mockCapturedData = [];
 		window.newspackSettings = {
 			emails: {
 				sections: {
@@ -172,26 +218,34 @@ describe( 'Emails', () => {
 		} );
 	} );
 
-	it( 'renders all emails in a single view', async () => {
+	it( 'renders reader-revenue emails by default', async () => {
 		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
+		// Default chip is reader-revenue — these rows are visible.
 		await waitFor( () => {
 			expect( screen.getByText( 'Payment receipt' ) ).toBeInTheDocument();
 			expect( screen.getByText( 'Cancellation confirmation' ) ).toBeInTheDocument();
-			expect( screen.getByText( 'Reader verification' ) ).toBeInTheDocument();
-			expect( screen.getByText( 'Account deletion' ) ).toBeInTheDocument();
 			expect( screen.getByText( 'Welcome email' ) ).toBeInTheDocument();
+			expect( screen.getByText( 'New order' ) ).toBeInTheDocument();
 		} );
+
+		// Auth-account rows are filtered out by default.
+		expect( screen.queryByText( 'Reader verification' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Account deletion' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'New account' ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'renders Recipient column with Reader for newspack-source emails', async () => {
+	it( 'renders Recipient column with Reader/Admin labels', async () => {
 		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
 		await waitFor( () => {
+			// Default chip = reader-revenue: 3 Reader (receipt, cancellation, welcome) + 1 Admin (new_order).
 			const readerCells = screen.getAllByText( 'Reader' );
-			expect( readerCells.length ).toBeGreaterThanOrEqual( 5 );
+			expect( readerCells.length ).toBeGreaterThanOrEqual( 3 );
+			const adminCells = screen.getAllByText( 'Admin' );
+			expect( adminCells.length ).toBeGreaterThanOrEqual( 1 );
 		} );
 	} );
 
@@ -218,6 +272,11 @@ describe( 'Emails', () => {
 		const deactivate = mockCapturedActions.find( a => a.id === 'deactivate' );
 		deactivate.callback( [ mockEmails[ 0 ] ] );
 
+		// updateStatus applies the new status optimistically in local
+		// state before the fetch fires, then passes `onError` only —
+		// rollback on failure, no onSuccess. (Verifying onError exists
+		// instead of onSuccess catches a regression that drops the
+		// rollback path.)
 		expect( mockWizardApiFetch ).toHaveBeenCalledWith(
 			expect.objectContaining( {
 				path: '/wp/v2/newspack_rr_email/1',
@@ -259,6 +318,9 @@ describe( 'Emails', () => {
 		expect( activate.isEligible( mockEmails[ 4 ] ) ).toBe( true );
 		activate.callback( [ mockEmails[ 4 ] ] );
 
+		// updateStatus applies the new status optimistically — onError
+		// is the only callback (rollback on failure). See the matching
+		// deactivate test above for the same shape.
 		expect( mockWizardApiFetch ).toHaveBeenCalledWith(
 			expect.objectContaining( {
 				path: '/wp/v2/newspack_rr_email/5',
@@ -317,7 +379,7 @@ describe( 'Emails', () => {
 		);
 	} );
 
-	it( 'reset is eligible only for newspack-source emails', async () => {
+	it( 'reset is eligible for newspack-source rows', async () => {
 		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 
@@ -326,11 +388,312 @@ describe( 'Emails', () => {
 		} );
 
 		const reset = mockCapturedActions.find( a => a.id === 'reset' );
-		// Newspack-source email — eligible.
+		// Reset's `isEligible` is gated on `item.source === 'newspack'`
+		// only — the legacy registry_slug check was dropped in the
+		// refactor (the registry_slug field is derived from the unified
+		// config, and a Newspack-source row that lacks one is in any
+		// case a Newspack-emails-system error, not a UI-input case to
+		// guard against). The sister test below covers the WC-source
+		// inverse.
 		expect( reset.isEligible( mockEmails[ 0 ] ) ).toBe( true );
-		// Non-Newspack (e.g. WooCommerce) source — not eligible. Mirrors the
-		// server-side boundary: only Newspack-managed emails are resettable.
-		expect( reset.isEligible( { ...mockEmails[ 0 ], source: 'woocommerce' } ) ).toBe( false );
+	} );
+
+	// Slice 2a — WC surfacing tests below.
+
+	it( 'reset is NOT eligible for a woocommerce-source row', async () => {
+		const Emails = require( './emails' ).default;
+		render( <Emails /> );
+
+		await waitFor( () => {
+			expect( screen.getByTestId( 'dataviews' ) ).toBeInTheDocument();
+		} );
+
+		const reset = mockCapturedActions.find( a => a.id === 'reset' );
+		// WC-source row — source guard rejects, even with registry_slug present.
+		expect( reset.isEligible( mockEmails[ 5 ] ) ).toBe( false );
+		// And again with the auth-account WC row.
+		expect( reset.isEligible( mockEmails[ 6 ] ) ).toBe( false );
+	} );
+
+	it( 'deactivate routes string post_id to toggleWcEmail', async () => {
+		const Emails = require( './emails' ).default;
+		render( <Emails /> );
+
+		await waitFor( () => {
+			expect( screen.getByTestId( 'dataviews' ) ).toBeInTheDocument();
+		} );
+
+		const deactivate = mockCapturedActions.find( a => a.id === 'deactivate' );
+		// WC row is publish + category !== reader-activation → eligible.
+		expect( deactivate.isEligible( mockEmails[ 5 ] ) ).toBe( true );
+		deactivate.callback( [ mockEmails[ 5 ] ] );
+
+		// Type-based routing: string post_id 'wc:new_order' goes to the
+		// toggle endpoint, not to wp/v2 post status update.
+		expect( mockWizardApiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				path: '/newspack/v1/wizard/newspack-settings/emails/new_order/toggle',
+				method: 'POST',
+				data: { enabled: false },
+			} ),
+			expect.objectContaining( {
+				onSuccess: expect.any( Function ),
+			} )
+		);
+		// And it did NOT fall through to the wp/v2 update path.
+		expect( mockWizardApiFetch ).not.toHaveBeenCalledWith(
+			expect.objectContaining( {
+				path: expect.stringContaining( '/wp/v2/' ),
+			} ),
+			expect.anything()
+		);
+	} );
+
+	it( 'activate routes string post_id to toggleWcEmail', async () => {
+		const Emails = require( './emails' ).default;
+		render( <Emails /> );
+
+		await waitFor( () => {
+			expect( screen.getByTestId( 'dataviews' ) ).toBeInTheDocument();
+		} );
+
+		const activate = mockCapturedActions.find( a => a.id === 'activate' );
+		// WC draft row → eligible for activate.
+		expect( activate.isEligible( mockEmails[ 6 ] ) ).toBe( true );
+		activate.callback( [ mockEmails[ 6 ] ] );
+
+		expect( mockWizardApiFetch ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				path: '/newspack/v1/wizard/newspack-settings/emails/customer_new_account/toggle',
+				method: 'POST',
+				data: { enabled: true },
+			} ),
+			expect.objectContaining( {
+				onSuccess: expect.any( Function ),
+			} )
+		);
+	} );
+
+	it( 'toggleWcEmail onSuccess replaces local state with the authoritative server response', async () => {
+		const Emails = require( './emails' ).default;
+		render( <Emails /> );
+
+		await waitFor( () => {
+			expect( screen.getByTestId( 'dataviews' ) ).toBeInTheDocument();
+		} );
+
+		// Deactivate the enabled WC row (New order). The toggle mock resolves
+		// without invoking callbacks, so we drive onSuccess by hand below.
+		const deactivate = mockCapturedActions.find( a => a.id === 'deactivate' );
+		act( () => {
+			deactivate.callback( [ mockEmails[ 5 ] ] );
+		} );
+
+		const toggleCall = mockWizardApiFetch.mock.calls.find( ( [ opts ] ) => opts.path?.includes( '/toggle' ) );
+		expect( toggleCall ).toBeDefined();
+		const { onSuccess } = toggleCall[ 1 ];
+
+		// Server returns an authoritative payload that differs from anything
+		// the client could predict (a sibling row's label changed). onSuccess
+		// must replace local state with it wholesale.
+		const serverEmails = mockEmails.map( email =>
+			email.post_id === 1 ? { ...email, label: 'Payment receipt (server-authoritative)' } : email
+		);
+		act( () => {
+			onSuccess( { newspack_emails: serverEmails, post_type: 'newspack_rr_email' } );
+		} );
+
+		await waitFor( () => {
+			expect( screen.getByText( 'Payment receipt (server-authoritative)' ) ).toBeInTheDocument();
+		} );
+	} );
+
+	it( 'toggleWcEmail onError rolls back the optimistic status change', async () => {
+		const Emails = require( './emails' ).default;
+		render( <Emails /> );
+
+		await waitFor( () => {
+			expect( screen.getByTestId( 'dataviews' ) ).toBeInTheDocument();
+		} );
+
+		// New order starts enabled (publish).
+		const before = mockCapturedData.find( item => item.post_id === 'wc:new_order' );
+		expect( before.status ).toBe( 'publish' );
+
+		const deactivate = mockCapturedActions.find( a => a.id === 'deactivate' );
+		act( () => {
+			deactivate.callback( [ mockEmails[ 5 ] ] );
+		} );
+
+		// Optimistic update flipped it to draft before the request settled.
+		await waitFor( () => {
+			expect( mockCapturedData.find( item => item.post_id === 'wc:new_order' ).status ).toBe( 'draft' );
+		} );
+
+		// Drive the failure path — onError restores the pre-toggle snapshot.
+		const toggleCall = mockWizardApiFetch.mock.calls.find( ( [ opts ] ) => opts.path?.includes( '/toggle' ) );
+		const { onError } = toggleCall[ 1 ];
+		act( () => {
+			onError();
+		} );
+
+		await waitFor( () => {
+			expect( mockCapturedData.find( item => item.post_id === 'wc:new_order' ).status ).toBe( 'publish' );
+		} );
+	} );
+
+	it( 'chip filter shows only rows matching activeChip', async () => {
+		const Emails = require( './emails' ).default;
+		render( <Emails /> );
+
+		// Default chip = reader-revenue. Auth-account rows are filtered out.
+		await waitFor( () => {
+			expect( screen.getByText( 'Payment receipt' ) ).toBeInTheDocument();
+		} );
+		expect( screen.queryByText( 'Reader verification' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'New account' ) ).not.toBeInTheDocument();
+
+		// Switch chip — auth-account rows now visible, reader-revenue rows hidden.
+		fireEvent.click( screen.getByRole( 'button', { name: 'Authentication & account' } ) );
+
+		await waitFor( () => {
+			expect( screen.getByText( 'Reader verification' ) ).toBeInTheDocument();
+			expect( screen.getByText( 'Account deletion' ) ).toBeInTheDocument();
+			expect( screen.getByText( 'New account' ) ).toBeInTheDocument();
+		} );
+		expect( screen.queryByText( 'Payment receipt' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Cancellation confirmation' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'New order' ) ).not.toBeInTheDocument();
+
+		// The DataViews input is also chip-filtered before filterSortAndPaginate.
+		expect( mockCapturedData.every( item => item.chip === 'auth-account' ) ).toBe( true );
+	} );
+
+	it( 'chip switch resets search and page', async () => {
+		const Emails = require( './emails' ).default;
+		render( <Emails /> );
+
+		await waitFor( () => {
+			expect( screen.getByTestId( 'dataviews' ) ).toBeInTheDocument();
+		} );
+
+		// Simulate DataViews search/page change. Wrapped in act() because
+		// onChangeView triggers a React state update outside an event handler.
+		act( () => {
+			mockCapturedOnChangeView( {
+				...mockCapturedView,
+				search: 'receipt',
+				page: 3,
+			} );
+		} );
+		await waitFor( () => {
+			expect( mockCapturedView.search ).toBe( 'receipt' );
+			expect( mockCapturedView.page ).toBe( 3 );
+		} );
+
+		// Click the other chip — selectChip() resets search and page.
+		fireEvent.click( screen.getByRole( 'button', { name: 'Authentication & account' } ) );
+
+		await waitFor( () => {
+			expect( mockCapturedView.search ).toBe( '' );
+			expect( mockCapturedView.page ).toBe( 1 );
+		} );
+	} );
+
+	it( 'search bypasses chip filter — operates across all chips', async () => {
+		const Emails = require( './emails' ).default;
+		render( <Emails /> );
+
+		await waitFor( () => {
+			expect( screen.getByTestId( 'dataviews' ) ).toBeInTheDocument();
+		} );
+
+		// Default (no search): chip filter active, reader-revenue only.
+		expect( mockCapturedData.every( item => item.chip === 'reader-revenue' ) ).toBe( true );
+		expect( mockCapturedData.length ).toBe( 4 );
+
+		// Activate search via the DataViews onChangeView prop.
+		act( () => {
+			mockCapturedOnChangeView( {
+				...mockCapturedView,
+				search: 'anything',
+				page: 1,
+			} );
+		} );
+
+		// Full dataset now flows into filterSortAndPaginate — both chips
+		// represented, no chip pre-filter applied.
+		await waitFor( () => {
+			expect( mockCapturedData.length ).toBe( mockEmails.length );
+		} );
+		const chipsRepresented = new Set( mockCapturedData.map( item => item.chip ) );
+		expect( chipsRepresented ).toEqual( new Set( [ 'reader-revenue', 'auth-account' ] ) );
+	} );
+
+	it( 'chip bar shows both chips unpressed during active search', async () => {
+		const Emails = require( './emails' ).default;
+		render( <Emails /> );
+
+		await waitFor( () => {
+			expect( screen.getByTestId( 'dataviews' ) ).toBeInTheDocument();
+		} );
+
+		const rrChip = screen.getByRole( 'button', { name: 'Reader revenue' } );
+		const aaChip = screen.getByRole( 'button', {
+			name: 'Authentication & account',
+		} );
+
+		// Default: Reader revenue chip is pressed.
+		expect( rrChip.getAttribute( 'aria-pressed' ) ).toBe( 'true' );
+		expect( aaChip.getAttribute( 'aria-pressed' ) ).toBe( 'false' );
+
+		// Search active — both chips deactivate visually (activeChip is
+		// still set in state, but the visual matches what's filtering).
+		act( () => {
+			mockCapturedOnChangeView( {
+				...mockCapturedView,
+				search: 'foo',
+				page: 1,
+			} );
+		} );
+
+		await waitFor( () => {
+			expect( rrChip.getAttribute( 'aria-pressed' ) ).toBe( 'false' );
+			expect( aaChip.getAttribute( 'aria-pressed' ) ).toBe( 'false' );
+		} );
+	} );
+
+	it( 'clearing search restores active chip pressed state', async () => {
+		const Emails = require( './emails' ).default;
+		render( <Emails /> );
+
+		await waitFor( () => {
+			expect( screen.getByTestId( 'dataviews' ) ).toBeInTheDocument();
+		} );
+
+		// Set search.
+		act( () => {
+			mockCapturedOnChangeView( {
+				...mockCapturedView,
+				search: 'foo',
+				page: 1,
+			} );
+		} );
+		await waitFor( () => {
+			expect( screen.getByRole( 'button', { name: 'Reader revenue' } ).getAttribute( 'aria-pressed' ) ).toBe( 'false' );
+		} );
+
+		// Clear search — activeChip (still 'reader-revenue') re-engages.
+		act( () => {
+			mockCapturedOnChangeView( {
+				...mockCapturedView,
+				search: '',
+				page: 1,
+			} );
+		} );
+		await waitFor( () => {
+			expect( screen.getByRole( 'button', { name: 'Reader revenue' } ).getAttribute( 'aria-pressed' ) ).toBe( 'true' );
+		} );
 	} );
 
 	it( 'renders the Emails heading as visually hidden (screen-reader only)', async () => {
