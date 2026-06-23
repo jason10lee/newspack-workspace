@@ -341,6 +341,8 @@ class Nextdoor {
 			$country  = ! empty( $settings['country'] ) ? $settings['country'] : 'US';
 		}
 
+		$country = strtoupper( trim( (string) $country ) );
+
 		$hosts = [
 			'US' => 'https://nextdoor.com',
 			'CA' => 'https://ca.nextdoor.com',
