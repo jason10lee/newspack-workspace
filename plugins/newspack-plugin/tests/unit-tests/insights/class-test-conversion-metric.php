@@ -2760,6 +2760,86 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 0, $by['direct']['count'] );
 	}
 
+	// --- 5.1 compute_registration_to_conversion_cohort ---------------------
+
+	/**
+	 * 5.1 compute: one cohort, cumulative monotonic conversion curve.
+	 */
+	public function test_compute_registration_cohort_cumulative_curve() {
+		$tz = new DateTimeZone( 'UTC' );
+		// 4 readers all registered 2026-01. 2 convert (sub) at month 1 and month 3.
+		$readers = [
+			1 => new DateTimeImmutable( '2026-01-05', $tz ),
+			2 => new DateTimeImmutable( '2026-01-10', $tz ),
+			3 => new DateTimeImmutable( '2026-01-15', $tz ),
+			4 => new DateTimeImmutable( '2026-01-20', $tz ),
+		];
+		$subs = [
+			1 => new DateTimeImmutable( '2026-02-05', $tz ), // months_since 1.
+			2 => new DateTimeImmutable( '2026-04-10', $tz ), // months_since 3.
+		];
+
+		$subs_metric = $this->createMock( Subscribers_Metric::class );
+		$subs_metric->method( 'get_reader_registration_dates' )->willReturn( $readers );
+		$subs_metric->method( 'get_first_subscription_order_dates' )->willReturn( $subs );
+		$donors_metric = $this->createMock( Donors_Metric::class );
+		$donors_metric->method( 'get_first_donation_order_dates' )->willReturn( [] );
+
+		$metric = new Conversion_Metric( null, null, $subs_metric, $donors_metric );
+		$result = $metric->compute_registration_to_conversion_cohort();
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertCount( 1, $result['cohorts'] );
+		$cohort = $result['cohorts'][0];
+		$this->assertSame( '2026-01', $cohort['label'] );
+		$points = array_column( $cohort['points'], 'value', 'period' );
+		// Cumulative: 0 at month 0, 1/4 at month 1, still 1/4 at month 2, 2/4 at month 3.
+		$this->assertSame( 0.0, $points[0] );
+		$this->assertSame( 0.25, $points[1] );
+		$this->assertSame( 0.25, $points[2] );
+		$this->assertSame( 0.5, $points[3] );
+		$this->assertSame( 0.15, $result['reference_line']['value'] );
+	}
+
+	/**
+	 * 5.1 compute: earlier of sub/donation wins; donation-only converter counts.
+	 */
+	public function test_compute_registration_cohort_combines_sub_and_donation() {
+		$tz      = new DateTimeZone( 'UTC' );
+		$readers = [ 5 => new DateTimeImmutable( '2026-01-01', $tz ) ];
+		$subs    = [ 5 => new DateTimeImmutable( '2026-05-01', $tz ) ]; // month 4.
+		$dons    = [ 5 => new DateTimeImmutable( '2026-03-01', $tz ) ]; // month 2 (earlier wins).
+
+		$subs_metric = $this->createMock( Subscribers_Metric::class );
+		$subs_metric->method( 'get_reader_registration_dates' )->willReturn( $readers );
+		$subs_metric->method( 'get_first_subscription_order_dates' )->willReturn( $subs );
+		$donors_metric = $this->createMock( Donors_Metric::class );
+		$donors_metric->method( 'get_first_donation_order_dates' )->willReturn( $dons );
+
+		$metric = new Conversion_Metric( null, null, $subs_metric, $donors_metric );
+		$result = $metric->compute_registration_to_conversion_cohort();
+		$points = array_column( $result['cohorts'][0]['points'], 'value', 'period' );
+		$this->assertSame( 0.0, $points[1] );
+		$this->assertSame( 1.0, $points[2] ); // converted by month 2 (donation).
+	}
+
+	/**
+	 * 5.1 compute: no readers → empty state, reference_line preserved.
+	 */
+	public function test_compute_registration_cohort_empty() {
+		$subs_metric = $this->createMock( Subscribers_Metric::class );
+		$subs_metric->method( 'get_reader_registration_dates' )->willReturn( [] );
+		$subs_metric->method( 'get_first_subscription_order_dates' )->willReturn( [] );
+		$donors_metric = $this->createMock( Donors_Metric::class );
+		$donors_metric->method( 'get_first_donation_order_dates' )->willReturn( [] );
+
+		$metric = new Conversion_Metric( null, null, $subs_metric, $donors_metric );
+		$result = $metric->compute_registration_to_conversion_cohort();
+		$this->assertSame( 'empty', $result['state'] );
+		$this->assertSame( [], $result['cohorts'] );
+		$this->assertSame( 0.15, $result['reference_line']['value'] );
+	}
+
 	/**
 	 * C12 mixed: some subscriber records have parent-order meta (classified
 	 * without BQ), others do not (go to matcher). BQ is called once for the

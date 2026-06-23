@@ -233,6 +233,13 @@ final class Conversion_Metric {
 	const MIN_COHORT_FOR_SUB_TO_DONOR = 50;
 
 	/**
+	 * Maximum months-since offset rendered on a cohort retention series (5.1/5.2).
+	 *
+	 * @var int
+	 */
+	const COHORT_MAX_MONTHS = 12;
+
+	/**
 	 * Constructor. Optionally inject collaborators (used in tests).
 	 *
 	 * @param BigQuery_Proxy_Client|null $proxy              Injected proxy client, or null to lazy-resolve.
@@ -1405,6 +1412,116 @@ final class Conversion_Metric {
 	// --- Section 5: Cohort retention ------------------------------------
 	// Snapshot metrics: pre-computed weekly, independent of the date picker.
 	// The $start/$end params are accepted for signature parity and ignored.
+
+	/**
+	 * Calendar-month index for cohort bucketing: year*12 + (month-1). The
+	 * difference of two indices is the whole-calendar-months between them.
+	 *
+	 * @param \DateTimeInterface $d Date.
+	 * @return int
+	 */
+	private function month_index( \DateTimeInterface $d ): int {
+		return ( (int) $d->format( 'Y' ) ) * 12 + ( (int) $d->format( 'n' ) - 1 );
+	}
+
+	/**
+	 * 5.1 reference line (hardcoded per spec): 15% conversion at 6 months.
+	 *
+	 * @return array{value: float, label: string}
+	 */
+	private function registration_reference_line(): array {
+		return [
+			'value' => 0.15,
+			'label' => __( '15% at 6 months', 'newspack-plugin' ),
+		];
+	}
+
+	/**
+	 * Compute the 5.1 registration → conversion cohort retention curve (the
+	 * expensive snapshot work; called by the weekly/one-off pre-warm handler,
+	 * never on the request hot path). Cohort = readers grouped by
+	 * `user_registered` month (trailing 365 days). Conversion = the earlier of
+	 * the reader's first subscription or first donation order. For each cohort
+	 * and each months-since offset N (0..age, capped 12), the value is the
+	 * CUMULATIVE fraction of the cohort converted by month N.
+	 *
+	 * @return array{state:string, cohorts:array, reference_line:array{value:float, label:string}}
+	 */
+	public function compute_registration_to_conversion_cohort(): array {
+		$readers = $this->subscribers_metric->get_reader_registration_dates();
+		if ( empty( $readers ) ) {
+			return array_merge(
+				[
+					'state'   => 'empty',
+					'cohorts' => [],
+				],
+				[ 'reference_line' => $this->registration_reference_line() ]
+			);
+		}
+
+		$ids  = array_keys( $readers );
+		$subs = $this->subscribers_metric->get_first_subscription_order_dates( $ids );
+		$dons = $this->donors_metric->get_first_donation_order_dates( $ids );
+
+		$now_index = $this->month_index( new \DateTimeImmutable( 'now', new \DateTimeZone( 'UTC' ) ) );
+
+		// Per-cohort tallies: denominator (cohort size) and a histogram of
+		// months_since at first conversion (only for converters).
+		$denominator   = []; // cohort_index => reader count.
+		$converted_at  = []; // cohort_index => [ months_since => converter count ].
+		$cohort_labels = []; // cohort_index => 'YYYY-MM'.
+		foreach ( $readers as $id => $reg ) {
+			$cohort_index                   = $this->month_index( $reg );
+			$cohort_labels[ $cohort_index ] = $reg->format( 'Y-m' );
+			$denominator[ $cohort_index ]   = ( $denominator[ $cohort_index ] ?? 0 ) + 1;
+
+			$sub  = $subs[ $id ] ?? null;
+			$don  = $dons[ $id ] ?? null;
+			$conv = null;
+			if ( $sub && $don ) {
+				$conv = $sub <= $don ? $sub : $don;
+			} else {
+				$conv = $sub ?? $don;
+			}
+			if ( null === $conv ) {
+				continue;
+			}
+			$months_since = $this->month_index( $conv ) - $cohort_index;
+			if ( $months_since < 0 ) {
+				continue;
+			}
+			$months_since = min( $months_since, self::COHORT_MAX_MONTHS );
+			$converted_at[ $cohort_index ][ $months_since ] = ( $converted_at[ $cohort_index ][ $months_since ] ?? 0 ) + 1;
+		}
+
+		ksort( $denominator );
+		$cohorts = [];
+		foreach ( $denominator as $cohort_index => $size ) {
+			$age     = min( self::COHORT_MAX_MONTHS, $now_index - $cohort_index );
+			$age     = max( 0, $age );
+			$points  = [];
+			$running = 0;
+			for ( $n = 0; $n <= $age; $n++ ) {
+				$running += $converted_at[ $cohort_index ][ $n ] ?? 0;
+				$points[] = [
+					'period' => $n,
+					'value'  => round( $running / $size, 4 ),
+				];
+			}
+			$cohorts[] = [
+				'label'  => $cohort_labels[ $cohort_index ],
+				'points' => $points,
+			];
+		}
+
+		return array_merge(
+			[
+				'state'   => empty( $cohorts ) ? 'empty' : 'populated',
+				'cohorts' => $cohorts,
+			],
+			[ 'reference_line' => $this->registration_reference_line() ]
+		);
+	}
 
 	/**
 	 * Registration → conversion cohort retention (5.1). Snapshot — ignores
