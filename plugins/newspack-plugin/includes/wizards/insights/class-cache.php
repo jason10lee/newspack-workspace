@@ -20,6 +20,10 @@ final class Cache {
 	const SOURCE_EXTERNAL = 'external';
 	const SOURCE_LOCAL    = 'local';
 
+	const SOURCE_SNAPSHOT = 'snapshot';
+
+	const TTL_SNAPSHOT = 9 * DAY_IN_SECONDS;
+
 	const TTL_BIGQUERY        = DAY_IN_SECONDS;
 	const TTL_EXTERNAL        = 10 * MINUTE_IN_SECONDS;
 	const BQ_COOLDOWN_SECONDS = 10 * MINUTE_IN_SECONDS;
@@ -77,7 +81,9 @@ final class Cache {
 			'source'      => $envelope['source'],
 		];
 		set_transient( $key, $store, self::ttl_for( $source ) );
-		self::index_add( $tab, $key );
+		if ( self::SOURCE_SNAPSHOT !== $source ) {
+			self::index_add( $tab, $key );
+		}
 
 		$envelope['cooldown_until'] = $cooldown_until;
 		return $envelope;
@@ -111,6 +117,26 @@ final class Cache {
 	}
 
 	/**
+	 * Read a cached envelope WITHOUT computing on miss. Returns the stored
+	 * `{ payload, computed_at, source }` array, or null when nothing usable is
+	 * cached or caching is disabled. The read-only primitive the snapshot
+	 * pre-warm pattern needs: request-path callers peek and, on null, schedule a
+	 * background refresh rather than computing an expensive payload inline.
+	 *
+	 * @param string   $tab       Tab slug.
+	 * @param string   $source    SOURCE_* constant.
+	 * @param string[] $key_parts Canonicalized key components.
+	 * @return array{ payload: array, computed_at: string, source: string }|null
+	 */
+	public static function peek( string $tab, string $source, array $key_parts ): ?array {
+		unset( $source ); // Reserved for parity with store()/refresh(); key is tab+parts.
+		if ( self::is_disabled() ) {
+			return null;
+		}
+		return self::read_cached( $tab, $key_parts );
+	}
+
+	/**
 	 * Get the TTL for a given source.
 	 *
 	 * @param string $source SOURCE_* constant.
@@ -119,6 +145,9 @@ final class Cache {
 	private static function ttl_for( string $source ): int {
 		if ( self::SOURCE_BIGQUERY === $source ) {
 			return self::TTL_BIGQUERY;
+		}
+		if ( self::SOURCE_SNAPSHOT === $source ) {
+			return self::TTL_SNAPSHOT;
 		}
 		return self::TTL_EXTERNAL;
 	}
@@ -254,7 +283,9 @@ final class Cache {
 			];
 			// set_transient() overwrites in place — no need to delete_transient() first.
 			set_transient( $key, $store, self::ttl_for( $source ) );
-			self::index_add( $tab, $key );
+			if ( self::SOURCE_SNAPSHOT !== $source ) {
+				self::index_add( $tab, $key );
+			}
 		}
 
 		// BigQuery refreshes always come back with the active cooldown stamp

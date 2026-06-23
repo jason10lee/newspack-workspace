@@ -431,6 +431,54 @@ class Newspack_Test_Insights_Cache extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Peek returns null when nothing is cached.
+	 */
+	public function test_snapshot_peek_returns_null_on_miss(): void {
+		$this->assertNull( Cache::peek( 'conversion', Cache::SOURCE_SNAPSHOT, [ 'cohorts' ] ) );
+	}
+
+	/**
+	 * Refresh with SOURCE_SNAPSHOT writes a snapshot peek can read back.
+	 */
+	public function test_snapshot_refresh_writes_then_peek_reads(): void {
+		$payload = [
+			'a' => 1,
+			'b' => 2,
+		];
+		$env     = Cache::refresh( 'conversion', Cache::SOURCE_SNAPSHOT, [ 'cohorts' ], fn() => $payload );
+
+		$this->assertSame( $payload, $env['payload'] );
+		$this->assertSame( Cache::SOURCE_SNAPSHOT, $env['source'] );
+
+		$peeked = Cache::peek( 'conversion', Cache::SOURCE_SNAPSHOT, [ 'cohorts' ] );
+		$this->assertIsArray( $peeked );
+		$this->assertSame( $payload, $peeked['payload'] );
+		$this->assertSame( Cache::SOURCE_SNAPSHOT, $peeked['source'] );
+	}
+
+	/**
+	 * Snapshot keys are kept out of the per-tab index, so purge() leaves them.
+	 */
+	public function test_snapshot_survives_purge(): void {
+		Cache::refresh( 'conversion', Cache::SOURCE_SNAPSHOT, [ 'cohorts' ], fn() => [ 'x' => 1 ] );
+		Cache::purge( 'conversion' );
+		$peeked = Cache::peek( 'conversion', Cache::SOURCE_SNAPSHOT, [ 'cohorts' ] );
+		$this->assertIsArray( $peeked );
+		$this->assertSame( [ 'x' => 1 ], $peeked['payload'] );
+	}
+
+	/**
+	 * Peek returns null when caching is disabled.
+	 */
+	public function test_snapshot_peek_null_when_disabled(): void {
+		Cache::refresh( 'conversion', Cache::SOURCE_SNAPSHOT, [ 'cohorts' ], fn() => [ 'x' => 1 ] );
+		if ( ! defined( 'NEWSPACK_INSIGHTS_CACHE_DISABLED' ) ) {
+			define( 'NEWSPACK_INSIGHTS_CACHE_DISABLED', true );
+		}
+		$this->assertNull( Cache::peek( 'conversion', Cache::SOURCE_SNAPSHOT, [ 'cohorts' ] ) );
+	}
+
+	/**
 	 * Mirror the production transient-key formula so tests can reach into storage.
 	 *
 	 * @param string $tab Tab slug.
