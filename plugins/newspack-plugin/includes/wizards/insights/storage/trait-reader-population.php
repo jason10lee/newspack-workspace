@@ -12,7 +12,6 @@ defined( 'ABSPATH' ) || exit;
 // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery
 // phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching
 // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared
 // phpcs:disable WordPress.DB.PreparedSQLPlaceholders.LikeWildcardsInQuery
 
 /**
@@ -87,7 +86,7 @@ trait Reader_Population_Trait {
 			$cutoff
 		);
 
-		$rows = $wpdb->get_results( $sql, ARRAY_A );
+		$rows = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $sql is built with $wpdb->prepare().
 		$map  = [];
 		foreach ( (array) $rows as $row ) {
 			if ( empty( $row['user_registered'] ) ) {
