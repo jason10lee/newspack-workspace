@@ -227,23 +227,39 @@ class Teams_For_Memberships_Diagnostics {
 			// or delete them – doing so would bind a live membership to a stale subscription
 			// and destroy a real team. See https://linear.app/a8c/issue/NPPM-2741.
 			if ( ! empty( $classification['separate_purchases'] ) ) {
-				$ids = implode(
+				// Show each team alongside the subscription it actually owns, so a dry run
+				// makes the collision and its real subscription links visible rather than
+				// claiming distinctness the command hasn't verified.
+				$purchases = implode(
 					', ',
 					array_map(
 						function ( $row ) {
-							return '#' . $row->ID;
+							return sprintf( '#%d→sub %s', $row->ID, $row->subscription_id );
 						},
 						$classification['separate_purchases']
 					)
 				);
-				WP_CLI::line(
-					sprintf(
-						'  SKIP: teams "%s" (author %d) each own a distinct subscription (%s) – separate purchases, not duplicates.',
-						$rows[0]->post_title,
-						$rows[0]->post_author,
-						$ids
-					)
+				$message = sprintf(
+					'  SKIP: teams "%s" (author %d) each carry their own subscription (%s) – separate purchases, not duplicates.',
+					$rows[0]->post_title,
+					$rows[0]->post_author,
+					$purchases
 				);
+				// Surface any subscription-less orphans in the same set: they can't be tied to
+				// a single purchase, so they're left for manual review rather than merged.
+				if ( ! empty( $classification['unattributed_orphans'] ) ) {
+					$orphan_ids = implode(
+						', ',
+						array_map(
+							function ( $row ) {
+								return '#' . $row->ID;
+							},
+							$classification['unattributed_orphans']
+						)
+					);
+					$message .= sprintf( ' Unlinked team(s) %s left for manual review.', $orphan_ids );
+				}
+				WP_CLI::line( $message );
 				continue;
 			}
 
@@ -284,7 +300,10 @@ class Teams_For_Memberships_Diagnostics {
 	 *
 	 * @param object[] $teams Objects with at least ->ID, ->post_date and ->subscription_id
 	 *                        (the last empty when the team has no linked subscription).
-	 * @return array{original:?object,duplicates:object[],separate_purchases:object[]}
+	 * @return array{original:?object,duplicates:object[],separate_purchases:object[],unattributed_orphans:object[]}
+	 *               `unattributed_orphans` is only populated for the separate-purchases case:
+	 *               subscription-less teams that can't be tied to a single purchase and so are
+	 *               left for manual review.
 	 */
 	public static function classify_team_bucket( array $teams ) {
 		// Oldest first, so the earliest-created team is preferred as the canonical original.
@@ -310,9 +329,10 @@ class Teams_For_Memberships_Diagnostics {
 		// whole set is left for manual review.
 		if ( count( $subscribed ) > 1 ) {
 			return [
-				'original'           => null,
-				'duplicates'         => [],
-				'separate_purchases' => $subscribed,
+				'original'             => null,
+				'duplicates'           => [],
+				'separate_purchases'   => $subscribed,
+				'unattributed_orphans' => $orphans,
 			];
 		}
 
@@ -326,9 +346,10 @@ class Teams_For_Memberships_Diagnostics {
 		}
 
 		return [
-			'original'           => $original,
-			'duplicates'         => $orphans,
-			'separate_purchases' => [],
+			'original'             => $original,
+			'duplicates'           => $orphans,
+			'separate_purchases'   => [],
+			'unattributed_orphans' => [],
 		];
 	}
 

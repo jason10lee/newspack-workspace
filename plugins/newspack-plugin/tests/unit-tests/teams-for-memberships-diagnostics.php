@@ -85,6 +85,7 @@ class Test_Teams_For_Memberships_Diagnostics extends WP_UnitTestCase {
 
 		$this->assertEmpty( $result['duplicates'], 'The orphan must not be merged when attribution is ambiguous.' );
 		$this->assertEqualSets( [ 100, 200 ], wp_list_pluck( $result['separate_purchases'], 'ID' ), 'Only the subscribed purchases are reported.' );
+		$this->assertEqualSets( [ 300 ], wp_list_pluck( $result['unattributed_orphans'], 'ID' ), 'The unlinked orphan is surfaced for manual review.' );
 	}
 
 	/**
