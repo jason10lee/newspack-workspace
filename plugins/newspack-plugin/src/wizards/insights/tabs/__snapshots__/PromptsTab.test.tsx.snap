@@ -858,7 +858,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Sum of Woo donation order totals from same-session completions after a prompt impression with a donation block
+                Sum of Woo donation order totals from same-session completions after a donation-intent prompt impression
               </div>
             </div>
           </div>
