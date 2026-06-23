@@ -7,14 +7,20 @@
 
 namespace Newspack\Wizards\Newspack;
 
+use Newspack\Emails;
+use Newspack\Reader_Activation;
+use Newspack\Reader_Revenue_Emails;
 use Newspack\Wizards\Wizard_Section;
-use Newspack\WooCommerce_Emails;
 use WP_REST_Server;
 
 defined( 'ABSPATH' ) || exit;
 
 /**
  * Emails Section Class.
+ *
+ * Surfaces the unified emails management UI in the Newspack > Settings >
+ * Emails wizard tab. Backed by the unified `newspack_email_configs`
+ * schema — no parallel registry.
  */
 class Emails_Section extends Wizard_Section {
 	/**
@@ -28,9 +34,6 @@ class Emails_Section extends Wizard_Section {
 	 * Register the endpoints needed for the wizard screens.
 	 */
 	public function register_rest_routes() {
-		if ( ! WooCommerce_Emails::is_active() ) {
-			return;
-		}
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
 			'wizard/' . $this->wizard_slug . '/emails',
@@ -40,51 +43,130 @@ class Emails_Section extends Wizard_Section {
 				'permission_callback' => [ $this, 'api_permissions_check' ],
 			]
 		);
-		register_rest_route(
-			NEWSPACK_API_NAMESPACE,
-			'wizard/' . $this->wizard_slug . '/emails',
-			[
-				'methods'             => WP_REST_Server::EDITABLE,
-				'callback'            => [ __CLASS__, 'api_update_email_settings' ],
-				'permission_callback' => [ $this, 'api_permissions_check' ],
-				'args'                => [
-					'enable_woocommerce_email_editor' => [
-						'type'              => 'boolean',
-						'required'          => true,
-						'sanitize_callback' => 'rest_sanitize_boolean',
-					],
-				],
-
-			]
-		);
 	}
 
 	/**
 	 * Get email settings.
 	 *
-	 * @return array
+	 * Builds the unified emails list directly from the
+	 * `newspack_email_configs` schema — no parallel registry, no join.
+	 * WooCommerce-source rows are filtered out at this layer; slice 2
+	 * removes that filter when the WC surface lands.
+	 *
+	 * @return array{
+	 *     newspack_emails: array<int, array{
+	 *         type:                string,
+	 *         category:            string,
+	 *         label:               string,
+	 *         description:         string,
+	 *         post_id:             int,
+	 *         edit_link:           string,
+	 *         subject:             string,
+	 *         from_name:           string,
+	 *         from_email:          string,
+	 *         reply_to_email:      string,
+	 *         status:              string,
+	 *         html_payload:        string,
+	 *         trigger_description: string,
+	 *         recipient:           'reader'|'admin',
+	 *         recommended:         bool,
+	 *         chip:                'auth-account'|'reader-revenue',
+	 *         source:              'newspack'|'woocommerce',
+	 *     }>,
+	 *     post_type: string,
+	 * }
 	 */
 	public static function api_get_email_settings(): array {
-		$settings = [];
-		if ( class_exists( 'WooCommerce' ) ) {
-			$settings['admin_url']                       = admin_url( 'admin.php?page=wc-settings&tab=email' );
-			$settings['enable_woocommerce_email_editor'] = 'yes' === WooCommerce_Emails::is_enabled();
+		$configs = Emails::get_email_configs();
+
+		// Slice 1 surfaces only Newspack-source emails. Slice 2 lifts this.
+		$configs = array_filter(
+			$configs,
+			fn( $config ) => ( $config['source'] ?? 'newspack' ) !== 'woocommerce'
+		);
+
+		// Without Reader Activation, the auth/account flows are unused —
+		// scope the visible set to reader-revenue configs only. Mirrors the
+		// legacy slice 1 behavior.
+		$configs = self::filter_configs_by_ra_state( Reader_Activation::is_enabled(), $configs );
+
+		// Resolve each newspack-source config to a Newspack post + serialized
+		// payload via the existing Emails::get_emails() pipeline. The
+		// serialized output now carries the four new schema fields per the
+		// commit 1 patch to Emails::serialize_email().
+		$types = array_keys( $configs );
+
+		// Guard against the empty-types case: Emails::get_emails() treats
+		// an empty $config_names as "no filter" and returns every registered
+		// email, which would bypass the WC-source and RA-state filters
+		// above. Return an empty list explicitly when there's nothing to
+		// resolve.
+		if ( empty( $types ) ) {
+			return [
+				'newspack_emails' => [],
+				'post_type'       => Emails::POST_TYPE,
+			];
 		}
-		return $settings;
+
+		$emails = Emails::get_emails( $types, false );
+
+		$newspack_emails = array_values( $emails );
+
+		// Single category-only sort: reader-revenue → reader-activation → other.
+		$category_order = [
+			'reader-revenue'    => 0,
+			'reader-activation' => 1,
+		];
+		// `usort` is not stable in PHP — same-category rows can reorder
+		// across requests without a tiebreaker. Use the config type as a
+		// deterministic secondary key so the API output is consistent.
+		usort(
+			$newspack_emails,
+			function ( $a, $b ) use ( $category_order ) {
+				$order_a = $category_order[ $a['category'] ?? '' ] ?? 2;
+				$order_b = $category_order[ $b['category'] ?? '' ] ?? 2;
+				if ( $order_a !== $order_b ) {
+					return $order_a - $order_b;
+				}
+				return strcmp( (string) ( $a['type'] ?? '' ), (string) ( $b['type'] ?? '' ) );
+			}
+		);
+
+		return [
+			'newspack_emails' => $newspack_emails,
+			'post_type'       => Emails::POST_TYPE,
+		];
 	}
 
 	/**
-	 * API callback to update woocommerce email settings.
+	 * Restrict configs to the set visible in the wizard given the current
+	 * Reader Activation state.
 	 *
-	 * @param WP_REST_Request $request Request object.
+	 * When RA is enabled, all configs are visible. When it's disabled, only
+	 * reader-revenue configs surface — the auth/account flows have no use
+	 * without RA. Membership is keyed off the config's `chip` field
+	 * (`'reader-revenue'`) rather than a hardcoded provider-specific
+	 * constant: any new reader-revenue provider that declares
+	 * `category: 'reader-revenue'` (and therefore inherits
+	 * `chip: 'reader-revenue'` via apply_config_defaults) automatically
+	 * surfaces in the RA-off view without needing to be added to a list
+	 * the section class knows about.
 	 *
-	 * @return WP_REST_Response Response.
+	 * Extracted from `api_get_email_settings()` so the gating is unit-testable
+	 * without toggling `Reader_Activation::is_enabled()` (which hard-returns
+	 * true in the test environment).
+	 *
+	 * @param bool  $ra_enabled Whether Reader Activation is enabled.
+	 * @param array $configs    Configs keyed by type.
+	 * @return array Configs filtered to the visible set for the given RA state.
 	 */
-	public static function api_update_email_settings( $request ) {
-		if ( $request->has_param( 'enable_woocommerce_email_editor' ) ) {
-			$enable = filter_var( $request->get_param( 'enable_woocommerce_email_editor' ), FILTER_VALIDATE_BOOLEAN );
-			WooCommerce_Emails::set_enabled( $enable );
+	public static function filter_configs_by_ra_state( bool $ra_enabled, array $configs ): array {
+		if ( $ra_enabled ) {
+			return $configs;
 		}
-		return rest_ensure_response( self::api_get_email_settings() );
+		return array_filter(
+			$configs,
+			fn( $config ) => 'reader-revenue' === ( $config['chip'] ?? '' )
+		);
 	}
 }

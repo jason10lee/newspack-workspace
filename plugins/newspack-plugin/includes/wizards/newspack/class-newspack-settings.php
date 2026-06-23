@@ -10,11 +10,8 @@ namespace Newspack\Wizards\Newspack;
 use Newspack\Emails;
 use Newspack\OAuth;
 use Newspack\Wizard;
-use Newspack\Reader_Activation;
-use Newspack\Reader_Revenue_Emails;
 use Newspack\Everlit_Configuration_Manager;
 use Newspack\Nextdoor;
-use Newspack\WooCommerce_Emails;
 use Newspack\Complianz;
 use function Newspack\google_site_kit_available;
 
@@ -84,12 +81,18 @@ class Newspack_Settings extends Wizard {
 				'label'    => __( 'Emails', 'newspack-plugin' ),
 				'sections' => [
 					'emails' => [
-						'dependencies'              => [
+						'dependencies' => [
 							'newspackNewsletters' => is_plugin_active( 'newspack-newsletters/newspack-newsletters.php' ),
 						],
-						'all'                       => Emails::get_emails( Reader_Activation::is_enabled() ? [] : array_values( Reader_Revenue_Emails::EMAIL_TYPES ), false ),
-						'postType'                  => Emails::POST_TYPE,
-						'isEmailEnhancementsActive' => WooCommerce_Emails::is_active(),
+						'postType'     => Emails::POST_TYPE,
+						// Intentionally NOT SSR-seeding the email list here.
+						// `api_get_email_settings()` → `Emails::get_emails()`
+						// lazily creates the Newspack email posts (via
+						// `wp_insert_post`) on first read. Seeding it on every
+						// Settings page load would create those posts even for
+						// publishers who never open the Emails tab. The Emails
+						// view fetches the list on mount instead, so creation is
+						// deferred until the tab is actually opened.
 					],
 				],
 			],
