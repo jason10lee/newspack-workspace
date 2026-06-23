@@ -117,15 +117,25 @@ class Theme_Json_Builder {
 			],
 		];
 
-		// Emit an email-safe button border-radius when the WC renderer is active.
+		// Emit email-safe button styles when the WC renderer is active.
 		// The WC email package drops CSS-var and rem values it cannot resolve,
-		// so we resolve the theme's button radius to a px literal here.
+		// so we resolve the theme's button radius and padding to px literals here.
 		if ( Feature_Flag::is_enabled() ) {
 			$styles['elements']['button'] = [
 				'border' => [
 					'radius' => self::resolve_button_border_radius(),
 				],
 			];
+
+			// Emit padding only when the active theme defines button padding.
+			// Classic themes (newspack-theme) define no button padding in theme.json,
+			// so we must not emit a padding key for them — leaving the render unchanged.
+			$padding = self::resolve_button_padding();
+			if ( ! empty( $padding ) ) {
+				$styles['elements']['button']['spacing'] = [
+					'padding' => $padding,
+				];
+			}
 		}
 
 		return [
@@ -167,39 +177,136 @@ class Theme_Json_Builder {
 			return Email_Defaults::DEFAULT_BUTTON_BORDER_RADIUS;
 		}
 
-		// Resolve a `var( --wp--custom--... )` reference via settings.custom.
-		if ( preg_match( '/^var\(\s*--wp--custom--([a-z0-9_-]+(?:--[a-z0-9_-]+)*)\s*\)$/i', $radius, $matches ) ) {
-			// Convert CSS-var segments to the PHP array path used in settings.custom.
-			// e.g. "--wp--custom--border--radius-medium" → segments ["border", "radius-medium"].
-			$segments = explode( '--', $matches[1] );
-			$custom   = $raw['settings']['custom'] ?? [];
-			foreach ( $segments as $segment ) {
-				if ( ! \is_array( $custom ) || ! \array_key_exists( $segment, $custom ) ) {
-					// Cannot resolve — fall back to default.
-					return Email_Defaults::DEFAULT_BUTTON_BORDER_RADIUS;
-				}
-				$custom = $custom[ $segment ];
+		$px = self::resolve_length_to_px( $radius, $raw );
+
+		if ( null === $px ) {
+			return Email_Defaults::DEFAULT_BUTTON_BORDER_RADIUS;
+		}
+
+		return $px;
+	}
+
+	/**
+	 * Resolve the active theme's button padding to email-safe px strings, keyed
+	 * by side (`top`, `right`, `bottom`, `left`).
+	 *
+	 * Returns an empty array when the theme defines no button padding (classic
+	 * theme scenario), so callers can skip emitting the key entirely.
+	 *
+	 * @return array<string,string> Map of side → px value for each resolved side.
+	 */
+	private static function resolve_button_padding(): array {
+		$merged = \WP_Theme_JSON_Resolver::get_merged_data();
+		return self::resolve_button_padding_from_raw( $merged->get_raw_data() );
+	}
+
+	/**
+	 * Resolve button padding sides from a raw theme.json data array.
+	 *
+	 * Reads `styles.elements.button.spacing.padding` and resolves each side
+	 * (`top`, `right`, `bottom`, `left`) to a px value via the shared length
+	 * resolver. Sides that cannot resolve to px are omitted. Returns an empty
+	 * array when no button padding is defined (theme defines nothing → no emit).
+	 *
+	 * @param array $raw Raw theme.json data array (from WP_Theme_JSON::get_raw_data()).
+	 * @return array<string,string> Map of side → px value for each resolved side.
+	 */
+	protected static function resolve_button_padding_from_raw( array $raw ): array {
+		$padding = $raw['styles']['elements']['button']['spacing']['padding'] ?? null;
+
+		if ( empty( $padding ) || ! \is_array( $padding ) ) {
+			return [];
+		}
+
+		$resolved = [];
+		foreach ( [ 'top', 'right', 'bottom', 'left' ] as $side ) {
+			$value = $padding[ $side ] ?? null;
+			if ( ! \is_string( $value ) || '' === $value ) {
+				continue;
 			}
-			if ( \is_string( $custom ) && '' !== $custom ) {
-				$radius = $custom;
+			$px = self::resolve_length_to_px( $value, $raw );
+			if ( null !== $px ) {
+				$resolved[ $side ] = $px;
+			}
+		}
+
+		return $resolved;
+	}
+
+	/**
+	 * Resolve a CSS length value to an email-safe px string.
+	 *
+	 * Handles:
+	 * - `var( --wp--custom--... )` → traverses `settings.custom` by the
+	 *   double-dash-delimited path segments.
+	 * - `var( --wp--preset--spacing--N )` → looks up the slug in
+	 *   `settings.spacing.spacingSizes` (theme.json preset array format).
+	 * - `rem` / `em` → converts to px (× 16, standard email base font size).
+	 * - Plain `px` → passes through unchanged.
+	 * - Anything else (percentages, vw, unresolvable vars, etc.) → returns null.
+	 *
+	 * @param string $value CSS length string to resolve (e.g. "var( --wp--custom--spacing--25 )").
+	 * @param array  $raw   Raw theme.json data (from WP_Theme_JSON::get_raw_data()).
+	 * @return string|null Resolved px string (e.g. "12px") or null if unresolvable.
+	 */
+	protected static function resolve_length_to_px( string $value, array $raw ): ?string {
+		$value = trim( $value );
+
+		// Resolve a `var( --wp--... )` reference.
+		if ( preg_match( '/^var\(\s*(--wp--[a-z0-9_-]+(?:--[a-z0-9_-]+)*)\s*\)$/i', $value, $matches ) ) {
+			$var_name = $matches[1]; // e.g. "--wp--custom--spacing--25".
+
+			// Preset spacing var: --wp--preset--spacing--<slug>.
+			if ( preg_match( '/^--wp--preset--spacing--([a-z0-9_-]+)$/i', $var_name, $preset_matches ) ) {
+				$slug       = $preset_matches[1];
+				$size_items = $raw['settings']['spacing']['spacingSizes'] ?? [];
+				foreach ( $size_items as $item ) {
+					if ( isset( $item['slug'] ) && (string) $item['slug'] === $slug ) {
+						$value = $item['size'];
+						break;
+					}
+				}
+				// If the slug wasn't in theme.json, fall back to our built-in scale.
+				if ( preg_match( '/^var\(/', $value ) ) {
+					$value = self::SPACING_SIZES[ $slug ] ?? null;
+					if ( null === $value ) {
+						return null;
+					}
+				}
+			} elseif ( preg_match( '/^--wp--custom--(.+)$/i', $var_name, $custom_matches ) ) {
+				// Custom var: --wp--custom--<path> where <path> uses -- as separator.
+				$segments = explode( '--', $custom_matches[1] );
+				$custom   = $raw['settings']['custom'] ?? [];
+				foreach ( $segments as $segment ) {
+					if ( ! \is_array( $custom ) || ! \array_key_exists( $segment, $custom ) ) {
+						return null;
+					}
+					$custom = $custom[ $segment ];
+				}
+				if ( \is_string( $custom ) && '' !== $custom ) {
+					$value = $custom;
+				} else {
+					return null;
+				}
 			} else {
-				return Email_Defaults::DEFAULT_BUTTON_BORDER_RADIUS;
+				// Unknown var type — cannot resolve.
+				return null;
 			}
 		}
 
 		// Convert rem/em to px (assume 1rem = 16px, standard for email clients).
-		if ( preg_match( '/^([\d.]+)r?em$/i', $radius, $m ) ) {
+		if ( preg_match( '/^([\d.]+)r?em$/i', $value, $m ) ) {
 			$px = (int) round( (float) $m[1] * 16 );
 			return $px . 'px';
 		}
 
-		// Final guard: only plain px values are email-safe. Anything else
-		// (percentages, vw, unresolvable vars, etc.) falls back to the default.
-		if ( ! preg_match( '/^\d+(?:\.\d+)?px$/', $radius ) ) {
-			return Email_Defaults::DEFAULT_BUTTON_BORDER_RADIUS;
+		// Plain px passes through unchanged.
+		if ( preg_match( '/^\d+(?:\.\d+)?px$/', $value ) ) {
+			return $value;
 		}
 
-		return $radius;
+		// Anything else (percentages, vw, unresolvable, etc.) is not email-safe.
+		return null;
 	}
 
 	/**
