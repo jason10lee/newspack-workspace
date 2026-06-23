@@ -193,6 +193,11 @@ class Controller {
 			return $account_response;
 		}
 
+		// Persist the country so subsequent calls (claim_page, articles) target the same region.
+		$settings            = Nextdoor::get_settings();
+		$settings['country'] = $country;
+		Nextdoor::update_settings( $settings );
+
 		return rest_ensure_response(
 			[
 				'login_url' => isset( $account_response['login_url'] ) ? $account_response['login_url'] : '',
