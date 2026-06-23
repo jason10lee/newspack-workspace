@@ -82,6 +82,42 @@ final class Conversion_Metric {
 	const CACHE_PREFIX = 'newspack_insights_tab3_v1:';
 
 	/**
+	 * Tab slug used as the Cache namespace for Section 5 snapshots.
+	 *
+	 * @var string
+	 */
+	const TAB_SLUG = 'conversion';
+
+	/**
+	 * Cache key parts for the combined cohort snapshot entry.
+	 *
+	 * @var string
+	 */
+	const SNAPSHOT_KEY = 'cohorts';
+
+	/**
+	 * Action Scheduler action name for a one-off cohort snapshot refresh
+	 * (triggered on cold-cache misses from the request path).
+	 *
+	 * @var string
+	 */
+	const COHORT_REFRESH_ACTION = 'newspack_insights_conversion_cohort_refresh';
+
+	/**
+	 * Action Scheduler action name for the weekly recurring cohort pre-warm.
+	 *
+	 * @var string
+	 */
+	const COHORT_REFRESH_WEEKLY_ACTION = 'newspack_insights_conversion_cohort_refresh_weekly';
+
+	/**
+	 * Action Scheduler group for all cohort-refresh jobs.
+	 *
+	 * @var string
+	 */
+	const COHORT_REFRESH_GROUP = 'newspack-insights';
+
+	/**
 	 * The three acquisition surfaces every source-attributed metric splits
 	 * by. Machine keys (not translated) — the React layer maps them to
 	 * display labels. Shared by the Section 3 PieCharts and the Section 4
@@ -1524,50 +1560,54 @@ final class Conversion_Metric {
 	}
 
 	/**
-	 * Registration → conversion cohort retention (5.1). Snapshot — ignores
-	 * the window. The reference line (15% at 6 months) is hardcoded per the
-	 * spec; Phase B `coming_soon` placeholder preserves the `reference_line`
-	 * key React reads unconditionally.
+	 * Registration → conversion cohort (5.1). Snapshot — ignores the window.
+	 * Reads the weekly pre-warmed snapshot via Cache::peek; on a cold cache it
+	 * schedules a one-off background refresh and returns the graceful
+	 * `coming_soon` envelope (never computes the expensive curve inline). The
+	 * `reference_line` key React reads unconditionally is always present.
 	 *
 	 * @param DateTimeInterface $start Window start (ignored — snapshot).
 	 * @param DateTimeInterface $end   Window end (ignored — snapshot).
-	 * @return array{state: string, cohorts: array, reference_line: array{value: float, label: string}}
+	 * @return array{state:string, cohorts:array, reference_line:array{value:float, label:string}}
 	 */
 	public function get_registration_to_conversion_cohort( DateTimeInterface $start, DateTimeInterface $end ): array {
 		unset( $start, $end );
+		if ( Cache::is_disabled() ) {
+			return $this->compute_registration_to_conversion_cohort();
+		}
+		$snapshot = Cache::peek( self::TAB_SLUG, Cache::SOURCE_SNAPSHOT, [ self::SNAPSHOT_KEY ] );
+		if ( null !== $snapshot && isset( $snapshot['payload']['registration_to_conversion_cohort'] ) ) {
+			return $snapshot['payload']['registration_to_conversion_cohort'];
+		}
+		self::schedule_cohort_refresh();
 		return array_merge(
 			$this->coming_soon_collection( 'cohorts' ),
-			[
-				'reference_line' => [
-					'value' => 0.15,
-					'label' => __( '15% at 6 months', 'newspack-plugin' ),
-				],
-			]
+			[ 'reference_line' => $this->registration_reference_line() ]
 		);
 	}
 
 	/**
-	 * Subscriber retention cohort (5.2). Snapshot — ignores the window.
-	 * Reference line (70% at 12 months) hardcoded per the spec.
-	 *
-	 * Local-only (Woo-only): does NOT belong in the BQ catalog. Phase B
-	 * `coming_soon` placeholder preserves the `reference_line` key React
-	 * reads unconditionally.
+	 * Subscriber retention cohort (5.2). Snapshot — ignores the window. Same
+	 * pre-warmed-snapshot read + cold-cache schedule-and-degrade contract as
+	 * {@see get_registration_to_conversion_cohort()}.
 	 *
 	 * @param DateTimeInterface $start Window start (ignored — snapshot).
 	 * @param DateTimeInterface $end   Window end (ignored — snapshot).
-	 * @return array{state: string, cohorts: array, reference_line: array{value: float, label: string}}
+	 * @return array{state:string, cohorts:array, reference_line:array{value:float, label:string}}
 	 */
 	public function get_subscriber_retention_cohort( DateTimeInterface $start, DateTimeInterface $end ): array {
 		unset( $start, $end );
+		if ( Cache::is_disabled() ) {
+			return $this->compute_subscriber_retention_cohort();
+		}
+		$snapshot = Cache::peek( self::TAB_SLUG, Cache::SOURCE_SNAPSHOT, [ self::SNAPSHOT_KEY ] );
+		if ( null !== $snapshot && isset( $snapshot['payload']['subscriber_retention_cohort'] ) ) {
+			return $snapshot['payload']['subscriber_retention_cohort'];
+		}
+		self::schedule_cohort_refresh();
 		return array_merge(
 			$this->coming_soon_collection( 'cohorts' ),
-			[
-				'reference_line' => [
-					'value' => 0.70,
-					'label' => __( '70% at 12 months', 'newspack-plugin' ),
-				],
-			]
+			[ 'reference_line' => $this->retention_reference_line() ]
 		);
 	}
 
@@ -1982,5 +2022,76 @@ final class Conversion_Metric {
 			],
 			[ 'reference_line' => $this->retention_reference_line() ]
 		);
+	}
+
+	// --- Section 5: Action Scheduler handlers and pre-warm scheduling -------
+
+	/**
+	 * Action Scheduler handler (one-off and weekly recurring): recompute both
+	 * cohort snapshots and write them to the snapshot cache. Constructs a
+	 * dependency-free metric (lazy storage), matching the REST controller.
+	 *
+	 * @return void
+	 */
+	public static function run_cohort_refresh(): void {
+		self::store_cohort_snapshot( new self() );
+	}
+
+	/**
+	 * Compute both cohorts from the given metric and write them to the snapshot
+	 * cache under one key. Split from run_cohort_refresh() so tests can inject a
+	 * metric with mocked storage-backed collaborators.
+	 *
+	 * @param self $metric Metric whose compute_* methods produce the payload.
+	 * @return void
+	 */
+	public static function store_cohort_snapshot( self $metric ): void {
+		Cache::refresh(
+			self::TAB_SLUG,
+			Cache::SOURCE_SNAPSHOT,
+			[ self::SNAPSHOT_KEY ],
+			static function () use ( $metric ) {
+				return [
+					'registration_to_conversion_cohort' => $metric->compute_registration_to_conversion_cohort(),
+					'subscriber_retention_cohort'       => $metric->compute_subscriber_retention_cohort(),
+				];
+			}
+		);
+	}
+
+	/**
+	 * Schedule a one-off background refresh of the cohort snapshot if Action
+	 * Scheduler is available and no such job is already queued. Called from the
+	 * request-path getters when the snapshot cache is cold, so it warms within
+	 * minutes instead of waiting for the weekly run.
+	 *
+	 * @return void
+	 */
+	private static function schedule_cohort_refresh(): void {
+		if ( ! function_exists( 'as_schedule_single_action' ) || ! function_exists( 'as_has_scheduled_action' ) ) {
+			return;
+		}
+		if ( as_has_scheduled_action( self::COHORT_REFRESH_ACTION, [], self::COHORT_REFRESH_GROUP ) ) {
+			return;
+		}
+		as_schedule_single_action( time(), self::COHORT_REFRESH_ACTION, [], self::COHORT_REFRESH_GROUP );
+	}
+
+	/**
+	 * Ensure a weekly recurring cohort pre-warm is scheduled (Monday 06:00 UTC).
+	 * No-op if Action Scheduler is unavailable or the recurring action already
+	 * exists. Hooked on `init` by the conversion section.
+	 *
+	 * @return void
+	 */
+	public static function maybe_schedule_cohort_prewarm(): void {
+		if ( ! function_exists( 'as_schedule_recurring_action' ) || ! function_exists( 'as_next_scheduled_action' ) ) {
+			return;
+		}
+		if ( false !== as_next_scheduled_action( self::COHORT_REFRESH_WEEKLY_ACTION, [], self::COHORT_REFRESH_GROUP ) ) {
+			return;
+		}
+		$next = ( new \DateTimeImmutable( 'next monday 06:00', new \DateTimeZone( 'UTC' ) ) )->getTimestamp();
+		as_schedule_recurring_action( $next, WEEK_IN_SECONDS, self::COHORT_REFRESH_WEEKLY_ACTION, [], self::COHORT_REFRESH_GROUP );
 	}
 }

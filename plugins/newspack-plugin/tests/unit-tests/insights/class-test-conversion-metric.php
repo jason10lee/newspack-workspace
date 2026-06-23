@@ -2974,4 +2974,86 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( [], $result['cohorts'] );
 		$this->assertSame( 0.70, $result['reference_line']['value'] );
 	}
+
+	// --- Task 6: Snapshot getters + store_cohort_snapshot -------------------
+
+	/**
+	 * Getter returns the cached snapshot slice when the snapshot is warm.
+	 */
+	public function test_registration_cohort_getter_reads_warm_snapshot() {
+		$payload = [
+			'registration_to_conversion_cohort' => [
+				'state'          => 'populated',
+				'cohorts'        => [
+					[
+						'label'  => '2026-01',
+						'points' => [
+							[
+								'period' => 0,
+								'value'  => 0.0,
+							],
+						],
+					],
+				],
+				'reference_line' => [
+					'value' => 0.15,
+					'label' => 'x',
+				],
+			],
+			'subscriber_retention_cohort'       => [
+				'state'          => 'empty',
+				'cohorts'        => [],
+				'reference_line' => [
+					'value' => 0.70,
+					'label' => 'y',
+				],
+			],
+		];
+		\Newspack\Insights\Cache::refresh( 'conversion', \Newspack\Insights\Cache::SOURCE_SNAPSHOT, [ 'cohorts' ], fn() => $payload );
+
+		[ $start, $end ] = $this->window();
+		$result          = $this->metric->get_registration_to_conversion_cohort( $start, $end );
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( '2026-01', $result['cohorts'][0]['label'] );
+	}
+
+	/**
+	 * Cold cache → coming_soon envelope with reference_line preserved (no throw).
+	 */
+	public function test_registration_cohort_getter_cold_cache_coming_soon() {
+		[ $start, $end ] = $this->window();
+		$result          = $this->metric->get_registration_to_conversion_cohort( $start, $end );
+		$this->assertSame( 'coming_soon', $result['state'] );
+		$this->assertSame( [], $result['cohorts'] );
+		$this->assertSame( 0.15, $result['reference_line']['value'] );
+	}
+
+	/**
+	 * Store_cohort_snapshot writes both cohort slices to the snapshot cache.
+	 */
+	public function test_store_cohort_snapshot_writes_both_slices() {
+		$subs_metric = $this->createMock( Subscribers_Metric::class );
+		$subs_metric->method( 'get_reader_registration_dates' )->willReturn( [] );
+		$subs_metric->method( 'get_first_subscription_order_dates' )->willReturn( [] );
+		$subs_metric->method( 'get_new_subscriber_cohort_intervals' )->willReturn( [] );
+		$donors_metric = $this->createMock( Donors_Metric::class );
+		$donors_metric->method( 'get_first_donation_order_dates' )->willReturn( [] );
+
+		$metric = new Conversion_Metric( null, null, $subs_metric, $donors_metric );
+		Conversion_Metric::store_cohort_snapshot( $metric );
+
+		$peeked = \Newspack\Insights\Cache::peek( 'conversion', \Newspack\Insights\Cache::SOURCE_SNAPSHOT, [ 'cohorts' ] );
+		$this->assertIsArray( $peeked );
+		$this->assertArrayHasKey( 'registration_to_conversion_cohort', $peeked['payload'] );
+		$this->assertArrayHasKey( 'subscriber_retention_cohort', $peeked['payload'] );
+		$this->assertSame( 'empty', $peeked['payload']['registration_to_conversion_cohort']['state'] );
+	}
+
+	/**
+	 * Clear the cohort snapshot transient between tests.
+	 */
+	public function tear_down() {
+		delete_transient( 'newspack_insights_conversion_' . md5( (string) wp_json_encode( [ 'cohorts' ] ) ) );
+		parent::tear_down();
+	}
 }
