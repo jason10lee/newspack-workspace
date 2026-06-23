@@ -59,6 +59,7 @@ class Insights_Section_Subscribers {
 	 */
 	private static function load_dependencies(): void {
 		$base = NEWSPACK_ABSPATH . 'includes/wizards/insights/';
+		include_once $base . 'storage/trait-reader-population.php';
 		include_once $base . 'storage/class-storage-interface.php';
 		include_once $base . 'storage/class-storage-detector.php';
 		include_once $base . 'storage/class-hpos-storage.php';

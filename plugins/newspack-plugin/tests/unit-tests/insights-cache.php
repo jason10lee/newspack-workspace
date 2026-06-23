@@ -431,6 +431,107 @@ class Newspack_Test_Insights_Cache extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Peek returns null when nothing is cached.
+	 */
+	public function test_snapshot_peek_returns_null_on_miss(): void {
+		$this->assertNull( Cache::peek( 'conversion', Cache::SOURCE_SNAPSHOT, [ 'cohorts' ] ) );
+	}
+
+	/**
+	 * Refresh with SOURCE_SNAPSHOT writes a snapshot peek can read back.
+	 */
+	public function test_snapshot_refresh_writes_then_peek_reads(): void {
+		$payload = [
+			'a' => 1,
+			'b' => 2,
+		];
+		$env     = Cache::refresh( 'conversion', Cache::SOURCE_SNAPSHOT, [ 'cohorts' ], fn() => $payload );
+
+		$this->assertSame( $payload, $env['payload'] );
+		$this->assertSame( Cache::SOURCE_SNAPSHOT, $env['source'] );
+
+		$peeked = Cache::peek( 'conversion', Cache::SOURCE_SNAPSHOT, [ 'cohorts' ] );
+		$this->assertIsArray( $peeked );
+		$this->assertSame( $payload, $peeked['payload'] );
+		$this->assertSame( Cache::SOURCE_SNAPSHOT, $peeked['source'] );
+	}
+
+	/**
+	 * Peek returns null when the cached envelope's source does not match the
+	 * requested source (source-mismatch guard added in fix 3).
+	 */
+	public function test_peek_returns_null_on_source_mismatch(): void {
+		$payload = [ 'a' => 1 ];
+		Cache::refresh( 'conversion', Cache::SOURCE_SNAPSHOT, [ 'cohorts' ], fn() => $payload );
+
+		// Correct source must return the envelope.
+		$hit = Cache::peek( 'conversion', Cache::SOURCE_SNAPSHOT, [ 'cohorts' ] );
+		$this->assertIsArray( $hit );
+		$this->assertSame( $payload, $hit['payload'] );
+
+		// Wrong source must return null even though the transient exists.
+		$miss = Cache::peek( 'conversion', Cache::SOURCE_EXTERNAL, [ 'cohorts' ] );
+		$this->assertNull( $miss, 'Source mismatch must return null.' );
+	}
+
+	/**
+	 * Snapshot keys are kept out of the per-tab index, so purge() leaves them.
+	 */
+	public function test_snapshot_survives_purge(): void {
+		Cache::refresh( 'conversion', Cache::SOURCE_SNAPSHOT, [ 'cohorts' ], fn() => [ 'x' => 1 ] );
+		Cache::purge( 'conversion' );
+		$peeked = Cache::peek( 'conversion', Cache::SOURCE_SNAPSHOT, [ 'cohorts' ] );
+		$this->assertIsArray( $peeked );
+		$this->assertSame( [ 'x' => 1 ], $peeked['payload'] );
+	}
+
+	/**
+	 * Snapshot written via store() is also excluded from the index, so purge() leaves it.
+	 */
+	public function test_snapshot_store_survives_purge(): void {
+		Cache::store( 'conversion', Cache::SOURCE_SNAPSHOT, [ 'cohorts' ], fn() => [ 'y' => 2 ] );
+		Cache::purge( 'conversion' );
+		$peeked = Cache::peek( 'conversion', Cache::SOURCE_SNAPSHOT, [ 'cohorts' ] );
+		$this->assertIsArray( $peeked );
+		$this->assertSame( [ 'y' => 2 ], $peeked['payload'] );
+	}
+
+	/**
+	 * Snapshot source uses 9-day TTL.
+	 */
+	public function test_snapshot_source_uses_9day_ttl(): void {
+		Cache::refresh(
+			'conversion',
+			Cache::SOURCE_SNAPSHOT,
+			[ 'cohorts' ],
+			function () {
+				return [ 'value' => 1 ];
+			}
+		);
+
+		$key       = self::transient_key_for_test( 'conversion', [ 'cohorts' ] );
+		$timeout   = get_option( '_transient_timeout_' . $key );
+		$remaining = $timeout - time();
+
+		$this->assertGreaterThan( 8 * DAY_IN_SECONDS, $remaining, 'Snapshot TTL should be ~9 days.' );
+		$this->assertLessThanOrEqual( Cache::TTL_SNAPSHOT, $remaining );
+	}
+
+	/**
+	 * Peek returns null when caching is disabled.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_snapshot_peek_null_when_disabled(): void {
+		Cache::refresh( 'conversion', Cache::SOURCE_SNAPSHOT, [ 'cohorts' ], fn() => [ 'x' => 1 ] );
+		if ( ! defined( 'NEWSPACK_INSIGHTS_CACHE_DISABLED' ) ) {
+			define( 'NEWSPACK_INSIGHTS_CACHE_DISABLED', true );
+		}
+		$this->assertNull( Cache::peek( 'conversion', Cache::SOURCE_SNAPSHOT, [ 'cohorts' ] ) );
+	}
+
+	/**
 	 * Mirror the production transient-key formula so tests can reach into storage.
 	 *
 	 * @param string $tab Tab slug.

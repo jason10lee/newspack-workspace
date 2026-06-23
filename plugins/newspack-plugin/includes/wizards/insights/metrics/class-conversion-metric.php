@@ -82,6 +82,42 @@ final class Conversion_Metric {
 	const CACHE_PREFIX = 'newspack_insights_tab3_v1:';
 
 	/**
+	 * Tab slug used as the Cache namespace for Section 5 snapshots.
+	 *
+	 * @var string
+	 */
+	const TAB_SLUG = 'conversion';
+
+	/**
+	 * Cache key parts for the combined cohort snapshot entry.
+	 *
+	 * @var string
+	 */
+	const SNAPSHOT_KEY = 'cohorts';
+
+	/**
+	 * Action Scheduler action name for a one-off cohort snapshot refresh
+	 * (triggered on cold-cache misses from the request path).
+	 *
+	 * @var string
+	 */
+	const COHORT_REFRESH_ACTION = 'newspack_insights_conversion_cohort_refresh';
+
+	/**
+	 * Action Scheduler action name for the weekly recurring cohort pre-warm.
+	 *
+	 * @var string
+	 */
+	const COHORT_REFRESH_WEEKLY_ACTION = 'newspack_insights_conversion_cohort_refresh_weekly';
+
+	/**
+	 * Action Scheduler group for all cohort-refresh jobs.
+	 *
+	 * @var string
+	 */
+	const COHORT_REFRESH_GROUP = 'newspack-insights';
+
+	/**
 	 * The three acquisition surfaces every source-attributed metric splits
 	 * by. Machine keys (not translated) — the React layer maps them to
 	 * display labels. Shared by the Section 3 PieCharts and the Section 4
@@ -231,6 +267,13 @@ final class Conversion_Metric {
 	 * @var int
 	 */
 	const MIN_COHORT_FOR_SUB_TO_DONOR = 50;
+
+	/**
+	 * Maximum months-since offset rendered on a cohort retention series (5.1/5.2).
+	 *
+	 * @var int
+	 */
+	const COHORT_MAX_MONTHS = 12;
 
 	/**
 	 * Constructor. Optionally inject collaborators (used in tests).
@@ -1407,50 +1450,164 @@ final class Conversion_Metric {
 	// The $start/$end params are accepted for signature parity and ignored.
 
 	/**
-	 * Registration → conversion cohort retention (5.1). Snapshot — ignores
-	 * the window. The reference line (15% at 6 months) is hardcoded per the
-	 * spec; Phase B `coming_soon` placeholder preserves the `reference_line`
-	 * key React reads unconditionally.
+	 * Calendar-month index for cohort bucketing: year*12 + (month-1). The
+	 * difference of two indices is the whole-calendar-months between them.
 	 *
-	 * @param DateTimeInterface $start Window start (ignored — snapshot).
-	 * @param DateTimeInterface $end   Window end (ignored — snapshot).
-	 * @return array{state: string, cohorts: array, reference_line: array{value: float, label: string}}
+	 * @param \DateTimeInterface $d Date.
+	 * @return int
 	 */
-	public function get_registration_to_conversion_cohort( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return array_merge(
-			$this->coming_soon_collection( 'cohorts' ),
-			[
-				'reference_line' => [
-					'value' => 0.15,
-					'label' => __( '15% at 6 months', 'newspack-plugin' ),
+	private function month_index( \DateTimeInterface $d ): int {
+		return ( (int) $d->format( 'Y' ) ) * 12 + ( (int) $d->format( 'n' ) - 1 );
+	}
+
+	/**
+	 * 5.1 reference line (hardcoded per spec): 15% conversion at 6 months.
+	 *
+	 * @return array{value: float, label: string}
+	 */
+	private function registration_reference_line(): array {
+		return [
+			'value' => 0.15,
+			'label' => __( '15% at 6 months', 'newspack-plugin' ),
+		];
+	}
+
+	/**
+	 * Compute the 5.1 registration → conversion cohort retention curve (the
+	 * expensive snapshot work; called by the weekly/one-off pre-warm handler,
+	 * never on the request hot path). Cohort = readers grouped by
+	 * `user_registered` month (trailing 365 days). Conversion = the earlier of
+	 * the reader's first subscription or first donation order. For each cohort
+	 * and each months-since offset N (0..age, capped 12), the value is the
+	 * CUMULATIVE fraction of the cohort converted by month N.
+	 *
+	 * @return array{state:string, cohorts:array, reference_line:array{value:float, label:string}}
+	 */
+	public function compute_registration_to_conversion_cohort(): array {
+		$readers = $this->subscribers_metric->get_reader_registration_dates();
+		if ( empty( $readers ) ) {
+			return array_merge(
+				[
+					'state'   => 'empty',
+					'cohorts' => [],
 				],
-			]
+				[ 'reference_line' => $this->registration_reference_line() ]
+			);
+		}
+
+		$ids  = array_keys( $readers );
+		$subs = $this->subscribers_metric->get_first_subscription_order_dates( $ids );
+		$dons = $this->donors_metric->get_first_donation_order_dates( $ids );
+
+		$now_index = $this->month_index( new \DateTimeImmutable( 'now', new \DateTimeZone( 'UTC' ) ) );
+
+		// Per-cohort tallies: denominator (cohort size) and a histogram of
+		// months_since at first conversion (only for converters).
+		$denominator   = []; // cohort_index => reader count.
+		$converted_at  = []; // cohort_index => [ months_since => converter count ].
+		$cohort_labels = []; // cohort_index => 'YYYY-MM'.
+		foreach ( $readers as $id => $reg ) {
+			$cohort_index                   = $this->month_index( $reg );
+			$cohort_labels[ $cohort_index ] = $reg->format( 'Y-m' );
+			$denominator[ $cohort_index ]   = ( $denominator[ $cohort_index ] ?? 0 ) + 1;
+
+			$sub  = $subs[ $id ] ?? null;
+			$don  = $dons[ $id ] ?? null;
+			$conv = null;
+			if ( $sub && $don ) {
+				$conv = $sub <= $don ? $sub : $don;
+			} else {
+				$conv = $sub ?? $don;
+			}
+			if ( null === $conv ) {
+				continue;
+			}
+			$months_since = $this->month_index( $conv ) - $cohort_index;
+			if ( $months_since < 0 ) {
+				continue;
+			}
+			$months_since = min( $months_since, self::COHORT_MAX_MONTHS );
+			$converted_at[ $cohort_index ][ $months_since ] = ( $converted_at[ $cohort_index ][ $months_since ] ?? 0 ) + 1;
+		}
+
+		ksort( $denominator );
+		$cohorts = [];
+		foreach ( $denominator as $cohort_index => $size ) {
+			$age     = min( self::COHORT_MAX_MONTHS, $now_index - $cohort_index );
+			$age     = max( 0, $age );
+			$points  = [];
+			$running = 0;
+			for ( $n = 0; $n <= $age; $n++ ) {
+				$running += $converted_at[ $cohort_index ][ $n ] ?? 0;
+				$points[] = [
+					'period' => $n,
+					'value'  => round( $running / $size, 4 ),
+				];
+			}
+			$cohorts[] = [
+				'label'  => $cohort_labels[ $cohort_index ],
+				'points' => $points,
+			];
+		}
+
+		return array_merge(
+			[
+				'state'   => empty( $cohorts ) ? 'empty' : 'populated',
+				'cohorts' => $cohorts,
+			],
+			[ 'reference_line' => $this->registration_reference_line() ]
 		);
 	}
 
 	/**
-	 * Subscriber retention cohort (5.2). Snapshot — ignores the window.
-	 * Reference line (70% at 12 months) hardcoded per the spec.
-	 *
-	 * Local-only (Woo-only): does NOT belong in the BQ catalog. Phase B
-	 * `coming_soon` placeholder preserves the `reference_line` key React
-	 * reads unconditionally.
+	 * Registration → conversion cohort (5.1). Snapshot — ignores the window.
+	 * Reads the weekly pre-warmed snapshot via Cache::peek; on a cold cache it
+	 * schedules a one-off background refresh and returns the graceful
+	 * `coming_soon` envelope (never computes the expensive curve inline). The
+	 * `reference_line` key React reads unconditionally is always present.
 	 *
 	 * @param DateTimeInterface $start Window start (ignored — snapshot).
 	 * @param DateTimeInterface $end   Window end (ignored — snapshot).
-	 * @return array{state: string, cohorts: array, reference_line: array{value: float, label: string}}
+	 * @return array{state:string, cohorts:array, reference_line:array{value:float, label:string}}
+	 */
+	public function get_registration_to_conversion_cohort( DateTimeInterface $start, DateTimeInterface $end ): array {
+		unset( $start, $end );
+		if ( Cache::is_disabled() ) {
+			return $this->compute_registration_to_conversion_cohort();
+		}
+		$snapshot = Cache::peek( self::TAB_SLUG, Cache::SOURCE_SNAPSHOT, [ self::SNAPSHOT_KEY ] );
+		if ( null !== $snapshot && isset( $snapshot['payload']['registration_to_conversion_cohort'] ) ) {
+			return $snapshot['payload']['registration_to_conversion_cohort'];
+		}
+		self::schedule_cohort_refresh();
+		return array_merge(
+			$this->coming_soon_collection( 'cohorts' ),
+			[ 'reference_line' => $this->registration_reference_line() ]
+		);
+	}
+
+	/**
+	 * Subscriber retention cohort (5.2). Snapshot — ignores the window. Same
+	 * pre-warmed-snapshot read + cold-cache schedule-and-degrade contract as
+	 * {@see get_registration_to_conversion_cohort()}.
+	 *
+	 * @param DateTimeInterface $start Window start (ignored — snapshot).
+	 * @param DateTimeInterface $end   Window end (ignored — snapshot).
+	 * @return array{state:string, cohorts:array, reference_line:array{value:float, label:string}}
 	 */
 	public function get_subscriber_retention_cohort( DateTimeInterface $start, DateTimeInterface $end ): array {
 		unset( $start, $end );
+		if ( Cache::is_disabled() ) {
+			return $this->compute_subscriber_retention_cohort();
+		}
+		$snapshot = Cache::peek( self::TAB_SLUG, Cache::SOURCE_SNAPSHOT, [ self::SNAPSHOT_KEY ] );
+		if ( null !== $snapshot && isset( $snapshot['payload']['subscriber_retention_cohort'] ) ) {
+			return $snapshot['payload']['subscriber_retention_cohort'];
+		}
+		self::schedule_cohort_refresh();
 		return array_merge(
 			$this->coming_soon_collection( 'cohorts' ),
-			[
-				'reference_line' => [
-					'value' => 0.70,
-					'label' => __( '70% at 12 months', 'newspack-plugin' ),
-				],
-			]
+			[ 'reference_line' => $this->retention_reference_line() ]
 		);
 	}
 
@@ -1748,5 +1905,233 @@ final class Conversion_Metric {
 			'rows'                => $table_rows,
 			'threshold_pageviews' => 100,
 		];
+	}
+
+	// --- Section 5: Cohorts (5.2 retention) --------------------------------
+
+	/**
+	 * 5.2 reference line (hardcoded per spec): 70% retention at 12 months.
+	 *
+	 * @return array{value: float, label: string}
+	 */
+	private function retention_reference_line(): array {
+		return [
+			'value' => 0.70,
+			'label' => __( '70% at 12 months', 'newspack-plugin' ),
+		];
+	}
+
+	/**
+	 * Compute the 5.2 subscriber retention cohort curve (expensive snapshot
+	 * work; called by the pre-warm handler, never on the request hot path).
+	 * Cohort = customers grouped by their first non-donation subscription month
+	 * (trailing 365 days). For offset N (0..age, capped 12), the value is the
+	 * fraction of the cohort with ANY subscription active at their own
+	 * (first_start + N months): start <= T AND not cancelled/ended before T.
+	 *
+	 * @return array{state:string, cohorts:array, reference_line:array{value:float, label:string}}
+	 */
+	public function compute_subscriber_retention_cohort(): array {
+		$rows = $this->subscribers_metric->get_new_subscriber_cohort_intervals();
+		if ( empty( $rows ) ) {
+			return array_merge(
+				[
+					'state'   => 'empty',
+					'cohorts' => [],
+				],
+				[ 'reference_line' => $this->retention_reference_line() ]
+			);
+		}
+
+		$utc = new \DateTimeZone( 'UTC' );
+
+		// Group intervals by customer. Each interval: start_ts and nullable terminus_ts.
+		$by_customer = [];
+		foreach ( $rows as $row ) {
+			$cid = (int) $row['customer_id'];
+			if ( empty( $row['start'] ) ) {
+				continue;
+			}
+			$start_ts = ( new \DateTimeImmutable( $row['start'], $utc ) )->getTimestamp();
+
+			$terminus_ts = null;
+			foreach ( [ $row['cancelled'] ?? null, $row['end'] ?? null ] as $raw ) {
+				if ( null === $raw || '' === $raw || '0' === $raw ) {
+					continue;
+				}
+				$ts = ( new \DateTimeImmutable( $raw, $utc ) )->getTimestamp();
+				if ( null === $terminus_ts || $ts < $terminus_ts ) {
+					$terminus_ts = $ts;
+				}
+			}
+			$by_customer[ $cid ][] = [
+				'start'    => $start_ts,
+				'terminus' => $terminus_ts,
+			];
+		}
+
+		$now_index = $this->month_index( new \DateTimeImmutable( 'now', $utc ) );
+
+		// Per cohort (by first-start month): the set of customers and, for each
+		// offset, the count still active.
+		$cohort_members = []; // cohort_index => [ customer_id => first_start_ts ].
+		$cohort_labels  = [];
+		foreach ( $by_customer as $cid => $intervals ) {
+			$first_start  = min( array_column( $intervals, 'start' ) );
+			$first_dt     = ( new \DateTimeImmutable( '@' . $first_start ) )->setTimezone( $utc );
+			$cohort_index = $this->month_index( $first_dt );
+			$cohort_labels[ $cohort_index ]        = $first_dt->format( 'Y-m' );
+			$cohort_members[ $cohort_index ][ $cid ] = $first_start;
+		}
+
+		ksort( $cohort_members );
+		$cohorts = [];
+		foreach ( $cohort_members as $cohort_index => $members ) {
+			$size   = count( $members );
+			$age    = max( 0, min( self::COHORT_MAX_MONTHS, $now_index - $cohort_index ) );
+			$points = [];
+			for ( $n = 0; $n <= $age; $n++ ) {
+				$active = 0;
+				foreach ( $members as $cid => $first_start ) {
+					$t = $this->add_months_clamped(
+						( new \DateTimeImmutable( '@' . $first_start ) )->setTimezone( $utc ),
+						$n
+					)->getTimestamp();
+					foreach ( $by_customer[ $cid ] as $interval ) {
+						if ( $interval['start'] <= $t && ( null === $interval['terminus'] || $interval['terminus'] > $t ) ) {
+							$active++;
+							break;
+						}
+					}
+				}
+				$points[] = [
+					'period' => $n,
+					'value'  => round( $active / $size, 4 ),
+				];
+			}
+			$cohorts[] = [
+				'label'  => $cohort_labels[ $cohort_index ],
+				'points' => $points,
+			];
+		}
+
+		return array_merge(
+			[
+				'state'   => empty( $cohorts ) ? 'empty' : 'populated',
+				'cohorts' => $cohorts,
+			],
+			[ 'reference_line' => $this->retention_reference_line() ]
+		);
+	}
+
+	/**
+	 * Add N months to a DateTimeImmutable, clamping end-of-month overflow.
+	 *
+	 * PHP's `modify('+N months')` overflows end-of-month dates into the next month
+	 * (e.g. Jan 31 + 1 month → Mar 3). For retention cohorts this shifts the
+	 * comparison instant T, flipping the strict `terminus > T` boundary for
+	 * end-of-month subscription starts. This helper clamps the result back to
+	 * the last day of the target month when overflow occurs, while preserving the
+	 * original time-of-day (e.g. Jan 31 +1mo → Feb 28/29 same time, not Mar 3).
+	 * All date math is performed in the timezone of $base.
+	 *
+	 * @param \DateTimeImmutable $base The base datetime (must be in the desired timezone).
+	 * @param int                $n    Number of months to add (non-negative).
+	 * @return \DateTimeImmutable
+	 */
+	private function add_months_clamped( \DateTimeImmutable $base, int $n ): \DateTimeImmutable {
+		$t = $base->modify( '+' . $n . ' months' );
+		// If the day-of-month changed, the month overflowed — clamp to last day of previous month.
+		if ( $t->format( 'j' ) !== $base->format( 'j' ) ) {
+			$t = $t->modify( 'last day of previous month' );
+		}
+		return $t;
+	}
+
+	// --- Section 5: Action Scheduler handlers and pre-warm scheduling -------
+
+	/**
+	 * Action Scheduler handler (one-off and weekly recurring): recompute both
+	 * cohort snapshots and write them to the snapshot cache. Constructs a
+	 * dependency-free metric (lazy storage), matching the REST controller.
+	 *
+	 * @return void
+	 */
+	public static function run_cohort_refresh(): void {
+		self::store_cohort_snapshot( new self() );
+	}
+
+	/**
+	 * Compute both cohorts from the given metric and write them to the snapshot
+	 * cache under one key. Split from run_cohort_refresh() so tests can inject a
+	 * metric with mocked storage-backed collaborators.
+	 *
+	 * @param self $metric Metric whose compute_* methods produce the payload.
+	 * @return void
+	 */
+	public static function store_cohort_snapshot( self $metric ): void {
+		Cache::refresh(
+			self::TAB_SLUG,
+			Cache::SOURCE_SNAPSHOT,
+			[ self::SNAPSHOT_KEY ],
+			static function () use ( $metric ) {
+				return [
+					'registration_to_conversion_cohort' => $metric->compute_registration_to_conversion_cohort(),
+					'subscriber_retention_cohort'       => $metric->compute_subscriber_retention_cohort(),
+				];
+			}
+		);
+	}
+
+	/**
+	 * Schedule a one-off background refresh of the cohort snapshot if Action
+	 * Scheduler is available and no such job is already queued. Called from the
+	 * request-path getters when the snapshot cache is cold, so it warms within
+	 * minutes instead of waiting for the weekly run.
+	 *
+	 * @return void
+	 */
+	private static function schedule_cohort_refresh(): void {
+		if ( ! function_exists( 'as_schedule_single_action' ) || ! function_exists( 'as_has_scheduled_action' ) ) {
+			return;
+		}
+		if ( as_has_scheduled_action( self::COHORT_REFRESH_ACTION, [], self::COHORT_REFRESH_GROUP ) ) {
+			return;
+		}
+		as_schedule_single_action( time(), self::COHORT_REFRESH_ACTION, [], self::COHORT_REFRESH_GROUP );
+	}
+
+	/**
+	 * Timestamp of the next weekly pre-warm slot: this week's Monday 06:00 UTC,
+	 * or next week's if that instant has already passed. Computed relative to
+	 * $now so it never skips the upcoming Monday when called early on a Monday.
+	 *
+	 * @param \DateTimeImmutable $now Reference time (UTC).
+	 * @return int Unix timestamp.
+	 */
+	public static function next_weekly_prewarm_timestamp( \DateTimeImmutable $now ): int {
+		$monday = $now->modify( 'monday this week' )->setTime( 6, 0 );
+		if ( $monday <= $now ) {
+			$monday = $monday->modify( '+1 week' );
+		}
+		return $monday->getTimestamp();
+	}
+
+	/**
+	 * Ensure a weekly recurring cohort pre-warm is scheduled (Monday 06:00 UTC).
+	 * No-op if Action Scheduler is unavailable or the recurring action already
+	 * exists. Hooked on `init` by the conversion section.
+	 *
+	 * @return void
+	 */
+	public static function maybe_schedule_cohort_prewarm(): void {
+		if ( ! function_exists( 'as_schedule_recurring_action' ) || ! function_exists( 'as_next_scheduled_action' ) ) {
+			return;
+		}
+		if ( false !== as_next_scheduled_action( self::COHORT_REFRESH_WEEKLY_ACTION, [], self::COHORT_REFRESH_GROUP ) ) {
+			return;
+		}
+		$next = self::next_weekly_prewarm_timestamp( new \DateTimeImmutable( 'now', new \DateTimeZone( 'UTC' ) ) );
+		as_schedule_recurring_action( $next, WEEK_IN_SECONDS, self::COHORT_REFRESH_WEEKLY_ACTION, [], self::COHORT_REFRESH_GROUP );
 	}
 }

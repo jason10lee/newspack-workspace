@@ -49,6 +49,8 @@ use Newspack\Logger;
  */
 class Legacy_Storage implements Storage_Interface {
 
+	use Reader_Population_Trait;
+
 	/**
 	 * Donation product IDs to exclude from non-donation metric queries.
 	 *
@@ -1435,5 +1437,81 @@ class Legacy_Storage implements Storage_Interface {
 			];
 		}
 		return $out;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @return array<int, array{customer_id:int, start:string, cancelled:?string, end:?string}>
+	 */
+	public function get_new_subscriber_cohort_intervals(): array {
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+
+		$cutoff = $this->fmt( ( new \DateTimeImmutable( 'now', new \DateTimeZone( 'UTC' ) ) )->modify( '-365 days' ) );
+		// Upper bound excludes subscriptions with a future _schedule_start (scheduled/pending).
+		$now = gmdate( 'Y-m-d H:i:s', ( new \DateTimeImmutable( 'now', new \DateTimeZone( 'UTC' ) ) )->getTimestamp() );
+
+		// Legacy CPT equivalent of HPOS_Storage::get_new_subscriber_cohort_intervals().
+		// _customer_user is cast to UNSIGNED (stored as a string) to align with the
+		// other list-scoped legacy queries.
+		$sql = $wpdb->prepare(
+			"SELECT CAST(cust.meta_value AS UNSIGNED) AS customer_id,
+				sm.meta_value AS sched_start,
+				cm.meta_value AS sched_cancelled,
+				em.meta_value AS sched_end
+			FROM {$prefix}posts p
+			JOIN {$prefix}postmeta cust
+				ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
+			JOIN {$prefix}postmeta sm
+				ON sm.post_id = p.ID AND sm.meta_key = '_schedule_start'
+			LEFT JOIN {$prefix}postmeta cm
+				ON cm.post_id = p.ID AND cm.meta_key = '_schedule_cancelled'
+			LEFT JOIN {$prefix}postmeta em
+				ON em.post_id = p.ID AND em.meta_key = '_schedule_end'
+			JOIN {$prefix}woocommerce_order_items oi
+				ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
+			JOIN {$prefix}woocommerce_order_itemmeta oim
+				ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+			WHERE p.post_type = 'shop_subscription'
+			  AND CAST(cust.meta_value AS UNSIGNED) > 0 -- exclude guest subscriptions (mirrors get_new_subscriber_records_in_window)
+			  AND oim.meta_value NOT IN ($donations)
+			  AND sm.meta_value != ''
+			  AND CAST(cust.meta_value AS UNSIGNED) IN (
+				SELECT cohort.customer_id FROM (
+					SELECT CAST(cust2.meta_value AS UNSIGNED) AS customer_id, MIN(sm2.meta_value) AS first_start
+					FROM {$prefix}posts p2
+					JOIN {$prefix}postmeta cust2
+						ON cust2.post_id = p2.ID AND cust2.meta_key = '_customer_user'
+					JOIN {$prefix}postmeta sm2
+						ON sm2.post_id = p2.ID AND sm2.meta_key = '_schedule_start'
+					JOIN {$prefix}woocommerce_order_items oi2
+						ON oi2.order_id = p2.ID AND oi2.order_item_type = 'line_item'
+					JOIN {$prefix}woocommerce_order_itemmeta oim2
+						ON oim2.order_item_id = oi2.order_item_id AND oim2.meta_key = '_product_id'
+					WHERE p2.post_type = 'shop_subscription'
+					  AND CAST(cust2.meta_value AS UNSIGNED) > 0 -- exclude guest subscriptions
+					  AND oim2.meta_value NOT IN ($donations)
+					  AND sm2.meta_value != ''
+					GROUP BY CAST(cust2.meta_value AS UNSIGNED)
+					HAVING first_start >= %s AND first_start <= %s
+				) cohort
+			  )",
+			$cutoff,
+			$now
+		);
+
+		$rows   = $wpdb->get_results( $sql, ARRAY_A );
+		$result = [];
+		foreach ( (array) $rows as $row ) {
+			$result[] = [
+				'customer_id' => (int) $row['customer_id'],
+				'start'       => (string) $row['sched_start'],
+				'cancelled'   => null === $row['sched_cancelled'] ? null : (string) $row['sched_cancelled'],
+				'end'         => null === $row['sched_end'] ? null : (string) $row['sched_end'],
+			];
+		}
+		return $result;
 	}
 }

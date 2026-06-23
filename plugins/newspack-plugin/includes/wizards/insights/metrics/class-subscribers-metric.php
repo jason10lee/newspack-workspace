@@ -477,6 +477,17 @@ class Subscribers_Metric {
 	}
 
 	/**
+	 * Reader registration dates (trailing 365 days), keyed by user ID. Snapshot
+	 * input for the 5.1 cohort. Uncached pass-through — the cohort's caching
+	 * layer is the weekly pre-warmed snapshot, not this delegation.
+	 *
+	 * @return array<int, \DateTimeImmutable>
+	 */
+	public function get_reader_registration_dates(): array {
+		return $this->storage->get_reader_registration_dates();
+	}
+
+	/**
 	 * New non-donation subscriber records for source-mix attribution (3.2).
 	 * Each record carries customer_id, first-sub epoch ts, and source meta
 	 * (gate_post_id, popup_id) read from the subscription's parent shop_order.
@@ -582,6 +593,16 @@ class Subscribers_Metric {
 			'by_gate'  => $by_gate,
 			'by_popup' => $by_popup,
 		];
+	}
+
+	/**
+	 * Trailing-365-day new-subscriber cohort subscription intervals (5.2 input).
+	 * Uncached pass-through — caching is the weekly pre-warmed snapshot.
+	 *
+	 * @return array<int, array{customer_id:int, start:string, cancelled:?string, end:?string}>
+	 */
+	public function get_new_subscriber_cohort_intervals(): array {
+		return $this->storage->get_new_subscriber_cohort_intervals();
 	}
 
 	/**

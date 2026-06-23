@@ -46,6 +46,8 @@ use Newspack\Logger;
  */
 class HPOS_Storage implements Storage_Interface {
 
+	use Reader_Population_Trait;
+
 	/**
 	 * Donation product IDs to exclude from non-donation metric queries.
 	 *
@@ -1506,5 +1508,82 @@ class HPOS_Storage implements Storage_Interface {
 			];
 		}
 		return $out;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @return array<int, array{customer_id:int, start:string, cancelled:?string, end:?string}>
+	 */
+	public function get_new_subscriber_cohort_intervals(): array {
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+
+		// Trailing-365-day cohort window in UTC, both bounds via prepare (not NOW()).
+		$cutoff = $this->fmt( ( new \DateTimeImmutable( 'now', new \DateTimeZone( 'UTC' ) ) )->modify( '-365 days' ) );
+		// Upper bound excludes subscriptions with a future _schedule_start (scheduled/pending).
+		$now = gmdate( 'Y-m-d H:i:s', ( new \DateTimeImmutable( 'now', new \DateTimeZone( 'UTC' ) ) )->getTimestamp() );
+
+		// Inner subquery: customers whose earliest non-donation subscription
+		// start is within the window (the cohort). Mirrors the first-start
+		// definition in get_first_subscription_order_dates(). MIN(meta_value)
+		// is a lexical comparison; _schedule_start is zero-padded `Y-m-d H:i:s`,
+		// so lexical order == chronological order.
+		// Outer query: every non-donation subscription of those customers, with
+		// its start/cancelled/end schedule meta.
+		$sql = $wpdb->prepare(
+			"SELECT o.customer_id,
+				sm.meta_value AS sched_start,
+				cm.meta_value AS sched_cancelled,
+				em.meta_value AS sched_end
+			FROM {$prefix}wc_orders o
+			JOIN {$prefix}wc_orders_meta sm
+				ON sm.order_id = o.id AND sm.meta_key = '_schedule_start'
+			LEFT JOIN {$prefix}wc_orders_meta cm
+				ON cm.order_id = o.id AND cm.meta_key = '_schedule_cancelled'
+			LEFT JOIN {$prefix}wc_orders_meta em
+				ON em.order_id = o.id AND em.meta_key = '_schedule_end'
+			JOIN {$prefix}woocommerce_order_items oi
+				ON oi.order_id = o.id AND oi.order_item_type = 'line_item'
+			JOIN {$prefix}woocommerce_order_itemmeta oim
+				ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+			WHERE o.type = 'shop_subscription'
+			  AND o.customer_id > 0 -- exclude guest subscriptions (mirrors get_new_subscriber_records_in_window)
+			  AND oim.meta_value NOT IN ($donations)
+			  AND sm.meta_value != ''
+			  AND o.customer_id IN (
+				SELECT cohort.customer_id FROM (
+					SELECT o2.customer_id, MIN(sm2.meta_value) AS first_start
+					FROM {$prefix}wc_orders o2
+					JOIN {$prefix}wc_orders_meta sm2
+						ON sm2.order_id = o2.id AND sm2.meta_key = '_schedule_start'
+					JOIN {$prefix}woocommerce_order_items oi2
+						ON oi2.order_id = o2.id AND oi2.order_item_type = 'line_item'
+					JOIN {$prefix}woocommerce_order_itemmeta oim2
+						ON oim2.order_item_id = oi2.order_item_id AND oim2.meta_key = '_product_id'
+					WHERE o2.type = 'shop_subscription'
+					  AND o2.customer_id > 0 -- exclude guest subscriptions
+					  AND oim2.meta_value NOT IN ($donations)
+					  AND sm2.meta_value != ''
+					GROUP BY o2.customer_id
+					HAVING first_start >= %s AND first_start <= %s
+				) cohort
+			  )",
+			$cutoff,
+			$now
+		);
+
+		$rows   = $wpdb->get_results( $sql, ARRAY_A );
+		$result = [];
+		foreach ( (array) $rows as $row ) {
+			$result[] = [
+				'customer_id' => (int) $row['customer_id'],
+				'start'       => (string) $row['sched_start'],
+				'cancelled'   => null === $row['sched_cancelled'] ? null : (string) $row['sched_cancelled'],
+				'end'         => null === $row['sched_end'] ? null : (string) $row['sched_end'],
+			];
+		}
+		return $result;
 	}
 }

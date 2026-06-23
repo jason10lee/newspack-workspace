@@ -2760,6 +2760,86 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 0, $by['direct']['count'] );
 	}
 
+	// --- 5.1 compute_registration_to_conversion_cohort ---------------------
+
+	/**
+	 * 5.1 compute: one cohort, cumulative monotonic conversion curve.
+	 */
+	public function test_compute_registration_cohort_cumulative_curve() {
+		$tz = new DateTimeZone( 'UTC' );
+		// 4 readers all registered 2026-01. 2 convert (sub) at month 1 and month 3.
+		$readers = [
+			1 => new DateTimeImmutable( '2026-01-05', $tz ),
+			2 => new DateTimeImmutable( '2026-01-10', $tz ),
+			3 => new DateTimeImmutable( '2026-01-15', $tz ),
+			4 => new DateTimeImmutable( '2026-01-20', $tz ),
+		];
+		$subs = [
+			1 => new DateTimeImmutable( '2026-02-05', $tz ), // months_since 1.
+			2 => new DateTimeImmutable( '2026-04-10', $tz ), // months_since 3.
+		];
+
+		$subs_metric = $this->createMock( Subscribers_Metric::class );
+		$subs_metric->method( 'get_reader_registration_dates' )->willReturn( $readers );
+		$subs_metric->method( 'get_first_subscription_order_dates' )->willReturn( $subs );
+		$donors_metric = $this->createMock( Donors_Metric::class );
+		$donors_metric->method( 'get_first_donation_order_dates' )->willReturn( [] );
+
+		$metric = new Conversion_Metric( null, null, $subs_metric, $donors_metric );
+		$result = $metric->compute_registration_to_conversion_cohort();
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertCount( 1, $result['cohorts'] );
+		$cohort = $result['cohorts'][0];
+		$this->assertSame( '2026-01', $cohort['label'] );
+		$points = array_column( $cohort['points'], 'value', 'period' );
+		// Cumulative: 0 at month 0, 1/4 at month 1, still 1/4 at month 2, 2/4 at month 3.
+		$this->assertSame( 0.0, $points[0] );
+		$this->assertSame( 0.25, $points[1] );
+		$this->assertSame( 0.25, $points[2] );
+		$this->assertSame( 0.5, $points[3] );
+		$this->assertSame( 0.15, $result['reference_line']['value'] );
+	}
+
+	/**
+	 * 5.1 compute: earlier of sub/donation wins; donation-only converter counts.
+	 */
+	public function test_compute_registration_cohort_combines_sub_and_donation() {
+		$tz      = new DateTimeZone( 'UTC' );
+		$readers = [ 5 => new DateTimeImmutable( '2026-01-01', $tz ) ];
+		$subs    = [ 5 => new DateTimeImmutable( '2026-05-01', $tz ) ]; // month 4.
+		$dons    = [ 5 => new DateTimeImmutable( '2026-03-01', $tz ) ]; // month 2 (earlier wins).
+
+		$subs_metric = $this->createMock( Subscribers_Metric::class );
+		$subs_metric->method( 'get_reader_registration_dates' )->willReturn( $readers );
+		$subs_metric->method( 'get_first_subscription_order_dates' )->willReturn( $subs );
+		$donors_metric = $this->createMock( Donors_Metric::class );
+		$donors_metric->method( 'get_first_donation_order_dates' )->willReturn( $dons );
+
+		$metric = new Conversion_Metric( null, null, $subs_metric, $donors_metric );
+		$result = $metric->compute_registration_to_conversion_cohort();
+		$points = array_column( $result['cohorts'][0]['points'], 'value', 'period' );
+		$this->assertSame( 0.0, $points[1] );
+		$this->assertSame( 1.0, $points[2] ); // converted by month 2 (donation).
+	}
+
+	/**
+	 * 5.1 compute: no readers → empty state, reference_line preserved.
+	 */
+	public function test_compute_registration_cohort_empty() {
+		$subs_metric = $this->createMock( Subscribers_Metric::class );
+		$subs_metric->method( 'get_reader_registration_dates' )->willReturn( [] );
+		$subs_metric->method( 'get_first_subscription_order_dates' )->willReturn( [] );
+		$donors_metric = $this->createMock( Donors_Metric::class );
+		$donors_metric->method( 'get_first_donation_order_dates' )->willReturn( [] );
+
+		$metric = new Conversion_Metric( null, null, $subs_metric, $donors_metric );
+		$result = $metric->compute_registration_to_conversion_cohort();
+		$this->assertSame( 'empty', $result['state'] );
+		$this->assertSame( [], $result['cohorts'] );
+		$this->assertSame( 0.15, $result['reference_line']['value'] );
+	}
+
 	/**
 	 * C12 mixed: some subscriber records have parent-order meta (classified
 	 * without BQ), others do not (go to matcher). BQ is called once for the
@@ -2821,5 +2901,272 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 1, $by['gate']['count'] );   // from parent order meta.
 		$this->assertSame( 1, $by['prompt']['count'] ); // from BQ matcher.
 		$this->assertSame( 1, $by['direct']['count'] ); // BQ-unmatched.
+	}
+
+	// --- 5.2 compute_subscriber_retention_cohort ----------------------------
+
+	/**
+	 * 5.2 compute: active spanning the curve; cancellation drops at the offset.
+	 */
+	public function test_compute_retention_cohort_cancellation_drops() {
+		// Two customers, cohort 2026-01. Cust 10 stays active (no terminus).
+		// Cust 11 cancels at 2026-03 (active at N=0,1; gone by N=2).
+		$rows = [
+			[
+				'customer_id' => 10,
+				'start'       => '2026-01-10 00:00:00',
+				'cancelled'   => null,
+				'end'         => null,
+			],
+			[
+				'customer_id' => 11,
+				'start'       => '2026-01-10 00:00:00',
+				'cancelled'   => '2026-03-10 00:00:00',
+				'end'         => null,
+			],
+		];
+		$subs_metric = $this->createMock( Subscribers_Metric::class );
+		$subs_metric->method( 'get_new_subscriber_cohort_intervals' )->willReturn( $rows );
+
+		$metric = new Conversion_Metric( null, null, $subs_metric, null );
+		$result = $metric->compute_subscriber_retention_cohort();
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( '2026-01', $result['cohorts'][0]['label'] );
+		$points = array_column( $result['cohorts'][0]['points'], 'value', 'period' );
+		$this->assertSame( 1.0, $points[0] ); // both active at start.
+		$this->assertSame( 1.0, $points[1] ); // cust 11 cancel (Mar) > Feb → still active.
+		$this->assertSame( 0.5, $points[2] ); // cust 11 cancelled before Mar+ → only cust 10.
+		$this->assertSame( 0.70, $result['reference_line']['value'] );
+	}
+
+	/**
+	 * 5.2 compute: natural expiry (_schedule_end) also ends activity.
+	 */
+	public function test_compute_retention_cohort_expiry_drops() {
+		$rows = [
+			[
+				'customer_id' => 20,
+				'start'       => '2026-01-10 00:00:00',
+				'cancelled'   => null,
+				'end'         => '2026-02-10 00:00:00', // expires after 1 month.
+			],
+		];
+		$subs_metric = $this->createMock( Subscribers_Metric::class );
+		$subs_metric->method( 'get_new_subscriber_cohort_intervals' )->willReturn( $rows );
+
+		$metric = new Conversion_Metric( null, null, $subs_metric, null );
+		$points = array_column( $metric->compute_subscriber_retention_cohort()['cohorts'][0]['points'], 'value', 'period' );
+		$this->assertSame( 1.0, $points[0] ); // active at start.
+		$this->assertSame( 0.0, $points[1] ); // end (Feb 10) <= start+1mo (Feb 10) → not active.
+	}
+
+	/**
+	 * 5.2 compute: no cohort rows → empty, reference_line preserved.
+	 */
+	public function test_compute_retention_cohort_empty() {
+		$subs_metric = $this->createMock( Subscribers_Metric::class );
+		$subs_metric->method( 'get_new_subscriber_cohort_intervals' )->willReturn( [] );
+
+		$metric = new Conversion_Metric( null, null, $subs_metric, null );
+		$result = $metric->compute_subscriber_retention_cohort();
+		$this->assertSame( 'empty', $result['state'] );
+		$this->assertSame( [], $result['cohorts'] );
+		$this->assertSame( 0.70, $result['reference_line']['value'] );
+	}
+
+	// --- 5.2 month-overflow clamp (end-of-month subscription start) ---------
+
+	/**
+	 * 5.2 clamp: Jan 31 start, sub expires Feb 28 12:00 — N=1 active-at-T check.
+	 *
+	 * Without the clamp: Jan 31 + 1 month = Mar 3 00:00:00 (PHP overflow).
+	 *   terminus Feb 28 12:00 < Mar 3 00:00 → NOT active → value 0.0.
+	 *
+	 * With the clamp: Jan 31 + 1 month clamped to Feb 28 00:00:00.
+	 *   terminus Feb 28 12:00 > Feb 28 00:00 → ACTIVE → value 1.0.
+	 *
+	 * This test is written to fail with the buggy `+N months` code and pass
+	 * only after the add_months_clamped() helper is in place.
+	 */
+	public function test_compute_retention_cohort_clamps_end_of_month_overflow() {
+		$rows = [
+			[
+				'customer_id' => 1,
+				'start'       => '2026-01-31 00:00:00',
+				'cancelled'   => null,
+				'end'         => '2026-02-28 12:00:00', // expires midday Feb 28.
+			],
+		];
+		$subs_metric = $this->createMock( Subscribers_Metric::class );
+		$subs_metric->method( 'get_new_subscriber_cohort_intervals' )->willReturn( $rows );
+
+		$metric = new Conversion_Metric( null, null, $subs_metric, null );
+		$result = $metric->compute_subscriber_retention_cohort();
+
+		$this->assertSame( 'populated', $result['state'] );
+		$points = array_column( $result['cohorts'][0]['points'], 'value', 'period' );
+
+		// N=0: anchor is Jan 31 00:00 — well before terminus Feb 28 12:00 → active.
+		$this->assertSame( 1.0, $points[0] );
+
+		// N=1: clamped anchor is Feb 28 00:00 — terminus Feb 28 12:00 > Feb 28 00:00 → active.
+		// A buggy +1 months would produce Mar 3 00:00, making terminus < T → 0.0.
+		$this->assertSame( 1.0, $points[1] );
+	}
+
+	// --- Task 6: Snapshot getters + store_cohort_snapshot -------------------
+
+	/**
+	 * Getter returns the cached snapshot slice when the snapshot is warm.
+	 */
+	public function test_registration_cohort_getter_reads_warm_snapshot() {
+		$payload = [
+			'registration_to_conversion_cohort' => [
+				'state'          => 'populated',
+				'cohorts'        => [
+					[
+						'label'  => '2026-01',
+						'points' => [
+							[
+								'period' => 0,
+								'value'  => 0.0,
+							],
+						],
+					],
+				],
+				'reference_line' => [
+					'value' => 0.15,
+					'label' => 'x',
+				],
+			],
+			'subscriber_retention_cohort'       => [
+				'state'          => 'empty',
+				'cohorts'        => [],
+				'reference_line' => [
+					'value' => 0.70,
+					'label' => 'y',
+				],
+			],
+		];
+		\Newspack\Insights\Cache::refresh( 'conversion', \Newspack\Insights\Cache::SOURCE_SNAPSHOT, [ 'cohorts' ], fn() => $payload );
+
+		[ $start, $end ] = $this->window();
+		$result          = $this->metric->get_registration_to_conversion_cohort( $start, $end );
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( '2026-01', $result['cohorts'][0]['label'] );
+	}
+
+	/**
+	 * Cold cache → coming_soon envelope with reference_line preserved (no throw).
+	 */
+	public function test_registration_cohort_getter_cold_cache_coming_soon() {
+		[ $start, $end ] = $this->window();
+		$result          = $this->metric->get_registration_to_conversion_cohort( $start, $end );
+		$this->assertSame( 'coming_soon', $result['state'] );
+		$this->assertSame( [], $result['cohorts'] );
+		$this->assertSame( 0.15, $result['reference_line']['value'] );
+	}
+
+	/**
+	 * Store_cohort_snapshot writes both cohort slices to the snapshot cache.
+	 */
+	public function test_store_cohort_snapshot_writes_both_slices() {
+		$subs_metric = $this->createMock( Subscribers_Metric::class );
+		$subs_metric->method( 'get_reader_registration_dates' )->willReturn( [] );
+		$subs_metric->method( 'get_first_subscription_order_dates' )->willReturn( [] );
+		$subs_metric->method( 'get_new_subscriber_cohort_intervals' )->willReturn( [] );
+		$donors_metric = $this->createMock( Donors_Metric::class );
+		$donors_metric->method( 'get_first_donation_order_dates' )->willReturn( [] );
+
+		$metric = new Conversion_Metric( null, null, $subs_metric, $donors_metric );
+		Conversion_Metric::store_cohort_snapshot( $metric );
+
+		$peeked = \Newspack\Insights\Cache::peek( 'conversion', \Newspack\Insights\Cache::SOURCE_SNAPSHOT, [ 'cohorts' ] );
+		$this->assertIsArray( $peeked );
+		$this->assertArrayHasKey( 'registration_to_conversion_cohort', $peeked['payload'] );
+		$this->assertArrayHasKey( 'subscriber_retention_cohort', $peeked['payload'] );
+		$this->assertSame( 'empty', $peeked['payload']['registration_to_conversion_cohort']['state'] );
+	}
+
+	// --- Cohort pre-warm scheduling ------------------------------------------
+
+	/**
+	 * Maybe_schedule_cohort_prewarm() schedules the weekly recurring action
+	 * when none exists yet.
+	 */
+	public function test_maybe_schedule_cohort_prewarm_schedules_when_none_exists() {
+		if ( ! function_exists( 'as_next_scheduled_action' ) || ! function_exists( 'as_schedule_recurring_action' ) ) {
+			$this->markTestSkipped( 'Action Scheduler not available in this test harness.' );
+		}
+		// Ensure no action is already scheduled (clean slate).
+		as_unschedule_all_actions( Conversion_Metric::COHORT_REFRESH_WEEKLY_ACTION, [], Conversion_Metric::COHORT_REFRESH_GROUP );
+		$this->assertFalse( as_next_scheduled_action( Conversion_Metric::COHORT_REFRESH_WEEKLY_ACTION, [], Conversion_Metric::COHORT_REFRESH_GROUP ) );
+
+		Conversion_Metric::maybe_schedule_cohort_prewarm();
+
+		$timestamp = as_next_scheduled_action( Conversion_Metric::COHORT_REFRESH_WEEKLY_ACTION, [], Conversion_Metric::COHORT_REFRESH_GROUP );
+		$this->assertNotFalse( $timestamp, 'Recurring weekly prewarm action should be scheduled.' );
+		$this->assertIsInt( $timestamp );
+	}
+
+	/**
+	 * Maybe_schedule_cohort_prewarm() is idempotent: a second call does not
+	 * schedule a duplicate action.
+	 */
+	public function test_maybe_schedule_cohort_prewarm_is_idempotent() {
+		if ( ! function_exists( 'as_next_scheduled_action' ) || ! function_exists( 'as_schedule_recurring_action' ) ) {
+			$this->markTestSkipped( 'Action Scheduler not available in this test harness.' );
+		}
+		as_unschedule_all_actions( Conversion_Metric::COHORT_REFRESH_WEEKLY_ACTION, [], Conversion_Metric::COHORT_REFRESH_GROUP );
+
+		Conversion_Metric::maybe_schedule_cohort_prewarm();
+		$first_timestamp = as_next_scheduled_action( Conversion_Metric::COHORT_REFRESH_WEEKLY_ACTION, [], Conversion_Metric::COHORT_REFRESH_GROUP );
+
+		// Second call must not throw and must not change the scheduled timestamp.
+		Conversion_Metric::maybe_schedule_cohort_prewarm();
+		$second_timestamp = as_next_scheduled_action( Conversion_Metric::COHORT_REFRESH_WEEKLY_ACTION, [], Conversion_Metric::COHORT_REFRESH_GROUP );
+
+		$this->assertSame( $first_timestamp, $second_timestamp, 'Second call must not reschedule the action.' );
+	}
+
+	/**
+	 * Next_weekly_prewarm_timestamp() returns the correct Monday 06:00 UTC for
+	 * several fixed anchors, covering the Monday-before-06:00 edge case that
+	 * 'next monday 06:00' would incorrectly skip to the following week.
+	 */
+	public function test_next_weekly_prewarm_timestamp_anchors(): void {
+		$utc = new DateTimeZone( 'UTC' );
+
+		// Monday 05:00 UTC — slot has not yet passed this week, must stay on SAME Monday.
+		$now    = new DateTimeImmutable( '2026-06-22 05:00:00', $utc );
+		$result = gmdate( 'D Y-m-d H:i', Conversion_Metric::next_weekly_prewarm_timestamp( $now ) );
+		$this->assertSame( 'Mon 2026-06-22 06:00', $result, 'Monday before 06:00 must schedule THIS Monday.' );
+
+		// Monday 06:00 UTC exactly — slot is at this instant (<= $now), must roll to next week.
+		$now    = new DateTimeImmutable( '2026-06-22 06:00:00', $utc );
+		$result = gmdate( 'D Y-m-d H:i', Conversion_Metric::next_weekly_prewarm_timestamp( $now ) );
+		$this->assertSame( 'Mon 2026-06-29 06:00', $result, 'Monday at exactly 06:00 must schedule NEXT Monday.' );
+
+		// Wednesday mid-day — this week's Monday is in the past, must return next Monday.
+		$now    = new DateTimeImmutable( '2026-06-24 10:00:00', $utc );
+		$result = gmdate( 'D Y-m-d H:i', Conversion_Metric::next_weekly_prewarm_timestamp( $now ) );
+		$this->assertSame( 'Mon 2026-06-29 06:00', $result, 'Mid-week must schedule next Monday.' );
+
+		// Sunday night — next Monday is tomorrow.
+		$now    = new DateTimeImmutable( '2026-06-28 23:00:00', $utc );
+		$result = gmdate( 'D Y-m-d H:i', Conversion_Metric::next_weekly_prewarm_timestamp( $now ) );
+		$this->assertSame( 'Mon 2026-06-29 06:00', $result, 'Sunday night must schedule next-day Monday.' );
+	}
+
+	/**
+	 * Clear the cohort snapshot transient between tests.
+	 */
+	public function tear_down() {
+		delete_transient( 'newspack_insights_conversion_' . md5( (string) wp_json_encode( [ 'cohorts' ] ) ) );
+		if ( function_exists( 'as_unschedule_all_actions' ) ) {
+			as_unschedule_all_actions( Conversion_Metric::COHORT_REFRESH_WEEKLY_ACTION, [], Conversion_Metric::COHORT_REFRESH_GROUP );
+		}
+		parent::tear_down();
 	}
 }

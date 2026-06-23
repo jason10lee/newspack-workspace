@@ -576,6 +576,38 @@ class Test_Conversion_Journey_Storage extends WP_UnitTestCase {
 		$this->assertSame( [], $metric->get_donation_conversion_lags() );
 	}
 
+	// =========================================================================
+	// Reader registration dates — Task 2 (5.1 cohort population).
+	// =========================================================================
+
+	/**
+	 * HPOS + Legacy storage expose get_reader_registration_dates().
+	 */
+	public function test_storages_implement_reader_registration_dates(): void {
+		$this->assertTrue( method_exists( new HPOS_Storage( [] ), 'get_reader_registration_dates' ) );
+		$this->assertTrue( method_exists( new Legacy_Storage( [] ), 'get_reader_registration_dates' ) );
+		$this->assertTrue(
+			( new \ReflectionClass( Storage_Interface::class ) )->hasMethod( 'get_reader_registration_dates' )
+		);
+	}
+
+	/**
+	 * Subscribers_Metric::get_reader_registration_dates() delegates to storage.
+	 */
+	public function test_subscribers_metric_reader_registration_dates_delegates(): void {
+		$dates = [
+			1 => $this->make_date( '2026-01-15' ),
+			2 => $this->make_date( '2026-02-20' ),
+		];
+		$mock = $this->createMock( Storage_Interface::class );
+		$mock->expects( $this->once() )
+			->method( 'get_reader_registration_dates' )
+			->willReturn( $dates );
+
+		$metric = $this->make_subscribers_metric( $mock );
+		$this->assertSame( $dates, $metric->get_reader_registration_dates() );
+	}
+
 	/**
 	 * Donor storages expose get_subscriber_to_donor_lags.
 	 */
@@ -594,5 +626,41 @@ class Test_Conversion_Journey_Storage extends WP_UnitTestCase {
 		$metric = $this->make_donors_metric( $mock );
 		$this->assertSame( $rows, $metric->get_subscriber_to_donor_lags() );
 		$this->assertSame( [], $metric->get_subscriber_to_donor_lags() );
+	}
+
+	// =========================================================================
+	// New-subscriber cohort intervals — Task 3 (5.2 retention input).
+	// =========================================================================
+
+	/**
+	 * HPOS + Legacy storage expose get_new_subscriber_cohort_intervals().
+	 */
+	public function test_storages_implement_cohort_intervals(): void {
+		$this->assertTrue( method_exists( new HPOS_Storage( [] ), 'get_new_subscriber_cohort_intervals' ) );
+		$this->assertTrue( method_exists( new Legacy_Storage( [] ), 'get_new_subscriber_cohort_intervals' ) );
+		$this->assertTrue(
+			( new \ReflectionClass( Storage_Interface::class ) )->hasMethod( 'get_new_subscriber_cohort_intervals' )
+		);
+	}
+
+	/**
+	 * Subscribers_Metric::get_new_subscriber_cohort_intervals() delegates.
+	 */
+	public function test_subscribers_metric_cohort_intervals_delegates(): void {
+		$rows = [
+			[
+				'customer_id' => 7,
+				'start'       => '2026-01-10 00:00:00',
+				'cancelled'   => null,
+				'end'         => null,
+			],
+		];
+		$mock = $this->createMock( Storage_Interface::class );
+		$mock->expects( $this->once() )
+			->method( 'get_new_subscriber_cohort_intervals' )
+			->willReturn( $rows );
+
+		$metric = $this->make_subscribers_metric( $mock );
+		$this->assertSame( $rows, $metric->get_new_subscriber_cohort_intervals() );
 	}
 }

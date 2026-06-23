@@ -327,6 +327,21 @@ interface Storage_Interface {
 	public function get_first_subscription_order_dates( array $customer_ids ): array;
 
 	/**
+	 * Registration dates of READER accounts created in the trailing 365 days,
+	 * keyed by user ID. "Reader" matches the base population of
+	 * {@see get_stale_registered_users()}: users bearing the `np_reader` meta,
+	 * or holding a 'subscriber'/'customer' role, excluding administrators and
+	 * editors. The full reader set is returned — converters AND non-converters —
+	 * because 5.1 uses it as the cohort denominator.
+	 *
+	 * Phase-A reader-role approximation applies (hardcoded roles, no filter
+	 * layer), same caveat as get_stale_registered_users().
+	 *
+	 * @return array<int, \DateTimeImmutable> user_id => user_registered (UTC).
+	 */
+	public function get_reader_registration_dates(): array;
+
+	/**
 	 * New non-donation subscribers in the window, each with the epoch timestamp
 	 * (UTC seconds) of their FIRST subscription start plus order-meta sourced from
 	 * the subscription's parent shop_order. Same population as
@@ -382,4 +397,23 @@ interface Storage_Interface {
 	 * @return array<int, array{order_id:int, gate_id:?string, popup_id:?string, order_total:float}>
 	 */
 	public function get_attributed_subscription_orders( DateTimeInterface $start, DateTimeInterface $end ): array;
+
+	/**
+	 * Subscription schedule intervals for the trailing-365-day new-subscriber
+	 * cohort (5.2 retention input). One row per (customer, non-donation
+	 * subscription) for every customer whose EARLIEST non-donation subscription
+	 * `_schedule_start` falls within the last 365 days. All of those customers'
+	 * non-donation subscriptions are returned (not just the first) so the metric
+	 * can evaluate "active at month N" across any active subscription, matching
+	 * the {@see Donors_Storage_Interface::get_recurring_donor_retention()}
+	 * active-at-T predicate.
+	 *
+	 * `start` is `_schedule_start` (`Y-m-d H:i:s` UTC, non-empty). `cancelled`
+	 * and `end` are the raw `_schedule_cancelled` / `_schedule_end` meta values
+	 * (may be `''`, `'0'`, or null — WCS's "not terminated" sentinels). Epoch
+	 * conversion is the metric layer's job (tz-safe DateTimeImmutable).
+	 *
+	 * @return array<int, array{customer_id:int, start:string, cancelled:?string, end:?string}>
+	 */
+	public function get_new_subscriber_cohort_intervals(): array;
 }
