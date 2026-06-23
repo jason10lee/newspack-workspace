@@ -28,6 +28,6 @@ export const NOT_COMPUTABLE_COPY = {
 	formBearing: __( 'No form-bearing prompts viewed in this timeframe.', 'newspack-plugin' ),
 	newsletter: __( 'No prompts with a newsletter block viewed in this timeframe.', 'newspack-plugin' ),
 	registration: __( 'No prompts with a registration block viewed in this timeframe.', 'newspack-plugin' ),
-	donation: __( 'No donation-intent prompts viewed in this timeframe.', 'newspack-plugin' ),
+	donation: __( 'No prompts with a donation block viewed in this timeframe.', 'newspack-plugin' ),
 	subscription: __( 'No subscription-intent prompts viewed in this timeframe.', 'newspack-plugin' ),
 };

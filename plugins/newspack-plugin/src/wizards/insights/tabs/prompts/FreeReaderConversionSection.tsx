@@ -54,7 +54,7 @@ const FreeReaderConversionSection = ( { current, previous }: FreeReaderConversio
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Registration Conversion (Influenced, 7d)', 'newspack-plugin' ),
 					description: __(
-						'Readers who registered in a later session within 7 days of seeing a registration-intent prompt ÷ readers who saw a registration-intent prompt',
+						'Readers who registered in a later session within 7 days of seeing a prompt with a registration block ÷ readers who saw a prompt with a registration block',
 						'newspack-plugin'
 					),
 					current: current.registration_conversion_influenced_7d,
@@ -80,7 +80,7 @@ const FreeReaderConversionSection = ( { current, previous }: FreeReaderConversio
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Newsletter Signup Conversion (Influenced, 7d)', 'newspack-plugin' ),
 					description: __(
-						'Readers who signed up for a newsletter in a later session within 7 days of seeing a newsletter-intent prompt ÷ readers who saw a newsletter-intent prompt',
+						'Readers who signed up for a newsletter in a later session within 7 days of seeing a prompt with a newsletter block ÷ readers who saw a prompt with a newsletter block',
 						'newspack-plugin'
 					),
 					current: current.newsletter_signup_conversion_influenced_7d,
