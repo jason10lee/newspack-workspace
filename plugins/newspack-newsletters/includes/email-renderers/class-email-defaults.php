@@ -42,9 +42,16 @@ class Email_Defaults {
 	 * Call this once from Editor_Bootstrap::init() (or equivalent) so the hook
 	 * is only wired up when the email-editor package is available.
 	 *
+	 * The `wp_theme_json_data_default` filter fires globally on every theme.json
+	 * resolution. Only register it when the WC renderer flag is on to avoid
+	 * unnecessary overhead on sites where the flag is off.
+	 *
 	 * @return void
 	 */
 	public static function init() {
+		if ( ! Feature_Flag::is_enabled() ) {
+			return;
+		}
 		add_filter( 'wp_theme_json_data_default', [ __CLASS__, 'inject_button_border_radius' ] );
 	}
 
@@ -66,7 +73,7 @@ class Email_Defaults {
 	 * @param \WP_Theme_JSON_Data $theme_json Incoming default theme.json data.
 	 * @return \WP_Theme_JSON_Data Potentially modified default theme.json data.
 	 */
-	public static function inject_button_border_radius( $theme_json ) {
+	public static function inject_button_border_radius( \WP_Theme_JSON_Data $theme_json ): \WP_Theme_JSON_Data {
 		if ( ! Feature_Flag::is_enabled() ) {
 			return $theme_json;
 		}
