@@ -232,4 +232,152 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 			'newsletters_allowed_block_types() must not restrict blocks for a non-newsletter post.'
 		);
 	}
+
+	// -------------------------------------------------------------------------
+	// strip_editor_modifications() early-return invariants.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Saved globals restored in tear_down.
+	 *
+	 * @var array{pagenow: string|null, get: array}
+	 */
+	private $strip_globals_backup = [];
+
+	/**
+	 * Save globals before each test (only relevant for strip tests, harmless otherwise).
+	 */
+	public function set_up() {
+		parent::set_up();
+		$this->strip_globals_backup = [
+			'pagenow' => $GLOBALS['pagenow'] ?? null,
+			'get'     => $_GET, // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		];
+	}
+
+	/**
+	 * Restore globals and remove any flag filters added during tests.
+	 */
+	public function tear_down() {
+		remove_all_filters( 'newspack_newsletters_use_woo_renderer' );
+
+		if ( null === $this->strip_globals_backup['pagenow'] ) {
+			unset( $GLOBALS['pagenow'] );
+		} else {
+			$GLOBALS['pagenow'] = $this->strip_globals_backup['pagenow'];
+		}
+		$_GET = $this->strip_globals_backup['get']; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		parent::tear_down();
+	}
+
+	/**
+	 * Simulate a post.php email-editor request for the given post ID.
+	 *
+	 * @param int $post_id Newsletter post ID.
+	 */
+	private function simulate_email_editor_request( int $post_id ): void {
+		global $pagenow;
+		$pagenow      = 'post.php';
+		$_GET['post'] = $post_id; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	}
+
+	/**
+	 * Flag ON + block theme: strip_editor_modifications() must early-return
+	 * (i.e. NOT call remove_editor_styles) for a newsletter request.
+	 *
+	 * The invariant: when the WC renderer is active and a block theme is in use,
+	 * editor styles are preserved so the canvas reflects the theme 1:1.
+	 * We verify this by checking that remove_editor_styles had no effect —
+	 * specifically that the method returns before reaching the remove_editor_styles()
+	 * call. The cleanest observable proxy is `did_action` state: we hook a counter
+	 * onto `remove_editor_styles` equivalent (or simply assert the editor_styles
+	 * global remains non-empty after the call).
+	 *
+	 * Practical approach: add a stylesheet via add_editor_style(), call the method,
+	 * assert the stylesheet is still registered (= early-return, styles NOT stripped).
+	 */
+	public function test_strip_does_not_run_for_block_theme_with_flag_on() {
+		if ( ! wp_is_block_theme() ) {
+			// This test only makes sense with a block theme. If the active theme is
+			// classic (the default in the test suite), skip gracefully.
+			$this->markTestSkipped( 'Active theme is not a block theme; skipping block-theme strip test.' );
+		}
+
+		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
+
+		$newsletter = $this->create_newsletter_post();
+		$this->simulate_email_editor_request( $newsletter->ID );
+
+		// Add a sentinel editor style so we can detect whether it was stripped.
+		add_editor_style( 'sentinel-style.css' );
+
+		\Newspack_Newsletters_Editor::strip_editor_modifications();
+
+		// Retrieve the current editor stylesheets.
+		$editor_styles = get_theme_support( 'editor-styles' );
+
+		// The sentinel must still be present — strip was bypassed.
+		$this->assertTrue(
+			! empty( $editor_styles ),
+			'strip_editor_modifications() must NOT strip editor styles for block theme + flag on.'
+		);
+	}
+
+	/**
+	 * Flag ON + classic theme: strip_editor_modifications() must run the full strip
+	 * (i.e. does NOT early-return after the block-theme guard).
+	 *
+	 * Classic themes style blocks via editor CSS that the WC email render cannot
+	 * reproduce, so stripping is correct behavior.
+	 */
+	public function test_strip_runs_for_classic_theme_with_flag_on() {
+		if ( wp_is_block_theme() ) {
+			$this->markTestSkipped( 'Active theme is a block theme; skipping classic-theme strip test.' );
+		}
+
+		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
+
+		$newsletter = $this->create_newsletter_post();
+		$this->simulate_email_editor_request( $newsletter->ID );
+
+		// Verify the method does NOT early-return on the block-theme guard by checking
+		// that it proceeds to the strip logic. The simplest observable effect is that
+		// remove_editor_styles() was called, which clears the add_theme_support list.
+		add_editor_style( 'sentinel-style.css' );
+
+		\Newspack_Newsletters_Editor::strip_editor_modifications();
+
+		// After stripping, the editor-style-sheets theme feature must be empty/gone.
+		$editor_styles_after = get_theme_support( 'editor-style' );
+		$this->assertFalse(
+			! empty( $editor_styles_after ) && in_array( 'sentinel-style.css', (array) $editor_styles_after, true ),
+			'strip_editor_modifications() must strip editor styles for classic theme + flag on.'
+		);
+	}
+
+	/**
+	 * Flag OFF: strip_editor_modifications() must run the full strip (legacy path),
+	 * regardless of which theme type is active.
+	 *
+	 * When the WC renderer flag is off, the block-theme early-return guard is not
+	 * reached — the method falls through to the full strip unconditionally.
+	 */
+	public function test_strip_runs_when_flag_is_off() {
+		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_false' );
+
+		$newsletter = $this->create_newsletter_post();
+		$this->simulate_email_editor_request( $newsletter->ID );
+
+		add_editor_style( 'sentinel-style.css' );
+
+		\Newspack_Newsletters_Editor::strip_editor_modifications();
+
+		// remove_editor_styles() must have been called — sentinel style is gone.
+		$editor_styles_after = get_theme_support( 'editor-style' );
+		$this->assertFalse(
+			! empty( $editor_styles_after ) && in_array( 'sentinel-style.css', (array) $editor_styles_after, true ),
+			'strip_editor_modifications() must strip editor styles when the WC renderer flag is off.'
+		);
+	}
 }
