@@ -298,10 +298,12 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 	 * assert the stylesheet is still registered (= early-return, styles NOT stripped).
 	 */
 	public function test_strip_does_not_run_for_block_theme_with_flag_on() {
+		$original = get_stylesheet();
+		switch_theme( 'newspack-block-theme' );
 		if ( ! wp_is_block_theme() ) {
-			// This test only makes sense with a block theme. If the active theme is
-			// classic (the default in the test suite), skip gracefully.
-			$this->markTestSkipped( 'Active theme is not a block theme; skipping block-theme strip test.' );
+			// newspack-block-theme not resolvable as a block theme in this env.
+			switch_theme( $original );
+			$this->markTestSkipped( 'newspack-block-theme is not available as a block theme in this environment.' );
 		}
 
 		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
@@ -314,12 +316,15 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 
 		\Newspack_Newsletters_Editor::strip_editor_modifications();
 
-		// Retrieve the current editor stylesheets.
-		$editor_styles = get_theme_support( 'editor-styles' );
+		// remove_editor_styles() removes the `editor-styles` theme support. If the
+		// support is still present, the strip early-returned (block theme path).
+		$styles_kept = get_theme_support( 'editor-styles' );
 
-		// The sentinel must still be present — strip was bypassed.
-		$this->assertTrue(
-			! empty( $editor_styles ),
+		remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
+		switch_theme( $original );
+
+		$this->assertNotFalse(
+			$styles_kept,
 			'strip_editor_modifications() must NOT strip editor styles for block theme + flag on.'
 		);
 	}
@@ -332,8 +337,11 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 	 * reproduce, so stripping is correct behavior.
 	 */
 	public function test_strip_runs_for_classic_theme_with_flag_on() {
+		$original = get_stylesheet();
+		switch_theme( 'newspack-theme' );
 		if ( wp_is_block_theme() ) {
-			$this->markTestSkipped( 'Active theme is a block theme; skipping classic-theme strip test.' );
+			switch_theme( $original );
+			$this->markTestSkipped( 'newspack-theme is unexpectedly a block theme in this environment.' );
 		}
 
 		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
@@ -341,17 +349,19 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 		$newsletter = $this->create_newsletter_post();
 		$this->simulate_email_editor_request( $newsletter->ID );
 
-		// Verify the method does NOT early-return on the block-theme guard by checking
-		// that it proceeds to the strip logic. The simplest observable effect is that
-		// remove_editor_styles() was called, which clears the add_theme_support list.
 		add_editor_style( 'sentinel-style.css' );
 
 		\Newspack_Newsletters_Editor::strip_editor_modifications();
 
-		// After stripping, the editor-style-sheets theme feature must be empty/gone.
-		$editor_styles_after = get_theme_support( 'editor-style' );
+		// Classic theme + flag on must run the full strip: remove_editor_styles()
+		// removes the `editor-styles` theme support entirely.
+		$styles_after = get_theme_support( 'editor-styles' );
+
+		remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
+		switch_theme( $original );
+
 		$this->assertFalse(
-			! empty( $editor_styles_after ) && in_array( 'sentinel-style.css', (array) $editor_styles_after, true ),
+			$styles_after,
 			'strip_editor_modifications() must strip editor styles for classic theme + flag on.'
 		);
 	}
@@ -373,10 +383,14 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 
 		\Newspack_Newsletters_Editor::strip_editor_modifications();
 
-		// remove_editor_styles() must have been called — sentinel style is gone.
-		$editor_styles_after = get_theme_support( 'editor-style' );
+		// Flag off (legacy path) must run the full strip regardless of theme type:
+		// remove_editor_styles() removes the `editor-styles` theme support.
+		$styles_after = get_theme_support( 'editor-styles' );
+
+		remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_false' );
+
 		$this->assertFalse(
-			! empty( $editor_styles_after ) && in_array( 'sentinel-style.css', (array) $editor_styles_after, true ),
+			$styles_after,
 			'strip_editor_modifications() must strip editor styles when the WC renderer flag is off.'
 		);
 	}
