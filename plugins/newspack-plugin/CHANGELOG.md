@@ -1,3 +1,10 @@
+## newspack [6.43.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.43.3...newspack@6.43.4) (2026-06-23)
+
+
+### Bug Fixes
+
+* **wc-memberships:** skip expiry filter for non-subscription memberships ([d0a399e](https://github.com/Automattic/newspack-workspace/commit/d0a399ee89c6dc787ea0377297ebc6a663f2cd46))
+
 ## newspack [6.43.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.43.2...newspack@6.43.3) (2026-06-19)
 
 
