@@ -477,6 +477,17 @@ class Subscribers_Metric {
 	}
 
 	/**
+	 * Reader registration dates (trailing 365 days), keyed by user ID. Snapshot
+	 * input for the 5.1 cohort. Uncached pass-through — the cohort's caching
+	 * layer is the weekly pre-warmed snapshot, not this delegation.
+	 *
+	 * @return array<int, \DateTimeImmutable>
+	 */
+	public function get_reader_registration_dates(): array {
+		return $this->storage->get_reader_registration_dates();
+	}
+
+	/**
 	 * New non-donation subscriber records for source-mix attribution (3.2).
 	 * Each record carries customer_id, first-sub epoch ts, and source meta
 	 * (gate_post_id, popup_id) read from the subscription's parent shop_order.

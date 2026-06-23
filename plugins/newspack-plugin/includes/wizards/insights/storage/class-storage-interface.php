@@ -327,6 +327,21 @@ interface Storage_Interface {
 	public function get_first_subscription_order_dates( array $customer_ids ): array;
 
 	/**
+	 * Registration dates of READER accounts created in the trailing 365 days,
+	 * keyed by user ID. "Reader" matches the base population of
+	 * {@see get_stale_registered_users()}: users bearing the `np_reader` meta,
+	 * or holding a 'subscriber'/'customer' role, excluding administrators and
+	 * editors. The full reader set is returned — converters AND non-converters —
+	 * because 5.1 uses it as the cohort denominator.
+	 *
+	 * Phase-A reader-role approximation applies (hardcoded roles, no filter
+	 * layer), same caveat as get_stale_registered_users().
+	 *
+	 * @return array<int, \DateTimeImmutable> user_id => user_registered (UTC).
+	 */
+	public function get_reader_registration_dates(): array;
+
+	/**
 	 * New non-donation subscribers in the window, each with the epoch timestamp
 	 * (UTC seconds) of their FIRST subscription start plus order-meta sourced from
 	 * the subscription's parent shop_order. Same population as

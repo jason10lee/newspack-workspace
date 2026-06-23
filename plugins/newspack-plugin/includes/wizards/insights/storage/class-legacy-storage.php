@@ -49,6 +49,8 @@ use Newspack\Logger;
  */
 class Legacy_Storage implements Storage_Interface {
 
+	use Reader_Population_Trait;
+
 	/**
 	 * Donation product IDs to exclude from non-donation metric queries.
 	 *
