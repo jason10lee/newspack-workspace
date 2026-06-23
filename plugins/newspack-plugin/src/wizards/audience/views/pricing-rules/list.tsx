@@ -19,6 +19,7 @@ import { Spinner, Button } from '@wordpress/components';
 import { DataViews, Badge, Router } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import CatalogImpact from './catalog-impact';
+import { intentLabel } from './recipes';
 
 const { useHistory } = Router;
 
@@ -30,7 +31,7 @@ const DEFAULT_VIEW: View = {
 	perPage: 25,
 	sort: { field: 'title', direction: 'asc' },
 	search: '',
-	fields: [ 'strategy', 'scope', 'priority', 'status', 'criterion' ],
+	fields: [ 'strategy', 'scope', 'priority', 'status', 'goal' ],
 	filters: [], // Show all statuses by default; the REST already excludes trash.
 	layout: {},
 	titleField: 'title',
@@ -146,15 +147,10 @@ export default function PricingRulesList() {
 				enableSorting: false,
 			},
 			{
-				id: 'criterion',
-				label: __( 'Success criterion', 'newspack-plugin' ),
-				getValue: ( { item } ) => ( item.target_conversion_pct !== null || item.max_cancellation_pct !== null ? 'yes' : 'no' ),
-				render: ( { item } ) =>
-					item.target_conversion_pct !== null || item.max_cancellation_pct !== null ? (
-						<Badge level="success" text={ __( 'Declared', 'newspack-plugin' ) } />
-					) : (
-						<span className="newspack-pricing-rules__muted">{ __( '— missing', 'newspack-plugin' ) }</span>
-					),
+				id: 'goal',
+				label: __( 'Goal', 'newspack-plugin' ),
+				getValue: ( { item } ) => intentLabel( item.intent ),
+				render: ( { item } ) => <span>{ intentLabel( item.intent ) }</span>,
 				enableSorting: false,
 			},
 			{
