@@ -626,6 +626,42 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * NPPD-1756/1757: when the hub exposes the per-popup `donation_impressions`
+	 * capability column, the donation-rate denominator uses it (summed across all
+	 * popups) instead of the `action_type='donation'` impression sum. This catches a
+	 * multi-block / Undefined-intent prompt that carries a donate block — which the
+	 * old intent-sum would have dropped entirely (denominator 0 → not computable).
+	 */
+	public function test_donation_conversion_direct_prefers_donation_impressions_column() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn(
+			[
+				// Donation-CAPABLE but NOT donation-intent (multi-block / Undefined).
+				[
+					'popup_id'             => 1,
+					'intent'               => 'undefined',
+					'impressions'          => 1000,
+					'donation_impressions' => 200,
+				],
+				// Not donation-capable — must not enter the denominator.
+				[
+					'popup_id'             => 9,
+					'intent'               => 'registration',
+					'impressions'          => 500,
+					'donation_impressions' => 0,
+				],
+			]
+		);
+
+		$metric = $this->make_direct_donation_metric( $proxy, $this->donors_with_conversions( 50 ), true );
+		$rate   = $metric->get_donation_conversion_direct( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $rate['state'] );
+		$this->assertSame( 200, $rate['denominator'], 'denominator is the capability column, not action_type=donation (which would be 0 here)' );
+		$this->assertSame( 0.25, $rate['value'], '50 conversions / 200 donation-capable impressions' );
+	}
+
+	/**
 	 * No donation impressions → no denominator → not computable (em-dash),
 	 * distinct from the real 0% below.
 	 */
@@ -1372,6 +1408,39 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		// map): a null rate, not a misleading 0%.
 		$this->assertSame( 0, $result['rows'][0]['donation_conversions'] );
 		$this->assertNull( $result['rows'][0]['donation_conversion_rate'] );
+	}
+
+	/**
+	 * NPPD-1756/1757 (capability path): a prompt that is donation-CAPABLE via the hub
+	 * `donation_impressions` column but is NOT donation-intent (multi-block /
+	 * Undefined) still surfaces its donations + a rate, with the donation-capable
+	 * impressions as the denominator. Pre-column, the `action_type='donation'` gate
+	 * hid it (rendered 0 / null).
+	 */
+	public function test_performance_by_prompt_shows_donations_for_non_donation_intent_when_capable() {
+		$row = array_merge(
+			$this->performance_row( 42, 'Member campaign', 'undefined', 1000 ),
+			[ 'donation_impressions' => 500 ] // Donation-capable (carries a donate block) despite intent.
+		);
+		$proxy = $this->make_performance_proxy( [ $row ], [], [] );
+
+		add_filter( 'newspack_insights_woocommerce_active', '__return_true' ); // Removed in tear_down.
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_prompt_attributed_donation_conversions' )->willReturn(
+			[
+				'42' => [
+					'conversions' => 3,
+					'revenue'     => 0.0,
+				],
+			]
+		);
+
+		$metric = new Prompts_Metric( $proxy, null, null, $donors, $this->empty_subscribers() );
+		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
+
+		$this->assertSame( 'undefined', $result['rows'][0]['intent'], 'guard: row is non-donation intent' );
+		$this->assertSame( 3, $result['rows'][0]['donation_conversions'], 'a donation-capable prompt surfaces its donations regardless of intent' );
+		$this->assertEqualsWithDelta( 0.006, $result['rows'][0]['donation_conversion_rate'], 0.0001, '3 / 500 donation-capable impressions, not / 1000 total' );
 	}
 
 	/**

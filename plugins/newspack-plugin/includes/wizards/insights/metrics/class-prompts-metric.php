@@ -914,7 +914,20 @@ final class Prompts_Metric {
 		}
 		$impressions = 0;
 		foreach ( $rows as $row ) {
-			if ( is_array( $row ) && 'donation' === (string) ( $row['intent'] ?? '' ) ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			if ( isset( $row['donation_impressions'] ) ) {
+				// NPPD-1756/1757: per-popup donation-CAPABLE impressions — seen events where
+				// the prompt carried a donate block (`prompt_has_donation`) — summed across
+				// all popups. Prefer this when the hub exposes it: it's the population matched
+				// to the order-meta donation numerator, and it catches a multi-block prompt
+				// that has a donate block but a different primary intent.
+				$impressions += (int) $row['donation_impressions'];
+			} elseif ( 'donation' === (string) ( $row['intent'] ?? '' ) ) {
+				// Fallback until the hub ships `donation_impressions`: donation-INTENT
+				// impressions. Misses the multi-block-donate-prompt case above (where
+				// `action_type` collapses to 'undefined'); the capability column closes it.
 				$impressions += (int) ( $row['impressions'] ?? 0 );
 			}
 		}
@@ -1373,23 +1386,30 @@ final class Prompts_Metric {
 			$intent      = (string) ( $row['intent'] ?? '' );
 			$impressions = (int) ( $row['impressions'] ?? 0 );
 
-			$donation_conversions = 'donation' === $intent ? (int) ( $donation_map[ $popup_id ]['conversions'] ?? 0 ) : 0;
 			// Subscription conversions are sourced per-popup from order meta (NPPD-1746),
-			// keyed by popup id, anonymous-inclusive — and NOT gated on the popup's declared
-			// intent: the order carries `_newspack_popup_id` regardless of action_type, so an
-			// "Undefined"-intent prompt (e.g. a generic "50% off" promo) can still drive
-			// subscriptions. Gating on `intent=registration` hid those and contradicted the
-			// scalar subscription card (caught on live data; the scalar already sums the whole
-			// `by_popup` map). The donation column keeps its intent gate — donations on this
-			// tab are gated on a donation block being present, so the same case doesn't arise.
+			// keyed by popup id, anonymous-inclusive — NOT gated on the popup's declared
+			// intent (the order carries the popup id regardless of `action_type`, so an
+			// "Undefined"-intent "50% off" promo can still drive a subscription). Until a
+			// checkout-capability signal exists (NPPD-1755/1756), the rate below is gated on
+			// map membership (a converting popup) as the interim.
 			$subscription_conversions = (int) ( $subscription_map[ $popup_id ]['conversions'] ?? 0 );
 
-			// Both rates share the tab-level coherence guard + em-dash semantics via
-			// rate_value() (null = not computable: no impressions or a >100% cross-surface
-			// ratio; a float incl. 0.0 = real rate). A rate is rendered only where the metric
-			// applies: donation for donation-intent prompts, subscription for prompts that
-			// actually drove a subscription (present in the map); null = N/A everywhere else,
-			// including non-WC.
+			// Donation is CAPABILITY-gated: a prompt is donation-capable when its per-popup
+			// `donation_impressions` (seen events carrying a donate block) is non-zero — or,
+			// until the hub exposes that column (NPPD-1756), when `action_type` is 'donation'
+			// (the legacy single-block signal). The capability column additionally catches a
+			// multi-block donate prompt whose primary intent collapsed to 'undefined'. The
+			// rate denominator is those donation-capable impressions, else total impressions.
+			$donation_impressions = (int) ( $row['donation_impressions'] ?? $impressions );
+			$donation_capable     = isset( $row['donation_impressions'] )
+				? $donation_impressions > 0
+				: 'donation' === $intent;
+			$donation_conversions = $donation_capable ? (int) ( $donation_map[ $popup_id ]['conversions'] ?? 0 ) : 0;
+
+			// Both rates share the coherence guard + em-dash semantics via rate_value() (null =
+			// not computable: no impressions, or a >100% cross-surface ratio; a float incl. 0.0
+			// = a real rate, e.g. a donation-capable prompt that converted nobody). null = N/A
+			// for a prompt the metric doesn't apply to, and on non-WC.
 			$mapped[] = [
 				'popup_id'                     => $popup_id,
 				'prompt_title'                 => (string) ( $row['prompt_title'] ?? '' ),
@@ -1403,7 +1423,7 @@ final class Prompts_Metric {
 				'registrations'                => (int) ( $row['registrations'] ?? 0 ),
 				'newsletter_signups'           => (int) ( $row['newsletter_signups'] ?? 0 ),
 				'donation_conversions'         => $donation_conversions,
-				'donation_conversion_rate'     => ( 'donation' === $intent && $wc ) ? $this->rate_value( $donation_conversions, $impressions ) : null,
+				'donation_conversion_rate'     => ( $wc && $donation_capable ) ? $this->rate_value( $donation_conversions, $donation_impressions ) : null,
 				'subscription_conversions'     => $subscription_conversions,
 				'subscription_conversion_rate' => ( $wc && isset( $subscription_map[ $popup_id ] ) ) ? $this->rate_value( $subscription_conversions, $impressions ) : null,
 			];
