@@ -1,19 +1,13 @@
 /**
  * Unit tests for the pricing-path recipe map.
  */
-import {
-	RECIPES,
-	LIFECYCLE_CONDITIONS,
-	applyRecipeConditions,
-	isConditionVisible,
-	segmentSatisfied,
-	intentLabel,
-} from './recipes';
+import { RECIPES, LIFECYCLE_CONDITIONS, applyRecipeConditions, isConditionVisible, segmentSatisfied, intentLabel } from './recipes';
 
 describe( 'recipes', () => {
-	it( 'save presets pending_cancellation + locked', () => {
+	it( 'save presets pending_cancellation + locked + all-subscriptions scope', () => {
 		expect( RECIPES.save.lifecycleCondition ).toBe( 'pending_cancellation' );
 		expect( RECIPES.save.application ).toBe( 'locked' );
+		expect( RECIPES.save.defaultScope ).toBe( 'all_subscriptions' );
 	} );
 
 	it( 'retention has no lifecycle matcher, current application, requires a segment', () => {
@@ -22,10 +16,11 @@ describe( 'recipes', () => {
 		expect( RECIPES.retention.requiresSegment ).toBe( true );
 	} );
 
-	it( 'custom presets nothing', () => {
+	it( 'custom presets nothing and defaults to all-products scope', () => {
 		expect( RECIPES.custom.lifecycleCondition ).toBeNull();
 		expect( RECIPES.custom.application ).toBeNull();
 		expect( RECIPES.custom.isCustom ).toBe( true );
+		expect( RECIPES.custom.defaultScope ).toBe( 'all_products' );
 	} );
 
 	it( 'applyRecipeConditions clears all lifecycle matchers and sets the path one', () => {

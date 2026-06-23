@@ -31,7 +31,7 @@ import ScopeTargets from './scope-targets';
 import Conditions from './conditions';
 import RulePreview from './rule-preview';
 import { tsToLocalInput, localInputToTs } from './datetime';
-import { RECIPES, pathOptions, applyRecipeConditions, segmentSatisfied, type PricingPath } from './recipes';
+import { RECIPES, pathOptions, applyRecipeConditions, segmentSatisfied, intentLabel, type PricingPath } from './recipes';
 
 const API_PATH = '/wc-dynamic-pricing/v1/rules';
 
@@ -82,10 +82,13 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 	const [ publicize, setPublicize ] = useState( Boolean( rule?.publicize ) );
 	const [ path, setPath ] = useState< string >( rule?.intent ?? ( isNew ? '' : 'custom' ) );
 	const [ intentNote, setIntentNote ] = useState( rule?.intent_note ?? '' );
+	// The deal name auto-fills from the goal until the publisher types their own.
+	const [ titleIsAuto, setTitleIsAuto ] = useState( isNew && ! rule?.title );
 	const recipe = path && path in RECIPES ? RECIPES[ path as PricingPath ] : null;
 
-	// Choosing a path applies its recipe: force the lifecycle matcher + application,
-	// preserving segmentation. Custom presets nothing.
+	// Choosing a path applies its recipe: force the lifecycle matcher + application +
+	// default scope, and seed the name from the goal. Preserves segmentation; Custom
+	// presets nothing but its scope default.
 	const choosePath = ( next: string ) => {
 		setPath( next );
 		if ( ! ( next in RECIPES ) ) {
@@ -96,6 +99,16 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 		const app = RECIPES[ p ].application;
 		if ( app ) {
 			setApplication( app );
+		}
+		// Default the deal name to the goal until the publisher types their own.
+		if ( titleIsAuto ) {
+			setTitle( 'custom' === p ? '' : intentLabel( p ) );
+		}
+		// Subscription presets target all subscriptions; Custom stays all products.
+		const wantScope = RECIPES[ p ].defaultScope;
+		if ( vocab.scopes.some( s => s.id === wantScope ) ) {
+			setScopeType( wantScope );
+			setScopeIds( [] );
 		}
 	};
 
@@ -304,7 +317,15 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 							description={ __( 'Name, status, and which products it applies to.', 'newspack-plugin' ) }
 						/>
 						<VStack spacing={ 4 }>
-							<TextControl label={ __( 'Name', 'newspack-plugin' ) } value={ title } onChange={ setTitle } __next40pxDefaultSize />
+							<TextControl
+							label={ __( 'Name', 'newspack-plugin' ) }
+							value={ title }
+							onChange={ v => {
+								setTitle( v );
+								setTitleIsAuto( false );
+							} }
+							__next40pxDefaultSize
+						/>
 							{ ! isNew && rule && (
 								<p className="description">
 									{ __( 'Deal ID:', 'newspack-plugin' ) } <code>{ rule.deal_key }</code>
