@@ -1520,8 +1520,10 @@ class HPOS_Storage implements Storage_Interface {
 		$prefix    = $wpdb->prefix;
 		$donations = $this->id_list( $this->donation_product_ids );
 
-		// Trailing-365-day cohort cutoff in UTC, bound via prepare (not NOW()).
+		// Trailing-365-day cohort window in UTC, both bounds via prepare (not NOW()).
 		$cutoff = $this->fmt( ( new \DateTimeImmutable( 'now', new \DateTimeZone( 'UTC' ) ) )->modify( '-365 days' ) );
+		// Upper bound excludes subscriptions with a future _schedule_start (scheduled/pending).
+		$now = gmdate( 'Y-m-d H:i:s', ( new \DateTimeImmutable( 'now', new \DateTimeZone( 'UTC' ) ) )->getTimestamp() );
 
 		// Inner subquery: customers whose earliest non-donation subscription
 		// start is within the window (the cohort). Mirrors the first-start
@@ -1563,10 +1565,11 @@ class HPOS_Storage implements Storage_Interface {
 					  AND oim2.meta_value NOT IN ($donations)
 					  AND sm2.meta_value != ''
 					GROUP BY o2.customer_id
-					HAVING first_start >= %s
+					HAVING first_start >= %s AND first_start <= %s
 				) cohort
 			  )",
-			$cutoff
+			$cutoff,
+			$now
 		);
 
 		$rows   = $wpdb->get_results( $sql, ARRAY_A );

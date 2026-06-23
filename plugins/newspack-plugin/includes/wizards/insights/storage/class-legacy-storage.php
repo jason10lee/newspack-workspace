@@ -1450,6 +1450,8 @@ class Legacy_Storage implements Storage_Interface {
 		$donations = $this->id_list( $this->donation_product_ids );
 
 		$cutoff = $this->fmt( ( new \DateTimeImmutable( 'now', new \DateTimeZone( 'UTC' ) ) )->modify( '-365 days' ) );
+		// Upper bound excludes subscriptions with a future _schedule_start (scheduled/pending).
+		$now = gmdate( 'Y-m-d H:i:s', ( new \DateTimeImmutable( 'now', new \DateTimeZone( 'UTC' ) ) )->getTimestamp() );
 
 		// Legacy CPT equivalent of HPOS_Storage::get_new_subscriber_cohort_intervals().
 		// _customer_user is cast to UNSIGNED (stored as a string) to align with the
@@ -1491,10 +1493,11 @@ class Legacy_Storage implements Storage_Interface {
 					  AND oim2.meta_value NOT IN ($donations)
 					  AND sm2.meta_value != ''
 					GROUP BY CAST(cust2.meta_value AS UNSIGNED)
-					HAVING first_start >= %s
+					HAVING first_start >= %s AND first_start <= %s
 				) cohort
 			  )",
-			$cutoff
+			$cutoff,
+			$now
 		);
 
 		$rows   = $wpdb->get_results( $sql, ARRAY_A );

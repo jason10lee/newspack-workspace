@@ -1993,10 +1993,10 @@ final class Conversion_Metric {
 			for ( $n = 0; $n <= $age; $n++ ) {
 				$active = 0;
 				foreach ( $members as $cid => $first_start ) {
-					$t = ( new \DateTimeImmutable( '@' . $first_start ) )
-						->setTimezone( $utc )
-						->modify( '+' . $n . ' months' )
-						->getTimestamp();
+					$t = $this->add_months_clamped(
+						( new \DateTimeImmutable( '@' . $first_start ) )->setTimezone( $utc ),
+						$n
+					)->getTimestamp();
 					foreach ( $by_customer[ $cid ] as $interval ) {
 						if ( $interval['start'] <= $t && ( null === $interval['terminus'] || $interval['terminus'] > $t ) ) {
 							$active++;
@@ -2022,6 +2022,30 @@ final class Conversion_Metric {
 			],
 			[ 'reference_line' => $this->retention_reference_line() ]
 		);
+	}
+
+	/**
+	 * Add N months to a DateTimeImmutable, clamping end-of-month overflow.
+	 *
+	 * PHP's `modify('+N months')` overflows end-of-month dates into the next month
+	 * (e.g. Jan 31 + 1 month → Mar 3). For retention cohorts this shifts the
+	 * comparison instant T, flipping the strict `terminus > T` boundary for
+	 * end-of-month subscription starts. This helper clamps the result back to
+	 * the last day of the target month when overflow occurs, while preserving the
+	 * original time-of-day (e.g. Jan 31 +1mo → Feb 28/29 same time, not Mar 3).
+	 * All date math is performed in the timezone of $base.
+	 *
+	 * @param \DateTimeImmutable $base The base datetime (must be in the desired timezone).
+	 * @param int                $n    Number of months to add (non-negative).
+	 * @return \DateTimeImmutable
+	 */
+	private function add_months_clamped( \DateTimeImmutable $base, int $n ): \DateTimeImmutable {
+		$t = $base->modify( '+' . $n . ' months' );
+		// If the day-of-month changed, the month overflowed — clamp to last day of previous month.
+		if ( $t->format( 'j' ) !== $base->format( 'j' ) ) {
+			$t = $t->modify( 'last day of previous month' );
+		}
+		return $t;
 	}
 
 	// --- Section 5: Action Scheduler handlers and pre-warm scheduling -------

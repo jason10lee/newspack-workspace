@@ -2975,6 +2975,46 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 0.70, $result['reference_line']['value'] );
 	}
 
+	// --- 5.2 month-overflow clamp (end-of-month subscription start) ---------
+
+	/**
+	 * 5.2 clamp: Jan 31 start, sub expires Feb 28 12:00 — N=1 active-at-T check.
+	 *
+	 * Without the clamp: Jan 31 + 1 month = Mar 3 00:00:00 (PHP overflow).
+	 *   terminus Feb 28 12:00 < Mar 3 00:00 → NOT active → value 0.0.
+	 *
+	 * With the clamp: Jan 31 + 1 month clamped to Feb 28 00:00:00.
+	 *   terminus Feb 28 12:00 > Feb 28 00:00 → ACTIVE → value 1.0.
+	 *
+	 * This test is written to fail with the buggy `+N months` code and pass
+	 * only after the add_months_clamped() helper is in place.
+	 */
+	public function test_compute_retention_cohort_clamps_end_of_month_overflow() {
+		$rows = [
+			[
+				'customer_id' => 1,
+				'start'       => '2026-01-31 00:00:00',
+				'cancelled'   => null,
+				'end'         => '2026-02-28 12:00:00', // expires midday Feb 28.
+			],
+		];
+		$subs_metric = $this->createMock( Subscribers_Metric::class );
+		$subs_metric->method( 'get_new_subscriber_cohort_intervals' )->willReturn( $rows );
+
+		$metric = new Conversion_Metric( null, null, $subs_metric, null );
+		$result = $metric->compute_subscriber_retention_cohort();
+
+		$this->assertSame( 'populated', $result['state'] );
+		$points = array_column( $result['cohorts'][0]['points'], 'value', 'period' );
+
+		// N=0: anchor is Jan 31 00:00 — well before terminus Feb 28 12:00 → active.
+		$this->assertSame( 1.0, $points[0] );
+
+		// N=1: clamped anchor is Feb 28 00:00 — terminus Feb 28 12:00 > Feb 28 00:00 → active.
+		// A buggy +1 months would produce Mar 3 00:00, making terminus < T → 0.0.
+		$this->assertSame( 1.0, $points[1] );
+	}
+
 	// --- Task 6: Snapshot getters + store_cohort_snapshot -------------------
 
 	/**
