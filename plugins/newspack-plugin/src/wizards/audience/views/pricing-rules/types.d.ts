@@ -36,8 +36,8 @@ interface PricingRuleRow {
 	active_until: number | null;
 	active_state: 'active' | 'scheduled' | 'ended';
 	published_at: number | null;
-	target_conversion_pct: number | null;
-	max_cancellation_pct: number | null;
+	intent: string;
+	intent_note: string;
 	is_stepped: boolean;
 	has_conditions: boolean;
 	conditions: { [ id: string ]: boolean | number | number[] | null };
