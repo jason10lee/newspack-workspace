@@ -287,16 +287,24 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 					) }
 				/>
 				<VStack spacing={ 4 }>
-					<SelectControl
-						label={ __( 'Goal', 'newspack-plugin' ) }
-						value={ path }
-						options={ [
-							...( path === '' ? [ { label: __( 'Select a goal…', 'newspack-plugin' ), value: '' } ] : [] ),
-							...pathOptions(),
-						] }
-						onChange={ choosePath }
-						__next40pxDefaultSize
-					/>
+					{ isNew ? (
+						<SelectControl
+							label={ __( 'Goal', 'newspack-plugin' ) }
+							value={ path }
+							options={ [
+								...( path === '' ? [ { label: __( 'Select a goal…', 'newspack-plugin' ), value: '' } ] : [] ),
+								...pathOptions(),
+							] }
+							onChange={ choosePath }
+							__next40pxDefaultSize
+						/>
+					) : (
+						<p className="description">
+							{ __( 'Goal:', 'newspack-plugin' ) } <strong>{ intentLabel( path ) }</strong>
+							<br />
+							{ __( 'Set when the rule was created — create a new rule to use a different goal.', 'newspack-plugin' ) }
+						</p>
+					) }
 					{ recipe && (
 						<p className="description" style={ { marginTop: 0 } }>
 							{ pathDescription( path as PricingPath ) }
@@ -323,14 +331,14 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 						/>
 						<VStack spacing={ 4 }>
 							<TextControl
-							label={ __( 'Name', 'newspack-plugin' ) }
-							value={ title }
-							onChange={ v => {
-								setTitle( v );
-								setTitleIsAuto( false );
-							} }
-							__next40pxDefaultSize
-						/>
+								label={ __( 'Name', 'newspack-plugin' ) }
+								value={ title }
+								onChange={ v => {
+									setTitle( v );
+									setTitleIsAuto( false );
+								} }
+								__next40pxDefaultSize
+							/>
 							{ ! isNew && rule && (
 								<p className="description">
 									{ __( 'Deal ID:', 'newspack-plugin' ) } <code>{ rule.deal_key }</code>
