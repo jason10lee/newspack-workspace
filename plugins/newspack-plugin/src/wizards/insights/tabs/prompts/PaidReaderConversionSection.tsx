@@ -42,7 +42,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Donation Conversion (Direct)', 'newspack-plugin' ),
 					description: __(
-						'Sessions with a completed donation after a donation-intent prompt impression ÷ sessions with a donation-intent prompt impression',
+						'Sessions with a completed donation after a prompt impression with a donation block ÷ sessions with a prompt impression with a donation block',
 						'newspack-plugin'
 					),
 					current: current.donation_conversion_direct,

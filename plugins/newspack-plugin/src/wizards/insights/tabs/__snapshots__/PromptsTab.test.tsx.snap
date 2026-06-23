@@ -442,7 +442,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Sessions with a registration after a registration-intent prompt impression ÷ sessions with a registration-intent prompt impression
+                Sessions with a registration after a prompt impression with a registration block ÷ sessions with a prompt impression with a registration block
               </div>
             </div>
           </div>
@@ -487,7 +487,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Readers who registered in a later session within 7 days of seeing a registration-intent prompt ÷ readers who saw a registration-intent prompt
+                Readers who registered in a later session within 7 days of seeing a prompt with a registration block ÷ readers who saw a prompt with a registration block
               </div>
             </div>
           </div>
@@ -532,7 +532,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Sessions with a newsletter signup after a newsletter-intent prompt impression ÷ sessions with a newsletter-intent prompt impression
+                Sessions with a newsletter signup after a prompt impression with a newsletter block ÷ sessions with a prompt impression with a newsletter block
               </div>
             </div>
           </div>
@@ -577,7 +577,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Readers who signed up for a newsletter in a later session within 7 days of seeing a newsletter-intent prompt ÷ readers who saw a newsletter-intent prompt
+                Readers who signed up for a newsletter in a later session within 7 days of seeing a prompt with a newsletter block ÷ readers who saw a prompt with a newsletter block
               </div>
             </div>
           </div>
@@ -650,7 +650,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Sessions with a completed donation after a donation-intent prompt impression ÷ sessions with a donation-intent prompt impression
+                Sessions with a completed donation after a prompt impression with a donation block ÷ sessions with a prompt impression with a donation block
               </div>
             </div>
           </div>
