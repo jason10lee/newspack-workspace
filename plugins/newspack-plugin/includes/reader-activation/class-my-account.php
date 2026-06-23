@@ -45,8 +45,36 @@ class My_Account {
 	 *
 	 * @return bool
 	 */
-	public static function woocommerce_owns_shell() {
+	public static function woocommerce_owns_shell(): bool {
 		return class_exists( 'WooCommerce' ) && function_exists( 'wc_get_page_permalink' );
+	}
+
+	/**
+	 * Add a My Account notice, using WooCommerce notices when available and
+	 * falling back to Newspack UI snackbars on the native (no-WooCommerce) page.
+	 *
+	 * Shared so the WooCommerce and native paths — and integrations such as
+	 * newspack-newsletters — emit notices through a single implementation.
+	 *
+	 * @param string $message Notice message.
+	 * @param string $type    Notice type: 'success' | 'error' | 'notice'.
+	 */
+	public static function add_notice( string $message, string $type = 'success' ): void {
+		if ( \function_exists( 'wc_add_notice' ) ) {
+			\wc_add_notice( $message, $type );
+			return;
+		}
+		if ( \class_exists( 'Newspack\Newspack_UI' ) ) {
+			Newspack_UI::add_notice(
+				$message,
+				[
+					'type'           => 'error' === $type ? 'error' : 'success',
+					'corner'         => 'top-right',
+					'autohide'       => true,
+					'active_on_load' => true,
+				]
+			);
+		}
 	}
 
 	/**
@@ -55,7 +83,7 @@ class My_Account {
 	 *
 	 * @return bool
 	 */
-	protected static function reader_must_verify() {
+	protected static function reader_must_verify(): bool {
 		if ( defined( 'NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION' ) && NEWSPACK_ALLOW_MY_ACCOUNT_ACCESS_WITHOUT_VERIFICATION ) {
 			return false;
 		}
@@ -68,7 +96,7 @@ class My_Account {
 	/**
 	 * Initialize hooks.
 	 */
-	public static function init() {
+	public static function init(): void {
 		\add_action( 'init', [ __CLASS__, 'register_shortcode' ] );
 		// Defer the native-shell decision to `plugins_loaded` so the WooCommerce
 		// class-existence check is reliable regardless of plugin load order
@@ -85,7 +113,7 @@ class My_Account {
 	 * that is effectively off (no native account page is provisioned when
 	 * Reader Activation is disabled).
 	 */
-	public static function maybe_register_native_hooks() {
+	public static function maybe_register_native_hooks(): void {
 		if ( self::woocommerce_owns_shell() || ! Reader_Activation::is_enabled() ) {
 			return;
 		}
@@ -113,7 +141,7 @@ class My_Account {
 	 * WooCommerce path enqueues this via My_Account_UI_V1; when WooCommerce is
 	 * absent the native shell must do it.
 	 */
-	public static function enqueue_assets() {
+	public static function enqueue_assets(): void {
 		if ( ! self::is_account_page() ) {
 			return;
 		}
@@ -175,7 +203,7 @@ class My_Account {
 	 * @param array $classes Body classes.
 	 * @return array
 	 */
-	public static function add_body_class( $classes ) {
+	public static function add_body_class( array $classes ): array {
 		if ( ! self::is_account_page() ) {
 			return $classes;
 		}
@@ -208,9 +236,9 @@ class My_Account {
 	 * @param bool $show Whether to show the admin bar.
 	 * @return bool
 	 */
-	public static function hide_admin_bar( $show ) {
+	public static function hide_admin_bar( $show ): bool {
 		if ( ! self::is_account_page() ) {
-			return $show;
+			return (bool) $show;
 		}
 		$user = \wp_get_current_user();
 		if ( ! $user || ! $user->ID || ! Reader_Activation::is_user_reader( $user ) ) {
@@ -223,10 +251,12 @@ class My_Account {
 	 * Ensure the native account page exists when running without WooCommerce.
 	 *
 	 * Self-healing: runs on admin_init, creates the page at most once (guarded
-	 * by the stored option), and only when Reader Activation is enabled.
+	 * by the stored option), and only when Reader Activation is enabled. Gated on
+	 * `manage_options` so the write never fires on low-privilege admin-ajax
+	 * requests or the hot admin path for non-administrators.
 	 */
-	public static function maybe_provision_page() {
-		if ( ! Reader_Activation::is_enabled() ) {
+	public static function maybe_provision_page(): void {
+		if ( ! Reader_Activation::is_enabled() || ! \current_user_can( 'manage_options' ) ) {
 			return;
 		}
 		$page_id = (int) \get_option( self::PAGE_ID_OPTION, 0 );
@@ -239,13 +269,17 @@ class My_Account {
 	/**
 	 * Handle the native account-settings save (Woo absent).
 	 *
-	 * Updates display name and email. Returns the updated user ID, or 0 on
-	 * failure / invalid nonce.
+	 * Updates the display name. The email address is intentionally not updated
+	 * here: the native path has no email-change verification flow, and
+	 * `WooCommerce_My_Account::edit_account_prevent_email_update()` resets
+	 * `$_POST['account_email']` to the current address on every Reader Activation
+	 * request, so the field is rendered read-only and any submitted value is
+	 * ignored rather than silently dropped while reporting success.
 	 *
-	 * @return int
+	 * @return int Updated user ID, or 0 on failure / invalid nonce / unverified.
 	 */
-	public static function handle_save_account() {
-		if ( ! \is_user_logged_in() ) {
+	public static function handle_save_account(): int {
+		if ( ! \is_user_logged_in() || self::reader_must_verify() ) {
 			return 0;
 		}
 		$nonce = isset( $_POST['newspack_my_account_save_nonce'] ) ? \sanitize_text_field( \wp_unslash( $_POST['newspack_my_account_save_nonce'] ) ) : '';
@@ -258,12 +292,6 @@ class My_Account {
 		if ( isset( $_POST['account_display_name'] ) ) {
 			$args['display_name'] = \sanitize_text_field( \wp_unslash( $_POST['account_display_name'] ) );
 		}
-		if ( isset( $_POST['account_email'] ) ) {
-			$email = \sanitize_email( \wp_unslash( $_POST['account_email'] ) );
-			if ( \is_email( $email ) ) {
-				$args['user_email'] = $email;
-			}
-		}
 		$result = \wp_update_user( $args );
 		return \is_wp_error( $result ) ? 0 : $user_id;
 	}
@@ -273,8 +301,8 @@ class My_Account {
 	 *
 	 * @return bool True on success.
 	 */
-	public static function handle_password_change() {
-		if ( ! \is_user_logged_in() ) {
+	public static function handle_password_change(): bool {
+		if ( ! \is_user_logged_in() || self::reader_must_verify() ) {
 			return false;
 		}
 		$nonce = isset( $_POST['newspack_my_account_password_nonce'] ) ? \sanitize_text_field( \wp_unslash( $_POST['newspack_my_account_password_nonce'] ) ) : '';
@@ -282,16 +310,19 @@ class My_Account {
 			return false;
 		}
 		$user  = \wp_get_current_user();
-		$pass1 = isset( $_POST['password_1'] ) ? (string) \wp_unslash( $_POST['password_1'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- passwords are not sanitized.
-		$pass2 = isset( $_POST['password_2'] ) ? (string) \wp_unslash( $_POST['password_2'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- passwords are not sanitized.
+		$pass1 = isset( $_POST['password_1'] ) && \is_string( $_POST['password_1'] ) ? \wp_unslash( $_POST['password_1'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- passwords are not sanitized.
+		$pass2 = isset( $_POST['password_2'] ) && \is_string( $_POST['password_2'] ) ? \wp_unslash( $_POST['password_2'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- passwords are not sanitized.
 
 		if ( '' === $pass1 || $pass1 !== $pass2 ) {
 			self::set_notice( \__( 'Passwords do not match. Please try again.', 'newspack-plugin' ), 'error' );
 			return false;
 		}
-		// Require the current password unless the reader has none yet.
-		if ( ! Reader_Activation::is_reader_without_password( $user ) ) {
-			$current = isset( $_POST['current_password'] ) ? (string) \wp_unslash( $_POST['current_password'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- passwords are not sanitized.
+		// Require the current password unless the reader has none yet. An explicit
+		// `true ===` check keeps a WP_Error (returned for a non-reader) on the
+		// safe side: it is treated as "has a password", so the current-password
+		// requirement is enforced rather than skipped on error-truthiness.
+		if ( true !== Reader_Activation::is_reader_without_password( $user ) ) {
+			$current = isset( $_POST['current_password'] ) && \is_string( $_POST['current_password'] ) ? \wp_unslash( $_POST['current_password'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- passwords are not sanitized.
 			if ( '' === $current || ! \wp_check_password( $current, $user->data->user_pass, $user->ID ) ) {
 				self::set_notice( \__( 'Your current password is incorrect.', 'newspack-plugin' ), 'error' );
 				return false;
@@ -313,7 +344,7 @@ class My_Account {
 	 * @param string $message Notice message.
 	 * @param string $type    'success' | 'error'.
 	 */
-	private static function set_notice( $message, $type = 'success' ) {
+	private static function set_notice( string $message, string $type = 'success' ): void {
 		\set_transient(
 			self::NOTICE_TRANSIENT_PREFIX . \get_current_user_id(),
 			[
@@ -330,7 +361,7 @@ class My_Account {
 	 * The form `action` value is only used for routing; each target handler runs
 	 * its own nonce verification before mutating any data.
 	 */
-	public static function handle_form_submissions() {
+	public static function handle_form_submissions(): void {
 		// phpcs:disable WordPress.Security.NonceVerification.Missing -- routing only; the dispatched handlers verify their own nonces.
 		if ( empty( $_POST['action'] ) || ! self::is_account_page() ) {
 			return;
@@ -359,7 +390,7 @@ class My_Account {
 	/**
 	 * Display a one-time success/error notice after a profile save.
 	 */
-	public static function maybe_display_notice() {
+	public static function maybe_display_notice(): void {
 		if ( ! \is_user_logged_in() || ! self::is_account_page() ) {
 			return;
 		}
@@ -367,43 +398,18 @@ class My_Account {
 		// Native equivalent of WooCommerce_My_Account::handle_messages(): show the
 		// `?message=...&is_error=...` feedback used by the verify-account buttons.
 		$message = filter_input( INPUT_GET, 'message', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
-		if ( $message && \class_exists( 'Newspack\Newspack_UI' ) ) {
+		if ( $message ) {
 			$is_error = (bool) filter_input( INPUT_GET, 'is_error', FILTER_VALIDATE_BOOLEAN );
-			Newspack_UI::add_notice(
-				$message,
-				[
-					'type'           => $is_error ? 'error' : 'success',
-					'corner'         => 'top-right',
-					'autohide'       => true,
-					'active_on_load' => true,
-				]
-			);
+			self::add_notice( $message, $is_error ? 'error' : 'success' );
 		}
 
 		$key    = self::NOTICE_TRANSIENT_PREFIX . \get_current_user_id();
 		$stored = \get_transient( $key );
-		if ( false !== $stored ) {
+		if ( is_array( $stored ) ) {
 			\delete_transient( $key );
-			if ( \class_exists( 'Newspack\Newspack_UI' ) ) {
-				if ( is_array( $stored ) ) {
-					$msg  = isset( $stored['message'] ) ? $stored['message'] : '';
-					$type = isset( $stored['type'] ) ? $stored['type'] : 'success';
-				} else {
-					// Back-compat with the old string form.
-					$type = ( 'success' === $stored ) ? 'success' : 'error';
-					$msg  = ( 'success' === $stored ) ? \__( 'Account details changed successfully.', 'newspack-plugin' ) : \__( 'Something went wrong. Please try again.', 'newspack-plugin' );
-				}
-				if ( $msg ) {
-					Newspack_UI::add_notice(
-						$msg,
-						[
-							'type'           => $type,
-							'corner'         => 'top-right',
-							'autohide'       => true,
-							'active_on_load' => true,
-						]
-					);
-				}
+			$msg = isset( $stored['message'] ) ? $stored['message'] : '';
+			if ( $msg ) {
+				self::add_notice( $msg, isset( $stored['type'] ) ? $stored['type'] : 'success' );
 			}
 		}
 	}
@@ -413,7 +419,7 @@ class My_Account {
 	 *
 	 * The dashboard has no standalone view; Account details is the default.
 	 */
-	public static function redirect_dashboard_to_account_details() {
+	public static function redirect_dashboard_to_account_details(): void {
 		if ( ! \is_user_logged_in() || ! self::is_account_page() ) {
 			return;
 		}
@@ -428,7 +434,7 @@ class My_Account {
 	 * Handle the native delete-account request (Woo absent): send the existing
 	 * deletion email if available, else delete after confirmation.
 	 */
-	public static function handle_delete_request() {
+	public static function handle_delete_request(): void {
 		if ( ! \is_user_logged_in() ) {
 			return;
 		}
@@ -452,7 +458,7 @@ class My_Account {
 	 *
 	 * @return int Page ID, or 0 if none is set.
 	 */
-	public static function get_page_id() {
+	public static function get_page_id(): int {
 		if ( self::woocommerce_owns_shell() ) {
 			return (int) \get_option( 'woocommerce_myaccount_page_id', 0 );
 		}
@@ -471,7 +477,7 @@ class My_Account {
 	 *
 	 * @return int Page ID.
 	 */
-	public static function get_or_create_page() {
+	public static function get_or_create_page(): int {
 		$page_id = (int) \get_option( self::PAGE_ID_OPTION, 0 );
 		if ( $page_id && 'page' === \get_post_type( $page_id ) ) {
 			return $page_id;
@@ -487,6 +493,16 @@ class My_Account {
 			return $existing_id;
 		}
 
+		// Reuse any page already sitting at the canonical "my-account" slug before
+		// inserting a new one. This closes the check-then-act race where two
+		// concurrent admin requests would each pass the option guard and insert a
+		// duplicate page (the second orphaning the first).
+		$existing_page = \get_page_by_path( 'my-account' );
+		if ( $existing_page instanceof \WP_Post && 'page' === $existing_page->post_type ) {
+			\update_option( self::PAGE_ID_OPTION, $existing_page->ID );
+			return $existing_page->ID;
+		}
+
 		$page_id = \wp_insert_post(
 			[
 				'post_type'      => 'page',
@@ -498,7 +514,7 @@ class My_Account {
 			]
 		);
 
-		if ( \is_numeric( $page_id ) && $page_id ) {
+		if ( ! \is_wp_error( $page_id ) && $page_id ) {
 			\update_option( self::PAGE_ID_OPTION, (int) $page_id );
 			\update_post_meta( $page_id, 'newspack_hide_page_title', true );
 			return (int) $page_id;
@@ -513,7 +529,7 @@ class My_Account {
 	 *
 	 * @return bool
 	 */
-	public static function is_account_page() {
+	public static function is_account_page(): bool {
 		if ( self::woocommerce_owns_shell() && function_exists( 'is_account_page' ) ) {
 			return \is_account_page();
 		}
@@ -529,7 +545,7 @@ class My_Account {
 	 * @param string $value    Optional endpoint value (e.g. a subscription ID).
 	 * @return string URL, or empty string if the page is not set.
 	 */
-	public static function get_endpoint_url( $endpoint = '', $value = '' ) {
+	public static function get_endpoint_url( string $endpoint = '', string $value = '' ): string {
 		if ( self::woocommerce_owns_shell() ) {
 			if ( '' === $endpoint || 'dashboard' === $endpoint ) {
 				return \wc_get_account_endpoint_url( 'dashboard' );
@@ -564,7 +580,7 @@ class My_Account {
 	 *
 	 * @return array<string,string> slug => label.
 	 */
-	public static function get_endpoints() {
+	public static function get_endpoints(): array {
 		$endpoints = [
 			self::ENDPOINT_EDIT_ACCOUNT   => \__( 'Account details', 'newspack-plugin' ),
 			self::ENDPOINT_DELETE_ACCOUNT => \__( 'Delete account', 'newspack-plugin' ),
@@ -587,7 +603,7 @@ class My_Account {
 	 *
 	 * @return array<string,string>
 	 */
-	public static function get_tabs() {
+	public static function get_tabs(): array {
 		if ( self::reader_must_verify() ) {
 			/**
 			 * Filters the ordered My Account navigation tabs.
@@ -619,7 +635,7 @@ class My_Account {
 	/**
 	 * Register rewrite endpoints for the native shell.
 	 */
-	public static function register_endpoints() {
+	public static function register_endpoints(): void {
 		$slugs = array_keys( self::get_endpoints() );
 		foreach ( $slugs as $slug ) {
 			\add_rewrite_endpoint( $slug, EP_PAGES );
@@ -645,7 +661,7 @@ class My_Account {
 	 * @param array $vars Query vars.
 	 * @return array
 	 */
-	public static function add_query_vars( $vars ) {
+	public static function add_query_vars( array $vars ): array {
 		foreach ( array_keys( self::get_endpoints() ) as $slug ) {
 			$vars[] = $slug;
 		}
@@ -657,7 +673,7 @@ class My_Account {
 	 *
 	 * @return string
 	 */
-	public static function get_current_endpoint() {
+	public static function get_current_endpoint(): string {
 		global $wp;
 		foreach ( array_keys( self::get_endpoints() ) as $slug ) {
 			if ( isset( $wp->query_vars[ $slug ] ) ) {
@@ -670,7 +686,7 @@ class My_Account {
 	/**
 	 * Register the [newspack_my_account] shortcode.
 	 */
-	public static function register_shortcode() {
+	public static function register_shortcode(): void {
 		\add_shortcode( 'newspack_my_account', [ __CLASS__, 'render_page' ] );
 
 		// The native account page reuses the existing WooCommerce account page,
@@ -690,9 +706,9 @@ class My_Account {
 	 * @param string $template Template path.
 	 * @return string
 	 */
-	public static function page_template( $template ) {
+	public static function page_template( $template ): string {
 		if ( ! self::is_account_page() ) {
-			return $template;
+			return (string) $template;
 		}
 		if ( ! \is_user_logged_in() ) {
 			// Logged-out readers get a stripped template: site header, the auth
@@ -710,7 +726,7 @@ class My_Account {
 	 *
 	 * @return string Rendered HTML.
 	 */
-	public static function render_page() {
+	public static function render_page(): string {
 		if ( ! \is_user_logged_in() ) {
 			// Mirror the WooCommerce account page: a logged-out visitor gets the
 			// inline Reader Activation auth form (see login-form.php), not an
@@ -745,7 +761,7 @@ class My_Account {
 	 * (dist/my-account-v1.css) applies, using native tab data instead of
 	 * WooCommerce menu functions.
 	 */
-	protected static function render_navigation() {
+	protected static function render_navigation(): void {
 		$current = self::get_current_endpoint();
 		$tabs    = self::get_tabs();
 		$logout  = null;
@@ -800,7 +816,7 @@ class My_Account {
 	 * default landing. Integration endpoints are rendered by the
 	 * newspack_my_account_content action.
 	 */
-	public static function render_content() {
+	public static function render_content(): void {
 		if ( self::reader_must_verify() ) {
 			include NEWSPACK_ABSPATH . 'includes/plugins/woocommerce/my-account/templates/verify.php';
 			return;
@@ -832,15 +848,16 @@ class My_Account {
 	/**
 	 * Render the dashboard landing. Stub; refined in a later task.
 	 */
-	protected static function render_dashboard() {
+	protected static function render_dashboard(): void {
 		echo '<p>' . \esc_html__( 'Welcome to your account.', 'newspack-plugin' ) . '</p>';
 	}
 
 	/**
-	 * Render the native account settings form (display name, email, password
-	 * link). Email-change verification reuses the shared handler.
+	 * Render the native account settings form: editable display name, a
+	 * read-only email field (the native path has no email-change verification
+	 * flow), the password form, and the delete-account section.
 	 */
-	protected static function render_account_settings() {
+	protected static function render_account_settings(): void {
 		// When arriving from the account-deletion email link, show the confirmation form.
 		if ( isset( $_GET[ WooCommerce_My_Account::DELETE_ACCOUNT_FORM ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- nonce is verified in render_delete_confirmation().
 			self::render_delete_confirmation();
@@ -860,8 +877,9 @@ class My_Account {
 					<input type="text" class="woocommerce-Input input-text" name="account_display_name" id="account_display_name" value="<?php echo \esc_attr( $user->display_name ); ?>" />
 				</p>
 				<p class="woocommerce-form-row form-row form-row-wide">
-					<label for="account_email"><?php \esc_html_e( 'Email address', 'newspack-plugin' ); ?>&nbsp;<span class="required">*</span></label>
-					<input type="email" class="woocommerce-Input input-text" name="account_email" id="account_email" value="<?php echo \esc_attr( $user->user_email ); ?>" required />
+					<label for="account_email"><?php \esc_html_e( 'Email address', 'newspack-plugin' ); ?></label>
+					<input type="email" class="woocommerce-Input input-text" name="account_email" id="account_email" value="<?php echo \esc_attr( $user->user_email ); ?>" autocomplete="email" readonly disabled />
+					<span class="newspack-ui__font--xs"><?php \esc_html_e( 'Your email address cannot be changed here.', 'newspack-plugin' ); ?></span>
 				</p>
 				<?php
 				/** Lets integrations add fields, mirroring the Woo template hook. */
@@ -875,8 +893,7 @@ class My_Account {
 			</form>
 		</section>
 		<?php
-		$newspack_user             = \wp_get_current_user();
-		$newspack_without_password = $newspack_user && true === Reader_Activation::is_reader_without_password( $newspack_user );
+		$newspack_without_password = $user && true === Reader_Activation::is_reader_without_password( $user );
 		?>
 		<section id="account-password">
 			<h4 class="newspack-ui__font--m"><?php \esc_html_e( 'Password', 'newspack-plugin' ); ?></h4>
@@ -924,7 +941,7 @@ class My_Account {
 	 * uses no WooCommerce functions. Submitting the form is processed by
 	 * WooCommerce_My_Account::handle_delete_account() on template_redirect.
 	 */
-	protected static function render_delete_confirmation() {
+	protected static function render_delete_confirmation(): void {
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- nonce is verified below before any output of the form.
 		$nonce = isset( $_GET[ WooCommerce_My_Account::DELETE_ACCOUNT_FORM ] ) ? \sanitize_text_field( \wp_unslash( $_GET[ WooCommerce_My_Account::DELETE_ACCOUNT_FORM ] ) ) : '';
 		if ( ! \wp_verify_nonce( $nonce, WooCommerce_My_Account::DELETE_ACCOUNT_FORM ) ) {
@@ -958,7 +975,7 @@ class My_Account {
 	/**
 	 * Render the native delete-account confirmation tab.
 	 */
-	protected static function render_delete_account() {
+	protected static function render_delete_account(): void {
 		?>
 		<section id="delete-account-confirm">
 			<h4 class="newspack-ui__font--m is-destructive"><?php \esc_html_e( 'Delete account', 'newspack-plugin' ); ?></h4>

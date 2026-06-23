@@ -216,9 +216,15 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The native save handler updates display name and email.
+	 * The native save handler updates the display name but never the email: the
+	 * native path has no email-change verification flow, so the email field is
+	 * read-only and any submitted address is ignored (rather than reported as a
+	 * successful change that is silently discarded).
 	 */
 	public function test_native_save_account() {
+		if ( My_Account::woocommerce_owns_shell() ) {
+			$this->markTestSkipped( 'WooCommerce is active; native path not exercised.' );
+		}
 		$user_id = self::factory()->user->create(
 			[
 				'role'         => 'subscriber',
@@ -236,7 +242,8 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 
 		$user = get_user_by( 'id', $user_id );
 		$this->assertSame( 'New Name', $user->display_name );
-		$this->assertSame( 'new@example.com', $user->user_email );
+		// Email is intentionally not updated on the native path.
+		$this->assertSame( 'old@example.com', $user->user_email );
 
 		unset( $_POST['newspack_my_account_save_nonce'], $_POST['account_display_name'], $_POST['account_email'] );
 	}
@@ -275,6 +282,10 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 		}
 		delete_option( My_Account::PAGE_ID_OPTION );
 
+		// Provisioning is gated on `manage_options`, so run as an administrator.
+		$admin_id = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		wp_set_current_user( $admin_id );
+
 		// Force Reader Activation enabled for this test.
 		add_filter( 'newspack_reader_activation_enabled', '__return_true' );
 
@@ -287,6 +298,14 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 		My_Account::maybe_provision_page();
 		$this->assertSame( $page_id, (int) get_option( My_Account::PAGE_ID_OPTION, 0 ) );
 
+		// A non-admin (e.g. a reader on an admin-ajax request) cannot provision.
+		delete_option( My_Account::PAGE_ID_OPTION );
+		$reader_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		wp_set_current_user( $reader_id );
+		My_Account::maybe_provision_page();
+		$this->assertSame( 0, (int) get_option( My_Account::PAGE_ID_OPTION, 0 ) );
+
+		wp_set_current_user( 0 );
 		remove_filter( 'newspack_reader_activation_enabled', '__return_true' );
 		wp_delete_post( $page_id, true );
 		delete_option( My_Account::PAGE_ID_OPTION );
@@ -406,8 +425,15 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 		$_POST['newspack_my_account_save_nonce'] = wp_create_nonce( 'newspack_my_account_save' );
 		$_POST['account_display_name']           = 'New Name';
 		My_Account::handle_save_account();
-		// Simulate what handle_form_submissions stores on success.
-		set_transient( My_Account::NOTICE_TRANSIENT_PREFIX . $user_id, 'success', MINUTE_IN_SECONDS );
+		// Simulate what handle_form_submissions stores on success (array shape).
+		set_transient(
+			My_Account::NOTICE_TRANSIENT_PREFIX . $user_id,
+			[
+				'message' => 'Account details changed successfully.',
+				'type'    => 'success',
+			],
+			MINUTE_IN_SECONDS
+		);
 
 		$page_id = self::factory()->post->create( [ 'post_type' => 'page' ] );
 		update_option( My_Account::PAGE_ID_OPTION, $page_id );
@@ -450,5 +476,90 @@ class Newspack_Test_My_Account extends WP_UnitTestCase {
 
 		unset( $_POST['newspack_my_account_password_nonce'], $_POST['current_password'], $_POST['password_1'], $_POST['password_2'] );
 		delete_transient( My_Account::NOTICE_TRANSIENT_PREFIX . $user_id );
+	}
+
+	/**
+	 * When WooCommerce owns the shell, the accessors delegate to WooCommerce
+	 * rather than the native implementation. This proves the "behavior is
+	 * unchanged when WooCommerce is present" guarantee instead of assuming it.
+	 *
+	 * Runs in a separate process so the stubbed WooCommerce class / wc_* helpers
+	 * (which flip woocommerce_owns_shell() to true) don't leak into the rest of
+	 * the suite, whose native-path tests skip when WooCommerce is present.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_woocommerce_delegation() {
+		// Stub WooCommerce's presence and the account-page accessors.
+		if ( ! class_exists( 'WooCommerce' ) ) {
+			eval( 'class WooCommerce {}' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- test-only stub for the delegation branch.
+		}
+		if ( ! function_exists( 'wc_get_page_permalink' ) ) {
+			/**
+			 * Stub: WooCommerce account page permalink.
+			 *
+			 * @param string $page Page identifier.
+			 * @return string
+			 */
+			function wc_get_page_permalink( $page = '' ) {
+				return 'https://example.test/my-account/';
+			}
+		}
+		if ( ! function_exists( 'wc_get_account_endpoint_url' ) ) {
+			/**
+			 * Stub: WooCommerce account endpoint URL.
+			 *
+			 * @param string $endpoint Endpoint slug.
+			 * @return string
+			 */
+			function wc_get_account_endpoint_url( $endpoint ) {
+				return 'https://example.test/my-account/';
+			}
+		}
+		if ( ! function_exists( 'wc_get_endpoint_url' ) ) {
+			/**
+			 * Stub: WooCommerce endpoint URL builder.
+			 *
+			 * @param string $endpoint  Endpoint slug.
+			 * @param string $value     Endpoint value.
+			 * @param string $permalink Base permalink.
+			 * @return string
+			 */
+			function wc_get_endpoint_url( $endpoint, $value, $permalink ) {
+				return rtrim( $permalink, '/' ) . '/' . $endpoint . '/';
+			}
+		}
+		if ( ! function_exists( 'is_account_page' ) ) {
+			/**
+			 * Stub: WooCommerce is-account-page conditional.
+			 *
+			 * @return bool
+			 */
+			function is_account_page() {
+				return true;
+			}
+		}
+
+		// The shell now reports WooCommerce ownership.
+		$this->assertTrue( My_Account::woocommerce_owns_shell() );
+
+		// get_page_id() reads the WooCommerce option, not the native one.
+		update_option( 'woocommerce_myaccount_page_id', 4242 );
+		update_option( My_Account::PAGE_ID_OPTION, 1 );
+		$this->assertSame( 4242, My_Account::get_page_id() );
+
+		// Empty / dashboard endpoint delegates to wc_get_account_endpoint_url().
+		$this->assertSame( 'https://example.test/my-account/', My_Account::get_endpoint_url() );
+		$this->assertSame( 'https://example.test/my-account/', My_Account::get_endpoint_url( 'dashboard' ) );
+
+		// A named endpoint delegates to wc_get_endpoint_url().
+		$this->assertSame( 'https://example.test/my-account/edit-account/', My_Account::get_endpoint_url( 'edit-account' ) );
+
+		// is_account_page() delegates to WooCommerce's is_account_page().
+		$this->assertTrue( My_Account::is_account_page() );
+
+		delete_option( 'woocommerce_myaccount_page_id' );
+		delete_option( My_Account::PAGE_ID_OPTION );
 	}
 }

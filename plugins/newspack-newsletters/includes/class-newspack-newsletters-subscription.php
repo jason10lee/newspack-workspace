@@ -985,6 +985,13 @@ class Newspack_Newsletters_Subscription {
 	 * @param string $type    Notice type: 'success' | 'error' | 'notice'.
 	 */
 	private static function add_account_notice( $message, $type = 'success' ) {
+		// Prefer the shared newspack-plugin helper so the WooCommerce / native
+		// notice fallback lives in one place. Fall back to a local implementation
+		// when newspack-plugin is absent (this plugin must work standalone).
+		if ( method_exists( 'Newspack\My_Account', 'add_notice' ) ) {
+			\Newspack\My_Account::add_notice( $message, $type );
+			return;
+		}
 		if ( function_exists( 'wc_add_notice' ) ) {
 			wc_add_notice( $message, $type );
 			return;
@@ -1094,7 +1101,14 @@ class Newspack_Newsletters_Subscription {
 	 * Process user newsletters subscription update.
 	 */
 	public static function process_subscription_update() {
-		if ( ! isset( $_POST[ self::SUBSCRIPTION_UPDATE ] ) || ! wp_verify_nonce( sanitize_text_field( $_POST[ self::SUBSCRIPTION_UPDATE ] ), self::SUBSCRIPTION_UPDATE ) ) {
+		if ( ! isset( $_POST[ self::SUBSCRIPTION_UPDATE ] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST[ self::SUBSCRIPTION_UPDATE ] ) ), self::SUBSCRIPTION_UPDATE ) ) {
+			return;
+		}
+		// Scope to the My Account page so this template_redirect handler doesn't
+		// process the POST on unrelated requests. My_Account::is_account_page()
+		// covers both the WooCommerce and native shells; a no-op when
+		// newspack-plugin is absent.
+		if ( method_exists( 'Newspack\My_Account', 'is_account_page' ) && ! \Newspack\My_Account::is_account_page() ) {
 			return;
 		}
 		if ( ! self::has_subscription_management() ) {
@@ -1104,7 +1118,7 @@ class Newspack_Newsletters_Subscription {
 			self::add_account_notice( __( 'You must be logged in and verified to update your subscriptions.', 'newspack-newsletters' ), 'error' );
 		} else {
 			$email         = get_userdata( get_current_user_id() )->user_email;
-			$lists         = isset( $_POST['lists'] ) ? array_map( 'sanitize_text_field', $_POST['lists'] ) : [];
+			$lists         = isset( $_POST['lists'] ) && is_array( $_POST['lists'] ) ? array_map( 'sanitize_text_field', wp_unslash( $_POST['lists'] ) ) : [];
 			$lists_config   = self::get_lists_config();
 			$lists_to_add  = array_intersect( array_keys( $lists_config ), $lists );
 			$current_lists = [];

@@ -896,8 +896,13 @@ class WooCommerce_My_Account {
 	 * @return string The filtered destination URL.
 	 */
 	public static function redirect_to_home_after_logout( $redirect_to ) {
+		// Compare without a trailing slash: on the WooCommerce path
+		// My_Account::get_endpoint_url() resolves to the dashboard endpoint URL,
+		// which can differ from $redirect_to by a trailing slash even though both
+		// point at the account page. Normalizing keeps the redirect-home behavior
+		// equivalent to the previous wc_get_page_permalink( 'myaccount' ) check.
 		$account_url = My_Account::get_endpoint_url();
-		if ( $account_url && $account_url === $redirect_to ) {
+		if ( $account_url && \untrailingslashit( $account_url ) === \untrailingslashit( $redirect_to ) ) {
 			return \get_home_url();
 		}
 

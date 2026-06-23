@@ -9,6 +9,7 @@ namespace Newspack\Reader_Activation;
 
 use Newspack\Data_Events;
 use Newspack\Logger;
+use Newspack\My_Account;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -606,6 +607,17 @@ class Integrations {
 	public static function register_my_account_endpoints() {
 		self::$my_account_endpoints = [];
 
+		// When WooCommerce owns the My Account shell, this method owns the rewrite
+		// registration (and flush) for integration slugs on the WooCommerce
+		// account page. When WooCommerce is absent, the native My_Account shell
+		// owns rewrite registration for the entire endpoint set — it already
+		// includes these integration slugs via the `newspack_my_account_endpoints`
+		// filter — so registering and flushing here too would double-register the
+		// endpoints and double-track the flush. In that case we only populate the
+		// slug => integration map (used for native dispatch and the menu) and skip
+		// the rewrite work.
+		$woo_owns_shell = My_Account::woocommerce_owns_shell();
+
 		foreach ( self::get_active_integrations() as $integration ) {
 			$item = $integration->get_my_account_menu_item();
 			if ( ! is_array( $item ) || empty( $item['slug'] ) || empty( $item['label'] ) ) {
@@ -620,6 +632,10 @@ class Integrations {
 				continue;
 			}
 			self::$my_account_endpoints[ $slug ] = $integration->get_id();
+
+			if ( ! $woo_owns_shell ) {
+				continue;
+			}
 
 			add_rewrite_endpoint( $slug, EP_PAGES );
 
@@ -637,6 +653,10 @@ class Integrations {
 					$integration->render_my_account_page( $value );
 				}
 			);
+		}
+
+		if ( ! $woo_owns_shell ) {
+			return;
 		}
 
 		// Flush rewrite rules only when the set of slugs changes.
@@ -783,6 +803,11 @@ class Integrations {
 	 * @param string $endpoint Current endpoint slug.
 	 */
 	public static function render_native_my_account_content( $endpoint ) {
+		// This dispatcher renders only slugs owned by a registered RAS
+		// integration. Slugs owned by another plugin's My Account bridge (e.g.
+		// `newsletters`, owned by newspack-newsletters) are not in
+		// self::$my_account_endpoints, so they are not handled here — each slug
+		// must have a single owner to avoid rendering two tab bodies.
 		if ( '' === $endpoint || empty( self::$my_account_endpoints[ $endpoint ] ) ) {
 			return;
 		}

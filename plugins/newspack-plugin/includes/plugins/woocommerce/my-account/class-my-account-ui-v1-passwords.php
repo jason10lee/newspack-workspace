@@ -163,19 +163,7 @@ class My_Account_UI_V1_Passwords {
 	 */
 	public static function maybe_password_reset_success() {
 		if ( \is_user_logged_in() && filter_input( INPUT_GET, 'password-reset', FILTER_VALIDATE_BOOLEAN ) ) {
-			if ( function_exists( 'wc_add_notice' ) ) {
-				\wc_add_notice( __( 'Password updated.', 'newspack-plugin' ), 'success' );
-			} elseif ( \class_exists( 'Newspack\Newspack_UI' ) ) {
-				\Newspack\Newspack_UI::add_notice(
-					__( 'Password updated.', 'newspack-plugin' ),
-					[
-						'type'           => 'success',
-						'corner'         => 'top-right',
-						'autohide'       => true,
-						'active_on_load' => true,
-					]
-				);
-			}
+			My_Account::add_notice( __( 'Password updated.', 'newspack-plugin' ), 'success' );
 		}
 	}
 
