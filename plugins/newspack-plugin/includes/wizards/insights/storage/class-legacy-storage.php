@@ -1475,6 +1475,7 @@ class Legacy_Storage implements Storage_Interface {
 			JOIN {$prefix}woocommerce_order_itemmeta oim
 				ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
 			WHERE p.post_type = 'shop_subscription'
+			  AND CAST(cust.meta_value AS UNSIGNED) > 0 -- exclude guest subscriptions (mirrors get_new_subscriber_records_in_window)
 			  AND oim.meta_value NOT IN ($donations)
 			  AND sm.meta_value != ''
 			  AND CAST(cust.meta_value AS UNSIGNED) IN (
@@ -1490,6 +1491,7 @@ class Legacy_Storage implements Storage_Interface {
 					JOIN {$prefix}woocommerce_order_itemmeta oim2
 						ON oim2.order_item_id = oi2.order_item_id AND oim2.meta_key = '_product_id'
 					WHERE p2.post_type = 'shop_subscription'
+					  AND CAST(cust2.meta_value AS UNSIGNED) > 0 -- exclude guest subscriptions
 					  AND oim2.meta_value NOT IN ($donations)
 					  AND sm2.meta_value != ''
 					GROUP BY CAST(cust2.meta_value AS UNSIGNED)

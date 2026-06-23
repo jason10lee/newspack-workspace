@@ -457,6 +457,24 @@ class Newspack_Test_Insights_Cache extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Peek returns null when the cached envelope's source does not match the
+	 * requested source (source-mismatch guard added in fix 3).
+	 */
+	public function test_peek_returns_null_on_source_mismatch(): void {
+		$payload = [ 'a' => 1 ];
+		Cache::refresh( 'conversion', Cache::SOURCE_SNAPSHOT, [ 'cohorts' ], fn() => $payload );
+
+		// Correct source must return the envelope.
+		$hit = Cache::peek( 'conversion', Cache::SOURCE_SNAPSHOT, [ 'cohorts' ] );
+		$this->assertIsArray( $hit );
+		$this->assertSame( $payload, $hit['payload'] );
+
+		// Wrong source must return null even though the transient exists.
+		$miss = Cache::peek( 'conversion', Cache::SOURCE_EXTERNAL, [ 'cohorts' ] );
+		$this->assertNull( $miss, 'Source mismatch must return null.' );
+	}
+
+	/**
 	 * Snapshot keys are kept out of the per-tab index, so purge() leaves them.
 	 */
 	public function test_snapshot_survives_purge(): void {

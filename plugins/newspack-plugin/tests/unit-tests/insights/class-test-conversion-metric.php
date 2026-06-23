@@ -3131,6 +3131,35 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Next_weekly_prewarm_timestamp() returns the correct Monday 06:00 UTC for
+	 * several fixed anchors, covering the Monday-before-06:00 edge case that
+	 * 'next monday 06:00' would incorrectly skip to the following week.
+	 */
+	public function test_next_weekly_prewarm_timestamp_anchors(): void {
+		$utc = new DateTimeZone( 'UTC' );
+
+		// Monday 05:00 UTC — slot has not yet passed this week, must stay on SAME Monday.
+		$now    = new DateTimeImmutable( '2026-06-22 05:00:00', $utc );
+		$result = gmdate( 'D Y-m-d H:i', Conversion_Metric::next_weekly_prewarm_timestamp( $now ) );
+		$this->assertSame( 'Mon 2026-06-22 06:00', $result, 'Monday before 06:00 must schedule THIS Monday.' );
+
+		// Monday 06:00 UTC exactly — slot is at this instant (<= $now), must roll to next week.
+		$now    = new DateTimeImmutable( '2026-06-22 06:00:00', $utc );
+		$result = gmdate( 'D Y-m-d H:i', Conversion_Metric::next_weekly_prewarm_timestamp( $now ) );
+		$this->assertSame( 'Mon 2026-06-29 06:00', $result, 'Monday at exactly 06:00 must schedule NEXT Monday.' );
+
+		// Wednesday mid-day — this week's Monday is in the past, must return next Monday.
+		$now    = new DateTimeImmutable( '2026-06-24 10:00:00', $utc );
+		$result = gmdate( 'D Y-m-d H:i', Conversion_Metric::next_weekly_prewarm_timestamp( $now ) );
+		$this->assertSame( 'Mon 2026-06-29 06:00', $result, 'Mid-week must schedule next Monday.' );
+
+		// Sunday night — next Monday is tomorrow.
+		$now    = new DateTimeImmutable( '2026-06-28 23:00:00', $utc );
+		$result = gmdate( 'D Y-m-d H:i', Conversion_Metric::next_weekly_prewarm_timestamp( $now ) );
+		$this->assertSame( 'Mon 2026-06-29 06:00', $result, 'Sunday night must schedule next-day Monday.' );
+	}
+
+	/**
 	 * Clear the cohort snapshot transient between tests.
 	 */
 	public function tear_down() {

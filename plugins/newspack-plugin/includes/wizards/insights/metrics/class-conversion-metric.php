@@ -2102,6 +2102,22 @@ final class Conversion_Metric {
 	}
 
 	/**
+	 * Timestamp of the next weekly pre-warm slot: this week's Monday 06:00 UTC,
+	 * or next week's if that instant has already passed. Computed relative to
+	 * $now so it never skips the upcoming Monday when called early on a Monday.
+	 *
+	 * @param \DateTimeImmutable $now Reference time (UTC).
+	 * @return int Unix timestamp.
+	 */
+	public static function next_weekly_prewarm_timestamp( \DateTimeImmutable $now ): int {
+		$monday = $now->modify( 'monday this week' )->setTime( 6, 0 );
+		if ( $monday <= $now ) {
+			$monday = $monday->modify( '+1 week' );
+		}
+		return $monday->getTimestamp();
+	}
+
+	/**
 	 * Ensure a weekly recurring cohort pre-warm is scheduled (Monday 06:00 UTC).
 	 * No-op if Action Scheduler is unavailable or the recurring action already
 	 * exists. Hooked on `init` by the conversion section.
@@ -2115,7 +2131,7 @@ final class Conversion_Metric {
 		if ( false !== as_next_scheduled_action( self::COHORT_REFRESH_WEEKLY_ACTION, [], self::COHORT_REFRESH_GROUP ) ) {
 			return;
 		}
-		$next = ( new \DateTimeImmutable( 'next monday 06:00', new \DateTimeZone( 'UTC' ) ) )->getTimestamp();
+		$next = self::next_weekly_prewarm_timestamp( new \DateTimeImmutable( 'now', new \DateTimeZone( 'UTC' ) ) );
 		as_schedule_recurring_action( $next, WEEK_IN_SECONDS, self::COHORT_REFRESH_WEEKLY_ACTION, [], self::COHORT_REFRESH_GROUP );
 	}
 }

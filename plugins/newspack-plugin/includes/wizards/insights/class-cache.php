@@ -119,21 +119,25 @@ final class Cache {
 	/**
 	 * Read a cached envelope WITHOUT computing on miss. Returns the stored
 	 * `{ payload, computed_at, source }` array, or null when nothing usable is
-	 * cached or caching is disabled. The read-only primitive the snapshot
+	 * cached, caching is disabled, or the cached envelope's source does not
+	 * match the requested $source. The read-only primitive the snapshot
 	 * pre-warm pattern needs: request-path callers peek and, on null, schedule a
 	 * background refresh rather than computing an expensive payload inline.
 	 *
 	 * @param string   $tab       Tab slug.
-	 * @param string   $source    SOURCE_* constant.
+	 * @param string   $source    SOURCE_* constant. Must match the stored envelope's source.
 	 * @param string[] $key_parts Canonicalized key components.
 	 * @return array{ payload: array, computed_at: string, source: string }|null
 	 */
 	public static function peek( string $tab, string $source, array $key_parts ): ?array {
-		unset( $source ); // Reserved for parity with store()/refresh(); key is tab+parts.
 		if ( self::is_disabled() ) {
 			return null;
 		}
-		return self::read_cached( $tab, $key_parts );
+		$cached = self::read_cached( $tab, $key_parts );
+		if ( null === $cached || $cached['source'] !== $source ) {
+			return null;
+		}
+		return $cached;
 	}
 
 	/**
