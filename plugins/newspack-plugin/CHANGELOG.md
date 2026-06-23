@@ -1,3 +1,10 @@
+## newspack [6.43.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.43.5...newspack@6.43.6) (2026-06-23)
+
+
+### Bug Fixes
+
+* **google-site-kit:** add filter to override forced GA4 snippet ([704cfee](https://github.com/Automattic/newspack-workspace/commit/704cfeeac0dc2d5a3b66523198a57ed963e77f38))
+
 ## newspack [6.43.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.43.4...newspack@6.43.5) (2026-06-23)
 
 
