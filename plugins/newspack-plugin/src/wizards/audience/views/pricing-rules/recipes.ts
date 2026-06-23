@@ -89,3 +89,30 @@ export function segmentSatisfied( path: PricingPath, conditions: ConditionsMap )
 export function intentLabel( value: string ): string {
 	return pathOptions().find( o => o.value === value )?.label ?? value;
 }
+
+/** A plain-language explanation of a path's use and what it presets, shown under the goal picker. */
+export function pathDescription( path: PricingPath ): string {
+	const map: Record< PricingPath, string > = {
+		new_subscriptions: __(
+			'Acquisition pricing for first-time subscribers — an intro or stepped offer. Presets new-subscribers-only eligibility, locks the price in at purchase, and targets all subscriptions.',
+			'newspack-plugin'
+		),
+		retention: __(
+			'A renewal discount to keep existing, at-risk subscribers. Stays “always current” so it re-applies at every renewal, targets all subscriptions, and needs a reader segment to define who is at risk.',
+			'newspack-plugin'
+		),
+		save: __(
+			'A last-chance offer at the cancellation moment. Applies when a pending-cancel subscriber reactivates, locks the saved price in, and targets all subscriptions.',
+			'newspack-plugin'
+		),
+		winback: __(
+			'Re-acquisition pricing to win back lapsed subscribers. Applies to readers with no active subscription when they resubscribe, locks the price in at purchase, and targets all subscriptions.',
+			'newspack-plugin'
+		),
+		custom: __(
+			'Full manual control — nothing is preset. Set the eligibility matcher, lock behavior, scope, and pricing yourself.',
+			'newspack-plugin'
+		),
+	};
+	return map[ path ];
+}

@@ -31,7 +31,7 @@ import ScopeTargets from './scope-targets';
 import Conditions from './conditions';
 import RulePreview from './rule-preview';
 import { tsToLocalInput, localInputToTs } from './datetime';
-import { RECIPES, pathOptions, applyRecipeConditions, segmentSatisfied, intentLabel, type PricingPath } from './recipes';
+import { RECIPES, pathOptions, applyRecipeConditions, segmentSatisfied, intentLabel, pathDescription, type PricingPath } from './recipes';
 
 const API_PATH = '/wc-dynamic-pricing/v1/rules';
 
@@ -297,6 +297,11 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 						onChange={ choosePath }
 						__next40pxDefaultSize
 					/>
+					{ recipe && (
+						<p className="description" style={ { marginTop: 0 } }>
+							{ pathDescription( path as PricingPath ) }
+						</p>
+					) }
 					{ recipe?.isCustom && (
 						<TextControl
 							label={ __( 'Goal note', 'newspack-plugin' ) }
