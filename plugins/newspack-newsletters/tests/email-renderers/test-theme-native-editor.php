@@ -240,7 +240,7 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 	/**
 	 * Saved globals restored in tear_down.
 	 *
-	 * @var array{pagenow: string|null, get: array}
+	 * @var array{pagenow: string|null, get: array, editor_support: mixed, editor_global: mixed}
 	 */
 	private $strip_globals_backup = [];
 
@@ -250,8 +250,10 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
 		$this->strip_globals_backup = [
-			'pagenow' => $GLOBALS['pagenow'] ?? null,
-			'get'     => $_GET, // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			'pagenow'        => $GLOBALS['pagenow'] ?? null,
+			'get'            => $_GET, // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			'editor_support' => get_theme_support( 'editor-styles' ),
+			'editor_global'  => $GLOBALS['editor_styles'] ?? null,
 		];
 	}
 
@@ -267,6 +269,19 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 			$GLOBALS['pagenow'] = $this->strip_globals_backup['pagenow'];
 		}
 		$_GET = $this->strip_globals_backup['get']; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		// strip_editor_modifications() can call remove_editor_styles(), which mutates
+		// the `editor-styles` theme support and $GLOBALS['editor_styles']. Restore both
+		// so the suite stays order-independent (phpunit.xml.dist sets backupGlobals=false).
+		remove_theme_support( 'editor-styles' );
+		if ( false !== $this->strip_globals_backup['editor_support'] ) {
+			add_theme_support( 'editor-styles' );
+		}
+		if ( null === $this->strip_globals_backup['editor_global'] ) {
+			unset( $GLOBALS['editor_styles'] );
+		} else {
+			$GLOBALS['editor_styles'] = $this->strip_globals_backup['editor_global'];
+		}
 
 		parent::tear_down();
 	}
