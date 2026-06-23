@@ -479,18 +479,17 @@ final class Gates_Metric {
 	 * denominator to the impressions of the gates that actually converted (see
 	 * {@see self::get_paywall_conversion_direct()}).
 	 *
-	 * NOTE (denominator precision): the hub query computes `checkout_impressions`
-	 * (impressions on gates carrying a checkout button — the paywall-capable subset)
-	 * but does NOT expose it as an output column; it is consumed only inside the
-	 * hub's `paywall_attempt_rate`. The exposed per-gate `impressions` IS true gate
-	 * impressions (anonymous-inclusive `np_gate_interaction(seen)` count) and equals
-	 * `checkout_impressions` exactly for a pure paywall gate; the two diverge only
-	 * for a gate that sometimes shows a checkout button and sometimes doesn't (where
-	 * `impressions` runs slightly larger → the rate reads slightly lower, i.e.
-	 * conservative). Until the hub follow-up NPPD-1749 exposes `checkout_impressions`
-	 * as an output column, `impressions` is the precise available denominator; the
-	 * swap is then one line here. Anonymous-inclusive either way, so no anonymous-at-
-	 * attempt bias is reintroduced.
+	 * NOTE (denominator precision): the ideal denominator is `checkout_impressions`
+	 * (impressions on gates carrying a checkout button — the paywall-capable subset).
+	 * The hub query already COMPUTES it directly (`COUNTIF(has_checkout_button='yes')`
+	 * over `np_gate_interaction(seen)` events — not derived from attempts); NPPD-1749
+	 * adds it to the query's output columns. This reader PREFERS it when present and
+	 * falls back to total `impressions` until that hub change ships — forward-
+	 * compatible, correct both before and after. Total `impressions` equals
+	 * `checkout_impressions` for a pure paywall gate and OVERcounts for a
+	 * registration-heavy mixed gate (where the rate then reads low — conservative,
+	 * never inflated; on Tab 4's live membership gates the dilution is large, hence
+	 * NPPD-1749). Anonymous-inclusive either way, so no anonymous-at-attempt bias.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
@@ -516,7 +515,11 @@ final class Gates_Metric {
 			if ( '' === $gate_id || '0' === $gate_id ) {
 				continue;
 			}
-			$map[ $gate_id ] = (int) ( $row['impressions'] ?? 0 );
+			// Prefer the paywall-capable subset (NPPD-1749) once the hub exposes it;
+			// fall back to total gate impressions until then.
+			$map[ $gate_id ] = isset( $row['checkout_impressions'] )
+				? (int) $row['checkout_impressions']
+				: (int) ( $row['impressions'] ?? 0 );
 		}
 		return $map;
 	}

@@ -113,6 +113,16 @@ final class Conversion_Metric {
 	 * {@see Conversion_REST_Controller::build_window()} +
 	 * {@see Conversion_REST_Controller::build_snapshot()}.
 	 *
+	 * COHERENCE GUARD (NPPD-1746): any card that becomes 'hybrid' — a local order-meta
+	 * numerator over a hub denominator — inherits a cross-source mismatch: the
+	 * complete, server-side order-meta numerator can EXCEED the GA4-undercounted hub
+	 * denominator, yielding a >100% / incoherent rate. The lifecycle funnels
+	 * (registered → subscriber/donor) are still 'hub' on both sides today, but when
+	 * their numerators move to order meta they MUST adopt the same guard the
+	 * Prompts/Gates direct rates use ({@see \Newspack\Insights\Gates_Metric::rate_value()}):
+	 * suppress to not-computable (em-dash) when numerator > denominator rather than
+	 * rendering >100%. Don't let a funnel go 'hybrid' without it.
+	 *
 	 * NOTE: source_mix_subscribers and source_mix_donors are 'hybrid' because their
 	 * numerator is local Woo order-meta and their denominator (total registrations
 	 * bucket) comes from the hub. They will migrate to 'local' when the order-meta

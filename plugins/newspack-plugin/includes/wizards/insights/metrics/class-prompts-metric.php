@@ -1374,15 +1374,22 @@ final class Prompts_Metric {
 			$impressions = (int) ( $row['impressions'] ?? 0 );
 
 			$donation_conversions = 'donation' === $intent ? (int) ( $donation_map[ $popup_id ]['conversions'] ?? 0 ) : 0;
-			// Subscription-intent prompts share `action_type=registration` at the data
-			// layer; subscription conversions are now sourced per-popup from order meta
-			// (NPPD-1746), keyed by popup id, anonymous-inclusive — no GA4 join.
-			$subscription_conversions = 'registration' === $intent ? (int) ( $subscription_map[ $popup_id ]['conversions'] ?? 0 ) : 0;
+			// Subscription conversions are sourced per-popup from order meta (NPPD-1746),
+			// keyed by popup id, anonymous-inclusive — and NOT gated on the popup's declared
+			// intent: the order carries `_newspack_popup_id` regardless of action_type, so an
+			// "Undefined"-intent prompt (e.g. a generic "50% off" promo) can still drive
+			// subscriptions. Gating on `intent=registration` hid those and contradicted the
+			// scalar subscription card (caught on live data; the scalar already sums the whole
+			// `by_popup` map). The donation column keeps its intent gate — donations on this
+			// tab are gated on a donation block being present, so the same case doesn't arise.
+			$subscription_conversions = (int) ( $subscription_map[ $popup_id ]['conversions'] ?? 0 );
 
 			// Both rates share the tab-level coherence guard + em-dash semantics via
-			// rate_value() (null = not computable: no impressions or a >100% cross-
-			// surface ratio; a float incl. 0.0 = real rate). null also covers intent
-			// mismatch + non-WC (the column is N/A).
+			// rate_value() (null = not computable: no impressions or a >100% cross-surface
+			// ratio; a float incl. 0.0 = real rate). A rate is rendered only where the metric
+			// applies: donation for donation-intent prompts, subscription for prompts that
+			// actually drove a subscription (present in the map); null = N/A everywhere else,
+			// including non-WC.
 			$mapped[] = [
 				'popup_id'                     => $popup_id,
 				'prompt_title'                 => (string) ( $row['prompt_title'] ?? '' ),
@@ -1398,7 +1405,7 @@ final class Prompts_Metric {
 				'donation_conversions'         => $donation_conversions,
 				'donation_conversion_rate'     => ( 'donation' === $intent && $wc ) ? $this->rate_value( $donation_conversions, $impressions ) : null,
 				'subscription_conversions'     => $subscription_conversions,
-				'subscription_conversion_rate' => ( 'registration' === $intent && $wc ) ? $this->rate_value( $subscription_conversions, $impressions ) : null,
+				'subscription_conversion_rate' => ( $wc && isset( $subscription_map[ $popup_id ] ) ) ? $this->rate_value( $subscription_conversions, $impressions ) : null,
 			];
 		}
 

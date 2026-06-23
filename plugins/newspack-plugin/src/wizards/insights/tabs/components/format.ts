@@ -103,8 +103,20 @@ export const formatCurrency = ( value: number ): FormattedCurrency => {
 	};
 };
 
-/** Format a fraction in [0, 1] as a percent: 0.123 -> "12.3%". */
-export const formatPercent = ( fraction: number ): string => percentFormatter.format( fraction );
+/**
+ * Format a fraction in [0, 1] as a percent: 0.123 -> "12.3%".
+ *
+ * A positive-but-tiny fraction that would round to "0%" at the displayed precision
+ * (i.e. < 0.05%) renders "<0.1%" instead (NPPD-1746), so a real-but-small rate is
+ * never shown as none — e.g. a paywall gate with a handful of subscriptions over
+ * 100k+ mostly-registration impressions. Genuine zero still renders "0%".
+ */
+export const formatPercent = ( fraction: number ): string => {
+	if ( fraction > 0 && fraction < 0.0005 ) {
+		return `<${ percentFormatter.format( 0.001 ) }`;
+	}
+	return percentFormatter.format( fraction );
+};
 
 /** Format a duration in seconds as m:ss (or h:mm:ss past an hour): 142 -> "2:22". */
 export const formatDuration = ( seconds: number ): string => {

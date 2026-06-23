@@ -287,6 +287,36 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * NPPD-1749: once the hub exposes `checkout_impressions` (the paywall-capable
+	 * subset), the rate uses it instead of total gate `impressions` — so a
+	 * registration-heavy mixed gate isn't diluted. Here 12 conversions over a gate
+	 * with 156,117 total impressions but 10,500 checkout impressions yields a rate on
+	 * the 10,500 denominator, not 156,117. Forward-compatible: when the column is
+	 * absent (rows without `checkout_impressions`), the other tests cover the
+	 * `impressions` fallback.
+	 */
+	public function test_paywall_conversion_direct_prefers_checkout_impressions() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn(
+			[
+				[
+					'gate_post_id'         => 77,
+					'impressions'          => 156117,
+					'checkout_impressions' => 10500,
+				],
+			]
+		);
+
+		$metric = $this->make_direct_paywall_metric( $proxy, $this->subscribers_with_gate( 12, 680.70 ), true );
+		$result = $metric->get_paywall_conversion_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 10500, $result['denominator'], 'uses checkout_impressions, not the diluted total impressions' );
+		$this->assertSame( 12, $result['numerator'] );
+		$this->assertEqualsWithDelta( 12 / 10500, $result['value'], 0.000001 );
+	}
+
+	/**
 	 * No impressions for the converting gate → no denominator → not computable.
 	 */
 	public function test_paywall_conversion_direct_not_computable_without_impressions() {

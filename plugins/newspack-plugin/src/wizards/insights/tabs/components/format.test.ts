@@ -7,7 +7,7 @@
 /**
  * Internal dependencies
  */
-import { formatCurrency } from './format';
+import { formatCurrency, formatPercent } from './format';
 
 describe( 'formatCurrency', () => {
 	it( 'keeps cents below $1,000', () => {
@@ -42,5 +42,26 @@ describe( 'formatCurrency', () => {
 
 	it( 'renders zero with cents and no title', () => {
 		expect( formatCurrency( 0 ) ).toEqual( { display: '$0.00', title: null } );
+	} );
+} );
+
+describe( 'formatPercent', () => {
+	it( 'formats a normal fraction to one decimal', () => {
+		expect( formatPercent( 0.123 ) ).toBe( '12.3%' );
+	} );
+
+	it( 'renders a genuine zero as 0%', () => {
+		expect( formatPercent( 0 ) ).toBe( '0%' );
+	} );
+
+	it( 'renders a positive-but-tiny rate as <0.1% instead of a misleading 0% (NPPD-1746)', () => {
+		// 12 conversions / 156,117 impressions = 0.0077% — would round to "0%".
+		expect( formatPercent( 12 / 156117 ) ).toBe( '<0.1%' );
+		expect( formatPercent( 0.0004 ) ).toBe( '<0.1%' );
+	} );
+
+	it( 'still rounds a rate at/above the display threshold to a real percent', () => {
+		// >= 0.05% rounds to a shown "0.1%", not the <0.1% sentinel.
+		expect( formatPercent( 0.0006 ) ).toBe( '0.1%' );
 	} );
 } );
