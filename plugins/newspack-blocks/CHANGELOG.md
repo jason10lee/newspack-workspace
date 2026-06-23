@@ -1,3 +1,26 @@
+## @automattic/newspack-blocks [4.26.5](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.26.4...newspack-blocks@4.26.5) (2026-06-15)
+
+
+### Bug Fixes
+
+* **blocks:** restore allow-duplicate toggle for static blocks ([#180](https://github.com/Automattic/newspack-workspace/issues/180)) ([8aaa75e](https://github.com/Automattic/newspack-workspace/commit/8aaa75e8565887e8ac5536cec74ea5f8184ebe83))
+* **newspack-blocks:** update swiper to patched release ([a33812a](https://github.com/Automattic/newspack-workspace/commit/a33812a8682966dba39af8789edd2dc26bf66a82))
+
+## @automattic/newspack-blocks [4.26.5-alpha.1](https://github.com/Automattic/newspack-workspace/compare/@automattic/newspack-blocks@4.26.4...@automattic/newspack-blocks@4.26.5-alpha.1) (2026-06-05)
+
+
+### Bug Fixes
+
+* **blocks:** restore allow-duplicate toggle for static blocks ([#180](https://github.com/Automattic/newspack-workspace/issues/180)) ([8aaa75e](https://github.com/Automattic/newspack-workspace/commit/8aaa75e8565887e8ac5536cec74ea5f8184ebe83))
+* **newspack-blocks:** update swiper to patched release ([a33812a](https://github.com/Automattic/newspack-workspace/commit/a33812a8682966dba39af8789edd2dc26bf66a82))
+
+## @automattic/newspack-blocks [4.26.4](https://github.com/Automattic/newspack-workspace/compare/@automattic/newspack-blocks@4.26.3...@automattic/newspack-blocks@4.26.4) (2026-06-01)
+
+
+### Bug Fixes
+
+* ensure buttons pick up all colours, fonts sizes, font class styles ([#2337](https://github.com/Automattic/newspack-workspace/issues/2337)) ([418ede0](https://github.com/Automattic/newspack-workspace/commit/418ede038595c1d3b03d12baf301749897dc5a1a))
+
 ## [4.26.3](https://github.com/Automattic/newspack-blocks/compare/v4.26.2...v4.26.3) (2026-05-18)
 
 
