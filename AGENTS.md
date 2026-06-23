@@ -30,6 +30,7 @@ The Newspack product consists of these interconnected plugins and themes:
 - `newspack-blocks` - Custom Gutenberg blocks for news sites (Homepage Posts, Carousel, Author List, etc.)
 - `newspack-listings` - Directory and listing functionality for events, places, and marketplaces
 - `newspack-sponsors` - Sponsored content management and labeling
+- `newspack-story-budget` - Newsroom editorial planning and story budgeting
 
 **Reader Revenue:**
 - `newspack-popups` - Campaigns/prompts system for reader engagement (popups, inline prompts, overlays)
@@ -395,6 +396,8 @@ Use the `newspack` plugin skills for the full PR lifecycle:
 3. `newspack:pr-ready` — Mark ready for human review and apply label
 4. `newspack:pr-merge` — Merge after approval and checks pass
 5. `newspack:pr-test` — Test a PR in an isolated environment with automated checks and code review
+
+**One Copilot pass per PR.** Request a Copilot review once, when the PR is opened. After addressing its feedback, do **not** re-request Copilot by default — one automated pass is enough, and the next review should come from a human. Re-request Copilot only when a reviewer explicitly asks for another pass.
 
 ## External Tools
 
