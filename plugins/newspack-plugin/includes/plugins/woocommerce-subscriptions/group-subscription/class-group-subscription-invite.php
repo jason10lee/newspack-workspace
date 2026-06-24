@@ -75,11 +75,16 @@ class Group_Subscription_Invite {
 	public static function add_email_config( $configs ) {
 		$configs[ self::EMAIL_TYPE ] = [
 			'name'                   => self::EMAIL_TYPE,
-			'category'               => 'reader-activation',
+			// Reader-revenue category: this is a paid-product email, not
+			// an auth/account flow. The chip is derived from category in
+			// Emails::apply_config_defaults(), and `recipient` defaults to
+			// 'reader' there, so neither needs to be declared here.
+			'category'               => 'reader-revenue',
 			'label'                  => __( 'Group Subscription Invitation', 'newspack-plugin' ),
 			'description'            => __( 'Email sent to invite a reader to join a group subscription.', 'newspack-plugin' ),
 			'template'               => dirname( NEWSPACK_PLUGIN_FILE ) . '/includes/templates/reader-activation-emails/group-subscription-invite.php',
 			'editor_notice'          => __( 'This email will be sent when a reader is invited to join a group subscription.', 'newspack-plugin' ),
+			'trigger_description'    => __( 'Sent to invite a reader to join a group subscription.', 'newspack-plugin' ),
 			'available_placeholders' => [
 				[
 					'label'    => __( 'the site title', 'newspack-plugin' ),
