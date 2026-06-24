@@ -66,6 +66,9 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 			: [ { at: '1', calc_type: defaultCalc, value: '', label: '' } ]
 	);
 	const isSchedule = strategyId === 'stepped_by_cycle';
+	// A stepped schedule, or a flat rule capped to N cycles, has a cycle dimension —
+	// the only case where the cycle anchor is consequential.
+	const hasCycleDimension = isSchedule || ( ! isSchedule && Number( cyclesLimit ) > 0 );
 	const updateStep = ( i: number, key: keyof StepRowState, val: string ) =>
 		setSteps( prev => prev.map( ( s, idx ) => ( idx === i ? { ...s, [ key ]: val } : s ) ) );
 	const addStep = () =>
@@ -79,6 +82,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 	const [ priority, setPriority ] = useState( String( rule?.priority ?? 100 ) );
 	const [ composeMode, setComposeMode ] = useState( rule?.compose_mode ?? 'min' );
 	const [ application, setApplication ] = useState( rule?.application === 'locked' ? 'locked' : 'current' );
+	const [ cycleAnchor, setCycleAnchor ] = useState( rule?.cycle_anchor === 'rule_application' ? 'rule_application' : 'subscription_start' );
 	const [ publicize, setPublicize ] = useState( Boolean( rule?.publicize ) );
 	const [ path, setPath ] = useState< string >( rule?.intent ?? ( isNew ? '' : 'custom' ) );
 	const [ intentNote, setIntentNote ] = useState( rule?.intent_note ?? '' );
@@ -100,6 +104,8 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 		if ( app ) {
 			setApplication( app );
 		}
+		// Seed the cycle anchor from the recipe — retention rebases to first apply.
+		setCycleAnchor( RECIPES[ p ].cycleAnchor );
 		// Default the deal name to the goal until the publisher types their own.
 		if ( titleIsAuto ) {
 			setTitle( 'custom' === p ? '' : intentLabel( p ) );
@@ -180,6 +186,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 			priority: Number( priority ) || 0,
 			compose_mode: composeMode,
 			application,
+			cycle_anchor: cycleAnchor,
 			publicize,
 			intent: path,
 			intent_note: path === 'custom' ? intentNote : '',
@@ -236,6 +243,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 		priority,
 		composeMode,
 		application,
+		cycleAnchor,
 		publicize,
 		path,
 		intentNote,
@@ -548,6 +556,25 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 									checked={ 'locked' === application }
 									onChange={ checked => setApplication( checked ? 'locked' : 'current' ) }
 									__nextHasNoMarginBottom
+								/>
+							) }
+							{ application === 'current' && hasCycleDimension && (
+								<SelectControl
+									label={ __( 'Count cycles from', 'newspack-plugin' ) }
+									value={ cycleAnchor }
+									options={ [
+										{
+											label: __( 'When this rule first applies to a subscriber', 'newspack-plugin' ),
+											value: 'rule_application',
+										},
+										{ label: __( 'Subscription start', 'newspack-plugin' ), value: 'subscription_start' },
+									] }
+									onChange={ setCycleAnchor }
+									help={ __(
+										'Anchors a stepped or cycle-limited schedule. “First applies” starts the schedule when the subscriber becomes eligible; “Subscription start” counts from their original signup.',
+										'newspack-plugin'
+									) }
+									__next40pxDefaultSize
 								/>
 							) }
 							<ToggleControl
