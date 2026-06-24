@@ -111,6 +111,12 @@
 
 		a {
 			font-family: inherit;
+			// Underline links — moved from `../style.scss`. This is an opinionated
+			// appearance rule, not structural: under flag-on the canvas lets link
+			// decoration flow from theme.json/core (so e.g. the site-title link is
+			// not underlined, matching the WC email and the standard post editor),
+			// while flag-off restores the legacy MJML underline here.
+			text-decoration: underline;
 		}
 
 		code {
