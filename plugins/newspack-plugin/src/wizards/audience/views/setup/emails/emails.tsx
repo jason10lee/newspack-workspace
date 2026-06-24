@@ -84,16 +84,27 @@ const CHIPS: { value: ChipValue; label: string }[] = [
 ];
 
 const Emails = () => {
-	const emailSections = window.newspackSettings.emails.sections;
-	const [ pluginsReady, setPluginsReady ] = useState( Boolean( emailSections.emails.dependencies.newspackNewsletters ) );
+	// Defensive: fall back to an empty shape if the SSR-bootstrap payload
+	// is missing (e.g., a plugin filter strips the localized object, the
+	// component is mounted from a non-Audience surface, or a dev-time HMR
+	// reseed clears window state). Without this, accessing
+	// `.dependencies.newspackNewsletters` on undefined would throw
+	// TypeError at mount and crash the entire route.
+	const emailSettings = window.newspackAudience?.emails ?? { dependencies: {}, postType: '', initial: undefined, isNewspackPlatform: false };
+	const [ pluginsReady, setPluginsReady ] = useState( Boolean( emailSettings.dependencies?.newspackNewsletters ) );
 
-	// Seed from the SSR bootstrap (class-newspack-settings.php passes the same
+	// Seed from the SSR bootstrap (class-audience-wizard.php passes the same
 	// shape as api_get_email_settings()) so DataViews renders on first paint
 	// instead of waiting for the mount-time XHR.
-	const initial = emailSections.emails.initial;
+	const initial = emailSettings.initial;
 	const [ data, setData ] = useState< EmailItem[] >( ( initial?.newspack_emails as EmailItem[] | undefined ) ?? [] );
-	const postType = initial?.post_type ?? emailSections.emails.postType;
+	const postType = initial?.post_type ?? emailSettings.postType;
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
+	// The chip bar only earns its place on the Newspack platform, which has
+	// both groups. On RevEngine/Other the server returns only auth/account
+	// emails, so there's a single group and the chip bar is hidden entirely
+	// (a lone, always-pressed chip is a non-functional, confusing control).
+	const isNewspackPlatform = Boolean( emailSettings.isNewspackPlatform );
 	const [ activeChip, setActiveChip ] = useState< ChipValue >( 'reader-revenue' );
 	const [ showSettingsModal, setShowSettingsModal ] = useState( false );
 
@@ -204,6 +215,9 @@ const Emails = () => {
 
 	const resetEmail = ( postId: number ) => {
 		resetError();
+		// Reset is served by Emails_Section under the pinned emails
+		// namespace (NPPD-1535), so the moved Audience UI no longer reaches
+		// into the donations wizard namespace.
 		wizardApiFetch(
 			{
 				path: `/newspack/v1/wizard/newspack-settings/emails/${ postId }`,
@@ -380,7 +394,13 @@ const Emails = () => {
 	// view scope. `activeChip` stays in state through a search and
 	// re-engages when search clears.
 	const isSearching = Boolean( view.search );
-	const visibleData = useMemo( () => ( isSearching ? data : data.filter( item => item.chip === activeChip ) ), [ data, activeChip, isSearching ] );
+	// Chip filtering only applies on the Newspack platform (where the chip
+	// bar is shown). Elsewhere the list is already auth/account-only from the
+	// server, so show it unfiltered.
+	const visibleData = useMemo(
+		() => ( isSearching || ! isNewspackPlatform ? data : data.filter( item => item.chip === activeChip ) ),
+		[ data, activeChip, isSearching, isNewspackPlatform ]
+	);
 	const { data: processedData, paginationInfo } = useMemo(
 		() => filterSortAndPaginate( visibleData, view, fields ),
 		[ visibleData, view, fields ]
@@ -449,32 +469,39 @@ const Emails = () => {
 			<PageHeading />
 			{ errorMessage && <Notice isError noticeText={ errorMessage } /> }
 			<HStack className="newspack-emails__chip-bar" justify="space-between" alignment="center">
-				<HStack
-					className="newspack-emails__chips"
-					role="group"
-					aria-label={ __( 'Filter emails by group', 'newspack-plugin' ) }
-					spacing={ 2 }
-					justify="flex-start"
-				>
-					{ CHIPS.map( chip => {
-						// During an active search, neither chip is filtering —
-						// render both as unpressed so the visual matches reality.
-						// Clicking either chip clears the search via selectChip
-						// and engages that chip's view.
-						const isActive = ! isSearching && activeChip === chip.value;
-						return (
-							<Button
-								key={ chip.value }
-								variant={ isActive ? 'primary' : 'secondary' }
-								aria-pressed={ isActive }
-								onClick={ () => selectChip( chip.value ) }
-								className="newspack-emails__chip"
-							>
-								{ chip.label }
-							</Button>
-						);
-					} ) }
-				</HStack>
+				{ /* Chip bar only on the Newspack platform (the only one with
+				     both groups). The empty span preserves the space-between
+				     layout so Settings stays right-aligned when chips are hidden. */ }
+				{ isNewspackPlatform ? (
+					<HStack
+						className="newspack-emails__chips"
+						role="group"
+						aria-label={ __( 'Filter emails by group', 'newspack-plugin' ) }
+						spacing={ 2 }
+						justify="flex-start"
+					>
+						{ CHIPS.map( chip => {
+							// During an active search, neither chip is filtering —
+							// render both as unpressed so the visual matches reality.
+							// Clicking either chip clears the search via selectChip
+							// and engages that chip's view.
+							const isActive = ! isSearching && activeChip === chip.value;
+							return (
+								<Button
+									key={ chip.value }
+									variant={ isActive ? 'primary' : 'secondary' }
+									aria-pressed={ isActive }
+									onClick={ () => selectChip( chip.value ) }
+									className="newspack-emails__chip"
+								>
+									{ chip.label }
+								</Button>
+							);
+						} ) }
+					</HStack>
+				) : (
+					<span />
+				) }
 				<Button variant="secondary" onClick={ () => setShowSettingsModal( true ) }>
 					{ __( 'Settings', 'newspack-plugin' ) }
 				</Button>

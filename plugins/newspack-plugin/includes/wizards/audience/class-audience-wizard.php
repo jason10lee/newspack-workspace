@@ -45,9 +45,16 @@ class Audience_Wizard extends Wizard {
 
 	/**
 	 * Audience Configuration Constructor.
+	 *
+	 * @param array $args Optional. Wizard arguments — forwarded to the
+	 *                    parent so `sections` can be loaded via
+	 *                    `Wizard::load_wizard_sections()`. Used by the
+	 *                    Emails section, which hosts under Audience now
+	 *                    (NPPD-1538) but keeps its REST_BASE pinned to
+	 *                    `newspack-settings` for API stability.
 	 */
-	public function __construct() {
-		parent::__construct();
+	public function __construct( $args = [] ) {
+		parent::__construct( $args );
 		add_action( 'rest_api_init', [ $this, 'register_api_endpoints' ] );
 
 		// Determine active menu items.
@@ -107,6 +114,28 @@ class Audience_Wizard extends Wizard {
 		];
 
 		$data['is_newspack_feature_enabled'] = Content_Gate::is_newspack_feature_enabled();
+
+		// Bootstrap only the cheap inputs the Emails tab needs to decide
+		// visibility + render its chip bar. Deliberately NOT seeding the
+		// email list: api_get_email_settings() -> Emails::get_emails()
+		// lazily wp_insert_post()s the Newspack email posts on first read,
+		// so seeding it here would create those posts on EVERY Audience page
+		// load even for publishers who never open the Emails tab. The Emails
+		// view fetches the list on mount instead, deferring creation until
+		// the tab is actually opened.
+		//
+		// `isNewspackPlatform` reflects whether Newspack is the reader-revenue
+		// platform (WooCommerce orders drive the commerce emails; RevEngine/NRH
+		// redirects checkout off-site and sends its own receipts; "Other" sends
+		// nothing through Newspack). It drives the chip bar + the email-list
+		// scoping; auth/account emails still surface on any platform with RA on.
+		$data['emails'] = [
+			'dependencies'       => [
+				'newspackNewsletters' => is_plugin_active( 'newspack-newsletters/newspack-newsletters.php' ),
+			],
+			'postType'           => Emails::POST_TYPE,
+			'isNewspackPlatform' => Donations::is_platform_wc(),
+		];
 
 		wp_enqueue_script( 'newspack-wizards' );
 

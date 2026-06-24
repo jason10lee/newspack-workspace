@@ -7,6 +7,7 @@
 
 namespace Newspack\Wizards\Newspack;
 
+use Newspack\Donations;
 use Newspack\Emails;
 use Newspack\Reader_Activation;
 use Newspack\Reader_Revenue_Emails;
@@ -20,30 +21,33 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Emails Section Class.
  *
- * Surfaces the unified emails management UI in the Newspack > Settings >
- * Emails wizard tab. Backed by the unified `newspack_email_configs`
- * schema — no parallel registry.
+ * Surfaces the unified emails management UI as a tab inside Audience >
+ * Configuration. Backed by the unified `newspack_email_configs` schema —
+ * no parallel registry. REST routes stay pinned to the `newspack-settings`
+ * REST_BASE for API stability across the UI move.
  */
 class Emails_Section extends Wizard_Section {
 	/**
 	 * Containing wizard slug.
 	 *
-	 * Vestigial: the actual REST path is constructed from `self::REST_BASE`,
-	 * not this property. The parent `Wizard_Section::__construct` overwrites
-	 * this from the `wizard_slug` arg passed by `Wizard::load_wizard_sections`
-	 * anyway. Kept for parity with sibling sections and any inherited base-
-	 * class behavior that reads it.
+	 * Not initialized at the class level — `Wizard_Section::__construct`
+	 * unconditionally assigns `$this->wizard_slug = $args['wizard_slug'] ?? ''`,
+	 * which would clobber any default declared here. The registration site
+	 * in `Wizards::init_wizards()` (currently the Audience wizard, slug
+	 * `newspack-audience`) is the single source of truth. Standalone
+	 * instantiation with no args leaves this empty — by design, since
+	 * REST routes use the pinned REST_BASE and don't depend on this value.
 	 *
 	 * @var string
 	 */
-	protected $wizard_slug = 'newspack-settings';
+	protected $wizard_slug;
 
 	/**
 	 * REST base path for Emails endpoints.
 	 *
-	 * Hardcoded to 'newspack-settings' for API stability. When NPPD-1538
-	 * later moves the Emails screen from Newspack > Settings to Audience >
-	 * Configuration, this REST path MUST stay at 'newspack-settings' —
+	 * Hardcoded to 'newspack-settings' for API stability. The Emails UI
+	 * moved from Newspack > Settings to Audience > Configuration in
+	 * NPPD-1538, but this REST path stays at 'newspack-settings' —
 	 * external callers and the frontend depend on it. Do NOT change.
 	 */
 	const REST_BASE = 'wizard/newspack-settings/emails';
@@ -88,6 +92,12 @@ class Emails_Section extends Wizard_Section {
 	 * Register the endpoints needed for the wizard screens.
 	 */
 	public function register_rest_routes() {
+		// All routes use self::REST_BASE (pinned to 'wizard/newspack-settings/emails')
+		// rather than interpolating $this->wizard_slug. This decouples the REST
+		// surface from the wizard's mount point: when NPPD-1538 moves the Emails
+		// UI from Newspack > Settings to Audience > Configuration, $wizard_slug
+		// flips but the REST paths stay put — the frontend's hardcoded URLs and
+		// any external callers keep working.
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
 			self::REST_BASE,
@@ -228,6 +238,64 @@ class Emails_Section extends Wizard_Section {
 	}
 
 	/**
+	 * Reset a Newspack-managed email to its default template.
+	 *
+	 * Trashes the `newspack_rr_email` post so the next read recreates it
+	 * from the bundled default. Ported from NPPD-1535's move of the reset
+	 * endpoint off the donations namespace; the source boundary (only
+	 * POST_TYPE posts, numeric-only id) keeps it Newspack-only.
+	 *
+	 * @todo NPPD-1569: consolidate the near-identical reset handlers
+	 *       (Audience_Wizard::api_reset_reader_activation_email,
+	 *       Audience_Donations::api_reset_donation_email) onto this one —
+	 *       this is the canonical reset endpoint going forward.
+	 *
+	 * @param \WP_REST_Request $request REST request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public static function api_reset_email( $request ) {
+		$id    = $request->get_param( 'id' );
+		$email = get_post( $id );
+
+		// Source boundary: this route can only ever reset Newspack-managed
+		// emails. WooCommerce-source rows are live `WC_Email` objects with
+		// `wc:`-prefixed string ids, which can't match the route's
+		// numeric-only `(?P<id>\d+)` pattern, and aren't POST_TYPE posts.
+		if ( null === $email || Emails::POST_TYPE !== $email->post_type ) {
+			return new \WP_Error(
+				'newspack_reset_email_invalid_arg',
+				esc_html__( 'Invalid argument: no email template matches the provided id.', 'newspack-plugin' ),
+				[
+					'status' => 400,
+					'level'  => 'notice',
+				]
+			);
+		}
+
+		// Idempotent: an already-trashed template is recreated from the
+		// default on the next read, so it's effectively already reset.
+		// `wp_trash_post()` returns false for a post already in the trash,
+		// so without this guard a double-click would surface a spurious
+		// "reset failed" error. Treat already-trashed as success.
+		if ( 'trash' !== $email->post_status && ! wp_trash_post( $id ) ) {
+			return new \WP_Error(
+				'newspack_reset_email_reset_failed',
+				esc_html__( 'Reset failed: unable to reset email template.', 'newspack-plugin' ),
+				[
+					'status' => 400,
+					'level'  => 'notice',
+				]
+			);
+		}
+
+		// Returns the raw Emails::get_emails() array, preserving the legacy
+		// donations-endpoint contract (callers depend on the raw shape).
+		return rest_ensure_response(
+			Emails::get_emails( Reader_Activation::is_enabled() ? [] : array_values( Reader_Revenue_Emails::EMAIL_TYPES ), false )
+		);
+	}
+
+	/**
 	 * Toggle a WooCommerce email's enabled state.
 	 *
 	 * Validates the email ID against the unified config set — only
@@ -285,64 +353,6 @@ class Emails_Section extends Wizard_Section {
 	}
 
 	/**
-	 * Reset an email template by trashing the email post.
-	 *
-	 * Ported from `Audience_Donations::api_reset_donation_email` in
-	 * NPPD-1535 — the endpoint conceptually belongs under the emails
-	 * namespace, not the donations wizard. Returns the refreshed email
-	 * list (same shape the donations endpoint returned) so existing
-	 * callers stay compatible.
-	 *
-	 * @param \WP_REST_Request $request Request object.
-	 *
-	 * @return \WP_Error|\WP_REST_Response
-	 */
-	public static function api_reset_email( $request ) {
-		$id    = $request->get_param( 'id' );
-		$email = get_post( $id );
-
-		// Source boundary: this route can only ever reset Newspack-managed
-		// emails. The `POST_TYPE === $email->post_type` check below is the
-		// enforcement — non-Newspack sources are never stored as POST_TYPE
-		// posts. WooCommerce-source rows are live `WC_Email` objects with
-		// `wc:`-prefixed string ids, which additionally can't match the
-		// route's numeric-only `(?P<id>\d+)` pattern (`absint`-sanitized).
-		// So a direct REST call cannot reset a row the UI gates behind
-		// `source === 'newspack'`.
-		if ( null === $email || Emails::POST_TYPE !== $email->post_type ) {
-			return new WP_Error(
-				'newspack_reset_email_invalid_arg',
-				esc_html__( 'Invalid argument: no email template matches the provided id.', 'newspack-plugin' ),
-				[
-					'status' => 400,
-					'level'  => 'notice',
-				]
-			);
-		}
-
-		if ( ! wp_trash_post( $id ) ) {
-			return new WP_Error(
-				'newspack_reset_email_reset_failed',
-				esc_html__( 'Reset failed: unable to reset email template.', 'newspack-plugin' ),
-				[
-					'status' => 400,
-					'level'  => 'notice',
-				]
-			);
-		}
-
-		// Returns the raw Emails::get_emails() array, not the enriched
-		// api_get_email_settings() shape that the sibling api_toggle_wc_email
-		// returns. Preserves the legacy donations-endpoint contract
-		// (callers depending on the raw shape don't break on the move).
-		// Aligning sibling endpoints in this class on a single shape is
-		// tracked separately — see NPPD-1569.
-		return rest_ensure_response(
-			Emails::get_emails( Reader_Activation::is_enabled() ? [] : array_values( Reader_Revenue_Emails::EMAIL_TYPES ), false )
-		);
-	}
-
-	/**
 	 * Get email settings.
 	 *
 	 * Builds the unified emails list directly from the
@@ -394,6 +404,22 @@ class Emails_Section extends Wizard_Section {
 			$configs,
 			fn( $config ) => ( $config['source'] ?? 'newspack' ) === 'woocommerce'
 		);
+
+		// Reader-revenue (commerce) emails — receipt/welcome/cancellation,
+		// group-subscription invite, and WC order emails — only fire when
+		// Newspack is the reader-revenue platform (WooCommerce orders drive
+		// them; RevEngine redirects checkout off-site and sends its own
+		// receipts, and "Other" sends nothing through Newspack). Drop them at
+		// the CONFIG level, before the resolve loop, so non-Newspack sites
+		// never run the per-type WP_Query / lazy wp_insert_post for emails
+		// they'd only have filtered back out. `chip` is the canonical
+		// commerce-vs-auth grouping (set by Emails::apply_config_defaults),
+		// so it covers the group-subscription and WC commerce emails too.
+		if ( ! Donations::is_platform_wc() ) {
+			$is_commerce      = fn( $config ) => 'reader-revenue' === ( $config['chip'] ?? '' );
+			$newspack_configs = array_filter( $newspack_configs, fn( $config ) => ! $is_commerce( $config ) );
+			$wc_configs       = array_filter( $wc_configs, fn( $config ) => ! $is_commerce( $config ) );
+		}
 
 		// RA gating applies only to Newspack-source configs (the auth/account
 		// flows have no use without RA). WC configs are gated by their own

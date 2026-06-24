@@ -220,17 +220,16 @@ describe( 'Emails', () => {
 		mockCapturedView = null;
 		mockCapturedOnChangeView = null;
 		mockCapturedData = [];
-		window.newspackSettings = {
+		window.newspackAudience = {
 			emails: {
-				sections: {
-					emails: {
-						dependencies: {
-							newspackNewsletters: true,
-						},
-						postType: 'newspack_rr_email',
-						isEmailEnhancementsActive: false,
-					},
+				dependencies: {
+					newspackNewsletters: true,
 				},
+				postType: 'newspack_rr_email',
+				// Default to the Newspack platform so the full chip set (and
+				// reader-revenue default) applies. The non-Newspack case has
+				// its own test below.
+				isNewspackPlatform: true,
 			},
 		};
 		mockWizardApiFetch.mockImplementation( ( opts, callbacks ) => {
@@ -787,5 +786,24 @@ describe( 'Emails', () => {
 		// present for assistive tech but visually hidden via screen-reader-text.
 		const heading = screen.getByRole( 'heading', { level: 1, name: 'Emails' } );
 		expect( heading ).toHaveClass( 'screen-reader-text' );
+	} );
+
+	it( 'hides the chip bar entirely on a non-Newspack platform', async () => {
+		// NPPD-1538: on RevEngine/Other the server returns only auth/account
+		// emails, so there's a single group — the chip bar is hidden rather
+		// than showing a lone, always-pressed (non-functional) chip. Settings
+		// stays available; the list renders unfiltered.
+		window.newspackAudience.emails.isNewspackPlatform = false;
+		const Emails = require( './emails' ).default;
+		render( <Emails /> );
+
+		await waitFor( () => {
+			expect( screen.getByTestId( 'dataviews' ) ).toBeInTheDocument();
+		} );
+
+		expect( screen.queryByRole( 'button', { name: 'Reader revenue' } ) ).not.toBeInTheDocument();
+		expect( screen.queryByRole( 'button', { name: 'Authentication & account' } ) ).not.toBeInTheDocument();
+		// Settings button remains.
+		expect( screen.getByRole( 'button', { name: 'Settings' } ) ).toBeInTheDocument();
 	} );
 } );
