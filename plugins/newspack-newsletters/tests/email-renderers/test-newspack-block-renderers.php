@@ -79,44 +79,109 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A real posts-inserter render emits the child columns and no raw comments.
+	 * Serialize a posts-inserter block whose innerBlocksToInsert holds the given
+	 * children, the way the block editor stores it.
 	 *
-	 * Renders a newsletter CPT containing a posts-inserter block whose
-	 * innerBlocksToInsert holds a columns child through the full WC pipeline and
-	 * asserts the column markup appears with no leaked block-comment delimiters.
+	 * Uses serialize_block() so the children's HTML is JSON-escaped exactly as the
+	 * editor writes it (e.g. `<!-- wp:columns -->`).
+	 * Critically, the saved comment carries no raw `<` for kses to strip, so when
+	 * stored via wp_slash()+wp_insert_post the markup survives byte-for-byte and
+	 * parse_blocks() decodes each child's innerHTML back to real block delimiters.
+	 *
+	 * A naive `'<!-- wp:... ' . wp_json_encode( $attrs ) . ' /-->'` does NOT survive
+	 * kses on save (the unescaped child HTML is stripped), which is why this fixture
+	 * had to mirror the editor's escaping to reproduce the production leak.
+	 *
+	 * @param array $children innerBlocksToInsert child blocks (blockName/innerHTML).
+	 * @return string Serialized posts-inserter block markup.
 	 */
-	public function test_posts_inserter_integration_renders_columns() {
-		Editor_Bootstrap::init();
+	private function serialize_posts_inserter( array $children ): string {
+		return serialize_block(
+			[
+				'blockName'    => 'newspack-newsletters/posts-inserter',
+				'attrs'        => [ 'innerBlocksToInsert' => $children ],
+				'innerBlocks'  => [],
+				'innerHTML'    => '',
+				'innerContent' => [],
+			]
+		);
+	}
 
-		$inner = '<!-- wp:columns --><div class="wp-block-columns">'
-			. '<!-- wp:column {"width":"50%"} --><div class="wp-block-column"><!-- wp:paragraph --><p>Inserted col</p><!-- /wp:paragraph --></div><!-- /wp:column -->'
-			. '</div><!-- /wp:columns -->';
-
-		$attrs = [
-			'innerBlocksToInsert' => [
-				[
-					'blockName' => 'core/columns',
-					'attrs'     => [],
-					'innerHTML' => $inner,
-				],
-			],
-		];
-
-		$content = '<!-- wp:newspack-newsletters/posts-inserter ' . wp_json_encode( $attrs ) . ' /-->';
-
-		$post_id = self::factory()->post->create(
+	/**
+	 * Create a newsletter CPT carrying the given block markup, kses-safe.
+	 *
+	 * Slashing preserves the editor's backslash escapes through wp_insert_post so
+	 * the stored content is byte-identical to the serialized markup.
+	 *
+	 * @param string $content Serialized block markup.
+	 * @return int Created post ID.
+	 */
+	private function create_newsletter_with_content( string $content ): int {
+		return self::factory()->post->create(
 			[
 				'post_type'    => \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
 				'post_status'  => 'draft',
 				'post_title'   => 'Posts inserter newsletter',
-				'post_content' => $content,
+				'post_content' => wp_slash( $content ),
+			]
+		);
+	}
+
+	/**
+	 * A real posts-inserter render emits the child columns as email tables and
+	 * leaks no raw block-comment delimiters.
+	 *
+	 * This is the end-to-end regression for the override never wiring up in the real
+	 * WC pipeline. The posts-inserter block is registered via register_block_type()
+	 * (no metadata), so the package's `block_type_metadata_settings` filter — the
+	 * only path the registry used to set `render_email_callback` — never fired for
+	 * it. The engine then fell back to the block's own server callback, which
+	 * concatenates each child's raw innerHTML, leaking `<!-- wp:columns -->` and
+	 * never turning the columns into email tables.
+	 *
+	 * The fixture mirrors post 76: a heading child plus a nested columns child,
+	 * serialized exactly as the editor stores it (see serialize_posts_inserter).
+	 */
+	public function test_posts_inserter_integration_renders_columns() {
+		Editor_Bootstrap::init();
+
+		$columns_inner = '<!-- wp:columns --><div class="wp-block-columns">'
+			. '<!-- wp:column --><div class="wp-block-column"><!-- wp:paragraph --><p>Left column body</p><!-- /wp:paragraph --></div><!-- /wp:column -->'
+			. '<!-- wp:column --><div class="wp-block-column"><!-- wp:paragraph --><p>Right column body</p><!-- /wp:paragraph --></div><!-- /wp:column -->'
+			. '</div><!-- /wp:columns -->';
+
+		$content = $this->serialize_posts_inserter(
+			[
+				[
+					'blockName'    => 'core/heading',
+					'attrs'        => [],
+					'innerHTML'    => '<h2>Latest posts</h2>',
+					'innerContent' => [ '<h2>Latest posts</h2>' ],
+					'innerBlocks'  => [],
+				],
+				[
+					'blockName'    => 'core/columns',
+					'attrs'        => [],
+					'innerHTML'    => $columns_inner,
+					'innerContent' => [ $columns_inner ],
+					'innerBlocks'  => [],
+				],
 			]
 		);
 
+		$post_id = $this->create_newsletter_with_content( $content );
+
 		$html = Renderer_Controller::render_wc( get_post( $post_id ) );
 
-		$this->assertStringContainsString( 'wp-block-column', $html, 'Expected the inserted column markup to appear in the email.' );
-		$this->assertStringContainsString( 'Inserted col', $html, 'Expected the inserted paragraph content to appear.' );
+		// The heading and both column bodies must survive into the email.
+		$this->assertStringContainsString( 'Latest posts', $html, 'Expected the inserted heading content to appear.' );
+		$this->assertStringContainsString( 'Left column body', $html, 'Expected the left column body to appear.' );
+		$this->assertStringContainsString( 'Right column body', $html, 'Expected the right column body to appear.' );
+
+		// The columns must be rendered as the email-block column markup, not leaked raw.
+		$this->assertStringContainsString( 'wp-block-column', $html, 'Expected the inserted columns to render as column markup.' );
+
+		// No raw block-comment delimiters may leak into the email body — this is the bug.
 		$this->assertStringNotContainsString( '<!-- wp:', $html, 'Expected no raw block-comment delimiters in the rendered email.' );
 	}
 
