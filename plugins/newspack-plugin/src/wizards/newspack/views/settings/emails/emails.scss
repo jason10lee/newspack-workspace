@@ -13,13 +13,14 @@
 
 // Chip filter bar above the DataViews grid. Two-way toggle between
 // 'Reader revenue' and 'Authentication & account' — every email belongs
-// to exactly one chip group, so there's no "All" view.
+// to exactly one chip group, so there's no "All" view. The outer
+// HStack also hosts a Settings button on the right (NPPD-1566).
 //
 // Horizontal padding matches the 24px inner padding `@wordpress/dataviews`
 // applies to `.dataviews__view-actions`, so the chip bar's left edge
-// lines up with the search field and grid below. Without this the bar
-// reads as unmoored — sitting at the section padding edge while the
-// DataViews controls are inset another 24px.
+// lines up with the search field and grid below — and the right-side
+// Settings button lines up with the DataViews actions on the right.
+// Without this the bar reads as unmoored.
 //
 // Vertical: the Newspack DataViews wrapper applies `margin-top: -16px`
 // in full-width contexts (see packages/components/src/dataviews/style.scss).
@@ -31,12 +32,15 @@
 // top after the pull-up resolves (24 + -16 = 8). Visible gap to the
 // search row inside DataViews is 24px (8 + view-actions padding-top
 // of 16px).
-.newspack-emails__chips {
-	display: flex;
-	gap: 8px;
+.newspack-emails__chip-bar {
 	margin-bottom: 24px;
 	padding: 0 24px;
+}
 
+// Layout (display: flex, gap) is provided by the HStack wrapper —
+// `spacing={2}` is WP's 8px grid unit, matching the previous custom
+// `gap: 8px`. Only the chip-pill visual styling stays in SCSS.
+.newspack-emails__chips {
 	// Nested for specificity over WP Button defaults — without the
 	// `.components-button` chain, the pill shape and padding lose to
 	// WP's default button styling.
@@ -127,13 +131,19 @@
 }
 
 // Trigger description sub-text under the title.
-// Two-line clamp keeps grid cards uniform while still showing enough context.
+//
+// Three-line clamp: the original two-line clamp truncated single-
+// sentence descriptions of normal length at 12px in the narrow grid
+// card width (e.g. card-expiry-warning, renewal-reminder). Three
+// lines fits sentence-length descriptions without forcing copy
+// reductions that hurt comprehension, while still bounding card
+// height enough to preserve grid uniformity.
 .newspack-emails__trigger-description {
 	color: wp-colors.$gray-900;
 	font-size: 12px;
 	margin-top: 4px;
 	display: -webkit-box;
-	-webkit-line-clamp: 2;
+	-webkit-line-clamp: 3;
 	-webkit-box-orient: vertical;
 	overflow: hidden;
 }

@@ -122,6 +122,84 @@ class Emails_Section extends Wizard_Section {
 			]
 		);
 
+		// GET — Read the three transactional-email setting values used
+		// by `Emails::get_from_name()`, `get_from_email()`, and
+		// `get_reply_to_email()`. INTENTIONALLY does NOT call
+		// `Reader_Activation::get_setting()`: that helper resolves to
+		// (saved OR derived), collapsing the two states the modal
+		// must keep separate. The handler returns raw `get_option`
+		// values at the top level (empty when no override is saved)
+		// and derived defaults under a `defaults` sub-array, so the
+		// frontend can render saved-override as `value=` and the
+		// dynamic default as `placeholder=`. Future refactors must
+		// preserve this split — calling `get_setting()` here would
+		// silently break the value-vs-placeholder contract and
+		// re-introduce the launch-safety bug where first-save locked
+		// derived defaults in as static option rows.
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			self::REST_BASE . '/settings',
+			[
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => [ __CLASS__, 'api_get_settings' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+			]
+		);
+
+		// POST — Save the three transactional-email setting values.
+		// Args-block sanitization is belt-and-suspenders; the handler
+		// re-validates via `is_email()` because `sanitize_email()` leaves
+		// partials intact (e.g. "user@" passes sanitize but fails is_email).
+		// Writes delegate to `Reader_Activation::update_setting()`, which
+		// preserves the `newspack_reader_activation_*` option-key location.
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			self::REST_BASE . '/settings',
+			[
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => [ __CLASS__, 'api_update_settings' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					// `sender_name` flows into the mail `From:` header via
+					// `Emails::get_from_name()`. `sanitize_text_field()`
+					// strips CR/LF (and other control chars), which is what
+					// closes the header-injection vector here — that
+					// newline-stripping is LOAD-BEARING, not incidental. If
+					// this callback is ever swapped for one that preserves
+					// newlines, re-add an explicit `str_replace`/`preg_replace`
+					// CR/LF guard before the value reaches the header, or
+					// header injection silently reopens.
+					'sender_name'           => [
+						'type'              => 'string',
+						'required'          => true,
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+					// Email fields use `sanitize_text_field`, NOT
+					// `sanitize_email`. `sanitize_email` collapses
+					// partially-typed input ('user@', 'newaddress') to
+					// '' BEFORE the handler runs — which then treats
+					// the empty value as "intentional revert" and
+					// `delete_option`s the publisher's previously
+					// saved override. The `newspack_invalid_sender_email`
+					// / `newspack_invalid_contact_email` WP_Errors
+					// would be unreachable for typo input. Use
+					// `sanitize_text_field` to preserve the typo so the
+					// handler's `is_email()` guard rejects it with a
+					// proper 400.
+					'sender_email_address'  => [
+						'type'              => 'string',
+						'required'          => true,
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'contact_email_address' => [
+						'type'              => 'string',
+						'required'          => true,
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+				],
+			]
+		);
+
 		// Toggle endpoint for WooCommerce-source emails. Only registered
 		// when WC is loaded; without WC there are no WC configs to toggle.
 		if ( self::is_woocommerce_active() ) {
@@ -711,5 +789,195 @@ class Emails_Section extends Wizard_Section {
 			],
 			admin_url( 'admin.php' )
 		);
+	}
+
+	/**
+	 * Get the three transactional-email setting values + their derived
+	 * defaults.
+	 *
+	 * Returns the raw saved values (empty string when nothing has been
+	 * saved) alongside the derived defaults so the frontend can render
+	 * value vs. placeholder distinctly. Reading via
+	 * `Reader_Activation::get_setting()` instead would collapse the two
+	 * into a single resolved value — losing the distinction the modal
+	 * needs to keep publishers from accidentally locking in derived
+	 * defaults as static option rows on first save.
+	 *
+	 * Default-source computation is inlined rather than abstracted into
+	 * `Emails`. The `Emails::get_from_*()` helpers return the *resolved*
+	 * value (saved override OR derived fallback), so calling them here
+	 * for the "default" slot would just return the saved value when one
+	 * exists — defeating the purpose of returning both separately.
+	 * Mirror the fallback logic from `Emails::get_from_email()` for the
+	 * sender-email default (network_home_url host, w/o `www.` prefix).
+	 *
+	 * @return \WP_REST_Response
+	 */
+	public static function api_get_settings() {
+		// Mirror `Emails::get_from_email()`'s default-derivation
+		// EXACTLY, including the misconfigured-host fallback. If the
+		// modal's placeholder diverged from what the send path
+		// actually emits when no override is saved, publishers would
+		// see one default in the UI and get a different from-address
+		// on outbound mail — silent UX/expectations gap. On a site
+		// where `network_home_url()` can't yield a host, both this
+		// derived default AND `Emails::get_from_email()` resolve to
+		// the literal `'no-reply@'` (broken-looking but consistent).
+		// Worth a separate follow-up to fix the broken-host case at
+		// the send path; the alignment here just keeps the two
+		// surfaces honest.
+		$home_host = (string) wp_parse_url( network_home_url(), PHP_URL_HOST );
+		if ( 'www.' === substr( $home_host, 0, 4 ) ) {
+			$home_host = substr( $home_host, 4 );
+		}
+
+		// Run each derived default through the SAME filter the send
+		// path applies (`Emails::get_from_name()` → `newspack_from_name`,
+		// `Emails::get_from_email()` → `newspack_from_email`,
+		// `Emails::get_reply_to_email()` → `newspack_reply_to_email`).
+		// When no override is saved, the send path resolves to the
+		// derived default and then filters it — so the modal placeholder
+		// must filter too, or a site that hooks any of these filters
+		// would show one default in the UI while outbound mail used
+		// another. Saved overrides stay raw (top-level keys above): they
+		// render as the input `value`, and the unfiltered stored string
+		// is what the publisher actually controls.
+		return rest_ensure_response(
+			[
+				'sender_name'           => (string) get_option( Reader_Activation::OPTIONS_PREFIX . 'sender_name', '' ),
+				'sender_email_address'  => (string) get_option( Reader_Activation::OPTIONS_PREFIX . 'sender_email_address', '' ),
+				'contact_email_address' => (string) get_option( Reader_Activation::OPTIONS_PREFIX . 'contact_email_address', '' ),
+				'defaults'              => [
+					'sender_name'           => apply_filters( 'newspack_from_name', get_bloginfo( 'name' ) ),
+					'sender_email_address'  => apply_filters( 'newspack_from_email', 'no-reply@' . $home_host ),
+					'contact_email_address' => apply_filters( 'newspack_reply_to_email', get_bloginfo( 'admin_email' ) ),
+				],
+			]
+		);
+	}
+
+	/**
+	 * Update the three transactional-email setting values.
+	 *
+	 * Empty value semantics: an empty string for any field means "revert
+	 * to the derived default" — the option row is deleted so subsequent
+	 * `get_from_*()` reads fall through to bloginfo / domain / admin
+	 * email. Without this, a publisher who'd never explicitly saved
+	 * could open the modal, see the derived defaults populated, hit
+	 * Save without realizing, and lock those derived values in as
+	 * static rows — breaking the dynamic-default behavior (later
+	 * site-title changes would no longer propagate to sender_name,
+	 * etc.).
+	 *
+	 * Format validation runs only on non-empty values. Email fields
+	 * must match `is_email()` when present; empty is treated as the
+	 * intentional-revert path, not as a validation error.
+	 *
+	 * Writes delegate to `Reader_Activation::update_setting()` for the
+	 * non-empty path (preserves the `newspack_reader_activation_*`
+	 * option-key location). Empty values bypass `update_setting` and
+	 * call `delete_option` directly — `update_setting` writes empty
+	 * strings via `update_option`, which would leave zombie option
+	 * rows; deleting is tidier and matches the "revert" intent.
+	 *
+	 * Mirrors the GET response shape so the frontend can confirm the
+	 * saved state without a second round-trip.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_Error|\WP_REST_Response Saved values, or 400 on validation failure.
+	 */
+	public static function api_update_settings( $request ) {
+		$sender_name           = $request->get_param( 'sender_name' );
+		$sender_email_address  = $request->get_param( 'sender_email_address' );
+		$contact_email_address = $request->get_param( 'contact_email_address' );
+
+		// Format validation runs only when the value is non-empty.
+		// Empty is the intentional "revert to default" path, not an
+		// error. `sanitize_email` returns "" for completely invalid
+		// input but leaves partials ("user@") intact, so the
+		// non-empty check is combined with `is_email()`.
+		if ( '' !== $sender_email_address && ! is_email( $sender_email_address ) ) {
+			return new \WP_Error(
+				'newspack_invalid_sender_email',
+				esc_html__( 'Sender email address must be a valid email address.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
+			);
+		}
+		if ( '' !== $contact_email_address && ! is_email( $contact_email_address ) ) {
+			return new \WP_Error(
+				'newspack_invalid_contact_email',
+				esc_html__( 'Contact email address must be a valid email address.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
+			);
+		}
+
+		$updates = [
+			'sender_name'           => $sender_name,
+			'sender_email_address'  => $sender_email_address,
+			'contact_email_address' => $contact_email_address,
+		];
+		foreach ( $updates as $key => $value ) {
+			$option_key = Reader_Activation::OPTIONS_PREFIX . $key;
+
+			if ( '' === $value ) {
+				// Empty = revert. Skip when there's no row to delete:
+				// otherwise the delete + action hook fire as a phantom
+				// "change" event with nothing actually changing. The
+				// hook contract is "this setting changed" — re-saving
+				// an already-absent value isn't a change.
+				if ( false === get_option( $option_key, false ) ) {
+					continue;
+				}
+				delete_option( $option_key );
+
+				// Mirror the action `Reader_Activation::update_setting()`
+				// fires for writes so external subscribers (audit logs,
+				// ESP sync) observe revert-to-default as a setting
+				// change. Without this, the delete path is invisible
+				// to hook listeners and produces drift between the
+				// stored state and any external mirror built from the
+				// hook.
+				do_action( 'newspack_reader_activation_update_setting', $key, '' );
+				continue;
+			}
+
+			// Non-empty = write. Pre-check current value and skip
+			// no-op saves: WordPress's `update_option()` returns
+			// false in two distinct cases — genuine write failure
+			// AND no-op (new value === current value). Without this
+			// pre-check, a publisher re-saving the same value
+			// (deliberately, or because the modal opened with
+			// already-saved state) would hit the WP_Error branch and
+			// see a 500 with no actual problem. Skipping no-ops also
+			// keeps the `newspack_reader_activation_update_setting`
+			// action hook semantically honest — "this changed" means
+			// it actually changed, not "this was submitted".
+			if ( get_option( $option_key, '' ) === $value ) {
+				continue;
+			}
+
+			if ( ! Reader_Activation::update_setting( $key, $value ) ) {
+				// `update_setting()` returns false when the key isn't
+				// in `get_settings_config()` (legitimate via the
+				// `newspack_reader_activation_settings_config` filter)
+				// or when `update_option()` itself fails for a real
+				// reason (DB write error, etc.) — the no-op case is
+				// already filtered out above. Convert the silent fail
+				// into a visible 500 so the frontend renders an
+				// inline error rather than a misleading success
+				// notice.
+				return new \WP_Error(
+					'newspack_settings_write_failed',
+					esc_html__( 'Could not save transactional email settings.', 'newspack-plugin' ),
+					[ 'status' => 500 ]
+				);
+			}
+		}
+
+		// Re-read via api_get_settings() so the response carries the
+		// refreshed value/default pair — saving an empty value flips
+		// the field's "value" back to '' and the frontend's placeholder
+		// path picks up the derived default again.
+		return self::api_get_settings();
 	}
 }

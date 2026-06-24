@@ -9,7 +9,7 @@ import { __, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useCallback, useMemo, Fragment } from '@wordpress/element';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
-import { Button } from '@wordpress/components';
+import { Button, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies.
@@ -18,6 +18,7 @@ import { Badge, DataViews, Notice, utils } from '../../../../../../packages/comp
 import WizardsPluginCard from '../../../../wizards-plugin-card';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 import EmailPreview from './email-preview';
+import SettingsModal from './settings-modal';
 import './emails.scss';
 
 interface EmailItem {
@@ -94,6 +95,7 @@ const Emails = () => {
 	const postType = initial?.post_type ?? emailSections.emails.postType;
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
 	const [ activeChip, setActiveChip ] = useState< ChipValue >( 'reader-revenue' );
+	const [ showSettingsModal, setShowSettingsModal ] = useState( false );
 
 	const selectChip = ( chip: ChipValue ) => {
 		setActiveChip( chip );
@@ -384,6 +386,39 @@ const Emails = () => {
 		[ visibleData, view, fields ]
 	);
 
+	// The `preview` media field belongs to the grid view (each card
+	// renders the iframe as its top tile). DataViews v14 also renders
+	// the media field as a leading thumbnail in table view, where the
+	// EmailPreview iframe is too constrained to actually show
+	// content — leaving an empty rounded square next to every row.
+	// Strip `mediaField` from the view passed to DataViews when
+	// the user has switched to table layout; the underlying state
+	// keeps the value so toggling back to grid restores the tile.
+	const effectiveView = useMemo< View >( () => {
+		if ( 'table' === view.type ) {
+			const { mediaField: _stripped, ...rest } = view;
+			return rest as View;
+		}
+		return view;
+	}, [ view ] );
+
+	// Normalize the view DataViews hands back before persisting it.
+	// `effectiveView` strips `mediaField` while in table layout, so
+	// without this a table→grid toggle would store a grid view that
+	// lost its preview tile, leaving grid cards with no media field.
+	// Grid always carries `mediaField: 'preview'`; table never does
+	// (it's stripped in `effectiveView` regardless, but drop it here
+	// too so the persisted state stays canonical). This keeps a
+	// grid→table→grid round-trip lossless.
+	const handleChangeView = useCallback( ( nextView: View ) => {
+		if ( 'grid' === nextView.type ) {
+			setView( { ...nextView, mediaField: 'preview' } );
+			return;
+		}
+		const { mediaField: _stripped, ...rest } = nextView;
+		setView( rest as View );
+	}, [] );
+
 	if ( false === pluginsReady ) {
 		return (
 			<Fragment>
@@ -413,32 +448,44 @@ const Emails = () => {
 		<Fragment>
 			<PageHeading />
 			{ errorMessage && <Notice isError noticeText={ errorMessage } /> }
-			<div className="newspack-emails__chips" role="group" aria-label={ __( 'Filter emails by group', 'newspack-plugin' ) }>
-				{ CHIPS.map( chip => {
-					// During an active search, neither chip is filtering —
-					// render both as unpressed so the visual matches reality.
-					// Clicking either chip clears the search via selectChip
-					// and engages that chip's view.
-					const isActive = ! isSearching && activeChip === chip.value;
-					return (
-						<Button
-							key={ chip.value }
-							variant={ isActive ? 'primary' : 'secondary' }
-							aria-pressed={ isActive }
-							onClick={ () => selectChip( chip.value ) }
-							className="newspack-emails__chip"
-						>
-							{ chip.label }
-						</Button>
-					);
-				} ) }
-			</div>
+			<HStack className="newspack-emails__chip-bar" justify="space-between" alignment="center">
+				<HStack
+					className="newspack-emails__chips"
+					role="group"
+					aria-label={ __( 'Filter emails by group', 'newspack-plugin' ) }
+					spacing={ 2 }
+					justify="flex-start"
+				>
+					{ CHIPS.map( chip => {
+						// During an active search, neither chip is filtering —
+						// render both as unpressed so the visual matches reality.
+						// Clicking either chip clears the search via selectChip
+						// and engages that chip's view.
+						const isActive = ! isSearching && activeChip === chip.value;
+						return (
+							<Button
+								key={ chip.value }
+								variant={ isActive ? 'primary' : 'secondary' }
+								aria-pressed={ isActive }
+								onClick={ () => selectChip( chip.value ) }
+								className="newspack-emails__chip"
+							>
+								{ chip.label }
+							</Button>
+						);
+					} ) }
+				</HStack>
+				<Button variant="secondary" onClick={ () => setShowSettingsModal( true ) }>
+					{ __( 'Settings', 'newspack-plugin' ) }
+				</Button>
+			</HStack>
+			<SettingsModal showModal={ showSettingsModal } closeModal={ () => setShowSettingsModal( false ) } />
 			<DataViews
 				className="newspack-emails"
 				data={ processedData }
 				fields={ fields }
-				view={ view }
-				onChangeView={ setView }
+				view={ effectiveView }
+				onChangeView={ handleChangeView }
 				actions={ actions }
 				paginationInfo={ paginationInfo }
 				defaultLayouts={ { table: {}, grid: {} } }

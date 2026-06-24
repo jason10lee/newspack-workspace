@@ -803,26 +803,10 @@ final class Reader_Activation {
 	 */
 	public static function get_prerequisites_status() {
 		$prerequisites = [
-			'emails'           => [
-				'active'      => self::is_transactional_email_configured(),
-				'label'       => __( 'Transactional Emails', 'newspack-plugin' ),
-				'description' => __( 'Your sender name and email address determines how readers find emails related to their account in their inbox. To customize the content of these emails, visit Advanced Settings below.', 'newspack-plugin' ),
-				'help_url'    => 'https://help.newspack.com/engagement/audience-management-system/',
-				'fields'      => [
-					'sender_name'           => [
-						'label'       => __( 'Sender Name', 'newspack-plugin' ),
-						'description' => __( 'Name to use as the sender of transactional emails.', 'newspack-plugin' ),
-					],
-					'sender_email_address'  => [
-						'label'       => __( 'Sender Email Address', 'newspack-plugin' ),
-						'description' => __( 'Email address to use as the sender of transactional emails.', 'newspack-plugin' ),
-					],
-					'contact_email_address' => [
-						'label'       => __( 'Contact Email Address', 'newspack-plugin' ),
-						'description' => __( 'This email will be used as "Reply-To" for transactional emails as well.', 'newspack-plugin' ),
-					],
-				],
-			],
+			// NPPD-1566: the 'emails' prerequisite was removed here — the
+			// three transactional-email settings now live in the Emails
+			// Settings modal with valid derived defaults, so they're no
+			// longer a gating prereq for Reader Activation.
 			'terms_conditions' => [
 				'active'      => self::is_terms_configured(),
 				'label'       => __( 'Legal Pages', 'newspack-plugin' ),
