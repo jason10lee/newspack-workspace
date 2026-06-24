@@ -69,7 +69,10 @@ function enqueue_scripts() {
 		\Newspack\Newspack::plugin_url() . '/dist/reader-registration-block.js',
 		[ 'wp-polyfill', 'newspack-reader-activation' ],
 		NEWSPACK_PLUGIN_VERSION,
-		true
+		[
+			'strategy'  => 'defer',
+			'in_footer' => true,
+		]
 	);
 	\wp_script_add_data( $handle, 'defer', true );
 	\wp_script_add_data( $handle, 'amp-plus', true );
