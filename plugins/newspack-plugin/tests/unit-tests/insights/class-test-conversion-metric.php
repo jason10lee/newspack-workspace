@@ -890,7 +890,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 					'customer_id' => 1,
 					'ts'          => 1700000000,
 				],
-			] 
+			]
 		);
 		$metric          = new Conversion_Metric( $proxy, $subs );
 		[ $start, $end ] = $this->window();
@@ -1035,7 +1035,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 					'customer_id' => 1,
 					'ts'          => 1700000000,
 				],
-			] 
+			]
 		);
 		$metric          = new Conversion_Metric( $proxy, null, $donors );
 		[ $start, $end ] = $this->window();
@@ -1061,8 +1061,8 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 						'influenced_subscription_rate' => 0.3,
 						'conversion_denominator'       => 50,
 					],
-				] 
-			) 
+				]
+			)
 		);
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_influenced_subscription_rate_14d( $start, $end );
@@ -1085,8 +1085,8 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 						'influenced_subscription_rate' => null,
 						'conversion_denominator'       => 0,
 					],
-				] 
-			) 
+				]
+			)
 		);
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_influenced_subscription_rate_14d( $start, $end );
@@ -1120,13 +1120,49 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 						'influenced_subscription_rate' => 'not-a-number',
 						'conversion_denominator'       => 50,
 					],
-				] 
-			) 
+				]
+			)
 		);
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_influenced_subscription_rate_14d( $start, $end );
 
 		$this->assertSame( 'error', $result['state'] );
+	}
+
+	/**
+	 * C14 non-numeric denominator: signals schema drift → error scalar.
+	 */
+	public function test_influenced_subscription_rate_14d_returns_error_on_non_numeric_denominator() {
+		$metric          = new Conversion_Metric(
+			$this->proxy_returning(
+				[
+					[
+						'influenced_subscription_rate' => 0.3,
+						'conversion_denominator'       => 'x',
+					],
+				]
+			)
+		);
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_influenced_subscription_rate_14d( $start, $end );
+
+		$this->assertSame( 'error', $result['state'] );
+	}
+
+	/**
+	 * C14 missing keys: a non-empty row lacking both required keys → non-computable zero.
+	 */
+	public function test_influenced_subscription_rate_14d_returns_noncomputable_zero_on_missing_keys() {
+		$metric          = new Conversion_Metric(
+			$this->proxy_returning( [ [ 'unexpected_column' => 1 ] ] )
+		);
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_influenced_subscription_rate_14d( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertFalse( $result['computable'] );
+		$this->assertSame( 0.0, $result['value'] );
+		$this->assertNull( $result['denominator'] );
 	}
 
 	// --- C15: get_influenced_donation_rate_14d ------------------------------
@@ -1142,8 +1178,8 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 						'influenced_donation_rate' => 0.18,
 						'conversion_denominator'   => 22,
 					],
-				] 
-			) 
+				]
+			)
 		);
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_influenced_donation_rate_14d( $start, $end );
@@ -1165,8 +1201,8 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 						'influenced_donation_rate' => null,
 						'conversion_denominator'   => 0,
 					],
-				] 
-			) 
+				]
+			)
 		);
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_influenced_donation_rate_14d( $start, $end );
@@ -2037,7 +2073,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 					'customer_id' => 1,
 					'ts'          => 1700000000,
 				],
-			] 
+			]
 		);
 		$metric          = new Conversion_Metric( $this->proxy_returning( 'not-an-array' ), $subs );
 		[ $start, $end ] = $this->window();
