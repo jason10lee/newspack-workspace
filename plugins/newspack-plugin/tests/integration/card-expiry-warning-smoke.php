@@ -725,16 +725,17 @@ if ( count( $mails ) >= 1 ) {
 // SCENARIO 12: Two-phase PENDING claim reconciliation (real subscription)
 //
 // Exercises the NPPD-1768 two-phase claim against a REAL WC_Subscription —
-// the one path the unit suite covers only with an in-memory fake. Proves:
-//   (a) the array-shaped PENDING marker round-trips through WC's
-//       save()/get_meta() (the real-WC serialization the fake can't show),
-//       and a RECENT claim blocks a resend (best-effort concurrency guard);
-//   (b) a STALE claim re-sends and is promoted to SENT with the claim
-//       cleared (the over-send reconciliation policy).
+// the one path the unit suite covers only with an in-memory fake. Proves
+// (a) the array-shaped PENDING marker round-trips through WC's
+// save()/get_meta() (the real-WC serialization the fake can't show), and a
+// RECENT claim blocks a resend (best-effort concurrency guard); and (b) a
+// STALE claim re-sends and is promoted to SENT with the claim cleared (the
+// over-send reconciliation policy).
 // ══════════════════════════════════════════════════════════════════════
 WP_CLI::log( '' );
 WP_CLI::log( '12. Two-phase PENDING claim reconciliation (real subscription)' );
 
+// phpcs:disable WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Diagnostic output in a manual smoke script, not production code.
 $subscription = wcs_get_subscription( $sub_id );
 Card_Expiry_Warning::clear_sent_flag( $subscription );
 
@@ -797,6 +798,7 @@ if ( true === $sent && 1 === count( $mails ) && '' === $pending_left && $sent_va
 		' pending_left=' . var_export( $pending_left, true ) . " sent_val='$sent_val'"
 	);
 }
+// phpcs:enable WordPress.PHP.DevelopmentFunctions.error_log_var_export
 
 
 // ══════════════════════════════════════════════════════════════════════
