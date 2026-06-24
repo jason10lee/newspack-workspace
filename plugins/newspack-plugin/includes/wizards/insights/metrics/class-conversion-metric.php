@@ -1441,15 +1441,19 @@ final class Conversion_Metric {
 	}
 
 	/**
-	 * 5.1 reference line (hardcoded per spec): 15% conversion at 6 months.
+	 * 5.1 reference line. Currently returns null: the 5.1 cohort chart autoscales
+	 * and shows no default line. The hardcoded 15% was removed because no fixed-%
+	 * default fits the network (publisher conversion models diverge widely). Kept
+	 * as the single seam where the dynamic baseline will be computed.
 	 *
-	 * @return array{value: float, label: string}
+	 * TODO: replace this null with a self-relative baseline — the median cumulative
+	 * conversion of mature (>=12-month) cohorts at the 6-month mark — and expose it
+	 * as a configurable Newspack publisher setting.
+	 *
+	 * @return array{value: float, label: string}|null
 	 */
-	private function registration_reference_line(): array {
-		return [
-			'value' => 0.15,
-			'label' => __( '15% at 6 months', 'newspack-plugin' ),
-		];
+	private function registration_reference_line(): ?array {
+		return null;
 	}
 
 	/**
@@ -1461,7 +1465,7 @@ final class Conversion_Metric {
 	 * and each months-since offset N (0..age, capped 12), the value is the
 	 * CUMULATIVE fraction of the cohort converted by month N.
 	 *
-	 * @return array{state:string, cohorts:array, reference_line:array{value:float, label:string}}
+	 * @return array{state:string, cohorts:array, reference_line:array{value:float, label:string}|null}
 	 */
 	public function compute_registration_to_conversion_cohort(): array {
 		$readers = $this->subscribers_metric->get_reader_registration_dates();
@@ -1548,7 +1552,7 @@ final class Conversion_Metric {
 	 *
 	 * @param DateTimeInterface $start Window start (ignored — snapshot).
 	 * @param DateTimeInterface $end   Window end (ignored — snapshot).
-	 * @return array{state:string, cohorts:array, reference_line:array{value:float, label:string}}
+	 * @return array{state:string, cohorts:array, reference_line:array{value:float, label:string}|null}
 	 */
 	public function get_registration_to_conversion_cohort( DateTimeInterface $start, DateTimeInterface $end ): array {
 		unset( $start, $end );
