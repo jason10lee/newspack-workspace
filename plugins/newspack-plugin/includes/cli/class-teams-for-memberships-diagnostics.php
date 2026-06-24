@@ -264,6 +264,9 @@ class Teams_For_Memberships_Diagnostics {
 			}
 
 			$original = $classification['original'];
+			// The original is invariant across the loop; fetch its post once, and only when
+			// we'll actually repair (fix_duplicate_team needs a WP_Post, not a row object).
+			$original_post = self::$fix ? get_post( $original->ID ) : null;
 			foreach ( $classification['duplicates'] as $dup ) {
 				$issue_count++;
 				WP_CLI::line(
@@ -276,7 +279,7 @@ class Teams_For_Memberships_Diagnostics {
 					)
 				);
 				if ( self::$fix ) {
-					self::fix_duplicate_team( get_post( $original->ID ), get_post( $dup->ID ) );
+					self::fix_duplicate_team( $original_post, get_post( $dup->ID ) );
 				}
 			}
 		}
@@ -299,7 +302,7 @@ class Teams_For_Memberships_Diagnostics {
 	 * throwaway test account); those are returned as `separate_purchases` and left untouched.
 	 *
 	 * @param object[] $teams Objects with at least ->ID, ->post_date and ->subscription_id
-	 *                        (the last empty when the team has no linked subscription).
+	 *                        (empty or '0' when the team has no linked subscription).
 	 * @return array{original:?object,duplicates:object[],separate_purchases:object[],unattributed_orphans:object[]}
 	 *               `unattributed_orphans` is only populated for the separate-purchases case:
 	 *               subscription-less teams that can't be tied to a single purchase and so are
@@ -317,7 +320,10 @@ class Teams_For_Memberships_Diagnostics {
 		$subscribed = [];
 		$orphans    = [];
 		foreach ( $teams as $team ) {
-			if ( '' === (string) $team->subscription_id ) {
+			// A '0' or empty _subscription_id means no live link – the rest of this command
+			// reads the meta as an int and gates on truthiness, so a stale '0' must not pass
+			// as a real purchase (which would shield a genuine duplicate from repair).
+			if ( 0 === (int) $team->subscription_id ) {
 				$orphans[] = $team;
 			} else {
 				$subscribed[] = $team;

@@ -89,6 +89,22 @@ class Test_Teams_For_Memberships_Diagnostics extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A `_subscription_id` of "0" (a stale or never-set link, stored as int 0) is not a
+	 * real subscription. It must count as an orphan, not a separate purchase – otherwise a
+	 * genuine duplicate carrying a "0" link would be shielded from repair.
+	 */
+	public function test_zero_subscription_id_counts_as_no_subscription() {
+		$subscribed = $this->team_row( 100, '2026-01-01 00:00:00', '555' );
+		$zero_link  = $this->team_row( 200, '2026-02-01 00:00:00', '0' );
+
+		$result = Teams_For_Memberships_Diagnostics::classify_team_bucket( [ $subscribed, $zero_link ] );
+
+		$this->assertSame( 100, $result['original']->ID, 'The genuinely subscribed team is the original.' );
+		$this->assertEqualSets( [ 200 ], wp_list_pluck( $result['duplicates'], 'ID' ), 'A team whose _subscription_id is "0" is an orphan duplicate.' );
+		$this->assertEmpty( $result['separate_purchases'], 'A "0" subscription id must not trigger the separate-purchases branch.' );
+	}
+
+	/**
 	 * When no team in the set owns a subscription, fall back to the oldest as the original
 	 * and treat the rest as duplicates (unchanged behaviour for fully unlinked sets).
 	 */
