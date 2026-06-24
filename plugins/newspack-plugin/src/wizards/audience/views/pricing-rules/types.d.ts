@@ -38,6 +38,7 @@ interface PricingRuleRow {
 	published_at: number | null;
 	intent: string;
 	intent_note: string;
+	cycle_anchor: 'subscription_start' | 'rule_application' | string;
 	is_stepped: boolean;
 	has_conditions: boolean;
 	conditions: { [ id: string ]: boolean | number | number[] | null };
