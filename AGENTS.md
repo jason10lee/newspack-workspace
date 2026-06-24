@@ -298,25 +298,6 @@ n sh <name>                    # Shell into environment container
 - `n env destroy` cleans up everything: container, DB, html dir, hosts entry, and worktrees
 - Managed `/etc/hosts` lines carry a `# newspack-env:<name>` marker so `n env destroy` and `n env cleanup` can reliably remove them (and never touch your own entries). After updating the workspace, re-run `./bin/setup-networking.sh` to reinstall the `newspack-manage-host` wrapper that writes the marker; until then new entries are unmarked but functional and destroy falls back to removing by domain.
 
-### Standalone Repos (`newspack_standalone_repos`)
-
-Beyond the canonical monorepo plugins (`plugins/<name>/`) and themes (`themes/<name>/`), the workspace supports a third tier for **standalone repos**: separate git checkouts at `repos/plugins/<name>/` or `repos/themes/<name>/` with their own history and remote. Typical uses: Newspack-adjacent repos like `newspack-manager` or `newspack-community`, and private/custom plugins you maintain as their own repos.
-
-As described under [Directory Structure](#directory-structure), a checkout dropped into `repos/plugins/<name>/` or `repos/themes/<name>/` is auto-mounted and symlinked into the active site **by directory existence — no registration needed**. The `newspack_standalone_repos` registry is a separate, optional layer: declaring a name opts it into the **`n`-tooling surface** (`n build`/`test`/`watch` targeting, which gate on declaration) and the **env/worktree standalone tier**.
-
-Declare them in `bin/repos.local.sh` (gitignored — see `bin/repos.local.sh.sample`):
-```bash
-newspack_standalone_repos+=("newspack-community")
-```
-
-Two modes of use:
-- **Available** — the host's `./repos/` directory is bind-mounted into every container at `/newspack-repos/`. A checkout at `repos/plugins/<name>/` (or `repos/themes/<name>/`) is auto-linked into the active site, and `n` discovers it by path for cwd-detection. Declaring it additionally enables `n build`/`watch` targeting by name.
-- **Active in an env** — `n env create demo --worktree newspack-community:branch-name` creates a worktree of the (declared) standalone repo and mounts it at `/newspack-plugins/<name>` so `link-repos.sh` symlinks it into `wp-content/plugins/`.
-
-**Caveat:** `--worktree` always activates (the mount triggers auto-linking). Don't `--worktree` a hub-only repo (e.g. `newspack-manager`) into a main-site env — it'd land in the wrong `wp-content/plugins/`. Pick the right repo for the env.
-
-**Shared-worktree note:** `n env destroy` removes worktrees by branch name. If two environments share the same standalone-repo+branch, destroying one removes the source files for both. (Tier-1 has the same property.)
-
 ### Claude Code Plugin Skills
 
 If the `newspack` Claude Code plugin is installed, these skills wrap the commands above:

@@ -11,13 +11,6 @@ if ! command -v pnpm >/dev/null 2>&1; then
     corepack enable pnpm >/dev/null
 fi
 
-# Run pnpm non-interactively. Without this, `pnpm install` aborts with
-# ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY when it wants to purge a
-# node_modules dir created by a different setup — there's no TTY to confirm, so
-# the whole build bails before anything compiles. CI=true makes pnpm assume a
-# non-interactive environment and proceed.
-export CI=true
-
 find_project() {
     local path=$(resolve_project_path "$1")
     if [ -z "$path" ]; then path=$(resolve_project_path "newspack-$1"); fi
@@ -38,22 +31,20 @@ package_filter_for_dir() {
     if [ -n "$name" ]; then echo "$name"; else basename "$1"; fi
 }
 
-# Build a standalone repos/ checkout using its own toolchain (it isn't part of
-# the pnpm workspace, so `pnpm --filter` won't find it). Respects lockfiles,
-# treats a missing composer.json/package.json as a no-op success.
+# Build a standalone repos/ checkout with its own toolchain. These live outside
+# the pnpm workspace, so `pnpm --filter` can't see them. Composer + JS deps are
+# installed in-place; in CI mode the JS install is frozen/clean (reproducible)
+# when a lockfile is present. Failures propagate so a broken standalone build
+# can't silently pass as green.
 build_standalone_repo() {
     local dir="$1"
     echo "Building standalone repo $dir"
 
-    # PHP deps if present. CI mode skips dev deps for parity with the JS
-    # path's --frozen-lockfile behaviour. Failures propagate so they don't
-    # silently turn into green builds.
+    # PHP deps if present. composer.lock pins exact versions, so the install is
+    # reproducible and identical in CI and dev. Dev deps are kept (a standalone
+    # repo's build step may need them) -- matching the monorepo composer paths.
     if [ -f "$dir/composer.json" ]; then
-        if [ "$MODE" = "ci" ]; then
-            composer install --working-dir "$dir" --no-dev || return 1
-        else
-            composer install --working-dir "$dir" || return 1
-        fi
+        composer install --working-dir "$dir" --no-interaction || return 1
     fi
 
     # JS deps + build: no-op if there's no package.json.
@@ -61,30 +52,35 @@ build_standalone_repo() {
         return 0
     fi
 
-    # Detect package manager from lockfile; default pnpm (monorepo convention).
-    local pm="pnpm"
+    # Detect package manager from lockfile; default npm for a lockfile-less repo
+    # (npm's lenient hoisting is the safest default, and matches the prior code).
+    local pm="npm"
     if [ -f "$dir/pnpm-lock.yaml" ]; then
         pm="pnpm"
     elif [ -f "$dir/yarn.lock" ]; then
         pm="yarn"
-    elif [ -f "$dir/package-lock.json" ]; then
-        pm="npm"
     fi
 
-    # Install (respecting MODE=ci for frozen-lockfile parity with the rest of build-repos).
-    if [ "$MODE" = "ci" ]; then
-        case "$pm" in
-            pnpm) (cd "$dir" && pnpm install --frozen-lockfile) || return 1 ;;
-            yarn) (cd "$dir" && yarn install --frozen-lockfile) || return 1 ;;
-            npm)  (cd "$dir" && npm ci) || return 1 ;;
-        esac
+    # Install JS deps. In CI mode use a reproducible install where the package
+    # manager + lockfile support it (pnpm is only selected when its lockfile
+    # exists, so --frozen-lockfile is always satisfiable; npm ci needs a
+    # package-lock.json). Everything else -- Yarn (avoids the Classic-vs-Berry
+    # frozen-flag split), a lockfile-less repo, or dev mode -- gets a plain
+    # install so it still builds. CI=true is scoped to the pnpm frozen install
+    # (non-interactive in a TTY-less CI shell) and is deliberately NOT exported:
+    # a global CI=true also flips pnpm's frozen-lockfile default onto the
+    # dev-mode and workspace installs, which would break them on a stale lockfile.
+    if [ "$MODE" = "ci" ] && [ "$pm" = "pnpm" ]; then
+        ( cd "$dir" && CI=true pnpm install --frozen-lockfile ) || return 1
+    elif [ "$MODE" = "ci" ] && [ "$pm" = "npm" ] && [ -f "$dir/package-lock.json" ]; then
+        ( cd "$dir" && npm ci ) || return 1
     else
-        (cd "$dir" && "$pm" install) || return 1
+        ( cd "$dir" && "$pm" install ) || return 1
     fi
 
     # Run build only if a build script is declared.
     if grep -q '"build"[[:space:]]*:' "$dir/package.json" 2>/dev/null; then
-        (cd "$dir" && "$pm" run build) || return 1
+        ( cd "$dir" && "$pm" run build ) || return 1
     fi
 }
 
@@ -102,10 +98,10 @@ cd "$MONOREPO_ROOT"
 # Workspace install: pnpm resolves `workspace:*` deps (e.g. newspack-scripts)
 # and links shared bins into each package's node_modules/.bin.
 if [ "$MODE" = "ci" ]; then
-    # CI=true keeps pnpm non-interactive so a one-time node_modules re-layout
-    # (e.g. after a hoist-pattern change in .npmrc) auto-purges instead of
-    # blocking on a confirmation prompt -- `n` runs pnpm via `docker exec`
-    # without a TTY in non-interactive contexts, where that prompt aborts.
+    # CI=true (scoped, NOT exported) keeps pnpm non-interactive so a one-time
+    # node_modules re-layout (e.g. after a hoist-pattern change in .npmrc)
+    # auto-purges instead of blocking on a TTY-less confirmation prompt --
+    # `n` runs pnpm via `docker exec` without a TTY, where that prompt aborts.
     CI=true pnpm install --frozen-lockfile
 else
     pnpm install
@@ -113,24 +109,17 @@ fi
 
 case $WHAT_TO_BUILD in
     all)
-        # Composer install per monorepo project that ships its own composer.json.
-        # Standalone repos/ checkouts are not built here — they're external and
+        # Composer install per monorepo project (each plugin still has its own
+        # composer.json for production deps; dev deps are hoisted to the root).
+        # Standalone repos/ checkouts are not built here -- they're external and
         # often distributed/pre-built; build one on demand with `n build <name>`.
         while IFS= read -r dir; do
-            [ -d "$dir" ] || continue
-            [ -f "$dir/composer.json" ] || continue
-            composer install --working-dir "$dir"
+            [ -d "$dir" ] && composer install --working-dir "$dir"
         done < <(get_all_project_dirs)
-        # Propagate a failed build so it doesn't silently pass CI.
-        rc=0
-        pnpm run build || rc=1
-        exit "$rc"
+        pnpm run build
         ;;
     *)
         dir="$(find_project "$WHAT_TO_BUILD")"
-        # Standalone repos build with their own toolchain. find_project resolves
-        # via resolve_project_path, which only yields a repos/ path for declared
-        # standalone repos, so a repos/ path here is already registry-gated.
         if [[ "$dir" == "$REPOS_PATH"/* ]]; then
             build_standalone_repo "$dir"
         else

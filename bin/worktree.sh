@@ -10,14 +10,26 @@ source "$(dirname "${BASH_SOURCE[0]}")/repos.sh"
 #   monorepo tree. The env system mounts specific subdirectories
 #   (plugins/<name>, themes/<name>) into the container.
 #
-#   Tier 2 (opt-in via --repo) — worktrees of standalone repos at repos/<name>/.
-#   Lives at worktrees/standalone/<name>/<safe_branch>/, created from the
-#   standalone repo's own git history. Names must appear in
-#   newspack_standalone_repos (typically via bin/repos.local.sh).
+#   Tier 2 (opt-in via --repo) — worktrees of a standalone checkout at
+#   repos/{plugins,themes}/<name>/. Lives at worktrees/standalone/<name>/<safe_branch>/,
+#   created from the standalone repo's own git history. The checkout is
+#   discovered by path -- no registration needed.
 
 # Sanitize a branch name for use as a directory: feat/foo -> feat-foo.
 sanitize_branch() {
     echo "$1" | tr '/' '-'
+}
+
+# Resolve a standalone repos/ checkout's host path by auto-discovery: a checkout
+# at repos/{plugins,themes}/<name>/ is matched by path (no registration). Prints
+# the relative host path (repos/plugins/<name>) or nothing if none is found.
+resolve_standalone_host_path() {
+    local name="$1"
+    if [[ -e "$NABSPATH/repos/plugins/$name/.git" ]]; then
+        echo "repos/plugins/$name"
+    elif [[ -e "$NABSPATH/repos/themes/$name/.git" ]]; then
+        echo "repos/themes/$name"
+    fi
 }
 
 case $1 in
@@ -49,17 +61,13 @@ case $1 in
         safe_branch=$(sanitize_branch "$branch")
 
         if [[ -n "$repo" ]]; then
-            # Tier 2: worktree of a standalone repo.
-            repo_path=$(get_repo_host_path "$repo")
-            if [[ "$repo_path" != repos/* ]]; then
-                echo "Error: --repo '$repo' is not a standalone repo (must appear in newspack_standalone_repos)"
+            # Tier 2: worktree of a standalone repos/ checkout (auto-discovered by path).
+            repo_path=$(resolve_standalone_host_path "$repo")
+            if [[ -z "$repo_path" ]]; then
+                echo "Error: no repos/plugins/$repo or repos/themes/$repo checkout found (standalone repos are discovered by path)"
                 exit 1
             fi
             standalone_dir="$NABSPATH/$repo_path"
-            if [[ ! -e "$standalone_dir/.git" ]]; then
-                echo "Error: $repo_path is not a git checkout; clone it first"
-                exit 1
-            fi
             worktree_dir="$NABSPATH/worktrees/standalone/$repo/$safe_branch"
             if [[ -d "$worktree_dir" ]]; then
                 echo "Worktree already exists at worktrees/standalone/$repo/$safe_branch"
@@ -101,12 +109,14 @@ case $1 in
         # Also enumerate worktrees of standalone repos (tier 2). Standalone
         # checkouts live at repos/{plugins,themes}/<name> (typed); resolve the
         # actual path via get_repo_host_path rather than assuming a flat repos/.
-        for r in "${newspack_standalone_repos[@]}"; do
-            r_path=$(get_repo_host_path "$r")
-            [[ -n "$r_path" && -e "$NABSPATH/$r_path/.git" ]] || continue
-            echo ""
-            echo "[$r]"
-            (cd "$NABSPATH/$r_path" && git worktree list)
+        for kind in plugins themes; do
+            for d in "$NABSPATH/repos/$kind"/*/; do
+                [[ -e "${d}.git" ]] || continue
+                r=$(basename "$d")
+                echo ""
+                echo "[$r]"
+                ( cd "$d" && git worktree list )
+            done
         done
         ;;
     remove)
@@ -137,10 +147,10 @@ case $1 in
         safe_branch=$(sanitize_branch "$branch")
 
         if [[ -n "$repo" ]]; then
-            # Tier 2: standalone-repo worktree.
-            repo_path=$(get_repo_host_path "$repo")
-            if [[ "$repo_path" != repos/* ]]; then
-                echo "Error: --repo '$repo' is not a standalone repo (must appear in newspack_standalone_repos)"
+            # Tier 2: standalone repos/ checkout worktree (auto-discovered by path).
+            repo_path=$(resolve_standalone_host_path "$repo")
+            if [[ -z "$repo_path" ]]; then
+                echo "Error: no repos/plugins/$repo or repos/themes/$repo checkout found (standalone repos are discovered by path)"
                 exit 1
             fi
             standalone_dir="$NABSPATH/$repo_path"
@@ -348,7 +358,7 @@ case $1 in
     *)
         echo "Usage: n worktree <add|list|remove|cleanup> [args]"
         echo "  add <branch> [--repo <name>]              Create a worktree at the given branch"
-        echo "                                              (--repo: standalone repo from newspack_standalone_repos)"
+        echo "                                              (--repo: a standalone repos/{plugins,themes}/<name> checkout)"
         echo "  list                                      List all worktrees (workspace + standalone)"
         echo "  remove <branch> [--repo <name>] [--yes]   Remove a worktree and delete the branch"
         echo "  cleanup [--all] [--yes]                   Interactive bulk cleanup (workspace worktrees only)"

@@ -106,8 +106,8 @@ parse_env_worktrees() {
             safe_branch="${BASH_REMATCH[2]}"
             # Typed host dir (repos/plugins/X or repos/themes/X), by existence —
             # not via the registry: we're parsing an already-created env, so the
-            # checkout's location shouldn't depend on the repo still being
-            # declared in repos.local.sh. Default to plugins/ (the common case)
+            # checkout's location shouldn't depend on any registry (it's
+            # discovered by path). Default to plugins/ (the common case)
             # if the checkout is gone, so the repos/ tier discriminator still holds.
             if [[ -d "$NABSPATH/repos/themes/$repo" ]]; then
                 host="repos/themes/$repo"
