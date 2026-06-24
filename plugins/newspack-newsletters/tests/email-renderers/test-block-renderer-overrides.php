@@ -315,6 +315,10 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 
 		// Other package-provided cite styles must still be present.
 		$this->assertStringContainsString( 'font-size: 13px', $cite_style, 'Expected the package font-size to be preserved.' );
+
+		// The quote table must carry the Newspack 2px left bar (not the package 1px).
+		$this->assertStringContainsString( 'border-width: 0 0 0 2px', $html, 'Expected the quote to carry a 2px left border to match the post editor.' );
+		$this->assertStringNotContainsString( 'border-width: 0 0 0 1px', $html, 'Expected the package 1px quote border to be overridden.' );
 	}
 
 	/**
@@ -348,12 +352,16 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 			'default'
 		);
 
-		// The un-italic filter runs at priority 11 (after the italic is set).
-		$theme = Quote::un_italic_cite( $theme );
+		// The override filter runs at priority 11 (after the package defaults).
+		$theme = Quote::override_quote_email_styles( $theme );
 
 		// The merged theme must report normal for the cite font-style.
 		$raw        = $theme->get_raw_data();
 		$font_style = $raw['styles']['blocks']['core/quote']['elements']['cite']['typography']['fontStyle'] ?? '';
-		$this->assertSame( 'normal', $font_style, 'Expected the quote un-italic filter to override the cite fontStyle to "normal".' );
+		$this->assertSame( 'normal', $font_style, 'Expected the quote override filter to set the cite fontStyle to "normal".' );
+
+		// The merged theme must also report the Newspack 2px left border width.
+		$border_width = $raw['styles']['blocks']['core/quote']['border']['width'] ?? '';
+		$this->assertSame( Quote::BORDER_WIDTH, $border_width, 'Expected the quote override filter to set the 2px left border width.' );
 	}
 }
