@@ -23,6 +23,8 @@ export interface Recipe {
 	application: 'locked' | 'current' | null;
 	/** Default scope applied when the path is chosen — subscription presets target all subscriptions. */
 	defaultScope: string;
+	/** Default cycle anchor — retention rebases to first apply; others count from subscription start. */
+	cycleAnchor: 'subscription_start' | 'rule_application';
 	/** Custom = the full advanced form (nothing preset or hidden). */
 	isCustom: boolean;
 }
@@ -32,30 +34,35 @@ export const RECIPES: Record< PricingPath, Recipe > = {
 		lifecycleCondition: 'first_time_only',
 		application: 'locked',
 		defaultScope: 'all_subscriptions',
+		cycleAnchor: 'subscription_start',
 		isCustom: false,
 	},
 	retention: {
 		lifecycleCondition: null,
 		application: 'current',
 		defaultScope: 'all_subscriptions',
+		cycleAnchor: 'rule_application',
 		isCustom: false,
 	},
 	save: {
 		lifecycleCondition: 'pending_cancellation',
 		application: 'locked',
 		defaultScope: 'all_subscriptions',
+		cycleAnchor: 'subscription_start',
 		isCustom: false,
 	},
 	winback: {
 		lifecycleCondition: 'lapsed_subscriber',
 		application: 'locked',
 		defaultScope: 'all_subscriptions',
+		cycleAnchor: 'subscription_start',
 		isCustom: false,
 	},
 	custom: {
 		lifecycleCondition: null,
 		application: null,
 		defaultScope: 'all_products',
+		cycleAnchor: 'subscription_start',
 		isCustom: true,
 	},
 };

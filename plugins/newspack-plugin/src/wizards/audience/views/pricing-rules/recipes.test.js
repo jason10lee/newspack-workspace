@@ -46,4 +46,15 @@ describe( 'recipes', () => {
 		expect( intentLabel( 'winback' ) ).toBe( 'Win-back' );
 		expect( intentLabel( 'mystery' ) ).toBe( 'mystery' );
 	} );
+
+	it( 'retention defaults the cycle anchor to rule application', () => {
+		expect( RECIPES.retention.cycleAnchor ).toBe( 'rule_application' );
+	} );
+
+	it( 'non-retention recipes default the cycle anchor to subscription start', () => {
+		expect( RECIPES.new_subscriptions.cycleAnchor ).toBe( 'subscription_start' );
+		expect( RECIPES.save.cycleAnchor ).toBe( 'subscription_start' );
+		expect( RECIPES.winback.cycleAnchor ).toBe( 'subscription_start' );
+		expect( RECIPES.custom.cycleAnchor ).toBe( 'subscription_start' );
+	} );
 } );
