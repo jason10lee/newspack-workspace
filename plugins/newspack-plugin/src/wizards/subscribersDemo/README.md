@@ -176,12 +176,14 @@ source of truth; this is a map of it.
   cancelled group shows no notice: the status badge and disabled actions say so.
   Members DataViews
   (avatar + name/email column, role badges, per-row kebab, "Remove member" as a
-  per-row and bulk action), seat count + Adjust seats + Add members. Invitations DataViews
-  (Pending/Expired badges) with an "Invite members" menu, plus "Accept on behalf"
-  as a per-row and bulk action.
+  per-row and bulk action), seat count + Adjust seats + a single "Add members"
+  menu (Add directly / Invite by email / Copy invite link, plus Regenerate /
+  Disable invite link once a link exists). The Invitations DataViews
+  (Pending/Expired badges, "Accept on behalf" as a per-row and bulk action) only
+  appears when there are pending invites.
 
 **Admin superpower (divergence from owner parity).** Beyond the owner-facing My
-Account flow (#148), an admin can add members directly (Members → Add members) and
+Account flow (#148), an admin can add members directly (Add members → Add directly) and
 accept or bulk-approve pending invitations on the invitee's behalf, creating
 accounts for unknown emails. Both paths respect the seat limit. Runtime adds are
 additive — they don't apply the seed-time covered-member clearing that strips a
@@ -204,13 +206,13 @@ All mutate through the `onComplete({ message, mutate })` convention above.
 | `SubscriptionDetailsDrawer` | "View subscription" kebab on group detail | Right-edge panel that slides in on open and out on close (no modal chrome, custom overlay). Shows the plan name as the title, then a self-contained snapshot in two tiers: an identity tier (Status badge, Owner as a link to the owner profile, Seats `x of y`), a divider, then the billing tier in the same order as the person-profile group card: First subscribed, Billing (price / cadence), Last payment (or "Free access"), and Next billing (or Cancelled date when cancelled). A pinned footer (mirroring the newsletters quick-edit footer: white, sticky, no divider, buttons split 50/50) carries the same status-gated CTAs as the person-profile group card: active → Change subscription (when other plans exist) + Refund or cancel (just Cancel when free-forever); on-hold → Reactivate + Cancel; cancelled → Resubscribe. Each CTA closes the drawer and opens the matching flow — Change subscription → `PlanChangeFlow`, Refund or cancel / Cancel → `RefundFlow`, Reactivate **and** Resubscribe → `GuidedFixFlow` (verb-aware) — which mutate the group on screen (and log owner billing-history orders on reactivate/resubscribe). | Display + actions; closes with the × button, overlay click, or any CTA. |
 | `NoteFlow` | "Add private note" / note "Edit" | Textarea, save disabled until non-empty. | Note added or edited. |
 | `TagsFlow` | "Manage tags" | `FormTokenField` with known-tag suggestions; save when changed. | Tags replaced. |
-| `InviteMemberFlow` | Group "Invite members → Invite by email" | `FormTokenField` multi-email, capacity-aware (warns at zero seats, trims over capacity, de-dupes vs. pending). | Pending email invites added. |
-| `AddMembersFlow` | Members "Add members" | `FormTokenField` multi-email, capacity-aware (trims over capacity with a warning), "Send a welcome email" checkbox. Existing accounts resolve by email; unknown emails create a stub account. | Members added immediately; a matching pending invite is consumed. |
+| `InviteMemberFlow` | "Add members → Invite by email" | `FormTokenField` multi-email, capacity-aware (warns at zero seats, trims over capacity, de-dupes vs. pending). | Pending email invites added. |
+| `AddMembersFlow` | "Add members → Add directly" | `FormTokenField` multi-email, capacity-aware (trims over capacity with a warning), "Send a welcome email" checkbox. Existing accounts resolve by email; unknown emails create a stub account. | Members added immediately; a matching pending invite is consumed. |
 | `AcceptInviteFlow` | Invitations "Accept on behalf" (row or bulk) | Confirms the count with a "Send a welcome email" checkbox. | Pending invite(s) converted to members; seat count unchanged. |
 | `AdjustSeatsFlow` | "Adjust seats" | Number input floored at reserved seats, raise only while active; two-step input → confirm summary. | Seat limit updated. |
 | `MakeOwnerFlow` | Member kebab "Make owner" | `ConfirmFlow`. | Ownership transferred; previous owner demoted. |
 | `RemoveMemberFlow` | Member kebab / bulk "Remove member" (row or bulk) | `ConfirmFlow` (destructive); pluralizes the copy for multiple members. The owner is never eligible. | Member(s) removed; seats freed. |
-| `RegenerateLinkFlow` / `DisableLinkFlow` | Invitations menu (when a link exists) | `ConfirmFlow` (disable is destructive). Copy invite link itself is no modal: it copies and creates the link if none exists. | Link regenerated / disabled. |
+| `RegenerateLinkFlow` / `DisableLinkFlow` | "Add members" menu (when a link exists) | `ConfirmFlow` (disable is destructive). Copy invite link itself is no modal: it copies and creates the link if none exists. | Link regenerated / disabled. |
 | `ResendInviteFlow` / `CancelInviteFlow` | Invite row kebab | `ConfirmFlow` (cancel is destructive). | Invite `sentAt` refreshed / invite removed. |
 
 `ConfirmFlow` is the shared scaffold (title, body, Cancel + primary/destructive

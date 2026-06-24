@@ -149,6 +149,12 @@
 	margin: 0;
 }
 
+// A standalone section heading (no surrounding flex row) carries both classes;
+// this beats section-title's margin reset so section-head's block spacing applies.
+.newspack-subscribers-demo__section-title.newspack-subscribers-demo__section-head {
+	margin-block: wp-vars.$grid-unit-30 wp-vars.$grid-unit-15;
+}
+
 // Seat count beside the "Members" heading: same size/line-height as the title,
 // lighter weight and gray so it reads as secondary.
 .newspack-subscribers-demo__seat-count {

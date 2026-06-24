@@ -482,9 +482,71 @@ function GroupDetailView() {
 					<Button variant="tertiary" size="compact" onClick={ () => setModal( { kind: 'seats' } ) } disabled={ ! isGroupActive( group ) }>
 						{ __( 'Adjust seats', 'newspack-plugin' ) }
 					</Button>
-					<Button variant="secondary" size="compact" onClick={ () => setModal( { kind: 'add-members' } ) } disabled={ ! canInvite }>
-						{ __( 'Add members', 'newspack-plugin' ) }
-					</Button>
+					<Dropdown
+						placement="bottom-end"
+						renderToggle={ ( { isOpen, onToggle } ) => (
+							<Button
+								variant="secondary"
+								size="compact"
+								onClick={ onToggle }
+								aria-expanded={ isOpen }
+								disabled={ ! isGroupActive( group ) }
+							>
+								{ __( 'Add members', 'newspack-plugin' ) }
+							</Button>
+						) }
+						renderContent={ ( { onClose } ) => (
+							<MenuGroup>
+								<MenuItem
+									disabled={ ! canInvite }
+									onClick={ () => {
+										onClose();
+										setModal( { kind: 'add-members' } );
+									} }
+								>
+									{ __( 'Add directly', 'newspack-plugin' ) }
+								</MenuItem>
+								<MenuItem
+									disabled={ ! canInvite }
+									onClick={ () => {
+										onClose();
+										setModal( { kind: 'invite' } );
+									} }
+								>
+									{ __( 'Invite by email', 'newspack-plugin' ) }
+								</MenuItem>
+								<MenuItem
+									onClick={ () => {
+										onClose();
+										copyInviteLink();
+									} }
+								>
+									{ __( 'Copy invite link', 'newspack-plugin' ) }
+								</MenuItem>
+								{ hasActiveInviteLink( group ) && (
+									<MenuItem
+										onClick={ () => {
+											onClose();
+											setModal( { kind: 'regenerate-link' } );
+										} }
+									>
+										{ __( 'Regenerate invite link', 'newspack-plugin' ) }
+									</MenuItem>
+								) }
+								{ hasActiveInviteLink( group ) && (
+									<MenuItem
+										isDestructive
+										onClick={ () => {
+											onClose();
+											setModal( { kind: 'disable-link' } );
+										} }
+									>
+										{ __( 'Disable invite link', 'newspack-plugin' ) }
+									</MenuItem>
+								) }
+							</MenuGroup>
+						) }
+					/>
 				</HStack>
 			</HStack>
 			<DataViews
@@ -500,81 +562,25 @@ function GroupDetailView() {
 				search
 			/>
 
-			<Divider alignment="full-width" variant="tertiary" />
+			{ inviteRows.length > 0 && (
+				<>
+					<Divider alignment="full-width" variant="tertiary" />
 
-			<HStack className="newspack-subscribers-demo__section-head" justify="space-between" alignment="center">
-				<h2 className="newspack-subscribers-demo__section-title">{ __( 'Invitations', 'newspack-plugin' ) }</h2>
-				<Dropdown
-					placement="bottom-end"
-					renderToggle={ ( { isOpen, onToggle } ) => (
-						<Button
-							variant="secondary"
-							size="compact"
-							onClick={ onToggle }
-							aria-expanded={ isOpen }
-							disabled={ ! isGroupActive( group ) }
-						>
-							{ __( 'Invite members', 'newspack-plugin' ) }
-						</Button>
-					) }
-					renderContent={ ( { onClose } ) => (
-						<MenuGroup>
-							<MenuItem
-								disabled={ ! canInvite }
-								onClick={ () => {
-									onClose();
-									setModal( { kind: 'invite' } );
-								} }
-							>
-								{ __( 'Invite by email', 'newspack-plugin' ) }
-							</MenuItem>
-							<MenuItem
-								onClick={ () => {
-									onClose();
-									copyInviteLink();
-								} }
-							>
-								{ __( 'Copy invite link', 'newspack-plugin' ) }
-							</MenuItem>
-							{ hasActiveInviteLink( group ) && (
-								<MenuItem
-									onClick={ () => {
-										onClose();
-										setModal( { kind: 'regenerate-link' } );
-									} }
-								>
-									{ __( 'Regenerate invite link', 'newspack-plugin' ) }
-								</MenuItem>
-							) }
-							{ hasActiveInviteLink( group ) && (
-								<MenuItem
-									isDestructive
-									onClick={ () => {
-										onClose();
-										setModal( { kind: 'disable-link' } );
-									} }
-								>
-									{ __( 'Disable invite link', 'newspack-plugin' ) }
-								</MenuItem>
-							) }
-						</MenuGroup>
-					) }
-				/>
-			</HStack>
-			{ inviteRows.length === 0 ? (
-				<p>{ __( 'No pending invitations.', 'newspack-plugin' ) }</p>
-			) : (
-				<DataViews
-					data={ processedInvites }
-					fields={ inviteFields }
-					view={ invitesView }
-					onChangeView={ setInvitesView }
-					actions={ inviteActions }
-					paginationInfo={ invitesPagination }
-					defaultLayouts={ { table: {} } }
-					getItemId={ item => item.id }
-					search={ false }
-				/>
+					<h2 className="newspack-subscribers-demo__section-head newspack-subscribers-demo__section-title">
+						{ __( 'Invitations', 'newspack-plugin' ) }
+					</h2>
+					<DataViews
+						data={ processedInvites }
+						fields={ inviteFields }
+						view={ invitesView }
+						onChangeView={ setInvitesView }
+						actions={ inviteActions }
+						paginationInfo={ invitesPagination }
+						defaultLayouts={ { table: {} } }
+						getItemId={ item => item.id }
+						search={ false }
+					/>
+				</>
 			) }
 
 			{ modal?.kind === 'add-members' && <AddMembersFlow group={ group } onClose={ closeModal } onComplete={ completeFlow } /> }
