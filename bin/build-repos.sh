@@ -11,6 +11,13 @@ if ! command -v pnpm >/dev/null 2>&1; then
     corepack enable pnpm >/dev/null
 fi
 
+# Run pnpm non-interactively for every pnpm call below. Without this, an install
+# that wants to purge/re-layout node_modules (e.g. after a hoist-pattern change
+# in .npmrc) blocks on a confirmation prompt -- `n` runs pnpm via `docker exec`
+# without a TTY, where that prompt aborts the whole build. CI=true makes pnpm
+# assume a non-interactive environment and proceed.
+export CI=true
+
 find_project() {
     local path=$(resolve_project_path "$1")
     if [ -z "$path" ]; then path=$(resolve_project_path "newspack-$1"); fi
@@ -32,19 +39,52 @@ package_filter_for_dir() {
 }
 
 # Build a standalone repos/ checkout with its own toolchain. These live outside
-# the pnpm workspace, so `pnpm --filter` can't see them. Composer + JS deps are
-# installed in-place; a missing composer.json/package.json is a no-op.
+# the pnpm workspace, so `pnpm --filter` can't see them. In CI mode, installs use
+# frozen-lockfile/--no-dev for reproducibility (parity with the workspace
+# install); failures propagate so a broken standalone build can't silently pass.
 build_standalone_repo() {
     local dir="$1"
     echo "Building standalone repo $dir"
-    [ -f "$dir/composer.json" ] && composer install --working-dir "$dir"
-    [ -f "$dir/package.json" ] || return 0
-    local pm="npm"
-    [ -f "$dir/pnpm-lock.yaml" ] && pm="pnpm"
-    [ -f "$dir/yarn.lock" ] && pm="yarn"
-    ( cd "$dir" && "$pm" install )
+
+    # PHP deps if present. CI mode skips dev deps for parity with the JS
+    # path's --frozen-lockfile behaviour.
+    if [ -f "$dir/composer.json" ]; then
+        if [ "$MODE" = "ci" ]; then
+            composer install --working-dir "$dir" --no-dev || return 1
+        else
+            composer install --working-dir "$dir" || return 1
+        fi
+    fi
+
+    # JS deps + build: no-op if there's no package.json.
+    if [ ! -f "$dir/package.json" ]; then
+        return 0
+    fi
+
+    # Detect package manager from lockfile; default pnpm (monorepo convention).
+    local pm="pnpm"
+    if [ -f "$dir/pnpm-lock.yaml" ]; then
+        pm="pnpm"
+    elif [ -f "$dir/yarn.lock" ]; then
+        pm="yarn"
+    elif [ -f "$dir/package-lock.json" ]; then
+        pm="npm"
+    fi
+
+    # Install (respecting MODE=ci for frozen-lockfile parity with the rest of build-repos).
+    if [ "$MODE" = "ci" ]; then
+        case "$pm" in
+            pnpm) (cd "$dir" && pnpm install --frozen-lockfile) || return 1 ;;
+            yarn) (cd "$dir" && yarn install --frozen-lockfile) || return 1 ;;
+            npm)  (cd "$dir" && npm ci) || return 1 ;;
+        esac
+    else
+        (cd "$dir" && "$pm" install) || return 1
+    fi
+
+    # Run build only if a build script is declared.
     if grep -q '"build"[[:space:]]*:' "$dir/package.json" 2>/dev/null; then
-        ( cd "$dir" && "$pm" run build )
+        (cd "$dir" && "$pm" run build) || return 1
     fi
 }
 
@@ -62,11 +102,7 @@ cd "$MONOREPO_ROOT"
 # Workspace install: pnpm resolves `workspace:*` deps (e.g. newspack-scripts)
 # and links shared bins into each package's node_modules/.bin.
 if [ "$MODE" = "ci" ]; then
-    # CI=true keeps pnpm non-interactive so a one-time node_modules re-layout
-    # (e.g. after a hoist-pattern change in .npmrc) auto-purges instead of
-    # blocking on a confirmation prompt -- `n` runs pnpm via `docker exec`
-    # without a TTY in non-interactive contexts, where that prompt aborts.
-    CI=true pnpm install --frozen-lockfile
+    pnpm install --frozen-lockfile
 else
     pnpm install
 fi
