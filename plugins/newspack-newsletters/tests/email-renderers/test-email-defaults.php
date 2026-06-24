@@ -73,6 +73,7 @@ class Test_Email_Defaults extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		delete_option( Feature_Flag::OPTION );
+		\Newspack\Newsletters\Email_Renderers\Fonts::reset_memo();
 
 		if ( null === $this->saved_pagenow ) {
 			unset( $GLOBALS['pagenow'] );

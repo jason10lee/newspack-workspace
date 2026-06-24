@@ -25,6 +25,7 @@ class Test_Fonts extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		remove_all_filters( 'newspack_newsletters_test_global_styles' );
+		Fonts::reset_memo();
 		parent::tear_down();
 	}
 
@@ -214,6 +215,92 @@ class Test_Fonts extends WP_UnitTestCase {
 		$this->assertSame( Fonts::THEME_DEFAULT_HEADER_FONT, $fonts['header'] );
 		$this->assertStringContainsString( 'garamond', $fonts['body'] );
 		$this->assertStringContainsString( 'apple-system', $fonts['header'] );
+	}
+
+	/**
+	 * A global font expressed as a CSS custom property (var(...)) is treated as
+	 * UNSET and falls through to the theme/fallback branch, because the email CSS
+	 * inliner and email clients can't resolve custom properties.
+	 */
+	public function test_global_var_font_falls_through_to_theme() {
+		require_once __DIR__ . '/fixtures/theme-font-functions.php';
+
+		$post_id = self::factory()->post->create();
+
+		// Global styles return an unresolvable CSS var for both sides.
+		add_filter(
+			'newspack_newsletters_test_global_styles',
+			function () {
+				return [
+					'typography' => [ 'fontFamily' => 'var(--wp--preset--font-family--inter)' ],
+					'elements'   => [
+						'heading' => [
+							'typography' => [ 'fontFamily' => 'var(--wp--preset--font-family--montserrat)' ],
+						],
+					],
+				];
+			}
+		);
+
+		// Theme mods unset → theme branch yields the CSS-var default stacks.
+		add_filter( 'theme_mod_font_body', '__return_empty_string' );
+		add_filter( 'theme_mod_font_header', '__return_empty_string' );
+
+		$fonts = Fonts::resolve( get_post( $post_id ) );
+
+		remove_filter( 'theme_mod_font_body', '__return_empty_string' );
+		remove_filter( 'theme_mod_font_header', '__return_empty_string' );
+
+		// The var() globals are skipped; resolution lands on the theme defaults,
+		// never returning the unresolvable var() into the email theme.json.
+		$this->assertStringNotContainsString( 'var(', $fonts['body'], 'Body must not contain an unresolvable CSS var.' );
+		$this->assertStringNotContainsString( 'var(', $fonts['header'], 'Header must not contain an unresolvable CSS var.' );
+		$this->assertSame( Fonts::THEME_DEFAULT_BODY_FONT, $fonts['body'] );
+		$this->assertSame( Fonts::THEME_DEFAULT_HEADER_FONT, $fonts['header'] );
+	}
+
+	/**
+	 * Resolving with null (the post-new.php create path) skips the per-post meta
+	 * step and runs the global → theme → fallback chain, returning both keys.
+	 *
+	 * With no theme fn and no global styles, that chain lands on the hardcoded
+	 * fallback — proving null is accepted and the meta lookups are skipped.
+	 */
+	public function test_resolves_without_post_falls_through_to_fallback() {
+		if ( function_exists( 'newspack_font_stack' ) ) {
+			$this->markTestSkipped( 'Theme font fn present; this case asserts the no-post hardcoded-fallback branch.' );
+		}
+
+		$fonts = Fonts::resolve( null );
+
+		$this->assertSame( Theme_Json_Builder::DEFAULT_BODY_FONT, $fonts['body'] );
+		$this->assertSame( Theme_Json_Builder::DEFAULT_HEADER_FONT, $fonts['header'] );
+	}
+
+	/**
+	 * Resolving with null honors global styles (the create path still picks up
+	 * site-wide global typography), proving the meta step is skipped but the
+	 * global/theme chain still runs.
+	 */
+	public function test_resolves_without_post_honors_global_styles() {
+		add_filter(
+			'newspack_newsletters_test_global_styles',
+			function () {
+				return [
+					'typography' => [ 'fontFamily' => 'GlobalBody, sans-serif' ],
+					'elements'   => [
+						'heading' => [
+							'typography' => [ 'fontFamily' => 'GlobalHeading, serif' ],
+						],
+					],
+				];
+			}
+		);
+
+		$fonts = Fonts::resolve( null );
+
+		$this->assertSame( 'GlobalBody, sans-serif', $fonts['body'] );
+		$this->assertSame( 'GlobalHeading, serif', $fonts['header'] );
 	}
 
 	/**

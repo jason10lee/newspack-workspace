@@ -64,10 +64,24 @@ class Quote extends Package_Quote {
 	 * co-located with the block it concerns and loaded only through the same
 	 * auto-discovery gate as all other overrides.
 	 *
+	 * `woocommerce_email_editor_theme_json` is a GLOBAL hook shared with the
+	 * WooCommerce block-email editor package. On a site running WooCommerce's own
+	 * transactional-email editor (same package, same hook), an unguarded override
+	 * would restyle core/quote in WC emails too. Guard it to the newsletter CPT,
+	 * mirroring Editor_Bootstrap::merge_theme_json() (the sibling on this hook).
+	 *
 	 * @param \WP_Theme_JSON $theme The assembled email editor theme.
 	 * @return \WP_Theme_JSON
 	 */
 	public static function override_quote_email_styles( \WP_Theme_JSON $theme ): \WP_Theme_JSON {
+		$post = \Newspack\Newsletters\Email_Renderers\Renderer_Controller::get_rendering_post();
+		if ( ! $post ) {
+			$post = \get_post();
+		}
+		if ( ! $post || \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT !== $post->post_type ) {
+			return $theme;
+		}
+
 		$theme->merge(
 			new \WP_Theme_JSON(
 				[

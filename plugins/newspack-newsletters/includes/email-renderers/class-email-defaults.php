@@ -110,8 +110,11 @@ class Email_Defaults {
 	 * global fonts are set" requirement.
 	 *
 	 * Guarded identically to inject_button_border_radius(): WC renderer flag on
-	 * AND an email-editor request. When there is no resolvable post being edited
-	 * (e.g. post-new.php before a draft exists) it skips gracefully.
+	 * AND an email-editor request. is_email_editor_request() is also true on
+	 * post-new.php (create), where there is no post yet — in that case fonts are
+	 * resolved with empty meta (global → theme → default), so a brand-new
+	 * newsletter's canvas still shows the resolved theme fonts instead of the
+	 * hardcoded builder defaults.
 	 *
 	 * @param \WP_Theme_JSON_Data $theme_json Incoming default theme.json data.
 	 * @return \WP_Theme_JSON_Data Potentially modified default theme.json data.
@@ -125,12 +128,9 @@ class Email_Defaults {
 			return $theme_json;
 		}
 
-		$post = self::get_editing_post();
-		if ( ! $post instanceof \WP_Post ) {
-			return $theme_json;
-		}
-
-		$fonts = Fonts::resolve( $post );
+		// On post-new.php there is no editing post yet; resolve() accepts null and
+		// skips the per-post meta step, running the global → theme → default chain.
+		$fonts = Fonts::resolve( self::get_editing_post() );
 
 		return $theme_json->update_with(
 			[

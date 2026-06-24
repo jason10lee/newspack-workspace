@@ -331,6 +331,13 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 	 * theme.json reports `normal` for the cite element.
 	 */
 	public function test_quote_theme_json_filter_overrides_vendor_italic() {
+		// The override is guarded to the newsletter CPT — set a newsletter as the
+		// global post so the filter's context check passes.
+		$newsletter_id   = self::factory()->post->create(
+			[ 'post_type' => \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT ]
+		);
+		$GLOBALS['post'] = get_post( $newsletter_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
 		// Start with a base theme that mimics the Core Initializer's italic injection.
 		$theme = new \WP_Theme_JSON(
 			[
@@ -355,6 +362,8 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 		// The override filter runs at priority 11 (after the package defaults).
 		$theme = Quote::override_quote_email_styles( $theme );
 
+		unset( $GLOBALS['post'] );
+
 		// The merged theme must report normal for the cite font-style.
 		$raw        = $theme->get_raw_data();
 		$font_style = $raw['styles']['blocks']['core/quote']['elements']['cite']['typography']['fontStyle'] ?? '';
@@ -363,5 +372,67 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 		// The merged theme must also report the Newspack 2px left border width.
 		$border_width = $raw['styles']['blocks']['core/quote']['border']['width'] ?? '';
 		$this->assertSame( Quote::BORDER_WIDTH, $border_width, 'Expected the quote override filter to set the 2px left border width.' );
+	}
+
+	/**
+	 * The quote override is a NO-OP outside the newsletter CPT context.
+	 *
+	 * `woocommerce_email_editor_theme_json` is a global hook shared with the
+	 * WooCommerce block-email editor. When the rendering post is not a newsletter
+	 * (here: a regular post, or no post at all), the override must return the theme
+	 * untouched so it never bleeds the Newspack quote styles into WC transactional
+	 * emails on a site running both editors.
+	 */
+	public function test_quote_override_is_no_op_for_non_newsletter_context() {
+		$base_styles = [
+			'version' => 3,
+			'styles'  => [
+				'blocks' => [
+					'core/quote' => [
+						'elements' => [
+							'cite' => [
+								'typography' => [
+									'fontStyle' => 'italic',
+								],
+							],
+						],
+					],
+				],
+			],
+		];
+
+		// Case 1: a non-newsletter post is the global post → no-op.
+		$regular_id      = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		$GLOBALS['post'] = get_post( $regular_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+		$theme_regular = Quote::override_quote_email_styles( new \WP_Theme_JSON( $base_styles, 'default' ) );
+		$raw_regular   = $theme_regular->get_raw_data();
+
+		$this->assertSame(
+			'italic',
+			$raw_regular['styles']['blocks']['core/quote']['elements']['cite']['typography']['fontStyle'] ?? '',
+			'On a non-newsletter post the override must not touch the cite fontStyle.'
+		);
+		$this->assertArrayNotHasKey(
+			'border',
+			$raw_regular['styles']['blocks']['core/quote'] ?? [],
+			'On a non-newsletter post the override must not add the Newspack border.'
+		);
+
+		// Case 2: no post in context at all → also a no-op.
+		unset( $GLOBALS['post'] );
+		$theme_none = Quote::override_quote_email_styles( new \WP_Theme_JSON( $base_styles, 'default' ) );
+		$raw_none   = $theme_none->get_raw_data();
+
+		$this->assertSame(
+			'italic',
+			$raw_none['styles']['blocks']['core/quote']['elements']['cite']['typography']['fontStyle'] ?? '',
+			'With no post in context the override must not touch the cite fontStyle.'
+		);
+		$this->assertArrayNotHasKey(
+			'border',
+			$raw_none['styles']['blocks']['core/quote'] ?? [],
+			'With no post in context the override must not add the Newspack border.'
+		);
 	}
 }

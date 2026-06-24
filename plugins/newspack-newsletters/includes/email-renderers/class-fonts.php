@@ -56,24 +56,73 @@ class Fonts {
 	const THEME_DEFAULT_HEADER_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif';
 
 	/**
+	 * Per-request memo of resolved font stacks, keyed by post ID.
+	 *
+	 * The resolve() chain (post meta + global styles + up to four
+	 * get_theme_mod calls) is invoked from Theme_Json_Builder::build() and the
+	 * wp_theme_json_data_default filter, which fires several times per request.
+	 * The memo is request-scoped (static) and a newsletter's font meta is stable
+	 * within one request. The no-post case (post-new.php) shares a stable sentinel
+	 * key so it is memoized too.
+	 *
+	 * @var array<int|string,array{body:string,header:string}>
+	 */
+	private static $memo = [];
+
+	/**
+	 * Sentinel memo key for the no-post (create) resolution path.
+	 *
+	 * @var string
+	 */
+	const NO_POST_MEMO_KEY = '__no_post__';
+
+	/**
 	 * Resolve the body and header font stacks for a newsletter.
 	 *
-	 * @param \WP_Post $post Newsletter post.
+	 * When $post is null (e.g. post-new.php before a draft exists), the per-post
+	 * meta step is skipped and resolution runs the global → theme → fallback chain,
+	 * so a brand-new newsletter's canvas still shows the resolved theme fonts.
+	 *
+	 * @param \WP_Post|null $post Newsletter post, or null to resolve without meta.
 	 * @return array{body:string,header:string} Resolved font stacks.
 	 */
-	public static function resolve( \WP_Post $post ): array {
-		return [
+	public static function resolve( ?\WP_Post $post ): array {
+		$memo_key = $post instanceof \WP_Post ? $post->ID : self::NO_POST_MEMO_KEY;
+		if ( isset( self::$memo[ $memo_key ] ) ) {
+			return self::$memo[ $memo_key ];
+		}
+
+		$body_meta   = $post instanceof \WP_Post ? (string) \get_post_meta( $post->ID, 'font_body', true ) : '';
+		$header_meta = $post instanceof \WP_Post ? (string) \get_post_meta( $post->ID, 'font_header', true ) : '';
+
+		$resolved = [
 			'body'   => self::resolve_side(
-				(string) \get_post_meta( $post->ID, 'font_body', true ),
+				$body_meta,
 				'body',
 				Theme_Json_Builder::DEFAULT_BODY_FONT
 			),
 			'header' => self::resolve_side(
-				(string) \get_post_meta( $post->ID, 'font_header', true ),
+				$header_meta,
 				'header',
 				Theme_Json_Builder::DEFAULT_HEADER_FONT
 			),
 		];
+
+		self::$memo[ $memo_key ] = $resolved;
+		return $resolved;
+	}
+
+	/**
+	 * Clear the per-request resolution memo.
+	 *
+	 * Primarily a test seam: the memo is keyed by post ID (with a stable sentinel
+	 * for the no-post case), so tests that mutate global styles or theme mods for a
+	 * reused key must reset it between cases. Harmless to call at runtime.
+	 *
+	 * @return void
+	 */
+	public static function reset_memo(): void {
+		self::$memo = [];
 	}
 
 	/**
@@ -146,10 +195,20 @@ class Fonts {
 			$value = $styles['typography']['fontFamily'] ?? null;
 		}
 
-		if ( \is_string( $value ) && '' !== \trim( $value ) ) {
-			return $value;
+		if ( ! \is_string( $value ) || '' === \trim( $value ) ) {
+			return null;
 		}
-		return null;
+
+		// Block themes often return a CSS custom property reference such as
+		// `var(--wp--preset--font-family--inter)`. The email CSS inliner and email
+		// clients can't resolve custom properties, so treat it as UNSET and fall
+		// through to the theme/fallback branch rather than emitting an unresolvable
+		// var() into the email theme.json.
+		if ( false !== \stripos( $value, 'var(' ) ) {
+			return null;
+		}
+
+		return $value;
 	}
 
 	/**
@@ -193,6 +252,11 @@ class Fonts {
 	 *
 	 * Returns null only when no Newspack theme is detected (standalone install),
 	 * so the caller falls through to the hardcoded email-safe default.
+	 *
+	 * Caveat: detection keys off function_exists( 'newspack_font_stack' ). A
+	 * non-Newspack theme (or a plugin) that defines a function by that name would
+	 * receive Newspack's font stacks rather than its own — the "matches the post
+	 * editor" guarantee holds for genuine Newspack themes.
 	 *
 	 * @param string $side 'body' or 'header'.
 	 * @return string|null The theme font stack, or null when no Newspack theme.

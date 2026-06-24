@@ -134,7 +134,15 @@ class Test_Core_Block_Fidelity extends WP_UnitTestCase {
 
 		$html = $this->render( $content );
 
-		$this->assertStringContainsString( 'email-block-quote', $html, 'Expected the email-safe quote table wrapper.' );
+		// Assert the main quote wrapper class specifically — `email-block-quote`
+		// followed by a class boundary (space or quote). A bare substring check
+		// would be satisfied by `email-block-quote-citation` alone, masking a
+		// regression of the actual wrapper.
+		$this->assertSame(
+			1,
+			preg_match( '/class="[^"]*\bemail-block-quote(\s|")/', $html ),
+			'Expected the main email-block-quote wrapper class (not just the citation class).'
+		);
 		$this->assertStringContainsString( 'Quoted text here.', $html, 'Expected the quoted paragraph text.' );
 		$this->assertStringContainsString( 'email-block-quote-citation', $html, 'Expected the citation wrapper.' );
 		$this->assertStringContainsString( 'A citation', $html, 'Expected the citation text.' );
@@ -179,6 +187,15 @@ class Test_Core_Block_Fidelity extends WP_UnitTestCase {
 
 		$this->assertStringContainsString( 'wp-block-site-title', $html, 'Expected the site-title to still render.' );
 		$this->assertStringContainsString( get_bloginfo( 'name' ), $html, 'Expected the site name to still resolve.' );
-		$this->assertStringNotContainsString( 'rel="home"', $html, 'Expected no home link when isLink is false.' );
+
+		// Prove the title is genuinely unlinked: the site-title heading must contain
+		// no anchor at all. Asserting only the absence of rel="home" would pass for
+		// an <a> without that attribute. Isolate the heading and assert no <a> in it.
+		$this->assertSame(
+			1,
+			preg_match( '/<h1[^>]*\bwp-block-site-title\b[^>]*>(.*?)<\/h1>/s', $html, $heading ),
+			'Expected the site-title heading to be present.'
+		);
+		$this->assertStringNotContainsString( '<a', $heading[1], 'Expected no anchor tag inside the site-title heading when isLink is false.' );
 	}
 }
