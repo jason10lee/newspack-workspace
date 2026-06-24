@@ -39,7 +39,7 @@
  * Phase 2 (Phase A) note: this class now also carries the state-envelope
  * helpers copied from {@see Prompts_Metric} — error_scalar, populated_scalar,
  * error_collection, malformed_collection, compute_metric_from_proxy, and
- * fetch_paid_attempts_woo_join — plus coming_soon helpers for the deferred
+ * compute_influenced_rate_from_proxy — plus coming_soon helpers for the deferred
  * (Phase B) sections. Wired methods report an explicit `state`
  * ('error' | 'empty' | 'populated'), replacing the Phase 1 `pending` flag;
  * deferred-section methods report `state: 'coming_soon'`.
@@ -56,7 +56,6 @@ use Newspack\Insights\BigQuery_Proxy_Client;
 use Newspack\Insights\Donors_Metric;
 use Newspack\Insights\Source_Matcher;
 use Newspack\Insights\Subscribers_Metric;
-use Newspack\Insights\Woo_Order_Resolver;
 
 /**
  * Tab 3 metric orchestrator.
@@ -200,24 +199,6 @@ final class Conversion_Metric {
 	private BigQuery_Proxy_Client $proxy;
 
 	/**
-	 * Resolver used to match BQ paid-conversion attempts against Woo orders.
-	 *
-	 * @var Woo_Order_Resolver
-	 */
-	private Woo_Order_Resolver $woo_resolver;
-
-	/**
-	 * Per-request memoization for paid-conversion BQ row fetches.
-	 *
-	 * Keyed by `<query_name>|Ymd|Ymd` of (query_name, start UTC, end UTC). The
-	 * conversion-rate and revenue methods for the same intent + same window
-	 * share one round-trip to the hub.
-	 *
-	 * @var array<string, array{rows:array, conversions:int, revenue:float}|\WP_Error>
-	 */
-	private array $paid_attempt_cache = [];
-
-	/**
 	 * Per-request memo for registration_source_events() BQ round-trip.
 	 *
 	 * Computed once on first call; subsequent calls within the same request
@@ -279,18 +260,15 @@ final class Conversion_Metric {
 	 * Constructor. Optionally inject collaborators (used in tests).
 	 *
 	 * @param BigQuery_Proxy_Client|null $proxy              Injected proxy client, or null to lazy-resolve.
-	 * @param Woo_Order_Resolver|null    $woo_resolver       Injected Woo resolver, or null to lazy-create.
 	 * @param Subscribers_Metric|null    $subscribers_metric Injected Subscribers_Metric, or null to lazy-create.
 	 * @param Donors_Metric|null         $donors_metric      Injected Donors_Metric, or null to lazy-create.
 	 */
 	public function __construct(
 		?BigQuery_Proxy_Client $proxy = null,
-		?Woo_Order_Resolver $woo_resolver = null,
 		?Subscribers_Metric $subscribers_metric = null,
 		?Donors_Metric $donors_metric = null
 	) {
 		$this->proxy              = $proxy ?? new BigQuery_Proxy_Client();
-		$this->woo_resolver       = $woo_resolver ?? new Woo_Order_Resolver();
 		$this->subscribers_metric = $subscribers_metric ?? new Subscribers_Metric();
 		$this->donors_metric      = $donors_metric ?? new Donors_Metric();
 	}
@@ -455,52 +433,54 @@ final class Conversion_Metric {
 	}
 
 	/**
-	 * Fetch paid-conversion rows for a given query and Woo-join them.
+	 * Influenced-rate scalar from a hub query that computes the rate + the
+	 * distinct-converter denominator BQ-internally (7.2/7.3). One proxy
+	 * round-trip — no Woo join. Mirrors compute_metric_from_proxy's error/empty
+	 * handling, but also surfaces the denominator (sample size).
 	 *
-	 * Returns { rows, conversions, revenue } on success or a WP_Error on proxy
-	 * failure. Used by both the conversion-rate and revenue methods for the
-	 * same intent + direction; the per-(query_name, window) memoization avoids
-	 * a redundant round-trip to the hub when both methods run in one request.
-	 *
-	 * @param string            $query_name The conversion catalog query name.
-	 * @param DateTimeInterface $start      Window start.
-	 * @param DateTimeInterface $end        Window end.
-	 * @return array{rows:array, conversions:int, revenue:float}|\WP_Error
+	 * @param string            $query_name      Hub catalog query name.
+	 * @param string            $rate_key        Row key for the SAFE_DIVIDE rate (null when no converters).
+	 * @param string            $denominator_key Row key for the distinct-converter count.
+	 * @param DateTimeInterface $start           Window start.
+	 * @param DateTimeInterface $end             Window end.
+	 * @return array
 	 */
-	private function fetch_paid_attempts_woo_join(
+	private function compute_influenced_rate_from_proxy(
 		string $query_name,
+		string $rate_key,
+		string $denominator_key,
 		DateTimeInterface $start,
 		DateTimeInterface $end
-	) {
-		// Normalize both bounds to UTC Ymd so callers passing different timezone
-		// objects don't bust the cache for the same logical window. Matches the
-		// proxy client's own UTC normalization.
-		$utc       = new \DateTimeZone( 'UTC' );
-		$cache_key = $query_name . '|'
-			. \DateTimeImmutable::createFromInterface( $start )->setTimezone( $utc )->format( 'Ymd' )
-			. '|'
-			. \DateTimeImmutable::createFromInterface( $end )->setTimezone( $utc )->format( 'Ymd' );
-
-		if ( array_key_exists( $cache_key, $this->paid_attempt_cache ) ) {
-			return $this->paid_attempt_cache[ $cache_key ];
-		}
-
+	): array {
 		$rows = $this->proxy->query( $query_name, $start, $end );
 		if ( is_wp_error( $rows ) ) {
-			$this->paid_attempt_cache[ $cache_key ] = $rows;
-			return $rows;
+			return $this->error_scalar( 'rate', $rows );
 		}
-
-		// A successful but empty response is real "no conversions", not an error:
-		// zero conversions / zero revenue, which the callers render as $0.00.
-		$rows   = is_array( $rows ) ? $rows : [];
-		$result = [
-			'rows'        => $rows,
-			'conversions' => $this->woo_resolver->count_completed_orders( $rows ),
-			'revenue'     => $this->woo_resolver->sum_completed_revenue( $rows ),
-		];
-		$this->paid_attempt_cache[ $cache_key ] = $result;
-		return $result;
+		if ( empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( $rate_key, $rows[0] ) || ! array_key_exists( $denominator_key, $rows[0] ) ) {
+			// Query succeeded with no usable row → non-computable zero.
+			return $this->populated_scalar( 0.0, false, null, 'rate' );
+		}
+		$denominator = $rows[0][ $denominator_key ];
+		if ( ! is_numeric( $denominator ) ) {
+			return $this->error_scalar(
+				'rate',
+				new \WP_Error( 'bigquery_proxy_malformed_value', __( 'The query returned a non-numeric denominator.', 'newspack-plugin' ) )
+			);
+		}
+		$denominator = (int) $denominator;
+		$rate        = $rows[0][ $rate_key ];
+		// SAFE_DIVIDE returns NULL when there are no converters in the window — a
+		// legitimate "nothing to influence" case, not a schema regression.
+		if ( null === $rate ) {
+			return $this->populated_scalar( 0.0, false, $denominator, 'rate' );
+		}
+		if ( ! is_numeric( $rate ) ) {
+			return $this->error_scalar(
+				'rate',
+				new \WP_Error( 'bigquery_proxy_malformed_value', __( 'The query returned a non-numeric value.', 'newspack-plugin' ) )
+			);
+		}
+		return $this->populated_scalar( (float) $rate, $denominator > 0, $denominator, 'rate' );
 	}
 
 	/**
@@ -1692,91 +1672,42 @@ final class Conversion_Metric {
 	}
 
 	/**
-	 * Influenced subscription rate, 14-day lookback (C14 / 7.2).
-	 *
-	 * Rate = (unique users who had a checkout attempt in `conversion_journey_influenced_subscription_14d`
-	 *         AND completed a Woo order) / (unique users who had any subscription attempt
-	 *         in `conversion_journey_source_mix_subscribers` AND completed a Woo order).
-	 *
-	 * Both fetches go through `fetch_paid_attempts_woo_join` so the
-	 * `source_mix_subscribers` rows are memoized and shared with C12. If EITHER
-	 * proxy call fails → error_scalar. Denominator = 0 → non-computable zero.
+	 * Influenced subscription rate, 14-day lookback (C14 / 7.2). Dispatches
+	 * `conversion_journey_influenced_subscription_14d`; the hub returns one row
+	 * with `{ influenced_subscription_rate, conversion_denominator }` computed
+	 * BQ-internally — one proxy call, no Woo join.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
 	public function get_influenced_subscription_rate_14d( DateTimeInterface $start, DateTimeInterface $end ): array {
-		return $this->compute_influenced_rate(
+		return $this->compute_influenced_rate_from_proxy(
 			'conversion_journey_influenced_subscription_14d',
-			'conversion_journey_source_mix_subscribers',
+			'influenced_subscription_rate',
+			'conversion_denominator',
 			$start,
 			$end
 		);
 	}
 
 	/**
-	 * Influenced donation rate, 14-day lookback (C15 / 7.3).
-	 *
-	 * Identical logic to C14 using the donation catalog queries.
-	 * The `source_mix_donors` fetch is memoized and shared with C13.
+	 * Influenced donation rate, 14-day lookback (C15 / 7.3). Dispatches
+	 * `conversion_journey_influenced_donation_14d`; the hub returns one row
+	 * with `{ influenced_donation_rate, conversion_denominator }` computed
+	 * BQ-internally — one proxy call, no Woo join.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
 	public function get_influenced_donation_rate_14d( DateTimeInterface $start, DateTimeInterface $end ): array {
-		return $this->compute_influenced_rate(
+		return $this->compute_influenced_rate_from_proxy(
 			'conversion_journey_influenced_donation_14d',
-			'conversion_journey_source_mix_donors',
+			'influenced_donation_rate',
+			'conversion_denominator',
 			$start,
 			$end
-		);
-	}
-
-	/**
-	 * Shared influenced-rate computation for C14 and C15.
-	 *
-	 * Fetches the influenced attempt rows (`$influenced_query`) and the full
-	 * population rows (`$population_query`) via `fetch_paid_attempts_woo_join`,
-	 * Woo-joins both via `count_unique_completed_users`, and returns the rate as
-	 * a `placeholder_type: 'rate'` scalar envelope.
-	 *
-	 * @param string            $influenced_query  Hub catalog query for influenced-subset rows.
-	 * @param string            $population_query  Hub catalog query for all-attempts rows.
-	 * @param DateTimeInterface $start             Window start.
-	 * @param DateTimeInterface $end               Window end.
-	 * @return array
-	 */
-	private function compute_influenced_rate(
-		string $influenced_query,
-		string $population_query,
-		DateTimeInterface $start,
-		DateTimeInterface $end
-	): array {
-		$influenced_joined = $this->fetch_paid_attempts_woo_join( $influenced_query, $start, $end );
-		if ( is_wp_error( $influenced_joined ) ) {
-			return $this->error_scalar( 'rate', $influenced_joined );
-		}
-
-		$population_joined = $this->fetch_paid_attempts_woo_join( $population_query, $start, $end );
-		if ( is_wp_error( $population_joined ) ) {
-			return $this->error_scalar( 'rate', $population_joined );
-		}
-
-		$numerator   = $this->woo_resolver->count_unique_completed_users( $influenced_joined['rows'] );
-		$denominator = $this->woo_resolver->count_unique_completed_users( $population_joined['rows'] );
-
-		if ( $denominator <= 0 ) {
-			// Legitimate non-computable: no converting subscribers/donors in window.
-			return $this->populated_scalar( 0.0, false, 0, 'rate' );
-		}
-
-		return $this->populated_scalar(
-			(float) ( $numerator / $denominator ),
-			true,
-			$denominator,
-			'rate'
 		);
 	}
 
