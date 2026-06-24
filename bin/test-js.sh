@@ -44,14 +44,13 @@ test_standalone_repo() {
         echo "No \"test\" script in $(basename "$dir")/package.json; nothing to test" >&2
         return 0
     fi
-    # Detect package manager from lockfile; default pnpm (monorepo convention).
-    local pm="pnpm"
+    # Detect package manager from lockfile; default npm for a lockfile-less repo
+    # (matches `n build` so the two never pick a different PM for one checkout).
+    local pm="npm"
     if [ -f "$dir/pnpm-lock.yaml" ]; then
         pm="pnpm"
     elif [ -f "$dir/yarn.lock" ]; then
         pm="yarn"
-    elif [ -f "$dir/package-lock.json" ]; then
-        pm="npm"
     fi
     ( cd "$dir" && "$pm" install ) || return 1
     ( cd "$dir" && "$pm" run test )
