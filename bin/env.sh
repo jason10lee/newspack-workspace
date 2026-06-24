@@ -2,6 +2,7 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/repos.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/worktree-mounts.sh"
 
 # Sanitize env name for use as a database name (replace dashes with underscores).
 db_name_for_env() {
@@ -42,12 +43,14 @@ ip_for_env() {
     grep -o '127\.0\.0\.[0-9]*' "$1" | head -1
 }
 
-# Parse a docker-compose volume line for a worktree mount and emit "repo|branch".
-# Handles both shapes:
-#   legacy (pre-monorepo): "- ./worktrees/<repo>/<branch>:/newspack-repos/<repo>"
-#   monorepo:              "- ./worktrees/<safe_branch>/plugins/<repo>:/newspack-plugins/<repo>"
-#                          "- ./worktrees/<safe_branch>/themes/<repo>:/newspack-themes/<repo>"
-# Returns non-zero for lines that don't match either shape.
+# Parse a docker-compose volume line for a worktree mount and emit "repo|branch|kind".
+# Handles three shapes (kind):
+#   legacy    : "- ./worktrees/<repo>/<branch>:/newspack-repos/<repo>"
+#   monorepo  : "- ./worktrees/<safe_branch>/plugins/<repo>:/newspack-plugins/<repo>"
+#               "- ./worktrees/<safe_branch>/themes/<repo>:/newspack-themes/<repo>"
+#   standalone: "- ./worktrees/standalone/<repo>/<branch>:/newspack-plugins/<repo>"
+#               (tier 2: a worktree of a repos/{plugins,themes}/<repo> checkout)
+# Returns non-zero for lines that don't match any shape.
 parse_worktree_mount() {
     local line="$1"
     # Use regex extraction so the parser tolerates exactly what the grep
@@ -62,24 +65,32 @@ parse_worktree_mount() {
     # display form for the monorepo case. Keeping the parser mount-path-only
     # ensures filesystem operations (e.g., worktree.sh remove) get a stable
     # identifier that doesn't drift when the worktree's git state changes.
+    # Tier 2 (standalone) is matched first (most specific): host =
+    # ./worktrees/standalone/<repo>/<safe_branch>, served at /newspack-{plugins,themes}/<repo>.
+    if [[ "$line" =~ ^[[:space:]]*-[[:space:]]+\./worktrees/standalone/([^/]+)/([^[:space:]:]+):/newspack-(plugins|themes)/([^[:space:]:]+) ]]; then
+        echo "${BASH_REMATCH[1]}|${BASH_REMATCH[2]}|standalone"
+        return 0
+    fi
     [[ "$line" =~ ^[[:space:]]*-[[:space:]]+\./worktrees/([^[:space:]:]+):/newspack-(repos|plugins|themes)/([^[:space:]:]+) ]] || return 1
     local host_rel="worktrees/${BASH_REMATCH[1]}"
     local container_type="${BASH_REMATCH[2]}"
     local repo="${BASH_REMATCH[3]}"
-    local branch=""
+    local branch="" kind=""
     case "$container_type" in
         repos)
             # Legacy: host = ./worktrees/<repo>/<branch> (slashes preserved in directory name).
             branch="${host_rel#worktrees/$repo/}"
+            kind="legacy"
             ;;
         plugins|themes)
             # Monorepo: host = ./worktrees/<safe_branch>/{plugins,themes}/<repo>.
             branch="${host_rel#worktrees/}"
             branch="${branch%/*/$repo}"
+            kind="monorepo"
             ;;
     esac
     [[ -n "$repo" && -n "$branch" ]] || return 1
-    echo "$repo|$branch"
+    echo "$repo|$branch|$kind"
 }
 
 # Resolve the unsanitized git branch name for a worktree directory.
@@ -136,35 +147,48 @@ case $1 in
                     validate_name "$wt_branch" "branch"
                     # Sanitize branch for directory name (feat/foo -> feat-foo).
                     safe_branch=$(echo "$wt_branch" | tr '/' '-')
-                    # Create a monorepo worktree at this branch if it doesn't exist.
-                    if [[ ! -d "$NABSPATH/worktrees/$safe_branch" ]]; then
-                        echo "Creating worktree at branch $wt_branch..."
-                        "$NABSPATH/bin/worktree.sh" add "$wt_branch" || exit 1
-                    fi
-                    # Mount the specific plugin/theme subdirectory from the worktree.
+                    # Resolve the project's host path. A monorepo plugin/theme
+                    # resolves to plugins/<name> or themes/<name>; otherwise look for
+                    # a standalone checkout at repos/{plugins,themes}/<name> (tier 2,
+                    # discovered by path -- no registration).
                     wt_host_path=$(get_repo_host_path "$wt_repo")
                     if [[ -z "$wt_host_path" ]]; then
-                        echo "Error: unknown project '$wt_repo'"
+                        if [[ -d "$NABSPATH/repos/plugins/$wt_repo" ]]; then
+                            wt_host_path="repos/plugins/$wt_repo"
+                        elif [[ -d "$NABSPATH/repos/themes/$wt_repo" ]]; then
+                            wt_host_path="repos/themes/$wt_repo"
+                        fi
+                    fi
+                    if [[ -z "$wt_host_path" ]]; then
+                        echo "Error: unknown project '$wt_repo' (no monorepo plugin/theme, and no repos/{plugins,themes}/$wt_repo checkout)"
                         exit 1
                     fi
-                    if [[ "$wt_host_path" == themes/* ]]; then
-                        wt_container_path="/newspack-themes/$wt_repo"
+                    case "$wt_host_path" in
+                        themes/*|repos/themes/*) wt_container_path="/newspack-themes/$wt_repo" ;;
+                        *)                       wt_container_path="/newspack-plugins/$wt_repo" ;;
+                    esac
+                    if [[ "$wt_host_path" == repos/* ]]; then
+                        # Tier 2: worktree of the whole standalone checkout, served
+                        # (only) at its plugin/theme path. worktree_volume_lines emits a
+                        # single serving mount -- a standalone repo is not a pnpm
+                        # workspace member, so it gets no /newspack-monorepo mount.
+                        worktree_dir="./worktrees/standalone/$wt_repo/$safe_branch"
+                        if [[ ! -d "$NABSPATH/worktrees/standalone/$wt_repo/$safe_branch" ]]; then
+                            echo "Creating worktree of $wt_repo at branch $wt_branch..."
+                            "$NABSPATH/bin/worktree.sh" add "$wt_branch" --repo "$wt_repo" || exit 1
+                        fi
                     else
-                        wt_container_path="/newspack-plugins/$wt_repo"
+                        # Tier 1: monorepo worktree; mount the plugin/theme subdir at
+                        # BOTH the serving path and the pnpm workspace-member path so the
+                        # JS toolchain (n build / n test-js, resolved under
+                        # /newspack-monorepo) builds/tests the worktree's source in place.
+                        worktree_dir="./worktrees/$safe_branch/$wt_host_path"
+                        if [[ ! -d "$NABSPATH/worktrees/$safe_branch" ]]; then
+                            echo "Creating worktree at branch $wt_branch..."
+                            "$NABSPATH/bin/worktree.sh" add "$wt_branch" || exit 1
+                        fi
                     fi
-                    worktree_dir="./worktrees/$safe_branch/$wt_host_path"
-                    # Mount the worktree subdir at BOTH container roots:
-                    #   - the site-serving path (/newspack-plugins|themes/<repo>), and
-                    #   - the pnpm-workspace path (/newspack-monorepo/<host_path>).
-                    # The site reads the first; the JS toolchain (n build / n test-js /
-                    # jest, all resolved under /newspack-monorepo) reads the second. Without
-                    # the workspace mount the toolchain builds/tests the *main* checkout's
-                    # source, never the worktree's, and the worktree's own node_modules has
-                    # relative pnpm symlinks (../../../packages/*) that only resolve when the
-                    # plugin sits at its real workspace location. Mounting here makes both
-                    # work, so builds land in the worktree's dist and are served immediately.
-                    worktree_volumes+="      - $worktree_dir:$wt_container_path"$'\n'
-                    worktree_volumes+="      - $worktree_dir:/newspack-monorepo/$wt_host_path"$'\n'
+                    worktree_volumes+="$(worktree_volume_lines "$worktree_dir" "$wt_container_path" "$wt_host_path")"$'\n'
                     shift 2
                     ;;
                 --domain)
@@ -487,8 +511,14 @@ MIGRATE
                 wt_path=$(echo "$line" | sed -E 's/^[[:space:]]*-[[:space:]]*//' | cut -d: -f1)
                 container_path=$(echo "$line" | cut -d: -f2)
                 repo=$(basename "$container_path")
-                # Resolve the source from the monorepo layout.
+                # Resolve the source from the monorepo layout. A standalone repo
+                # (tier 2) has no monorepo source to copy from -- its worktree is a
+                # full checkout; skip and let the user build it (n build <repo>).
                 repo_host_path=$(get_repo_host_path "$repo")
+                if [[ -z "$repo_host_path" ]]; then
+                    echo "Skipping asset copy for standalone repo $repo (build with: n build $repo)"
+                    continue
+                fi
                 src="$NABSPATH/$repo_host_path"
                 dst="$NABSPATH/${wt_path#./}"
                 echo "Copying built assets for $repo..."
@@ -582,8 +612,12 @@ MIGRATE
         # across create/destroy cycles. A proper fix removes the dir by safe
         # name and deletes the branch by its resolved real name separately.
         for entry in "${worktree_entries[@]}"; do
-            IFS='|' read -r wt_repo wt_branch <<< "$entry"
-            "$NABSPATH/bin/worktree.sh" remove --yes "$wt_repo" "$wt_branch"
+            IFS='|' read -r wt_repo wt_branch wt_kind <<< "$entry"
+            if [[ "$wt_kind" == standalone ]]; then
+                "$NABSPATH/bin/worktree.sh" remove "$wt_branch" --repo "$wt_repo" --yes
+            else
+                "$NABSPATH/bin/worktree.sh" remove --yes "$wt_repo" "$wt_branch"
+            fi
         done
         echo "Destroyed environment '$env_name'"
         ;;
@@ -609,7 +643,7 @@ MIGRATE
             # worktrees while leaving filesystem-operation paths to the safe
             # form.
             worktrees=""
-            while IFS='|' read -r repo safe_branch; do
+            while IFS='|' read -r repo safe_branch wt_kind; do
                 branch=$(resolve_unsanitized_branch "$safe_branch")
                 [[ -n "$worktrees" ]] && worktrees="$worktrees,"
                 worktrees="${worktrees}${repo}:${branch}"
@@ -619,7 +653,7 @@ MIGRATE
             else
                 echo "  $name ($status) https://${domain}/"
                 # Show worktrees mounted by this environment.
-                while IFS='|' read -r repo safe_branch; do
+                while IFS='|' read -r repo safe_branch wt_kind; do
                     branch=$(resolve_unsanitized_branch "$safe_branch")
                     echo "    └ $repo ($branch)"
                 done < <(each_worktree_in_env "$f")
