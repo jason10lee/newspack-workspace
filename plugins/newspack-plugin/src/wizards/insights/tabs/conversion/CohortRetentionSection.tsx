@@ -19,7 +19,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { ConversionCohortData } from '../../api/conversion';
 import SectionHeading from '../components/SectionHeading';
-import LineChart, { type LineSeries } from '../components/LineChart';
+import LineChart, { type LineSeries, type LineReferenceLine } from '../components/LineChart';
 import SectionState from './SectionState';
 
 export interface CohortRetentionSectionProps {
@@ -39,16 +39,18 @@ const toCohortSeries = ( data: ConversionCohortData ): LineSeries[] =>
 interface CohortChartProps {
 	title: string;
 	data: ConversionCohortData;
+	yMax?: number;
+	referenceLine?: LineReferenceLine;
 }
 
-const CohortChart = ( { title, data }: CohortChartProps ) => (
+const CohortChart = ( { title, data, yMax, referenceLine }: CohortChartProps ) => (
 	<div className="newspack-insights__conversion-cohort-cell">
 		<h3 className="newspack-insights__conversion-subheading">{ title }</h3>
 		<SectionState state={ data.state } emptyMessage={ __( 'Cohort data will appear after the first weekly refresh.', 'newspack-plugin' ) }>
 			<LineChart
 				series={ toCohortSeries( data ) }
-				referenceLine={ data.reference_line }
-				yMax={ 1 }
+				referenceLine={ referenceLine }
+				yMax={ yMax }
 				emptyMessage={ __( 'Cohort data will appear after the first weekly refresh.', 'newspack-plugin' ) }
 			/>
 		</SectionState>
@@ -69,8 +71,24 @@ const CohortRetentionSection = ( { current }: CohortRetentionSectionProps ) => (
 			) }
 		/>
 		<div className="newspack-insights__conversion-cohort-stack">
-			<CohortChart title={ __( 'Registration → conversion', 'newspack-plugin' ) } data={ current.registration_to_conversion_cohort } />
-			<CohortChart title={ __( 'Subscriber retention', 'newspack-plugin' ) } data={ current.subscriber_retention_cohort } />
+			<CohortChart
+				/*
+				 * TODO: default a self-relative reference line here — the median
+				 * cumulative conversion of mature (>=12-month) cohorts at the 6-month
+				 * mark — and expose it as a configurable Newspack publisher setting.
+				 * For now the 5.1 axis autoscales (no yMax) and shows no reference
+				 * line; the hardcoded 15% was removed because no fixed-% default fits
+				 * the network (publisher conversion models diverge widely).
+				 */
+				title={ __( 'Registration → conversion', 'newspack-plugin' ) }
+				data={ current.registration_to_conversion_cohort }
+			/>
+			<CohortChart
+				title={ __( 'Subscriber retention', 'newspack-plugin' ) }
+				data={ current.subscriber_retention_cohort }
+				yMax={ 1 }
+				referenceLine={ current.subscriber_retention_cohort.reference_line ?? undefined }
+			/>
 		</div>
 	</section>
 );
