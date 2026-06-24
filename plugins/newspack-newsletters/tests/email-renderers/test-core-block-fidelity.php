@@ -12,17 +12,20 @@ use Newspack\Newsletters\Email_Renderers\Renderer_Controller;
  * Core Block Fidelity Test.
  *
  * Locks in the Batch C audit finding (NEWS-1904): the core blocks `core/list`
- * (with its `core/list-item` children), `core/quote`, and `core/site-title`
- * render correctly through the WC email engine WITHOUT a Newspack override. The
- * package's own renderers already match vanilla WordPress block semantics in a
- * way that is email-safe, so no `blocks/class-*.php` override is registered for
- * any of them.
+ * (with its `core/list-item` children) and `core/site-title` render correctly
+ * through the WC email engine without a Newspack override. The package's own
+ * renderers already match vanilla WordPress block semantics in a way that is
+ * email-safe.
+ *
+ * `core/quote` does have a Newspack override (blocks/class-quote.php) solely to
+ * un-italic the cite element — the package theme.json forces `fontStyle: italic`
+ * on the cite, but the editor canvas renders it upright. The override is a theme.json
+ * filter, not a render_content override, so all structural quote traits (wrapper,
+ * content, citation) remain the package's responsibility and are tested here.
  *
  * These tests render each block through `Renderer_Controller::render_wc()` and
  * assert the structural traits that would break if the package regressed
- * (list markers, the quote wrapper, the dynamic site-title resolving). If a
- * future package version diverges, one of these fails and the finding gets a
- * fresh look — the cheap guard that justifies shipping zero overrides.
+ * (list markers, the quote wrapper, the dynamic site-title resolving).
  */
 class Test_Core_Block_Fidelity extends WP_UnitTestCase {
 	/**
@@ -120,8 +123,9 @@ class Test_Core_Block_Fidelity extends WP_UnitTestCase {
 	 *
 	 * The package wraps the quote in an `email-block-quote` table (the visual
 	 * indent that survives in email) and keeps both the quoted paragraph and the
-	 * `<cite>` citation. That is the correct email rendering, not an MJML
-	 * workaround, so no override is needed.
+	 * `<cite>` citation. The Newspack Quote override exists only to fix cite
+	 * italic parity via theme.json — the structural layout here (wrapper, content,
+	 * citation presence) is still fully the package's responsibility.
 	 */
 	public function test_quote_renders_wrapper_content_and_citation() {
 		$content = '<!-- wp:quote --><blockquote class="wp-block-quote">'
