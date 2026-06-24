@@ -4,30 +4,35 @@
 
 ## Setup
 
+This suite lives in the `e2e/` directory of the [`newspack-workspace`](https://github.com/Automattic/newspack-workspace) monorepo. It is a self-contained npm project (its own `package.json`/`package-lock.json`), deliberately kept out of the pnpm workspace so the monorepo's per-package CI does not try to build or run it.
+
 ### Local setup & testing
 
-Will need a local test site – set it up with [`newspack-docker`](https://github.com/Automattic/newspack-docker) by running `n sites-add e2e`. This will create a local `https://e2e.local` site.
+The monorepo's `n env e2e-setup` helper does the one-time setup for you: it spins up an isolated local site, builds the Newspack plugins, installs `e2e-plugin.php`, runs `e2e-reset.sh` to create the `vanilla`/`with-woo` snapshots, and writes a matching `.env` here.
 
-Then, follow the "Setting up a test site" instructions from this doc.
+```sh
+# From the monorepo root:
+n env e2e-setup <name>            # build a local env wired for this suite
 
-1. One-time setup (unless the files mentioned below are updated)
-   - create an `.env` file (see `.env-sample`).
-   - copy `e2e-reset.sh` to the site's html folder and run it in the docker container. 
-   - put `e2e-plugin.php` in the test site's plugins directory
-   - set up payments - see "Payments" section below
-2. Testing
-   - run `npm t` for a single test run
-   - run `npm run test:ui` for a test run with UI
-   - run `npm run codegen -- <site-url>` for a test code generation UI
-   - run the `e2e-reset.sh` script in the docker container to clean up after a test run
+# Then, from this directory:
+npm ci && npx playwright install
+USE_SNAPSHOTS=true npm run test:snapshots   # full run
+```
+
+Other handy scripts:
+- `npm t` – single run (no snapshot switching)
+- `npm run test:ui` – run with the Playwright UI
+- `npm run codegen -- <site-url>` – open the codegen recorder
+
+For payments-dependent tests (`donations`), wire Stripe test keys – see "Payments" below. To reset the site by hand, re-run `e2e-reset.sh` inside the env container.
 
 ### CI testing
 
-Will need a publicly accessible (or at least accessible for the CI server) test site, running on a platform which accepts password-only SSH authentication.
+CI runs nightly on **TeamCity** (internal) against a dedicated staging site. The build's VCS root is this monorepo (`Automattic/newspack-workspace`) with the build working directory set to `e2e/`; the steps are `npm ci` → `npx playwright install` → `USE_SNAPSHOTS=true npm run test:snapshots`. (TeamCity project/credentials details are in the internal CI docs.)
 
-[The credentials for the Atomic site currently used for the e2e testing.](https://mc.a8c.com/secret-store/?secret_id=12168)
+A CI test site needs to be reachable by the CI server and accept password-only SSH authentication. The credentials for the current staging site live in the a8c secret store (internal).
 
-1. Define all variables listed in `.env-sample` in the CircleCI project settings
+1. Define all variables listed in `.env-sample` in the TeamCity build parameters
 2. Also define the following:
    1. `SSH_USER` - simply a username string, e.g. `newspack-user`
    2. `SSH_HOST` - hostname of the platform, e.g. `ssh.myplatform.net`

@@ -1,7 +1,9 @@
-# newspack-e2e-tests – agent notes
+# e2e suite – agent notes
 
-Playwright end-to-end suite for Newspack. CI (TeamCity) runs it against
-`https://e2e.newspackstaging.com`. It can also run against a local isolated env.
+Playwright end-to-end suite for Newspack, living in `e2e/` of the
+`newspack-workspace` monorepo. CI (TeamCity) runs it against
+`https://e2e.newspackstaging.com`. It can also run against a local isolated env
+created with `n env e2e-setup <name>`.
 
 ## How to run
 
@@ -20,8 +22,8 @@ SITE_URL="https://e2e.newspackstaging.com" ADMIN_PASSWORD="<staging-pw>" \
 - Projects: `setup-vanilla` and `setup-with-woo` load snapshots; the four
   `Vanilla/With Woo in Desktop/Mobile Chrome` projects depend on them (so running
   a spec project pulls in its setup).
-- The local env runs in the docker container `newspack_env_e2e_release`
-  (`docker exec newspack_env_e2e_release wp --allow-root ...`).
+- The local env runs in the docker container `newspack_env_<name>` (the name you
+  passed to `n env e2e-setup`), e.g. `docker exec newspack_env_<name> wp --allow-root ...`.
 - `e2e-reset.sh` provisions a site from scratch and (re)creates the snapshots. You
   rarely need it – snapshots are the normal reset mechanism. It is written for the
   local `--allow-root` docker env, not staging.
@@ -37,7 +39,7 @@ drives the admin UI at `tools.php?page=newspack-snapshots`.
   admin password becomes the one captured when the snapshot was created.
   Therefore `ADMIN_PASSWORD` must match the snapshot's admin password.
   - `.env`'s `ADMIN_PASSWORD=password` is for the **local** env only.
-  - Staging's admin password lives in the a8c secret store (README → `secret_id=12168`)
+  - Staging's admin password lives in the a8c secret store (internal; see README)
     and matches what's baked into the staging snapshots.
   - Do **not** `wp user update --user_pass` to fix a login failure – the snapshot
     is the source of truth; you'd just desync it. Running the suite twice with the

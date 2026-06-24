@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Build a ready-to-run local environment for the newspack-e2e-tests Playwright
-# suite, end to end. This is the one-shot equivalent of the manual dance of
-# creating worktrees, spinning up an isolated env, building any unbuilt assets,
+# Build a ready-to-run local environment for the e2e/ Playwright suite, end to
+# end. This is the one-shot equivalent of the manual dance of creating
+# worktrees, spinning up an isolated env, building any unbuilt assets,
 # installing the e2e helper plugin, running the e2e reset script, and pointing
-# the e2e repo's .env at the new site.
+# the suite's .env at the new site.
 #
 # Usage:
 #   n env e2e-setup <name> [options]
@@ -12,8 +12,8 @@
 # Options:
 #   --branch <branch>     Branch to check out for each plugin (default: release).
 #   --domain <domain>     Site domain (default: <name>.test).
-#   --e2e-repo <path>     Path to the newspack-e2e-tests checkout
-#                         (default: a sibling of this workspace).
+#   --e2e-repo <path>     Path to the Playwright suite
+#                         (default: the in-repo e2e/ directory).
 #   -h, --help            Show this help.
 #
 # Safe to re-run: an existing environment is reused, and only worktrees missing
@@ -52,7 +52,7 @@ usage() {
 env_name=""
 branch="release"
 domain=""
-e2e_repo="$(cd "$NABSPATH/.." 2>/dev/null && pwd)/newspack-e2e-tests"
+e2e_repo="$NABSPATH/e2e"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in

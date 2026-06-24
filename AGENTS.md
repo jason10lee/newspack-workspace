@@ -148,6 +148,21 @@ n test-php --list-groups            # List available test groups
 n test-js                           # Run JS tests
 ```
 
+### End-to-end (Playwright) tests
+
+The Playwright E2E suite lives in `e2e/` (self-contained npm project, kept out of
+the pnpm workspace). It is snapshot-driven: the `setup-vanilla` / `setup-with-woo`
+projects load `vanilla` / `with-woo` DB snapshots via the `newspack-manager` admin
+UI, then the spec projects run against them. CI runs it nightly on TeamCity against
+a staging Atomic site; see `e2e/README.md` for the snapshot model and CI details.
+
+```bash
+n env e2e-setup <name>              # One-shot: build a local isolated env wired for the suite
+cd e2e && npm ci && npx playwright install
+USE_SNAPSHOTS=true npm run test:snapshots                      # full run (all 6 projects)
+USE_SNAPSHOTS=true npx playwright test --project="Vanilla in Desktop Chrome"  # one project
+```
+
 ### Development
 ```bash
 n watch <name>                # Watch & rebuild a single project (or run `n watch` from inside its folder)
