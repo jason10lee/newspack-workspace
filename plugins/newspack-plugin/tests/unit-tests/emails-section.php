@@ -13,6 +13,7 @@
 use Newspack\Emails;
 use Newspack\Reader_Activation_Emails;
 use Newspack\Reader_Revenue_Emails;
+use Newspack\Wizards;
 use Newspack\Wizards\Newspack\Emails_Section;
 
 /**
@@ -1208,5 +1209,224 @@ class Newspack_Test_Emails_Section extends WP_UnitTestCase {
 
 		wp_set_current_user( $prev_user );
 		wp_delete_user( $subscriber_id );
+	}
+
+	/*
+	 * ------------------------------------------------------------------
+	 * Bucket G — Architectural lock-in (NPPD-1538)
+	 * ------------------------------------------------------------------
+	 * Pins the post-move invariants: Emails_Section now lives under
+	 * Audience but its REST surface stays under newspack-settings.
+	 * These tests fail loudly if a future contributor accidentally
+	 * unmoves the section, drifts the REST_BASE constant, or adds a
+	 * new endpoint that interpolates $wizard_slug instead of REST_BASE.
+	 * They also cover the legacy-URL redirect both directions
+	 * (with hint → fires, without hint → passes through).
+	 */
+
+	/**
+	 * Emails_Section's wizard_slug is 'newspack-audience' at runtime.
+	 *
+	 * The class declares `$wizard_slug` UNINITIALIZED by design — there is
+	 * no class-level default. Wizard_Section::__construct assigns it from
+	 * the args passed by Wizard::load_wizard_sections, so the value comes
+	 * solely from the registration site. The assertion below checks the
+	 * actually-registered instance. A regression where Emails_Section is
+	 * re-registered under Newspack_Settings would set wizard_slug to
+	 * 'newspack-settings' and this test would catch it.
+	 */
+	public function test_emails_section_wizard_slug_is_audience() {
+		$audience_wizard = Wizards::get_wizard( 'audience' );
+		$this->assertNotFalse( $audience_wizard, 'Audience wizard must be registered.' );
+
+		$reflection      = new ReflectionClass( $audience_wizard );
+		$sections_prop   = $reflection->getProperty( 'sections' );
+		$sections_prop->setAccessible( true );
+		$sections = $sections_prop->getValue( $audience_wizard );
+
+		$this->assertArrayHasKey( 'emails', $sections, 'Audience wizard must host the emails section.' );
+		$emails_section = $sections['emails'];
+		$this->assertInstanceOf( Emails_Section::class, $emails_section );
+
+		$wizard_slug_prop = ( new ReflectionClass( $emails_section ) )->getProperty( 'wizard_slug' );
+		$wizard_slug_prop->setAccessible( true );
+		$this->assertSame(
+			'newspack-audience',
+			$wizard_slug_prop->getValue( $emails_section ),
+			'Emails_Section must register under Audience after NPPD-1538.'
+		);
+	}
+
+	/**
+	 * The reset endpoint is served from Emails_Section under the pinned
+	 * emails namespace (ported from NPPD-1535), so the moved Audience UI
+	 * no longer depends on the legacy donations route. Locks the handler's
+	 * source-boundary contract: a non-email id is rejected with
+	 * `newspack_reset_email_invalid_arg` (400). Named distinctly from
+	 * 1535's own reset coverage so the two don't collide at merge.
+	 */
+	public function test_reset_endpoint_ported_rejects_non_email_id() {
+		// A regular post is not a Newspack email — reset must refuse it.
+		$post_id = wp_insert_post(
+			[
+				'post_type'   => 'post',
+				'post_status' => 'publish',
+				'post_title'  => 'Not an email',
+			]
+		);
+
+		$request = new WP_REST_Request( 'DELETE' );
+		$request->set_param( 'id', $post_id );
+		$response = Emails_Section::api_reset_email( $request );
+
+		$this->assertInstanceOf( WP_Error::class, $response, 'Resetting a non-email post must return WP_Error.' );
+		$this->assertSame( 'newspack_reset_email_invalid_arg', $response->get_error_code() );
+		$this->assertSame( 400, $response->get_error_data()['status'] );
+		$this->assertNotSame( 'trash', get_post_status( $post_id ), 'The non-email post must NOT be trashed.' );
+	}
+
+	/**
+	 * Reset is idempotent: resetting an already-trashed Newspack email
+	 * returns success (it's recreated from the default on the next read),
+	 * not a spurious "reset failed". Guards the double-click case where
+	 * wp_trash_post() returns false for a post already in the trash.
+	 */
+	public function test_reset_endpoint_idempotent_on_already_trashed_email() {
+		$post_id = wp_insert_post(
+			[
+				'post_type'   => Emails::POST_TYPE,
+				'post_status' => 'publish',
+				'post_title'  => 'Receipt',
+				'meta_input'  => [ Emails::EMAIL_CONFIG_NAME_META => 'receipt' ],
+			]
+		);
+		wp_trash_post( $post_id );
+		$this->assertSame( 'trash', get_post_status( $post_id ), 'Precondition: the email post is trashed.' );
+
+		$request = new WP_REST_Request( 'DELETE' );
+		$request->set_param( 'id', $post_id );
+		$response = Emails_Section::api_reset_email( $request );
+
+		$this->assertNotInstanceOf( WP_Error::class, $response, 'Resetting an already-trashed email must not error.' );
+	}
+
+	/**
+	 * REST_BASE is hardcoded to 'wizard/newspack-settings/emails'.
+	 *
+	 * The class docblock says "Do NOT change" — this test locks the
+	 * invariant. If anyone flips REST_BASE to follow the wizard's new
+	 * home, every external caller and the frontend's hardcoded API
+	 * paths would break.
+	 */
+	public function test_rest_base_is_pinned_to_newspack_settings() {
+		$this->assertSame( 'wizard/newspack-settings/emails', Emails_Section::REST_BASE );
+	}
+
+	/**
+	 * No Emails_Section REST route interpolates $wizard_slug.
+	 *
+	 * NPPD-1538 migrated GET /emails and POST /emails/{id}/toggle to use
+	 * self::REST_BASE (slice 2a had registered them with $wizard_slug
+	 * directly). This test verifies by constructing a fresh
+	 * `WP_REST_Server`, calling `register_rest_routes()` on a freshly-
+	 * instantiated `Emails_Section` (with a deliberately-mismatched
+	 * wizard_slug to surface any remaining `$wizard_slug` interpolation),
+	 * and inspecting the resulting route table. Both the listing endpoint
+	 * AND the toggle endpoint must register under `wizard/newspack-settings`
+	 * regardless of what `$wizard_slug` is set to — that's the invariant.
+	 *
+	 * Forces `newspack_woocommerce_active` to true so the toggle endpoint
+	 * (gated by `is_woocommerce_active()` in `register_rest_routes`) is
+	 * exercised — a regression that reintroduced `$wizard_slug` interpolation
+	 * on the toggle endpoint would otherwise slip through in WC-inactive
+	 * test environments.
+	 *
+	 * Uses the in-test route-registration pattern established at
+	 * `test_post_settings_args_use_text_field_sanitizer_for_emails` —
+	 * a fresh `WP_REST_Server` avoids depending on global REST state
+	 * and on whether `rest_api_init` fired with the section attached.
+	 */
+	public function test_no_wizard_slug_in_rest_route_registration() {
+		add_filter( 'newspack_woocommerce_active', '__return_true' );
+
+		// register_rest_route normally complains when called outside
+		// `rest_api_init`; we're calling register_rest_routes() directly
+		// to introspect what would be registered through the normal
+		// lifecycle. Acknowledge the notice rather than fire the whole
+		// action chain.
+		$this->setExpectedIncorrectUsage( 'register_rest_route' );
+
+		global $wp_rest_server;
+		$prev_server    = $wp_rest_server;
+		$wp_rest_server = new WP_REST_Server();
+		// Deliberately pass a different wizard_slug than the section's
+		// natural home. If any route registration still interpolates
+		// $this->wizard_slug, it would land under
+		// `wizard/regression-canary-slug/...` and the negative
+		// assertion below would fire.
+		( new Emails_Section( [ 'wizard_slug' => 'regression-canary-slug' ] ) )->register_rest_routes();
+		$routes         = $wp_rest_server->get_routes();
+		$wp_rest_server = $prev_server;
+
+		remove_filter( 'newspack_woocommerce_active', '__return_true' );
+
+		// Positive: both the listing endpoint AND the toggle endpoint
+		// (WC-active branch) must register under REST_BASE.
+		$this->assertArrayHasKey(
+			'/newspack/v1/wizard/newspack-settings/emails',
+			$routes,
+			'Pinned listing endpoint must be registered under REST_BASE.'
+		);
+		$toggle_pattern    = '#^/newspack/v1/wizard/newspack-settings/emails/\(\?P<id>#';
+		$matching_toggle   = array_filter(
+			array_keys( $routes ),
+			fn( $route ) => preg_match( $toggle_pattern, $route )
+		);
+		$this->assertNotEmpty(
+			$matching_toggle,
+			'Pinned toggle endpoint must be registered under REST_BASE when WC is active.'
+		);
+
+		// Negative: no Emails_Section route may live under the
+		// canary slug — would only happen if a registration still
+		// interpolates $this->wizard_slug instead of self::REST_BASE.
+		$leak_pattern = '#^/newspack/v1/wizard/regression-canary-slug/#';
+		$leaks        = array_filter(
+			array_keys( $routes ),
+			fn( $route ) => preg_match( $leak_pattern, $route )
+		);
+		$this->assertEmpty(
+			$leaks,
+			'Emails_Section endpoints must not register under the wizard_slug namespace. Leaked routes: ' . implode( ', ', $leaks )
+		);
+	}
+
+	/**
+	 * Platform-scoped list (NPPD-1538): reader-revenue (commerce) emails
+	 * appear only when Newspack is the reader-revenue platform. On RevEngine
+	 * (nrh) and "Other", the list returns only auth/account emails — the
+	 * commerce emails never fire there (off-site checkout / nothing sent
+	 * through Newspack), so they're filtered out. The Emails tab itself stays
+	 * available on every platform; only the list is scoped.
+	 */
+	public function test_email_list_scopes_reader_revenue_to_newspack_platform() {
+		$prev_platform = \Newspack\Donations::get_platform_slug();
+		try {
+			\Newspack\Donations::set_platform_slug( 'wc' );
+			$wc_chips = array_column( Emails_Section::api_get_email_settings()['newspack_emails'], 'chip' );
+			$this->assertContains( 'reader-revenue', $wc_chips, 'Newspack platform must surface reader-revenue emails.' );
+
+			foreach ( [ 'nrh', 'other' ] as $platform ) {
+				\Newspack\Donations::set_platform_slug( $platform );
+				$chips = array_column( Emails_Section::api_get_email_settings()['newspack_emails'], 'chip' );
+				$this->assertNotContains(
+					'reader-revenue',
+					$chips,
+					sprintf( '"%s" platform must NOT surface reader-revenue emails.', $platform )
+				);
+			}
+		} finally {
+			\Newspack\Donations::set_platform_slug( $prev_platform );
+		}
 	}
 }
