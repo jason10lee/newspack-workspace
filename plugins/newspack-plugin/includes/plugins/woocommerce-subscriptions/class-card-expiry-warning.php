@@ -571,22 +571,28 @@ class Card_Expiry_Warning {
 	 * Whether this (subscription, token, expiry) tuple has already been
 	 * processed and should be skipped.
 	 *
-	 * Two-prefix schema (see SEEDED_META_PREFIX + SENT_META_PREFIX):
+	 * Schema (see SEEDED_META_PREFIX + SENT_META_PREFIX + PENDING_META_PREFIX):
 	 *
-	 *   - SENT_META always blocks. Even with `$bypass_idempotency=true`,
-	 *     a real prior send is never re-sent. This is what makes the CLI
-	 *     backfill silently idempotent across operator re-runs.
+	 *   - SENT_META always blocks, and a *recent* in-progress PENDING claim
+	 *     blocks too — both delegated to `Idempotent_Send::is_claimed()` so
+	 *     this gate, the cron scan and the CLI backfill's count all agree
+	 *     with what `Idempotent_Send::send()` will actually do (a recent
+	 *     claim is skipped, so counting it here keeps the backfill estimate
+	 *     honest and avoids building a recipient for a pair that won't send).
+	 *     SENT blocks even under `$bypass_idempotency=true`, which is what
+	 *     makes the CLI backfill silently idempotent across operator re-runs.
+	 *     A *stale* claim does NOT block — the helper re-sends it.
 	 *   - SEEDED_META blocks unless `$bypass_idempotency=true`. The seed
 	 *     pass writes it without sending; the CLI bypass is the explicit
 	 *     publisher opt-in to release the deferred warning.
 	 *
-	 * Value-match (`=== $expiry_key`) is intentional, not just key-
-	 * existence. A token's `expiry_month`/`expiry_year` meta can change
-	 * in place — e.g., a Stripe Card Account Updater webhook reissues
-	 * the same `token_id` with a new expiry — and the value-match
-	 * invalidates the stale mark so the next expiry cycle gets warned.
-	 * Replacing this with `metadata_exists()` would silently block the
-	 * new warning. Do NOT simplify to existence-only.
+	 * Value-match against `$expiry_key` (not mere key-existence) is intentional
+	 * and lives in `Idempotent_Send::is_claimed()` for SENT/PENDING and here
+	 * for SEEDED: a token's `expiry_month`/`expiry_year` meta can change in
+	 * place — e.g. a Stripe Card Account Updater webhook reissues the same
+	 * `token_id` with a new expiry — and the value-match invalidates the stale
+	 * mark so the next expiry cycle gets warned. Do NOT simplify to
+	 * existence-only.
 	 *
 	 * @internal Public so the WP-CLI backfill's --dry-run path can
 	 *           preview accurately (skip pairs that wouldn't actually
@@ -596,11 +602,18 @@ class Card_Expiry_Warning {
 	 * @param \WC_Subscription $subscription       The subscription.
 	 * @param int              $token_id           The CC token id.
 	 * @param string           $expiry_key         `token_id:MM/YYYY`.
-	 * @param bool             $bypass_idempotency When true, ignore the SEEDED gate (SENT still blocks).
+	 * @param bool             $bypass_idempotency When true, ignore the SEEDED gate (SENT + recent PENDING still block).
 	 * @return bool True if already processed (skip), false if proceed.
 	 */
 	public static function is_already_processed( $subscription, int $token_id, string $expiry_key, bool $bypass_idempotency = false ): bool {
-		if ( $subscription->get_meta( self::SENT_META_PREFIX . $token_id, true ) === $expiry_key ) {
+		if ( Idempotent_Send::is_claimed(
+			$subscription,
+			[
+				'sent_key'    => self::SENT_META_PREFIX . $token_id,
+				'pending_key' => self::PENDING_META_PREFIX . $token_id,
+				'idem_value'  => $expiry_key,
+			]
+		) ) {
 			return true;
 		}
 		if ( ! $bypass_idempotency && $subscription->get_meta( self::SEEDED_META_PREFIX . $token_id, true ) === $expiry_key ) {

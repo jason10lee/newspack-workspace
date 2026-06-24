@@ -695,6 +695,45 @@ class Newspack_Test_Card_Expiry_Warning extends WP_UnitTestCase {
 		);
 	}
 
+	/**
+	 * NPPD-1768: the gate now also reflects an in-progress PENDING claim via
+	 * Idempotent_Send::is_claimed, so the cron scan and the CLI backfill's
+	 * count agree with what the helper will actually do. A RECENT claim
+	 * blocks (even under bypass — a concurrent send is in flight); a STALE
+	 * claim does NOT block (the helper re-sends it).
+	 */
+	public function test_recent_pending_claim_blocks_gate_stale_does_not() {
+		$recent = $this->make_subscription_stub(
+			[
+				Card_Expiry_Warning::PENDING_META_PREFIX . 100 => [
+					'value' => '100:12/2026',
+					'ts'    => time() - 10,
+				],
+			]
+		);
+		$this->assertTrue(
+			$this->invoke_is_already_processed( $recent, 100, '100:12/2026', false ),
+			'A recent PENDING claim must block the normal-scan path.'
+		);
+		$this->assertTrue(
+			$this->invoke_is_already_processed( $recent, 100, '100:12/2026', true ),
+			'A recent PENDING claim must block even under the CLI bypass (a send is in flight).'
+		);
+
+		$stale = $this->make_subscription_stub(
+			[
+				Card_Expiry_Warning::PENDING_META_PREFIX . 100 => [
+					'value' => '100:12/2026',
+					'ts'    => time() - ( 2 * HOUR_IN_SECONDS ),
+				],
+			]
+		);
+		$this->assertFalse(
+			$this->invoke_is_already_processed( $stale, 100, '100:12/2026', false ),
+			'A stale PENDING claim must NOT block — the helper re-sends it.'
+		);
+	}
+
 	// --------------------------------------------------------------------
 	// Marker-persistence retry (NPPD-1524 → NPPD-1768). A marker save is
 	// retried a bounded number of times to ride out a transient failure.

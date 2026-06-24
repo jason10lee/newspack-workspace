@@ -23,7 +23,7 @@ defined( 'ABSPATH' ) || exit;
  *   1. SENT marker present and matching → already delivered, skip.
  *   2. PENDING claim present and matching:
  *        - recent (within the grace window) → another pass is mid-send;
- *          skip to avoid a concurrent double-send (the claim acts as a lock).
+ *          skip (best-effort guard — see the concurrency note below).
  *        - stale (older than the grace window) → the claiming pass died
  *          between send() and confirm. We cannot know whether the mail went
  *          out, so we RE-SEND and log it. This is a deliberate over-send
@@ -35,6 +35,17 @@ defined( 'ABSPATH' ) || exit;
  *      between send and promote leaves a PENDING claim that the next
  *      post-grace pass reconciles per step 2.
  *
+ * Concurrency: the PENDING claim is a *best-effort* guard, NOT a
+ * mutual-exclusion lock. It is a non-atomic read-then-write, so two passes
+ * that each read "no claim" before either persists one can still both send.
+ * It reliably catches *overlapping* passes (e.g. a daily cron still running
+ * when an operator starts a CLI backfill) but not perfectly *simultaneous*
+ * ones, and per-process WC meta caches widen that window further. A hard
+ * guarantee would need an atomic primitive (a DB unique index, MySQL
+ * GET_LOCK, or wp_cache_add). For the card-expiry use case — a daily cron
+ * plus occasional manual backfill — best-effort is sufficient: the residual
+ * race is a rare duplicate, the accepted failure direction.
+ *
  * The entity is any WC_Data-backed object (WC_Subscription, WC_Order, ...);
  * it is duck-typed on get_meta / update_meta_data / delete_meta_data / save,
  * so this helper carries no hard WooCommerce dependency.
@@ -43,8 +54,9 @@ defined( 'ABSPATH' ) || exit;
  * idempotency value encodes mutable state (e.g. a card's expiry tuple), a
  * change in that state yields a new value which the stored marker no longer
  * matches — so the next cycle is correctly not blocked by a stale mark.
+ * Callers should pass a string idem value; the markers are compared strictly.
  */
-class Idempotent_Send {
+final class Idempotent_Send {
 
 	/**
 	 * Default bounded save attempts (a transient save() is retried).
@@ -55,6 +67,51 @@ class Idempotent_Send {
 	 * Log header used when the caller does not supply one.
 	 */
 	const LOGGER_HEADER = 'NEWSPACK-IDEMPOTENT-SEND';
+
+	/**
+	 * Whether a send should be SKIPPED right now for this (entity, value):
+	 * the SENT marker already matches, or a matching PENDING claim is still
+	 * recent (within the grace window). A *stale* PENDING claim returns
+	 * false — it does not block, it re-sends (see `send()`).
+	 *
+	 * This is the public predicate callers use to pre-filter or count work
+	 * without sending (e.g. a CLI backfill estimate), so their view stays
+	 * consistent with what `send()` will actually do. The PENDING marker's
+	 * shape and grace logic live here, not in callers.
+	 *
+	 * @param object $entity The WC_Data-backed entity carrying the markers.
+	 * @param array  $args {
+	 *     Predicate arguments.
+	 *
+	 *     @type string $sent_key      Meta key for the SENT marker. Required.
+	 *     @type string $pending_key   Meta key for the PENDING claim. Required.
+	 *     @type string $idem_value    Idempotency value to match. Required.
+	 *     @type int    $grace_seconds Seconds a claim is "in progress". Optional.
+	 * }
+	 * @return bool True if a send should be skipped right now.
+	 */
+	public static function is_claimed( $entity, array $args ): bool {
+		if ( ! isset( $args['sent_key'], $args['pending_key'], $args['idem_value'] ) ) {
+			return false;
+		}
+		if ( ! is_object( $entity ) || ! method_exists( $entity, 'get_meta' ) ) {
+			return false;
+		}
+		$idem = $args['idem_value'];
+
+		// SENT always blocks. Checked first and without computing grace, so
+		// the common already-delivered case stays cheap.
+		if ( $entity->get_meta( $args['sent_key'], true ) === $idem ) {
+			return true;
+		}
+
+		// A matching PENDING claim blocks only while it is recent.
+		$pending = $entity->get_meta( $args['pending_key'], true );
+		if ( is_array( $pending ) && isset( $pending['value'], $pending['ts'] ) && $pending['value'] === $idem ) {
+			return ( time() - (int) $pending['ts'] ) < self::grace_seconds( $args );
+		}
+		return false;
+	}
 
 	/**
 	 * Perform a two-phase idempotent send.
@@ -91,45 +148,28 @@ class Idempotent_Send {
 			return false;
 		}
 
-		$sent_key      = $args['sent_key'];
+		// Already delivered, or a recent claim holds it → skip. Computing
+		// grace lazily inside is_claimed keeps the already-sent path cheap.
+		if ( self::is_claimed( $entity, $args ) ) {
+			return false;
+		}
+
 		$pending_key   = $args['pending_key'];
 		$idem          = $args['idem_value'];
 		$header        = $args['logger_header'] ?? self::LOGGER_HEADER;
 		$save_attempts = max( 1, (int) ( $args['save_attempts'] ?? self::DEFAULT_SAVE_ATTEMPTS ) );
 		$clear_on_send = (array) ( $args['clear_on_send'] ?? [] );
+		$grace         = self::grace_seconds( $args );
 
-		/**
-		 * Filters how long (in seconds) a PENDING claim is treated as
-		 * in-progress before a later pass considers it stale and re-sends.
-		 *
-		 * @param int    $grace_seconds Grace window in seconds.
-		 * @param string $sent_key      The SENT meta key (identifies the flow).
-		 */
-		$grace = (int) apply_filters(
-			'newspack_idempotent_send_grace_seconds',
-			(int) ( $args['grace_seconds'] ?? HOUR_IN_SECONDS ),
-			$sent_key
-		);
-
-		// 1. SENT always blocks.
-		if ( $entity->get_meta( $sent_key, true ) === $idem ) {
-			return false;
-		}
-
-		// 2. Reconcile an existing matching PENDING claim.
+		// We are past is_claimed(), so any matching PENDING here is STALE:
+		// the claiming pass died without confirming. Re-send per the
+		// over-send policy and surface it in the log.
 		$pending = $entity->get_meta( $pending_key, true );
 		if ( is_array( $pending ) && isset( $pending['value'], $pending['ts'] ) && $pending['value'] === $idem ) {
-			$age = time() - (int) $pending['ts'];
-			if ( $age < $grace ) {
-				// Recent claim: a concurrent pass holds it. Skip (lock).
-				return false;
-			}
-			// Stale claim: the claiming pass died without confirming.
-			// Re-send per the over-send policy and surface it in the log.
 			Logger::log(
 				sprintf(
 					'Stale pending send claim (age %ds, grace %ds) for "%s"; re-sending per over-send policy.',
-					$age,
+					time() - (int) $pending['ts'],
 					$grace,
 					$idem
 				),
@@ -138,7 +178,7 @@ class Idempotent_Send {
 			);
 		}
 
-		// 3. Claim PENDING durably. Never send without a durable claim.
+		// 1. Claim PENDING durably. Never send without a durable claim.
 		$entity->update_meta_data(
 			$pending_key,
 			[
@@ -155,18 +195,32 @@ class Idempotent_Send {
 			return false;
 		}
 
-		// 4. Send.
+		// 2. Send.
 		$sent = (bool) call_user_func( $args['send'] );
 		if ( ! $sent ) {
-			// Release the claim so a later pass retries cleanly.
+			// Release the claim so a later pass retries cleanly. If the
+			// release save ALSO fails, the (now-recent) claim persists and
+			// can suppress the retry for up to the grace window — the wrong
+			// failure direction for these warnings — so log it: this rare
+			// double-failure is otherwise invisible.
 			$entity->delete_meta_data( $pending_key );
-			self::save_with_retry( $entity, $save_attempts );
+			if ( ! self::save_with_retry( $entity, $save_attempts )['saved'] ) {
+				Logger::log(
+					sprintf(
+						'Send failed for "%s" and releasing the pending claim also failed; the claim may delay a retry for up to %ds.',
+						$idem,
+						$grace
+					),
+					$header,
+					'error'
+				);
+			}
 			return false;
 		}
 
-		// 5. Confirm: promote PENDING → SENT (and clear companion keys).
+		// 3. Confirm: promote PENDING → SENT (and clear companion keys).
 		$entity->delete_meta_data( $pending_key );
-		$entity->update_meta_data( $sent_key, $idem );
+		$entity->update_meta_data( $args['sent_key'], $idem );
 		foreach ( $clear_on_send as $key ) {
 			$entity->delete_meta_data( $key );
 		}
@@ -182,6 +236,29 @@ class Idempotent_Send {
 			);
 		}
 		return true;
+	}
+
+	/**
+	 * Resolve the grace window (seconds) a PENDING claim is treated as
+	 * in-progress, applying the filter. Kept private so the marker shape and
+	 * the filter name live in one place.
+	 *
+	 * @param array $args Send/predicate args (reads `grace_seconds`, `sent_key`).
+	 * @return int Grace window in seconds.
+	 */
+	private static function grace_seconds( array $args ): int {
+		/**
+		 * Filters how long (in seconds) a PENDING claim is treated as
+		 * in-progress before a later pass considers it stale and re-sends.
+		 *
+		 * @param int    $grace_seconds Grace window in seconds.
+		 * @param string $sent_key      The SENT meta key (identifies the flow).
+		 */
+		return (int) apply_filters(
+			'newspack_idempotent_send_grace_seconds',
+			(int) ( $args['grace_seconds'] ?? HOUR_IN_SECONDS ),
+			$args['sent_key'] ?? ''
+		);
 	}
 
 	/**

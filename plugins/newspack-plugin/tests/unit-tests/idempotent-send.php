@@ -2,14 +2,15 @@
 /**
  * Tests for the two-phase idempotent send helper (NPPD-1768).
  *
- * Covers the claim → send → confirm state machine and its reconciliation
- * of interrupted claims:
- *   - SENT marker blocks without sending.
- *   - a recent PENDING claim is skipped (concurrency lock).
- *   - a stale PENDING claim re-sends (over-send policy) and is logged.
- *   - a clean send claims durably BEFORE sending, then promotes to SENT.
- *   - a failed send releases the claim; an un-persistable claim is not sent.
- *   - the grace window is filterable; value-match invalidates stale marks.
+ * Covers the claim → send → confirm state machine and its reconciliation of
+ * interrupted claims, plus the `is_claimed()` skip predicate.
+ *
+ * The fake entity models WC_Data's stage-then-commit semantics: writes go to a
+ * `staged` copy that `get_meta()` reads (like WC's in-memory meta), and only a
+ * successful `save()` commits `staged` into `persisted` (the durable view a
+ * fresh load on the next pass would see). A `save()` that throws commits
+ * nothing — which is exactly what lets these tests verify the DURABILITY the
+ * two-phase claim exists to provide (a claim survives a failed confirm save).
  *
  * @package Newspack\Tests
  */
@@ -27,23 +28,38 @@ class Newspack_Test_Idempotent_Send extends WP_UnitTestCase {
 	const IDEM        = '42:12/2026';
 
 	/**
-	 * Build a minimal in-memory WC_Data-like entity. Duck-typed on the
-	 * methods Idempotent_Send uses. `save()` throws while `throw_saves` is
-	 * true, so tests can simulate a transient/persistent persistence failure
-	 * (including failing only the confirm save by flipping the flag from
-	 * inside the send callback).
+	 * Remove the grace filter after each test so a test that tightens it
+	 * cannot leak into a later one (and survives an assertion that throws
+	 * before an inline cleanup would run).
+	 */
+	public function tear_down() {
+		remove_all_filters( 'newspack_idempotent_send_grace_seconds' );
+		parent::tear_down();
+	}
+
+	/**
+	 * Build a fake WC_Data-like entity with stage-then-commit meta. `save()`
+	 * throws while `throw_saves` is true (commits nothing); otherwise it
+	 * commits `staged` into `persisted`. Tests assert on `persisted` for the
+	 * durable, cross-pass truth.
 	 *
-	 * @param array $initial Initial meta as key => value.
+	 * @param array $persisted Initial persisted meta as key => value.
 	 * @return object
 	 */
-	private function make_entity( array $initial = [] ) {
-		return new class( $initial ) {
+	private function make_entity( array $persisted = [] ) {
+		return new class( $persisted ) {
 			/**
-			 * Meta storage.
+			 * Working copy (reads + writes land here, like WC in-memory meta).
 			 *
 			 * @var array
 			 */
-			public $meta = [];
+			public $staged = [];
+			/**
+			 * Committed copy (what a fresh load on the next pass would see).
+			 *
+			 * @var array
+			 */
+			public $persisted = [];
 			/**
 			 * Count of save() calls.
 			 *
@@ -51,7 +67,7 @@ class Newspack_Test_Idempotent_Send extends WP_UnitTestCase {
 			 */
 			public $save_calls = 0;
 			/**
-			 * When true, save() throws.
+			 * When true, save() throws and commits nothing.
 			 *
 			 * @var bool
 			 */
@@ -59,40 +75,42 @@ class Newspack_Test_Idempotent_Send extends WP_UnitTestCase {
 			/**
 			 * Constructor.
 			 *
-			 * @param array $initial Initial meta.
+			 * @param array $persisted Initial persisted meta.
 			 */
-			public function __construct( array $initial ) {
-				$this->meta = $initial;
+			public function __construct( array $persisted ) {
+				$this->persisted = $persisted;
+				$this->staged    = $persisted;
 			}
 			/**
-			 * Get a single meta value.
+			 * Get a single (staged) meta value.
 			 *
 			 * @param string $key    Meta key.
 			 * @param bool   $single Single flag (ignored).
 			 * @return mixed Stored value or '' if absent.
 			 */
 			public function get_meta( $key, $single = true ) {
-				return $this->meta[ $key ] ?? '';
+				return $this->staged[ $key ] ?? '';
 			}
 			/**
-			 * Set a meta value.
+			 * Stage a meta value.
 			 *
 			 * @param string $key   Meta key.
 			 * @param mixed  $value Value.
 			 */
 			public function update_meta_data( $key, $value ) {
-				$this->meta[ $key ] = $value;
+				$this->staged[ $key ] = $value;
 			}
 			/**
-			 * Delete a meta key.
+			 * Stage a meta deletion.
 			 *
 			 * @param string $key Meta key.
 			 */
 			public function delete_meta_data( $key ) {
-				unset( $this->meta[ $key ] );
+				unset( $this->staged[ $key ] );
 			}
 			/**
-			 * Persist; throws while throw_saves is set.
+			 * Commit staged → persisted; throws (committing nothing) while
+			 * throw_saves is set.
 			 *
 			 * @return bool
 			 * @throws \RuntimeException When throw_saves is true.
@@ -102,15 +120,15 @@ class Newspack_Test_Idempotent_Send extends WP_UnitTestCase {
 				if ( $this->throw_saves ) {
 					throw new \RuntimeException( 'transient save failure' );
 				}
+				$this->persisted = $this->staged;
 				return true;
 			}
 		};
 	}
 
 	/**
-	 * Base args for a send, with a counting send callback that returns
-	 * $return. The callback records how many times it ran via $calls (passed
-	 * by reference).
+	 * Base send args with a counting send callback that returns $return. The
+	 * callback records its invocation count via $calls (passed by reference).
 	 *
 	 * @param int|null $calls  By-ref counter of send invocations.
 	 * @param bool     $return What the send callback returns.
@@ -131,23 +149,37 @@ class Newspack_Test_Idempotent_Send extends WP_UnitTestCase {
 		];
 	}
 
+	// --------------------------------------------------------------------
+	// Guard rails.
+	// --------------------------------------------------------------------
+
 	/**
-	 * Missing a required arg (or an unusable entity) is a no-op returning
-	 * false — never a fatal.
+	 * A missing required arg returns false without sending.
 	 */
-	public function test_missing_args_or_bad_entity_returns_false() {
+	public function test_missing_required_arg_returns_false() {
 		$entity = $this->make_entity();
-		$calls  = 0;
 		$args   = $this->args( $calls );
 		unset( $args['send'] );
-		$this->assertFalse( Idempotent_Send::send( $entity, $args ), 'Missing send callback must return false.' );
 
+		$this->assertFalse( Idempotent_Send::send( $entity, $args ), 'Missing send callback must return false.' );
+		$this->assertSame( 0, $calls, 'Nothing should be sent when a required arg is missing.' );
+		$this->assertSame( 0, $entity->save_calls, 'Nothing should be saved when a required arg is missing.' );
+	}
+
+	/**
+	 * An entity missing the WC_Data meta API returns false without sending.
+	 */
+	public function test_bad_entity_returns_false() {
 		$this->assertFalse(
 			Idempotent_Send::send( new \stdClass(), $this->args( $calls ) ),
 			'An entity missing the WC_Data meta API must return false.'
 		);
-		$this->assertSame( 0, $calls );
+		$this->assertSame( 0, $calls, 'A bad entity must not invoke the send callback.' );
 	}
+
+	// --------------------------------------------------------------------
+	// Skip paths (SENT + recent claim).
+	// --------------------------------------------------------------------
 
 	/**
 	 * A matching SENT marker blocks: no send, nothing written.
@@ -159,14 +191,14 @@ class Newspack_Test_Idempotent_Send extends WP_UnitTestCase {
 		$this->assertFalse( $result, 'A matching SENT marker must short-circuit to false.' );
 		$this->assertSame( 0, $calls, 'The send callback must not run when already sent.' );
 		$this->assertSame( 0, $entity->save_calls, 'No save should occur when already sent.' );
-		$this->assertArrayNotHasKey( self::PENDING_KEY, $entity->meta, 'No pending claim should be written.' );
+		$this->assertArrayNotHasKey( self::PENDING_KEY, $entity->persisted, 'No pending claim should be written.' );
 	}
 
 	/**
 	 * A recent matching PENDING claim is treated as a concurrent in-progress
-	 * send and skipped — the claim is the lock.
+	 * send and skipped — the best-effort guard.
 	 */
-	public function test_recent_pending_claim_skips_as_lock() {
+	public function test_recent_pending_claim_skips() {
 		$entity = $this->make_entity(
 			[
 				self::PENDING_KEY => [
@@ -177,7 +209,7 @@ class Newspack_Test_Idempotent_Send extends WP_UnitTestCase {
 		);
 		$result = Idempotent_Send::send( $entity, $this->args( $calls ) );
 
-		$this->assertFalse( $result, 'A recent claim must skip (concurrency lock).' );
+		$this->assertFalse( $result, 'A recent claim must skip.' );
 		$this->assertSame( 0, $calls, 'No send while a recent claim is held.' );
 		$this->assertSame( 0, $entity->save_calls );
 	}
@@ -200,23 +232,28 @@ class Newspack_Test_Idempotent_Send extends WP_UnitTestCase {
 
 		$this->assertTrue( $result, 'A stale claim must re-send.' );
 		$this->assertSame( 1, $calls, 'The send callback must run exactly once.' );
-		$this->assertSame( self::IDEM, $entity->meta[ self::SENT_KEY ], 'SENT must be written on confirm.' );
-		$this->assertArrayNotHasKey( self::PENDING_KEY, $entity->meta, 'The stale claim must be cleared.' );
+		$this->assertSame( self::IDEM, $entity->persisted[ self::SENT_KEY ], 'SENT must be durably written on confirm.' );
+		$this->assertArrayNotHasKey( self::PENDING_KEY, $entity->persisted, 'The stale claim must be cleared.' );
 	}
+
+	// --------------------------------------------------------------------
+	// Happy path + durability.
+	// --------------------------------------------------------------------
 
 	/**
 	 * A clean send claims PENDING durably BEFORE sending, then promotes the
 	 * claim to SENT and clears the companion (seeded) key. The send callback
-	 * asserts the claim is already visible when it runs.
+	 * asserts the claim is already persisted when it runs.
 	 */
 	public function test_clean_send_claims_before_send_then_confirms() {
-		$entity      = $this->make_entity( [ self::SEEDED_KEY => self::IDEM ] );
-		$claim_seen  = null;
+		$entity        = $this->make_entity( [ self::SEEDED_KEY => self::IDEM ] );
+		$claim_seen    = null;
 		$saves_at_send = null;
-		$args        = $this->args( $calls );
-		$args['send'] = function () use ( $entity, &$claim_seen, &$saves_at_send, &$calls ) {
+		$calls         = 0;
+		$args          = $this->args( $calls );
+		$args['send']  = function () use ( $entity, &$claim_seen, &$saves_at_send, &$calls ) {
 			++$calls;
-			$claim_seen    = $entity->get_meta( self::PENDING_KEY, true );
+			$claim_seen    = $entity->persisted[ self::PENDING_KEY ] ?? null;
 			$saves_at_send = $entity->save_calls;
 			return true;
 		};
@@ -225,17 +262,53 @@ class Newspack_Test_Idempotent_Send extends WP_UnitTestCase {
 
 		$this->assertTrue( $result );
 		$this->assertSame( 1, $calls );
-		$this->assertIsArray( $claim_seen, 'The PENDING claim must be visible at send time (claimed before send).' );
+		$this->assertIsArray( $claim_seen, 'The PENDING claim must be DURABLE (persisted) before the send runs.' );
 		$this->assertSame( self::IDEM, $claim_seen['value'], 'The claim must carry the idempotency value.' );
-		$this->assertSame( 1, $saves_at_send, 'The claim must be persisted (one save) before the send runs.' );
-		$this->assertSame( self::IDEM, $entity->meta[ self::SENT_KEY ], 'SENT must be written on confirm.' );
-		$this->assertArrayNotHasKey( self::PENDING_KEY, $entity->meta, 'The claim must be cleared on confirm.' );
-		$this->assertArrayNotHasKey( self::SEEDED_KEY, $entity->meta, 'clear_on_send keys must be removed on confirm.' );
+		$this->assertSame( 1, $saves_at_send, 'Exactly one save (the claim) must precede the send.' );
+		$this->assertSame( self::IDEM, $entity->persisted[ self::SENT_KEY ], 'SENT must be written on confirm.' );
+		$this->assertArrayNotHasKey( self::PENDING_KEY, $entity->persisted, 'The claim must be cleared on confirm.' );
+		$this->assertArrayNotHasKey( self::SEEDED_KEY, $entity->persisted, 'clear_on_send keys must be removed on confirm.' );
 	}
 
 	/**
-	 * When the send returns false, the claim is released so a later pass can
-	 * retry cleanly, and no SENT marker is written.
+	 * Durability invariant (the whole reason the two-phase claim exists):
+	 * when the confirm save fails after the mail is accepted, the helper still
+	 * returns true AND the PENDING claim SURVIVES in the durable store (SENT
+	 * does not), so the next post-grace pass can reconcile it. With WC's
+	 * stage-then-commit semantics the failed confirm commits nothing, so
+	 * `persisted` keeps the claim from the earlier (successful) claim save.
+	 */
+	public function test_pending_claim_survives_failed_confirm_save() {
+		$entity       = $this->make_entity();
+		$calls        = 0;
+		$args         = $this->args( $calls );
+		$args['send'] = function () use ( $entity, &$calls ) {
+			++$calls;
+			$entity->throw_saves = true; // Fail only the confirm save (claim already committed).
+			return true;
+		};
+
+		$result = Idempotent_Send::send( $entity, $args );
+
+		$this->assertTrue( $result, 'A confirmed send returns true even if the SENT-marker save fails.' );
+		$this->assertSame( 1, $calls );
+		$this->assertSame(
+			1 + Idempotent_Send::DEFAULT_SAVE_ATTEMPTS,
+			$entity->save_calls,
+			'One successful claim save, then the confirm save retried to the budget.'
+		);
+		$this->assertArrayHasKey( self::PENDING_KEY, $entity->persisted, 'The claim must SURVIVE a failed confirm so a later pass can reconcile it.' );
+		$this->assertSame( self::IDEM, $entity->persisted[ self::PENDING_KEY ]['value'] );
+		$this->assertArrayNotHasKey( self::SENT_KEY, $entity->persisted, 'SENT must NOT be durably set when its save failed.' );
+	}
+
+	// --------------------------------------------------------------------
+	// Failure paths.
+	// --------------------------------------------------------------------
+
+	/**
+	 * When the send returns false, the claim is durably released so a later
+	 * pass retries cleanly, and no SENT marker is written.
 	 */
 	public function test_send_failure_releases_claim() {
 		$entity = $this->make_entity();
@@ -243,8 +316,31 @@ class Newspack_Test_Idempotent_Send extends WP_UnitTestCase {
 
 		$this->assertFalse( $result, 'A failed send returns false.' );
 		$this->assertSame( 1, $calls );
-		$this->assertArrayNotHasKey( self::PENDING_KEY, $entity->meta, 'A failed send must release the claim.' );
-		$this->assertArrayNotHasKey( self::SENT_KEY, $entity->meta, 'A failed send must not mark SENT.' );
+		$this->assertArrayNotHasKey( self::PENDING_KEY, $entity->persisted, 'A failed send must durably release the claim.' );
+		$this->assertArrayNotHasKey( self::SENT_KEY, $entity->persisted, 'A failed send must not mark SENT.' );
+	}
+
+	/**
+	 * If the send fails AND the claim-release save also fails (a rare double
+	 * failure), the claim persists — a known cost the helper logs. This pins
+	 * the behavior so a future change doesn't silently make it worse or
+	 * better without noticing.
+	 */
+	public function test_failed_release_leaves_claim_persisted() {
+		$entity       = $this->make_entity();
+		$calls        = 0;
+		$args         = $this->args( $calls );
+		$args['send'] = function () use ( $entity, &$calls ) {
+			++$calls;
+			$entity->throw_saves = true; // Fail the release save (claim already committed).
+			return false;
+		};
+
+		$result = Idempotent_Send::send( $entity, $args );
+
+		$this->assertFalse( $result, 'A failed send returns false.' );
+		$this->assertSame( 1, $calls );
+		$this->assertArrayHasKey( self::PENDING_KEY, $entity->persisted, 'When the release save also fails, the claim persists (logged).' );
 	}
 
 	/**
@@ -259,37 +355,63 @@ class Newspack_Test_Idempotent_Send extends WP_UnitTestCase {
 		$this->assertFalse( $result, 'No send when the claim cannot be persisted.' );
 		$this->assertSame( 0, $calls, 'The send callback must not run without a durable claim.' );
 		$this->assertSame( Idempotent_Send::DEFAULT_SAVE_ATTEMPTS, $entity->save_calls, 'The claim save is retried to the budget.' );
+		$this->assertArrayNotHasKey( self::PENDING_KEY, $entity->persisted, 'No claim is durably written when its save fails.' );
 	}
 
+	// --------------------------------------------------------------------
+	// Value-match, non-array claim, multi-key clear, grace filter.
+	// --------------------------------------------------------------------
+
 	/**
-	 * The mail is accepted but the confirm save fails: the helper still
-	 * returns true (a send happened) and retried the confirm save. The
-	 * remaining claim bounds the over-send to a single re-send after grace.
+	 * Value-match: a SENT marker carrying a DIFFERENT value (e.g. the card's
+	 * prior expiry tuple) does not block a new idempotency value.
 	 */
-	public function test_returns_true_when_confirm_save_fails() {
-		$entity       = $this->make_entity();
-		$args         = $this->args( $calls );
-		$args['send'] = function () use ( $entity, &$calls ) {
-			++$calls;
-			$entity->throw_saves = true; // Fail only the confirm save (claim already saved).
-			return true;
-		};
+	public function test_value_change_is_not_blocked_by_stale_marker() {
+		$entity = $this->make_entity( [ self::SENT_KEY => '42:01/2025' ] ); // Old expiry.
+		$result = Idempotent_Send::send( $entity, $this->args( $calls ) ); // New IDEM = 42:12/2026.
 
-		$result = Idempotent_Send::send( $entity, $args );
-
-		$this->assertTrue( $result, 'A confirmed send returns true even if the SENT marker save fails.' );
+		$this->assertTrue( $result, 'A SENT marker for a different value must not block the new value.' );
 		$this->assertSame( 1, $calls );
-		$this->assertSame(
-			1 + Idempotent_Send::DEFAULT_SAVE_ATTEMPTS,
-			$entity->save_calls,
-			'One successful claim save, then the confirm save retried to the budget.'
-		);
+		$this->assertSame( self::IDEM, $entity->persisted[ self::SENT_KEY ], 'SENT is updated to the new value.' );
 	}
 
 	/**
-	 * The grace window is filterable: a 30-minute-old claim is "recent"
-	 * under the default 1-hour grace (skip), but "stale" once the filter
-	 * tightens the window to 10 minutes (re-send).
+	 * A malformed (non-array) PENDING value — a legacy or corrupted marker —
+	 * is ignored by the array/isset guard, and the send proceeds and
+	 * overwrites it with a well-formed claim rather than fatal-ing.
+	 */
+	public function test_non_array_pending_is_overwritten_and_send_proceeds() {
+		$entity = $this->make_entity( [ self::PENDING_KEY => 'corrupt-scalar' ] );
+		$result = Idempotent_Send::send( $entity, $this->args( $calls ) );
+
+		$this->assertTrue( $result, 'A non-array pending value must not block or fatal; the send proceeds.' );
+		$this->assertSame( 1, $calls );
+		$this->assertSame( self::IDEM, $entity->persisted[ self::SENT_KEY ] );
+		$this->assertArrayNotHasKey( self::PENDING_KEY, $entity->persisted, 'The malformed claim is replaced and cleared on confirm.' );
+	}
+
+	/**
+	 * The clear_on_send list removes EVERY companion key on confirm, not just the first.
+	 */
+	public function test_clear_on_send_clears_all_keys() {
+		$entity                = $this->make_entity(
+			[
+				'_companion_a' => self::IDEM,
+				'_companion_b' => self::IDEM,
+			]
+		);
+		$args                  = $this->args( $calls );
+		$args['clear_on_send'] = [ '_companion_a', '_companion_b' ];
+
+		$this->assertTrue( Idempotent_Send::send( $entity, $args ) );
+		$this->assertArrayNotHasKey( '_companion_a', $entity->persisted, 'First clear_on_send key must be removed.' );
+		$this->assertArrayNotHasKey( '_companion_b', $entity->persisted, 'Second clear_on_send key must be removed.' );
+	}
+
+	/**
+	 * The grace window is filterable: a 30-minute-old claim is "recent" under
+	 * the default 1-hour grace (skip), but "stale" once the filter tightens
+	 * the window to 10 minutes (re-send).
 	 */
 	public function test_grace_window_is_filterable() {
 		$make = function () {
@@ -303,36 +425,80 @@ class Newspack_Test_Idempotent_Send extends WP_UnitTestCase {
 			);
 		};
 
-		$default = $make();
 		$this->assertFalse(
-			Idempotent_Send::send( $default, $this->args( $calls ) ),
+			Idempotent_Send::send( $make(), $this->args( $calls ) ),
 			'Under the default 1h grace, a 30m-old claim is recent → skip.'
 		);
 		$this->assertSame( 0, $calls );
 
 		add_filter( 'newspack_idempotent_send_grace_seconds', fn() => 10 * MINUTE_IN_SECONDS );
-		$tightened = $make();
 		$this->assertTrue(
-			Idempotent_Send::send( $tightened, $this->args( $calls ) ),
+			Idempotent_Send::send( $make(), $this->args( $calls ) ),
 			'With a 10m grace, the 30m-old claim is stale → re-send.'
 		);
 		$this->assertSame( 1, $calls );
-		remove_all_filters( 'newspack_idempotent_send_grace_seconds' );
 	}
+
+	// --------------------------------------------------------------------
+	// is_claimed() predicate.
+	// --------------------------------------------------------------------
 
 	/**
-	 * Value-match: a SENT marker carrying a DIFFERENT value (e.g. the card's
-	 * prior expiry tuple) does not block a new idempotency value — the next
-	 * cycle correctly sends.
+	 * The is_claimed predicate reflects the skip decision: true for a matching
+	 * SENT marker and a recent matching claim; false for stale, mismatched, or absent.
 	 */
-	public function test_value_change_is_not_blocked_by_stale_marker() {
-		$entity = $this->make_entity( [ self::SENT_KEY => '42:01/2025' ] ); // Old expiry.
-		$result = Idempotent_Send::send( $entity, $this->args( $calls ) ); // New IDEM = 42:12/2026.
+	public function test_is_claimed_predicate() {
+		$args = [
+			'sent_key'    => self::SENT_KEY,
+			'pending_key' => self::PENDING_KEY,
+			'idem_value'  => self::IDEM,
+		];
 
-		$this->assertTrue( $result, 'A SENT marker for a different value must not block the new value.' );
-		$this->assertSame( 1, $calls );
-		$this->assertSame( self::IDEM, $entity->meta[ self::SENT_KEY ], 'SENT is updated to the new value.' );
+		$this->assertTrue(
+			Idempotent_Send::is_claimed( $this->make_entity( [ self::SENT_KEY => self::IDEM ] ), $args ),
+			'A matching SENT marker is claimed.'
+		);
+		$this->assertTrue(
+			Idempotent_Send::is_claimed(
+				$this->make_entity(
+					[
+						self::PENDING_KEY => [
+							'value' => self::IDEM,
+							'ts'    => time() - 10,
+						],
+					] 
+				),
+				$args
+			),
+			'A recent matching claim is claimed.'
+		);
+		$this->assertFalse(
+			Idempotent_Send::is_claimed(
+				$this->make_entity(
+					[
+						self::PENDING_KEY => [
+							'value' => self::IDEM,
+							'ts'    => time() - ( 2 * HOUR_IN_SECONDS ),
+						],
+					] 
+				),
+				$args
+			),
+			'A stale claim is NOT claimed (it re-sends).'
+		);
+		$this->assertFalse(
+			Idempotent_Send::is_claimed( $this->make_entity( [ self::SENT_KEY => '42:01/2025' ] ), $args ),
+			'A SENT marker for a different value is not claimed.'
+		);
+		$this->assertFalse(
+			Idempotent_Send::is_claimed( $this->make_entity(), $args ),
+			'An unmarked entity is not claimed.'
+		);
 	}
+
+	// --------------------------------------------------------------------
+	// Bounded save retry.
+	// --------------------------------------------------------------------
 
 	/**
 	 * The bounded save retry rides out transient failures within the budget.
