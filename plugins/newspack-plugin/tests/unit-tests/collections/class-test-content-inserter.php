@@ -264,18 +264,42 @@ class Test_Content_Inserter extends \WP_UnitTestCase {
 		$block_content = "<!-- wp:paragraph -->\n<p>First paragraph.</p>\n<!-- /wp:paragraph -->\n\n<!-- wp:paragraph -->\n<p>Second paragraph.</p>\n<!-- /wp:paragraph -->\n\n<!-- wp:paragraph -->\n<p>Third paragraph.</p>\n<!-- /wp:paragraph -->";
 		$block_result  = Content_Inserter::insert_after_nth_block( $block_content, $insert_html, 2 );
 
-		$this->assertStringContainsString( '<p>First paragraph.</p>', $block_result, 'First paragraph should be present.' );
-		$this->assertStringContainsString( '<p>Second paragraph.</p>', $block_result, 'Second paragraph should be present.' );
+		// WP 7.0+ adds a `wp-block-paragraph` class to rendered paragraph blocks.
+		$this->assertStringContainsString( '<p class="wp-block-paragraph">First paragraph.</p>', $block_result, 'First paragraph should be present.' );
+		$this->assertStringContainsString( '<p class="wp-block-paragraph">Second paragraph.</p>', $block_result, 'Second paragraph should be present.' );
 		$this->assertStringContainsString( $insert_html, $block_result, 'Inserted content should be present.' );
-		$this->assertStringContainsString( '<p>Third paragraph.</p>', $block_result, 'Third paragraph should be present.' );
+		$this->assertStringContainsString( '<p class="wp-block-paragraph">Third paragraph.</p>', $block_result, 'Third paragraph should be present.' );
 
 		// Verify proper insertion order for Gutenberg blocks.
-		$second_pos = strpos( $block_result, '<p>Second paragraph.</p>' );
+		$second_pos = strpos( $block_result, '<p class="wp-block-paragraph">Second paragraph.</p>' );
 		$insert_pos = strpos( $block_result, $insert_html );
-		$third_pos  = strpos( $block_result, '<p>Third paragraph.</p>' );
+		$third_pos  = strpos( $block_result, '<p class="wp-block-paragraph">Third paragraph.</p>' );
 
 		$this->assertGreaterThan( $second_pos, $insert_pos, 'Inserted content should come after second paragraph.' );
 		$this->assertLessThan( $third_pos, $insert_pos, 'Inserted content should come before third paragraph.' );
+	}
+
+	/**
+	 * Test insert_after_nth_block preserves inner blocks (e.g., list items).
+	 *
+	 * Regression: a `core/list` block stores its `<li>` items as `core/list-item`
+	 * inner blocks, not in `innerHTML`. The same applies to columns, groups,
+	 * buttons, etc. Reassembling parsed blocks must use `render_block()` so
+	 * inner-block content (and dynamic blocks) are emitted.
+	 *
+	 * @covers \Newspack\Collections\Content_Inserter::insert_after_nth_block
+	 */
+	public function test_insert_after_nth_block_preserves_inner_blocks() {
+		$insert_html = '<div>Inserted content</div>';
+
+		$block_content = "<!-- wp:paragraph -->\n<p>First paragraph.</p>\n<!-- /wp:paragraph -->\n\n"
+			. "<!-- wp:paragraph -->\n<p>Second paragraph.</p>\n<!-- /wp:paragraph -->\n\n"
+			. "<!-- wp:list -->\n<ul class=\"wp-block-list\"><!-- wp:list-item -->\n<li>Item one</li>\n<!-- /wp:list-item -->\n\n<!-- wp:list-item -->\n<li>Item two</li>\n<!-- /wp:list-item --></ul>\n<!-- /wp:list -->";
+
+		$result = Content_Inserter::insert_after_nth_block( $block_content, $insert_html, 2 );
+
+		$this->assertStringContainsString( '<li>Item one</li>', $result, 'First list item should be preserved.' );
+		$this->assertStringContainsString( '<li>Item two</li>', $result, 'Second list item should be preserved.' );
 	}
 
 	/**
