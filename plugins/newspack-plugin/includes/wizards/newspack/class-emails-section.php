@@ -12,6 +12,7 @@ use Newspack\Reader_Activation;
 use Newspack\Reader_Revenue_Emails;
 use Newspack\Wizards\Wizard_Section;
 use Newspack\WooCommerce_Emails;
+use WP_Error;
 use WP_REST_Server;
 
 defined( 'ABSPATH' ) || exit;
@@ -27,9 +28,25 @@ class Emails_Section extends Wizard_Section {
 	/**
 	 * Containing wizard slug.
 	 *
+	 * Vestigial: the actual REST path is constructed from `self::REST_BASE`,
+	 * not this property. The parent `Wizard_Section::__construct` overwrites
+	 * this from the `wizard_slug` arg passed by `Wizard::load_wizard_sections`
+	 * anyway. Kept for parity with sibling sections and any inherited base-
+	 * class behavior that reads it.
+	 *
 	 * @var string
 	 */
 	protected $wizard_slug = 'newspack-settings';
+
+	/**
+	 * REST base path for Emails endpoints.
+	 *
+	 * Hardcoded to 'newspack-settings' for API stability. When NPPD-1538
+	 * later moves the Emails screen from Newspack > Settings to Audience >
+	 * Configuration, this REST path MUST stay at 'newspack-settings' —
+	 * external callers and the frontend depend on it. Do NOT change.
+	 */
+	const REST_BASE = 'wizard/newspack-settings/emails';
 
 	/**
 	 * Constructor — extends Wizard_Section's REST-route hookup with an
@@ -73,11 +90,35 @@ class Emails_Section extends Wizard_Section {
 	public function register_rest_routes() {
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
-			'wizard/' . $this->wizard_slug . '/emails',
+			self::REST_BASE,
 			[
 				'methods'             => WP_REST_Server::READABLE,
 				'callback'            => [ __CLASS__, 'api_get_email_settings' ],
 				'permission_callback' => [ $this, 'api_permissions_check' ],
+			]
+		);
+
+		// Reset endpoint — trashes the email template post so the next
+		// read recreates it from the default template. Owns the action
+		// the donations wizard used to register at
+		// `/wizard/newspack-audience-donations/emails/{id}` — consolidated
+		// under the emails namespace in NPPD-1535. Registered
+		// unconditionally; resetting a Newspack-managed email has no WC
+		// dependency.
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			self::REST_BASE . '/(?P<id>\d+)',
+			[
+				'methods'             => WP_REST_Server::DELETABLE,
+				'callback'            => [ __CLASS__, 'api_reset_email' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'id' => [
+						'type'              => 'integer',
+						'required'          => true,
+						'sanitize_callback' => 'absint',
+					],
+				],
 			]
 		);
 
@@ -86,7 +127,7 @@ class Emails_Section extends Wizard_Section {
 		if ( self::is_woocommerce_active() ) {
 			register_rest_route(
 				NEWSPACK_API_NAMESPACE,
-				'wizard/' . $this->wizard_slug . '/emails/(?P<id>[A-Za-z0-9_]+)/toggle',
+				self::REST_BASE . '/(?P<id>[A-Za-z0-9_]+)/toggle',
 				[
 					'methods'             => WP_REST_Server::EDITABLE,
 					'callback'            => [ __CLASS__, 'api_toggle_wc_email' ],
@@ -163,6 +204,64 @@ class Emails_Section extends Wizard_Section {
 		}
 
 		return rest_ensure_response( self::api_get_email_settings() );
+	}
+
+	/**
+	 * Reset an email template by trashing the email post.
+	 *
+	 * Ported from `Audience_Donations::api_reset_donation_email` in
+	 * NPPD-1535 — the endpoint conceptually belongs under the emails
+	 * namespace, not the donations wizard. Returns the refreshed email
+	 * list (same shape the donations endpoint returned) so existing
+	 * callers stay compatible.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 *
+	 * @return \WP_Error|\WP_REST_Response
+	 */
+	public static function api_reset_email( $request ) {
+		$id    = $request->get_param( 'id' );
+		$email = get_post( $id );
+
+		// Source boundary: this route can only ever reset Newspack-managed
+		// emails. The `POST_TYPE === $email->post_type` check below is the
+		// enforcement — non-Newspack sources are never stored as POST_TYPE
+		// posts. WooCommerce-source rows are live `WC_Email` objects with
+		// `wc:`-prefixed string ids, which additionally can't match the
+		// route's numeric-only `(?P<id>\d+)` pattern (`absint`-sanitized).
+		// So a direct REST call cannot reset a row the UI gates behind
+		// `source === 'newspack'`.
+		if ( null === $email || Emails::POST_TYPE !== $email->post_type ) {
+			return new WP_Error(
+				'newspack_reset_email_invalid_arg',
+				esc_html__( 'Invalid argument: no email template matches the provided id.', 'newspack-plugin' ),
+				[
+					'status' => 400,
+					'level'  => 'notice',
+				]
+			);
+		}
+
+		if ( ! wp_trash_post( $id ) ) {
+			return new WP_Error(
+				'newspack_reset_email_reset_failed',
+				esc_html__( 'Reset failed: unable to reset email template.', 'newspack-plugin' ),
+				[
+					'status' => 400,
+					'level'  => 'notice',
+				]
+			);
+		}
+
+		// Returns the raw Emails::get_emails() array, not the enriched
+		// api_get_email_settings() shape that the sibling api_toggle_wc_email
+		// returns. Preserves the legacy donations-endpoint contract
+		// (callers depending on the raw shape don't break on the move).
+		// Aligning sibling endpoints in this class on a single shape is
+		// tracked separately — see NPPD-1569.
+		return rest_ensure_response(
+			Emails::get_emails( Reader_Activation::is_enabled() ? [] : array_values( Reader_Revenue_Emails::EMAIL_TYPES ), false )
+		);
 	}
 
 	/**
