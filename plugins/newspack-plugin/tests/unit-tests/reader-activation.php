@@ -252,6 +252,35 @@ class Newspack_Test_Reader_Activation extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The admin bar is hidden on the front end for readers but kept for admins.
+	 */
+	public function test_hide_admin_bar_for_readers() {
+		$reader_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		wp_set_current_user( $reader_id );
+		$this->assertFalse( Reader_Activation::hide_admin_bar_for_readers( true ) );
+
+		$admin_id = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		wp_set_current_user( $admin_id );
+		$this->assertTrue( Reader_Activation::hide_admin_bar_for_readers( true ) );
+
+		wp_set_current_user( 0 );
+	}
+
+	/**
+	 * The account link renders for logged-out visitors without WooCommerce.
+	 */
+	public function test_account_link_without_woocommerce() {
+		if ( function_exists( 'wc_get_account_endpoint_url' ) ) {
+			$this->markTestSkipped( 'WooCommerce active; native fallback not exercised.' );
+		}
+		wp_set_current_user( 0 );
+		$method = new ReflectionMethod( 'Newspack\Reader_Activation', 'get_account_link' );
+		$method->setAccessible( true );
+		$link = $method->invoke( null );
+		$this->assertStringContainsString( 'data-newspack-reader-account-link', $link );
+	}
+
+	/**
 	 * Test that the prerequisites status no longer exposes skip-related keys.
 	 */
 	public function test_prerequisites_status_has_no_skip_keys() {
