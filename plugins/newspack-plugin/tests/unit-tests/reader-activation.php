@@ -311,17 +311,20 @@ class Newspack_Test_Reader_Activation extends WP_UnitTestCase {
 
 		$this->assertArrayNotHasKey( 'reader_revenue', $prerequisites, 'Reader Revenue prerequisite should be removed.' );
 		$this->assertArrayNotHasKey( 'ras_campaign', $prerequisites, 'Campaign defaults prerequisite should be removed.' );
+		// NPPD-1566: the Transactional Emails prerequisite was removed — its
+		// settings moved to the Emails screen with valid derived defaults, so
+		// they no longer gate Reader Activation.
+		$this->assertArrayNotHasKey( 'emails', $prerequisites, 'Transactional Emails prerequisite should be removed (NPPD-1566).' );
 
-		// First three are always present and ordered.
+		// First two are always present and ordered.
 		$keys = array_keys( $prerequisites );
-		$this->assertSame( 'emails', $keys[0], 'Transactional Emails should be first.' );
-		$this->assertSame( 'terms_conditions', $keys[1], 'Legal Pages should be second.' );
-		$this->assertSame( 'recaptcha', $keys[2], 'reCAPTCHA should be third.' );
+		$this->assertSame( 'terms_conditions', $keys[0], 'Legal Pages should be first.' );
+		$this->assertSame( 'recaptcha', $keys[1], 'reCAPTCHA should be second.' );
 
 		// ESP is gated on Newspack Newsletters; in the test env it is absent.
 		if ( class_exists( '\Newspack_Newsletters' ) ) {
 			$this->assertArrayHasKey( 'esp', $prerequisites, 'ESP should be present when Newsletters exists.' );
-			$this->assertSame( 'esp', $keys[3], 'ESP should be fourth when present.' );
+			$this->assertSame( 'esp', $keys[2], 'ESP should be third when present.' );
 		} else {
 			$this->assertArrayNotHasKey( 'esp', $prerequisites, 'ESP should be absent without Newsletters.' );
 		}
