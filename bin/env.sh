@@ -99,8 +99,11 @@ parse_worktree_mount() {
 # branch ref can't be resolved (e.g., detached HEAD).
 resolve_unsanitized_branch() {
     local safe_branch="$1"
+    # Optional explicit worktree dir. Tier-2 worktrees live at
+    # worktrees/standalone/<repo>/<safe_branch>; default to the tier-1 location.
+    local wt_dir="${2:-$NABSPATH/worktrees/$safe_branch}"
     local resolved
-    resolved=$(git -C "$NABSPATH/worktrees/$safe_branch" branch --show-current 2>/dev/null)
+    resolved=$(git -C "$wt_dir" branch --show-current 2>/dev/null)
     [[ -n "$resolved" ]] && echo "$resolved" || echo "$safe_branch"
 }
 
@@ -153,9 +156,9 @@ case $1 in
                     # discovered by path -- no registration).
                     wt_host_path=$(get_repo_host_path "$wt_repo")
                     if [[ -z "$wt_host_path" ]]; then
-                        if [[ -d "$NABSPATH/repos/plugins/$wt_repo" ]]; then
+                        if [[ -e "$NABSPATH/repos/plugins/$wt_repo/.git" ]]; then
                             wt_host_path="repos/plugins/$wt_repo"
-                        elif [[ -d "$NABSPATH/repos/themes/$wt_repo" ]]; then
+                        elif [[ -e "$NABSPATH/repos/themes/$wt_repo/.git" ]]; then
                             wt_host_path="repos/themes/$wt_repo"
                         fi
                     fi
@@ -644,7 +647,11 @@ MIGRATE
             # form.
             worktrees=""
             while IFS='|' read -r repo safe_branch wt_kind; do
-                branch=$(resolve_unsanitized_branch "$safe_branch")
+                if [[ "$wt_kind" == standalone ]]; then
+                    branch=$(resolve_unsanitized_branch "$safe_branch" "$NABSPATH/worktrees/standalone/$repo/$safe_branch")
+                else
+                    branch=$(resolve_unsanitized_branch "$safe_branch")
+                fi
                 [[ -n "$worktrees" ]] && worktrees="$worktrees,"
                 worktrees="${worktrees}${repo}:${branch}"
             done < <(each_worktree_in_env "$f")
@@ -654,7 +661,11 @@ MIGRATE
                 echo "  $name ($status) https://${domain}/"
                 # Show worktrees mounted by this environment.
                 while IFS='|' read -r repo safe_branch wt_kind; do
-                    branch=$(resolve_unsanitized_branch "$safe_branch")
+                    if [[ "$wt_kind" == standalone ]]; then
+                        branch=$(resolve_unsanitized_branch "$safe_branch" "$NABSPATH/worktrees/standalone/$repo/$safe_branch")
+                    else
+                        branch=$(resolve_unsanitized_branch "$safe_branch")
+                    fi
                     echo "    └ $repo ($branch)"
                 done < <(each_worktree_in_env "$f")
             fi

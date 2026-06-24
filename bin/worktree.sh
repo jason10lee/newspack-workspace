@@ -155,6 +155,14 @@ case $1 in
             fi
             standalone_dir="$NABSPATH/$repo_path"
             worktree_dir="$NABSPATH/worktrees/standalone/$repo/$safe_branch"
+            # Resolve the worktree's actual branch (the caller may pass the
+            # mount-derived safe form, e.g. `n env destroy` passes "feat-foo" for
+            # branch "feat/foo"); fall back to the passed value if the worktree is gone.
+            del_branch="$branch"
+            if [[ -d "$worktree_dir" ]]; then
+                resolved=$(git -C "$worktree_dir" branch --show-current 2>/dev/null)
+                [[ -n "$resolved" ]] && del_branch="$resolved"
+            fi
             if [[ ! -d "$worktree_dir" ]] && ! (cd "$standalone_dir" 2>/dev/null && git show-ref --verify --quiet "refs/heads/$branch"); then
                 echo "Nothing to remove: no worktree or branch '$branch' found in $repo."
                 exit 0
@@ -170,7 +178,7 @@ case $1 in
                 fi
             done
             echo "Worktree: $worktree_dir"
-            echo "Branch:   $branch in $repo (will be deleted)"
+            echo "Branch:   $del_branch in $repo (will be deleted)"
             if [[ -d "$worktree_dir" ]]; then
                 changes=$(cd "$worktree_dir" && git status --porcelain 2>/dev/null)
                 if [[ -n "$changes" ]]; then
@@ -178,7 +186,7 @@ case $1 in
                     echo "WARNING: Worktree has uncommitted changes:"
                     echo "$changes" | head -10
                 fi
-                unpushed=$(cd "$worktree_dir" && git log --oneline "origin/$branch..$branch" 2>/dev/null)
+                unpushed=$(cd "$worktree_dir" && git log --oneline "origin/$del_branch..$del_branch" 2>/dev/null)
                 if [[ -n "$unpushed" ]]; then
                     echo ""
                     echo "WARNING: Branch has unpushed commits:"
@@ -199,7 +207,7 @@ case $1 in
             else
                 git worktree prune
             fi
-            git branch -D "$branch" 2>/dev/null && echo "Deleted branch $branch in $repo"
+            git branch -D "$del_branch" 2>/dev/null && echo "Deleted branch $del_branch in $repo"
             # Best-effort cleanup of empty parent dirs.
             rmdir "$NABSPATH/worktrees/standalone/$repo" 2>/dev/null
             rmdir "$NABSPATH/worktrees/standalone" 2>/dev/null

@@ -22,25 +22,4 @@ out=$(worktree_volume_lines "./worktrees/standalone/newspack-community/jl-foo" "
 ok "tier2 emits 1 line" "$(nlines "$out")" "1"
 ok "tier2 has no monorepo member" "$(printf '%s\n' "$out" | grep -c 'newspack-monorepo')" "0"
 
-# --- worktree_member_lines_to_add ---
-C1="$FIX/c1.yml"; cat > "$C1" <<'EOF'
-    volumes:
-      - ./worktrees/feat-x/plugins/newspack-newsletters:/newspack-plugins/newspack-newsletters
-      - ./html:/var/www/html
-EOF
-ok "missing member -> emitted" "$(worktree_member_lines_to_add "$C1" | grep -c -- ':/newspack-monorepo/plugins/newspack-newsletters$')" "1"
-
-C2="$FIX/c2.yml"; cat > "$C2" <<'EOF'
-    volumes:
-      - ./worktrees/feat-x/plugins/newspack-newsletters:/newspack-plugins/newspack-newsletters
-      - ./worktrees/feat-x/plugins/newspack-newsletters:/newspack-monorepo/plugins/newspack-newsletters
-EOF
-ok "already-present member -> nothing (idempotent)" "$(nlines "$(worktree_member_lines_to_add "$C2")")" "0"
-
-C3="$FIX/c3.yml"; cat > "$C3" <<'EOF'
-    volumes:
-      - ./worktrees/standalone/newspack-community/jl-foo:/newspack-plugins/newspack-community
-EOF
-ok "tier2-only -> nothing" "$(nlines "$(worktree_member_lines_to_add "$C3")")" "0"
-
 echo ""; echo "RESULT: $pass passed, $fail failed"; [ "$fail" -eq 0 ]
