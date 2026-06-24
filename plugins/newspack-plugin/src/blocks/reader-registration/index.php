@@ -71,7 +71,7 @@ function enqueue_scripts() {
 		NEWSPACK_PLUGIN_VERSION,
 		true
 	);
-	\wp_script_add_data( $handle, 'async', true );
+	\wp_script_add_data( $handle, 'defer', true );
 	\wp_script_add_data( $handle, 'amp-plus', true );
 	\wp_localize_script(
 		$handle,
