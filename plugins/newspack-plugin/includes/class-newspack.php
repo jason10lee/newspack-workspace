@@ -109,6 +109,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/class-comment-display-name.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-action-scheduler.php';
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/class-integrations.php';
+		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/class-my-account.php';
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/class-promoted-fields.php';
 		include_once NEWSPACK_ABSPATH . 'includes/reader-activation/class-session-hydration.php';
 		include_once NEWSPACK_ABSPATH . 'includes/data-events/class-utils.php';
@@ -165,17 +166,9 @@ final class Newspack {
 		// Newspack Wizards and Sections.
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-newspack-dashboard.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-newspack-settings.php';
-		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/class-insights-wizard.php';
-		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/class-insights-section-audience.php';
-		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/class-insights-section-engagement.php';
-		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/class-insights-section-conversion.php';
-		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/class-insights-section-gates.php';
-		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/class-insights-section-prompts.php';
-		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/class-insights-section-subscribers.php';
-		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/class-insights-section-donors.php';
-		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/class-insights-section-advertising.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-custom-events-section.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-emails-section.php';
+		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-email-preview.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-syndication-section.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-seo-section.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-pixels-section.php';
@@ -238,6 +231,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/co-authors-plus/class-nicename-change.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/co-authors-plus/class-nicename-change-ui.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/co-authors-plus/class-co-authors-plus-rss-feed.php';
+		include_once NEWSPACK_ABSPATH . 'includes/plugins/co-authors-plus/class-co-authors-plus-count-user-posts-fix.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/co-authors-plus/class-search-authors-limit.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-complianz.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/wc-memberships/class-memberships.php';
@@ -253,12 +247,14 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-teams-for-memberships.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-newspack-elections.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-yoast.php';
+		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-parsely.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-primary-category.php';
 
 		include_once NEWSPACK_ABSPATH . 'includes/class-patches.php';
 		include_once NEWSPACK_ABSPATH . 'includes/polyfills/class-amp-polyfills.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-performance.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-default-image.php';
+		include_once NEWSPACK_ABSPATH . 'includes/class-default-templates.php';
 
 		include_once NEWSPACK_ABSPATH . 'includes/optional-modules/class-optional-modules.php';
 		include_once NEWSPACK_ABSPATH . 'includes/optional-modules/class-rss.php';

@@ -250,4 +250,102 @@ class Newspack_Test_Reader_Activation extends WP_UnitTestCase {
 
 		wp_delete_user( $user_id ); // Clean up.
 	}
+
+	/**
+	 * The admin bar is hidden on the front end for readers but kept for admins.
+	 */
+	public function test_hide_admin_bar_for_readers() {
+		$reader_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		wp_set_current_user( $reader_id );
+		$this->assertFalse( Reader_Activation::hide_admin_bar_for_readers( true ) );
+
+		$admin_id = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		wp_set_current_user( $admin_id );
+		$this->assertTrue( Reader_Activation::hide_admin_bar_for_readers( true ) );
+
+		wp_set_current_user( 0 );
+	}
+
+	/**
+	 * The account link renders for logged-out visitors without WooCommerce.
+	 */
+	public function test_account_link_without_woocommerce() {
+		if ( function_exists( 'wc_get_account_endpoint_url' ) ) {
+			$this->markTestSkipped( 'WooCommerce active; native fallback not exercised.' );
+		}
+		wp_set_current_user( 0 );
+		$method = new ReflectionMethod( 'Newspack\Reader_Activation', 'get_account_link' );
+		$method->setAccessible( true );
+		$link = $method->invoke( null );
+		$this->assertStringContainsString( 'data-newspack-reader-account-link', $link );
+	}
+
+	/**
+	 * Test that the prerequisites status no longer exposes skip-related keys.
+	 */
+	public function test_prerequisites_status_has_no_skip_keys() {
+		$prerequisites = Reader_Activation::get_prerequisites_status();
+		$this->assertNotEmpty( $prerequisites );
+		foreach ( $prerequisites as $slug => $prerequisite ) {
+			$this->assertArrayNotHasKey( 'skippable', $prerequisite, "Prerequisite '$slug' should not expose 'skippable'." );
+			$this->assertArrayNotHasKey( 'is_skipped', $prerequisite, "Prerequisite '$slug' should not expose 'is_skipped'." );
+			$this->assertArrayNotHasKey( 'action_enabled', $prerequisite, "Prerequisite '$slug' should not expose 'action_enabled'." );
+			$this->assertArrayNotHasKey( 'disabled_text', $prerequisite, "Prerequisite '$slug' should not expose 'disabled_text'." );
+		}
+	}
+
+	/**
+	 * Test that the auto-enable and skip helpers have been removed.
+	 */
+	public function test_auto_enable_and_skip_helpers_removed() {
+		$this->assertFalse( method_exists( Reader_Activation::class, 'is_ras_ready_to_configure' ), 'is_ras_ready_to_configure() should be removed.' );
+		$this->assertFalse( method_exists( Reader_Activation::class, 'skip' ), 'skip() should be removed.' );
+		$this->assertFalse( method_exists( Reader_Activation::class, 'is_skipped' ), 'is_skipped() should be removed.' );
+	}
+
+	/**
+	 * Test that removed prerequisites are gone and ordering is correct.
+	 */
+	public function test_prerequisites_status_cleanup() {
+		$prerequisites = Reader_Activation::get_prerequisites_status();
+
+		$this->assertArrayNotHasKey( 'reader_revenue', $prerequisites, 'Reader Revenue prerequisite should be removed.' );
+		$this->assertArrayNotHasKey( 'ras_campaign', $prerequisites, 'Campaign defaults prerequisite should be removed.' );
+		// NPPD-1566: the Transactional Emails prerequisite was removed — its
+		// settings moved to the Emails screen with valid derived defaults, so
+		// they no longer gate Reader Activation.
+		$this->assertArrayNotHasKey( 'emails', $prerequisites, 'Transactional Emails prerequisite should be removed (NPPD-1566).' );
+
+		// First two are always present and ordered.
+		$keys = array_keys( $prerequisites );
+		$this->assertSame( 'terms_conditions', $keys[0], 'Legal Pages should be first.' );
+		$this->assertSame( 'recaptcha', $keys[1], 'reCAPTCHA should be second.' );
+
+		// ESP is gated on Newspack Newsletters; in the test env it is absent.
+		if ( class_exists( '\Newspack_Newsletters' ) ) {
+			$this->assertArrayHasKey( 'esp', $prerequisites, 'ESP should be present when Newsletters exists.' );
+			$this->assertSame( 'esp', $keys[2], 'ESP should be third when present.' );
+		} else {
+			$this->assertArrayNotHasKey( 'esp', $prerequisites, 'ESP should be absent without Newsletters.' );
+		}
+	}
+
+	/**
+	 * Test the reader-revenue platform first-run signal.
+	 */
+	public function test_is_platform_selected() {
+		delete_option( 'newspack_reader_revenue_platform' );
+		$this->assertFalse(
+			\Newspack\Donations::is_platform_selected(),
+			'Platform should report not selected when the option was never saved.'
+		);
+
+		\Newspack\Donations::set_platform_slug( 'wc' );
+		$this->assertTrue(
+			\Newspack\Donations::is_platform_selected(),
+			'Platform should report selected after an explicit save.'
+		);
+
+		delete_option( 'newspack_reader_revenue_platform' );
+	}
 }
