@@ -25,6 +25,8 @@ class Newspack_Test_Modal_Checkout {
 	/**
 	 * Get user from email.
 	 *
+	 * Keep this fallback aligned with Newspack_Blocks\Modal_Checkout::get_user_id_from_email().
+	 *
 	 * @return false|int User ID if found by email address, false otherwise.
 	 */
 	public static function get_user_id_from_email() {
