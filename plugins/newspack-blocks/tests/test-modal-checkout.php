@@ -8,11 +8,50 @@
 /**
  * Modal checkout.
  */
+if ( ! function_exists( 'wcs_is_product_limited_for_user' ) ) {
+	/**
+	 * Mock WooCommerce Subscriptions product limiting.
+	 *
+	 * @param object $product Product.
+	 * @param int    $user_id User ID.
+	 *
+	 * @return bool
+	 */
+	function wcs_is_product_limited_for_user( $product, $user_id ) {
+		global $newspack_blocks_test_limited_product_id, $newspack_blocks_test_limited_user_id;
+
+		return (
+			$product &&
+			method_exists( $product, 'get_id' ) &&
+			(int) $product->get_id() === (int) $newspack_blocks_test_limited_product_id &&
+			(int) $user_id === (int) $newspack_blocks_test_limited_user_id
+		);
+	}
+}
+
+if ( ! function_exists( 'wcs_get_product_limitation' ) ) {
+	/**
+	 * Mock WooCommerce Subscriptions product limitation type.
+	 *
+	 * @param int $product_id Product ID.
+	 *
+	 * @return string
+	 */
+	function wcs_get_product_limitation( $product_id ) {
+		unset( $product_id );
+		return 'any';
+	}
+}
+
 class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	/**
 	 * Clean up request data.
 	 */
 	public function tear_down() {
+		global $newspack_blocks_test_limited_product_id, $newspack_blocks_test_limited_user_id;
+		$newspack_blocks_test_limited_product_id = null;
+		$newspack_blocks_test_limited_user_id    = null;
+		remove_all_filters( 'woocommerce_cart_item_removed_message' );
 		unset( $_POST['billing_email'], $_POST['post_data'], $_REQUEST['modal_checkout'], $_REQUEST['post_data'] );
 		parent::tear_down();
 	}
@@ -305,18 +344,32 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
-	 * It does not resolve subscription limits from serialized post_data outside modal checkout.
+	 * It resolves subscription limits from serialized post_data outside modal checkout.
 	 */
-	public function test_subscriptions_product_limited_for_user_ignores_serialized_post_data_outside_modal_checkout() {
-		self::factory()->user->create(
+	public function test_subscriptions_product_limited_for_user_resolves_serialized_post_data_outside_modal_checkout() {
+		global $newspack_blocks_test_limited_product_id, $newspack_blocks_test_limited_user_id;
+
+		$user_id = self::factory()->user->create(
 			[
 				'user_email' => 'repeat@example.com',
 			]
 		);
+		$product = new class() {
+			/**
+			 * Get product ID.
+			 *
+			 * @return int
+			 */
+			public function get_id() {
+				return 123;
+			}
+		};
 
+		$newspack_blocks_test_limited_product_id = 123;
+		$newspack_blocks_test_limited_user_id    = $user_id;
 		$this->set_serialized_post_data( 'billing_first_name=Repeat&billing_email=repeat%40example.com' );
 
-		$this->assertFalse( \Newspack_Blocks\Modal_Checkout::subscriptions_product_limited_for_user( false, null, 0 ) );
+		$this->assertTrue( \Newspack_Blocks\Modal_Checkout::subscriptions_product_limited_for_user( false, $product, 0 ) );
 	}
 
 	/**

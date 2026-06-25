@@ -636,11 +636,9 @@ class WooCommerce_Subscriptions {
 
 		$user_id = get_current_user_id();
 
-		// If not logged in during modal checkout, try to get the user ID from the billing email.
+		// Standard and modal checkout refreshes can both carry guest emails in serialized post_data.
 		if (
 			! $user_id &&
-			method_exists( 'Newspack_Blocks\Modal_Checkout', 'is_modal_checkout' ) &&
-			\Newspack_Blocks\Modal_Checkout::is_modal_checkout() &&
 			method_exists( 'Newspack_Blocks\Modal_Checkout', 'get_user_id_from_email' )
 		) {
 			$user_id = \Newspack_Blocks\Modal_Checkout::get_user_id_from_email();

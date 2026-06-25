@@ -89,9 +89,9 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Trial limiting does not resolve serialized checkout emails outside modal checkout.
+	 * Trial limiting resolves serialized checkout emails outside modal checkout.
 	 */
-	public function test_limit_free_trials_does_not_resolve_serialized_email_outside_modal_checkout() {
+	public function test_limit_free_trials_resolves_serialized_email_outside_modal_checkout() {
 		$this->ensure_modal_checkout_available();
 
 		$user_id = $this->factory->user->create(
@@ -114,7 +114,7 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 		);
 		$this->set_serialized_post_data( 'billing_first_name=Repeat&billing_email=repeat%40example.com' );
 
-		$this->assertSame( 14, WooCommerce_Subscriptions::limit_free_trials_to_one_per_user( 14, $product ) );
+		$this->assertSame( 0, WooCommerce_Subscriptions::limit_free_trials_to_one_per_user( 14, $product ) );
 	}
 
 	/**

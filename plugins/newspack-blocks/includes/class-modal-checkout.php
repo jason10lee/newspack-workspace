@@ -2367,9 +2367,10 @@ final class Modal_Checkout {
 	 * @param int            $user_id The user ID.
 	 */
 	public static function subscriptions_product_limited_for_user( $is_limited_for_user, $product, $user_id ) {
-		if ( ! self::is_modal_checkout() || $user_id !== 0 ) {
+		if ( $user_id !== 0 ) {
 			return $is_limited_for_user;
 		}
+		// Standard and modal checkout refreshes can both carry guest emails in serialized post_data.
 		$id_from_email = self::get_user_id_from_email();
 		if ( $id_from_email ) {
 			$is_limited_for_user = wcs_is_product_limited_for_user( $product, $id_from_email );
