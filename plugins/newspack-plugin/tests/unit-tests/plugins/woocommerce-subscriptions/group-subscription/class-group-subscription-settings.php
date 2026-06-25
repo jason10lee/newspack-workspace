@@ -314,4 +314,25 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 			'Metabox must not register for a post that is not a subscription.'
 		);
 	}
+
+	/**
+	 * Under HPOS a subscription's ID lives in a separate space from wp_posts and can coincide
+	 * with an ordinary post/product ID. Editing that unrelated post must NOT resolve to the
+	 * subscription or register the metabox on the wrong screen.
+	 */
+	public function test_metabox_not_registered_for_non_subscription_post_with_colliding_id() {
+		$subscription = $this->make_subscription_with_product( [ 'enabled' => 'yes' ] );
+		// A product whose ID happens to match the subscription's ID (the HPOS collision case).
+		$colliding_product = new WP_Post(
+			(object) [
+				'ID'        => $subscription->get_id(),
+				'post_type' => 'product',
+			]
+		);
+
+		$this->assertFalse(
+			$this->register_metabox_returns_registered( $colliding_product ),
+			'Metabox must not register on a non-subscription post even when its ID collides with a subscription ID.'
+		);
+	}
 }

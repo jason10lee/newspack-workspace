@@ -326,18 +326,38 @@ class Group_Subscription_Settings {
 	}
 
 	/**
+	 * Resolve a subscription from a metabox hook argument.
+	 *
+	 * WP core passes a WP_Post on the classic (CPT) order editor; WooCommerce passes the
+	 * order object under HPOS. A WP_Post is resolved by ID only when it is a
+	 * `shop_subscription`, so an unrelated post or product whose ID happens to coincide
+	 * with an HPOS subscription ID (the two live in separate ID spaces) is never mistaken
+	 * for a subscription.
+	 *
+	 * @param WP_Post|WC_Subscription|int $post_or_subscription The metabox subject.
+	 * @return WC_Subscription|false The subscription, or false if the argument is not one.
+	 */
+	private static function resolve_hook_subscription( $post_or_subscription ) {
+		if ( is_a( $post_or_subscription, 'WP_Post' ) ) {
+			if ( 'shop_subscription' !== $post_or_subscription->post_type ) {
+				return false;
+			}
+			$post_or_subscription = $post_or_subscription->ID;
+		}
+		return WooCommerce_Subscriptions::sanitize_subscription( $post_or_subscription );
+	}
+
+	/**
 	 * Add Group Subscription meta box to subscription admin pages.
 	 *
 	 * @param string                  $post_type The post type of the current post being edited.
 	 * @param WP_Post|WC_Subscription $post_or_subscription The post or subscription currently being edited.
 	 */
 	public static function add_group_subscription_meta_box( $post_type, $post_or_subscription ) {
-		// On the classic (non-HPOS) order editor WP core passes a WP_Post as the second
-		// argument; under HPOS it passes the WC_Subscription object. Resolve either form
-		// to a subscription so the metabox registers in both storage modes.
-		$subscription = WooCommerce_Subscriptions::sanitize_subscription(
-			is_a( $post_or_subscription, 'WP_Post' ) ? $post_or_subscription->ID : $post_or_subscription
-		);
+		// On the classic (non-HPOS) order editor WP core passes a WP_Post; under HPOS it
+		// passes the WC_Subscription object. Resolve either form so the metabox registers
+		// in both storage modes.
+		$subscription = self::resolve_hook_subscription( $post_or_subscription );
 		if ( ! Content_Gate::is_newspack_feature_enabled() || ! $subscription ) {
 			return;
 		}
@@ -359,9 +379,7 @@ class Group_Subscription_Settings {
 	public static function add_group_subscription_options( $subscription ) {
 		// WP core passes the metabox callback a WP_Post (classic editor) or the
 		// WC_Subscription (HPOS); normalize to a subscription before rendering.
-		$subscription = WooCommerce_Subscriptions::sanitize_subscription(
-			is_a( $subscription, 'WP_Post' ) ? $subscription->ID : $subscription
-		);
+		$subscription = self::resolve_hook_subscription( $subscription );
 		if ( ! Content_Gate::is_newspack_feature_enabled() || ! $subscription ) {
 			return;
 		}
