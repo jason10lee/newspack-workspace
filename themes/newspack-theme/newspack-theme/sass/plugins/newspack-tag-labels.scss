@@ -36,17 +36,38 @@ amp-script .tag-labels {
 }
 /* stylelint-enable */
 
-/* Single Posts */
-.single {
-	// When categories are visible
-	.tag-labels {
+// Tag labels render after the category / sponsor label and sit on the same line,
+// mirroring the sponsor → category convention. The category (or sponsor) `.cat-links`
+// is immediately followed by the tag-labels `.cat-links.tag-labels` in every context
+// (single posts, home, archive, search, and the Content Loop / Carousel blocks), so
+// keep the preceding label inline-block and space the tag labels that follow it.
+.cat-links:has( + .tag-labels ) {
+	display: inline-block;
+}
+.cat-links + .tag-labels {
+	display: inline-flex;
+	margin-left: 0.5em;
+}
+
+// In the Content Loop (`.wpnbha`) and Carousel (`.wpnbpc`) blocks, `.cat-links` is set
+// to `display: flex` (block-level), which would stack the category and the tag labels
+// that follow it. Re-assert `inline-flex` with higher specificity so the category and
+// tag labels share one line, matching single posts and the sponsor convention.
+.wpnbha,
+.wpnbpc {
+	.cat-links:has( + .tag-labels ),
+	.cat-links + .tag-labels {
 		display: inline-flex;
 	}
-	// Labels render before categories (matching the sponsor-label convention),
-	// so space the category that follows a label — mirrors `.sponsor-label + .cat-links`.
-	.tag-labels + .cat-links {
-		display: inline-block;
+	.cat-links + .tag-labels {
 		margin-left: 0.5em;
+	}
+}
+
+/* Single Posts */
+.single {
+	.tag-labels {
+		display: inline-flex;
 	}
 
 	// Workaround margin/padding override for featured images.
@@ -76,18 +97,9 @@ amp-script .tag-labels {
 	}
 }
 
-// Re-show the category that follows a tag label on search results.
-.search article .tag-labels + .cat-links {
-	display: inline-flex;
-}
-
 // Home page.
 .home {
 	article {
-		.tag-labels,
-		.tag-labels + .cat-links {
-			display: inline-flex;
-		}
 		.tag-labels a,
 		.tag-labels a:hover {
 			padding: 0.3em 0.5em;
