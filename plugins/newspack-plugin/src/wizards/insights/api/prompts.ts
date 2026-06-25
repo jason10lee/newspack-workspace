@@ -96,6 +96,9 @@ export interface PromptsPerformanceByPromptRow {
 	popup_id: number;
 	prompt_title: string;
 	intent: string;
+	// Friendly display label (NPPD-1758); null when the intent has no override,
+	// in which case the table falls back to humanizing `intent`.
+	intent_label: string | null;
 	placement: string;
 	impressions: number;
 	unique_viewers: number;
@@ -116,6 +119,9 @@ export interface PromptsPerformanceByPromptRow {
  */
 export interface PromptsPerformanceByIntentRow {
 	intent: string;
+	// Friendly display label (NPPD-1758); null when the intent has no override,
+	// in which case the table falls back to humanizing `intent`.
+	intent_label: string | null;
 	impressions: number;
 	unique_viewers: number;
 	ctr: number | null;
