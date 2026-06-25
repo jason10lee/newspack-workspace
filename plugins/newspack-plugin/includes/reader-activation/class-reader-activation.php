@@ -172,7 +172,7 @@ final class Reader_Activation {
 			self::SCRIPT_HANDLE,
 			Newspack::plugin_url() . '/dist/reader-activation.js',
 			$script_dependencies,
-			NEWSPACK_PLUGIN_VERSION,
+			Newspack::asset_version( 'reader-activation' ),
 			[
 				'strategy'  => 'async',
 				'in_footer' => true,
@@ -199,7 +199,7 @@ final class Reader_Activation {
 				self::AUTH_SCRIPT_HANDLE,
 				Newspack::plugin_url() . '/dist/reader-auth.js',
 				[ self::SCRIPT_HANDLE ],
-				NEWSPACK_PLUGIN_VERSION,
+				Newspack::asset_version( 'reader-auth' ),
 				[
 					'strategy'  => 'async',
 					'in_footer' => true,
@@ -212,7 +212,7 @@ final class Reader_Activation {
 				self::AUTH_SCRIPT_HANDLE,
 				Newspack::plugin_url() . '/dist/reader-auth.css',
 				[],
-				NEWSPACK_PLUGIN_VERSION
+				Newspack::asset_version( 'reader-auth' )
 			);
 		}
 
@@ -224,7 +224,7 @@ final class Reader_Activation {
 				self::NEWSLETTERS_SCRIPT_HANDLE,
 				Newspack::plugin_url() . '/dist/newsletters-signup.js',
 				[ self::SCRIPT_HANDLE ],
-				NEWSPACK_PLUGIN_VERSION,
+				Newspack::asset_version( 'newsletters-signup' ),
 				[
 					'strategy'  => 'async',
 					'in_footer' => true,
@@ -245,7 +245,7 @@ final class Reader_Activation {
 				self::NEWSLETTERS_SCRIPT_HANDLE,
 				Newspack::plugin_url() . '/dist/newsletters-signup.css',
 				[],
-				NEWSPACK_PLUGIN_VERSION
+				Newspack::asset_version( 'newsletters-signup' )
 			);
 		}
 	}
