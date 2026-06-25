@@ -52,11 +52,14 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 	/**
 	 * Render the inserted child blocks to email-safe HTML.
 	 *
-	 * Concatenates each child's `innerHTML` after running it through
-	 * `do_blocks()`, which renders any nested blocks (so no raw block-comment
-	 * delimiters survive) and, while the package's `render_block` filter is
-	 * active, returns them email-processed. Kept as a static so it stays
-	 * unit-testable without booting the WC engine.
+	 * Wraps each child back into its block delimiter, then runs it through
+	 * `do_blocks()` so the child block itself is rendered — its own
+	 * `render_email_callback` fires via the package's `render_block` filter, and
+	 * any nested blocks render too (no raw block-comment delimiters survive).
+	 * Rendering the bare `innerHTML` instead would render only the inner blocks
+	 * and leave the outer block (e.g. `core/columns`) as raw markup that never
+	 * gets its email wrapper — so its columns overflow the email width. Kept as a
+	 * static so it stays unit-testable without booting the WC engine.
 	 *
 	 * @param array $children The `innerBlocksToInsert` array of child blocks.
 	 * @return string The concatenated rendered HTML, in child order.
@@ -64,10 +67,42 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 	public static function render_inserted_blocks( array $children ): string {
 		$html = '';
 		foreach ( $children as $child ) {
-			$inner_html = is_array( $child ) ? ( $child['innerHTML'] ?? '' ) : '';
-			$html      .= do_blocks( (string) $inner_html );
+			if ( ! is_array( $child ) ) {
+				continue;
+			}
+			// Wrap a named child back into its delimiter so the outer block is
+			// email-rendered (its render_email_callback fires). A child without a
+			// block name is unexpected — the editor always stores one — but fall
+			// back to rendering its inner HTML so content is never dropped.
+			$html .= empty( $child['blockName'] )
+				? do_blocks( (string) ( $child['innerHTML'] ?? '' ) )
+				: do_blocks( self::serialize_inserted_block( $child ) );
 		}
 		return $html;
+	}
+
+	/**
+	 * Wrap a parsed child block back into block markup for `do_blocks()`.
+	 *
+	 * Rebuilds the block delimiter around the saved `innerHTML` (which already
+	 * carries the child's own inner-block delimiters), so `do_blocks()` re-parses
+	 * and renders the full block — outer wrapper included. Mirrors core's
+	 * `serialize_block()` but reads from `innerHTML`, since the inserted children
+	 * carry `innerHTML` but not necessarily `innerContent`.
+	 *
+	 * @param array $child A child block shaped `{ blockName, attrs, innerHTML }`.
+	 * @return string Block markup ready for `do_blocks()`.
+	 */
+	private static function serialize_inserted_block( array $child ): string {
+		$name       = (string) $child['blockName'];
+		$short_name = str_starts_with( $name, 'core/' ) ? substr( $name, 5 ) : $name;
+		$attrs      = empty( $child['attrs'] ) ? '' : ' ' . serialize_block_attributes( $child['attrs'] );
+		$inner_html = (string) ( $child['innerHTML'] ?? '' );
+
+		if ( '' === trim( $inner_html ) ) {
+			return "<!-- wp:{$short_name}{$attrs} /-->";
+		}
+		return "<!-- wp:{$short_name}{$attrs} -->{$inner_html}<!-- /wp:{$short_name} -->";
 	}
 }
 

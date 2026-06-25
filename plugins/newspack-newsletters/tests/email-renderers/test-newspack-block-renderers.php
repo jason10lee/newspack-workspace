@@ -35,10 +35,12 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 	public function test_posts_inserter_renders_nested_blocks_without_delimiters() {
 		$children = [
 			[
+				// A real inserted child carries the block's INNER html (no outer
+				// `<!-- wp:columns -->` delimiter — that is implied by blockName).
 				'blockName' => 'core/columns',
-				'innerHTML' => '<!-- wp:columns --><div class="wp-block-columns">'
+				'innerHTML' => '<div class="wp-block-columns">'
 					. '<!-- wp:column --><div class="wp-block-column"><!-- wp:paragraph --><p>Hello</p><!-- /wp:paragraph --></div><!-- /wp:column -->'
-					. '</div><!-- /wp:columns -->',
+					. '</div>',
 			],
 		];
 
@@ -145,10 +147,12 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 	public function test_posts_inserter_integration_renders_columns() {
 		Editor_Bootstrap::init();
 
-		$columns_inner = '<!-- wp:columns --><div class="wp-block-columns">'
+		// A real inserted child carries the block's INNER html — no outer
+		// `<!-- wp:columns -->` delimiter (that is implied by blockName).
+		$columns_inner = '<div class="wp-block-columns">'
 			. '<!-- wp:column --><div class="wp-block-column"><!-- wp:paragraph --><p>Left column body</p><!-- /wp:paragraph --></div><!-- /wp:column -->'
 			. '<!-- wp:column --><div class="wp-block-column"><!-- wp:paragraph --><p>Right column body</p><!-- /wp:paragraph --></div><!-- /wp:column -->'
-			. '</div><!-- /wp:columns -->';
+			. '</div>';
 
 		$content = $this->serialize_posts_inserter(
 			[
@@ -180,6 +184,11 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 
 		// The columns must be rendered as the email-block column markup, not leaked raw.
 		$this->assertStringContainsString( 'wp-block-column', $html, 'Expected the inserted columns to render as column markup.' );
+
+		// The outer columns block must be email-rendered with its width wrapper, not
+		// left as a raw div that overflows the email body — the override must render
+		// the whole child block, not only its inner blocks.
+		$this->assertStringContainsString( 'email-block-columns', $html, 'Expected the inserted columns to get the email-block-columns width wrapper.' );
 
 		// No raw block-comment delimiters may leak into the email body — this is the bug.
 		$this->assertStringNotContainsString( '<!-- wp:', $html, 'Expected no raw block-comment delimiters in the rendered email.' );
@@ -213,7 +222,10 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 	public function test_share_integration_public_renders_anchor() {
 		Editor_Bootstrap::init();
 
-		$content = '<!-- wp:newspack-newsletters/share {"href":"mailto:?body=read-this","content":"Share this"} -->'
+		// Mirror production: `content` is an HTML-sourced RichText attribute, so it
+		// is NOT serialized into the block comment — the link text lives only in the
+		// saved anchor. The override must recover it from the inner HTML.
+		$content = '<!-- wp:newspack-newsletters/share {"href":"mailto:?body=read-this"} -->'
 			. '<p class="newspack-newsletters-share-block"><a href="mailto:?body=read-this">Share this</a></p>'
 			. '<!-- /wp:newspack-newsletters/share -->';
 
@@ -242,7 +254,10 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 	public function test_share_integration_non_public_renders_no_anchor() {
 		Editor_Bootstrap::init();
 
-		$content = '<!-- wp:newspack-newsletters/share {"href":"mailto:?body=read-this","content":"Share this"} -->'
+		// Mirror production: `content` is an HTML-sourced RichText attribute, so it
+		// is NOT serialized into the block comment — the link text lives only in the
+		// saved anchor. The override must recover it from the inner HTML.
+		$content = '<!-- wp:newspack-newsletters/share {"href":"mailto:?body=read-this"} -->'
 			. '<p class="newspack-newsletters-share-block"><a href="mailto:?body=read-this">Share this</a></p>'
 			. '<!-- /wp:newspack-newsletters/share -->';
 

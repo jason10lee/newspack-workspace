@@ -58,6 +58,15 @@ class Share extends Abstract_Block_Renderer {
 		$href    = (string) ( $attrs['href'] ?? '' );
 		$content = (string) ( $attrs['content'] ?? '' );
 
+		// `content` is an HTML-sourced RichText attribute, so it is not serialized
+		// into the block delimiter that email rendering parses — the link text
+		// lives in the saved markup. Fall back to the saved anchor's inner HTML
+		// (mirroring the legacy renderer, which renders the share block from its
+		// inner HTML) so the email link isn't empty.
+		if ( '' === $content && preg_match( '/<a\b[^>]*>(.*?)<\/a>/is', (string) ( $parsed_block['innerHTML'] ?? '' ), $matches ) ) {
+			$content = $matches[1];
+		}
+
 		return self::build_share_html( $href, $content );
 	}
 
