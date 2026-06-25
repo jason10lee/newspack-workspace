@@ -262,6 +262,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 
 					const $productName = $cartItem.find( '.product-name' ).clone();
 					$productName.find( '.product-quantity' ).remove();
+					// Keep the DOM path text-only; the AJAX fallback is the HTML path because PHP runs it through wp_kses.
 					const productName = $productName.text().replace( /\s+/g, ' ' ).trim();
 					const productTotal = $cartItem.find( '.product-total' ).text().replace( /\s+/g, ' ' ).trim();
 					if ( productName && productTotal ) {
