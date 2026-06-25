@@ -57,9 +57,12 @@ function maybeRenderAfterSuccessButton( container, responseContainer, submitButt
 	const label = container.getAttribute( 'data-after-success-label' ) || 'Continue';
 	const button = document.createElement( 'button' );
 	button.type = 'button';
-	button.className = 'newspack-newsletters-subscribe__continue submit-button';
 	button.textContent = label;
-	// Inherit the form button's color styling for visual parity.
+	// Inherit the form button's classes and inline color styling for full visual
+	// parity (block-theme `wp-element-button`, named-palette `has-*` color classes,
+	// and custom hex styles). The spinner is a child node, and `in-progress` lives
+	// on the form, so the submit button carries no transient classes to strip.
+	button.className = 'newspack-newsletters-subscribe__continue ' + ( submitButton?.className || 'submit-button' );
 	const submitStyle = submitButton?.getAttribute( 'style' );
 	if ( submitStyle ) {
 		button.setAttribute( 'style', submitStyle );
