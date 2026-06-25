@@ -28,6 +28,52 @@ function domReady( callback ) {
 	document.addEventListener( 'DOMContentLoaded', callback );
 }
 
+/**
+ * After a successful subscribe, optionally present a "Continue" button that
+ * redirects the reader. This mirrors the Checkout Button block's afterSuccess
+ * behavior (click-through, not auto-redirect): 'custom' goes to a publisher-set
+ * URL, 'referrer' goes back to the previous page. An empty/absent behavior just
+ * leaves the success message in place, as before.
+ *
+ * The Checkout Button implements this inside the modal-checkout iframe
+ * (thankyou.php button + modal.js close handler); the subscription form has no
+ * modal, so it is re-implemented natively here against the AJAX success path.
+ *
+ * @param {HTMLElement} container         The block container holding the data-after-success-* config.
+ * @param {HTMLElement} responseContainer The success response container to append the button to.
+ * @param {HTMLElement} submitButton      The original form submit button, used to copy color styling.
+ * @return {void}
+ */
+function maybeRenderAfterSuccessButton( container, responseContainer, submitButton ) {
+	const behavior = container.getAttribute( 'data-after-success-behavior' );
+	if ( ! behavior ) {
+		return;
+	}
+	const url = container.getAttribute( 'data-after-success-url' );
+	// Match the Checkout Button: a 'custom' redirect with no URL is a no-op.
+	if ( 'custom' === behavior && ! url ) {
+		return;
+	}
+	const label = container.getAttribute( 'data-after-success-label' ) || 'Continue';
+	const button = document.createElement( 'button' );
+	button.type = 'button';
+	button.className = 'newspack-newsletters-subscribe__continue submit-button';
+	button.textContent = label;
+	// Inherit the form button's color styling for visual parity.
+	const submitStyle = submitButton?.getAttribute( 'style' );
+	if ( submitStyle ) {
+		button.setAttribute( 'style', submitStyle );
+	}
+	button.addEventListener( 'click', () => {
+		if ( 'custom' === behavior ) {
+			window.location.href = url;
+		} else if ( 'referrer' === behavior ) {
+			window.history.back();
+		}
+	} );
+	responseContainer.appendChild( button );
+}
+
 domReady( function () {
 	const successEvent = new Event( 'newspack-newsletters-subscribe-success' );
 	document.querySelectorAll( '.newspack-newsletters-subscribe' ).forEach( container => {
@@ -55,6 +101,7 @@ domReady( function () {
 			if ( status === 200 ) {
 				container.replaceChild( responseContainer, form );
 				form.dispatchEvent( successEvent );
+				maybeRenderAfterSuccessButton( container, responseContainer, submit );
 				window.newspackRAS = window.newspackRAS || [];
 				const formData = new FormData( form );
 				const lists = formData.getAll( 'lists[]' );
