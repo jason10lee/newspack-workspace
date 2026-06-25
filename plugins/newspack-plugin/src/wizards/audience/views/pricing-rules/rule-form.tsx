@@ -288,16 +288,23 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 				/>
 				<VStack spacing={ 4 }>
 					{ isNew ? (
-						<SelectControl
-							label={ __( 'Goal', 'newspack-plugin' ) }
-							value={ path }
-							options={ [
-								...( path === '' ? [ { label: __( 'Select a goal…', 'newspack-plugin' ), value: '' } ] : [] ),
-								...pathOptions(),
-							] }
-							onChange={ choosePath }
-							__next40pxDefaultSize
-						/>
+						<div className="newspack-pricing-rules__goal-grid">
+							{ pathOptions().map( opt => {
+								const selected = path === opt.value;
+								return (
+									<button
+										key={ opt.value }
+										type="button"
+										className={ `newspack-pricing-rules__goal-card${ selected ? ' is-selected' : '' }` }
+										aria-pressed={ selected }
+										onClick={ () => choosePath( opt.value ) }
+									>
+										<span className="newspack-pricing-rules__goal-card-title">{ opt.label }</span>
+										<span className="newspack-pricing-rules__goal-card-desc">{ pathDescription( opt.value ) }</span>
+									</button>
+								);
+							} ) }
+						</div>
 					) : (
 						<p className="description">
 							{ __( 'Goal:', 'newspack-plugin' ) } <strong>{ intentLabel( path ) }</strong>
@@ -305,7 +312,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 							{ __( 'Set when the rule was created — create a new rule to use a different goal.', 'newspack-plugin' ) }
 						</p>
 					) }
-					{ recipe && (
+					{ ! isNew && recipe && (
 						<p className="description" style={ { marginTop: 0 } }>
 							{ pathDescription( path as PricingPath ) }
 						</p>
