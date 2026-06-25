@@ -1833,13 +1833,12 @@ final class Modal_Checkout {
 		);
 		// phpcs:enable
 
-		ob_start();
-		echo wp_kses( $product_name, $allowed_html ) . ': ';
+		$summary = $product_name . ': ';
 		if ( function_exists( 'wc_get_formatted_cart_item_data' ) ) {
-			echo wp_kses( wc_get_formatted_cart_item_data( $cart_item ), $allowed_html );
+			$summary .= wc_get_formatted_cart_item_data( $cart_item );
 		}
-		echo wp_kses( $product_subtotal, $allowed_html );
-		return wp_kses( ob_get_clean(), $allowed_html );
+		$summary .= $product_subtotal;
+		return wp_kses( $summary, $allowed_html );
 	}
 
 	/**
