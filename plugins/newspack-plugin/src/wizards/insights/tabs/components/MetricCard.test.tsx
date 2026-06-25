@@ -210,6 +210,15 @@ describe( 'MetricCard notCapableMessage (NPPD-1720)', () => {
 	} );
 } );
 
+describe( 'MetricCard dataMissing', () => {
+	it( 'renders the data-missing note in place of the value', () => {
+		render( <MetricCard label="Influenced subscription rate" value={ 0 } format="percent" dataMissing /> );
+		expect( screen.getByText( 'Some data could not be loaded.' ) ).toBeInTheDocument();
+		// The misleading zero is not shown.
+		expect( screen.queryByText( '0%' ) ).not.toBeInTheDocument();
+	} );
+} );
+
 describe( 'MetricCard notComputableMessage (NPPD-1704)', () => {
 	const MESSAGE = 'No donation-intent prompts viewed in this timeframe.';
 	const NUDGE = 'No donation block detected in your active prompts.';

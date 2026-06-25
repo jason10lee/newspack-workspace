@@ -28,9 +28,11 @@ export interface MetricNoteProps {
 	notConfigured?: boolean;
 	/** Generic data failure. */
 	error?: boolean;
+	/** A present hub row was missing required column(s) — schema drift / bad deploy. */
+	dataMissing?: boolean;
 }
 
-const MetricNote = ( { overlay, notConfigured }: MetricNoteProps ) => {
+const MetricNote = ( { overlay, notConfigured, dataMissing }: MetricNoteProps ) => {
 	let body: React.ReactNode;
 
 	if ( overlay && overlay.type === 'data_unavailable' ) {
@@ -49,6 +51,8 @@ const MetricNote = ( { overlay, notConfigured }: MetricNoteProps ) => {
 		);
 	} else if ( notConfigured ) {
 		body = __( 'Not configured for this site.', 'newspack-plugin' );
+	} else if ( dataMissing ) {
+		body = __( 'Some data could not be loaded.', 'newspack-plugin' );
 	} else {
 		body = __( 'Data temporarily unavailable.', 'newspack-plugin' );
 	}
