@@ -265,6 +265,9 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 		onDone,
 	] );
 
+	// The create/save action is disabled until the form's hard requirements are met:
+	// a name and a chosen goal (mirrors the submit() guards).
+	const canSubmit = title.trim() !== '' && path !== '';
 	useEffect( () => {
 		setHeaderData( {
 			backNav: '#/',
@@ -273,11 +276,11 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 					type: 'primary',
 					label: isNew ? __( 'Create rule', 'newspack-plugin' ) : __( 'Save changes', 'newspack-plugin' ),
 					action: submit,
-					disabled: isSaving,
+					disabled: isSaving || ! canSubmit,
 				},
 			],
 		} );
-	}, [ setHeaderData, submit, isNew, isSaving ] );
+	}, [ setHeaderData, submit, isNew, isSaving, canSubmit ] );
 
 	return (
 		<div className="newspack-pricing-rules__form">
