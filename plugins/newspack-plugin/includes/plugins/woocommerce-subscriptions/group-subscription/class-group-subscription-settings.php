@@ -332,7 +332,13 @@ class Group_Subscription_Settings {
 	 * @param WP_Post|WC_Subscription $post_or_subscription The post or subscription currently being edited.
 	 */
 	public static function add_group_subscription_meta_box( $post_type, $post_or_subscription ) {
-		if ( ! Content_Gate::is_newspack_feature_enabled() || ! function_exists( 'wcs_is_subscription' ) || ! \wcs_is_subscription( $post_or_subscription ) ) {
+		// On the classic (non-HPOS) order editor WP core passes a WP_Post as the second
+		// argument; under HPOS it passes the WC_Subscription object. Resolve either form
+		// to a subscription so the metabox registers in both storage modes.
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription(
+			is_a( $post_or_subscription, 'WP_Post' ) ? $post_or_subscription->ID : $post_or_subscription
+		);
+		if ( ! Content_Gate::is_newspack_feature_enabled() || ! $subscription ) {
 			return;
 		}
 		\add_meta_box(
@@ -351,7 +357,12 @@ class Group_Subscription_Settings {
 	 * @param WC_Subscription $subscription The subscription object.
 	 */
 	public static function add_group_subscription_options( $subscription ) {
-		if ( ! $subscription || ! Content_Gate::is_newspack_feature_enabled() || ! function_exists( 'wcs_is_subscription' ) || ! wcs_is_subscription( $subscription ) ) {
+		// WP core passes the metabox callback a WP_Post (classic editor) or the
+		// WC_Subscription (HPOS); normalize to a subscription before rendering.
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription(
+			is_a( $subscription, 'WP_Post' ) ? $subscription->ID : $subscription
+		);
+		if ( ! Content_Gate::is_newspack_feature_enabled() || ! $subscription ) {
 			return;
 		}
 		$settings = self::get_subscription_settings( $subscription );

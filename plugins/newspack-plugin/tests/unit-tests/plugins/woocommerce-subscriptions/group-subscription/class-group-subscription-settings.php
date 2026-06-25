@@ -11,6 +11,8 @@ use Newspack\Group_Subscription_Settings;
 
 /**
  * Test Group_Subscription_Settings.
+ *
+ * @group WooCommerce_Subscriptions_Integration
  */
 class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 
@@ -241,5 +243,75 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 		$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
 
 		$this->assertSame( Group_Subscription::get_label( 'singular' ), $settings['name'], 'When neither name meta nor a product name is set, the group name should fall back to the publisher singular group label.' );
+	}
+
+	/*
+	 * --- metabox registration (HPOS vs legacy CPT) ---
+	 */
+
+	/**
+	 * Register the metabox via the handler and report whether it landed.
+	 *
+	 * @param mixed $hook_arg The second `add_meta_boxes` argument (WP_Post on the classic
+	 *                        editor, WC_Subscription under HPOS).
+	 * @return bool Whether the group subscription metabox was registered.
+	 */
+	private function register_metabox_returns_registered( $hook_arg ) {
+		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
+			define( 'NEWSPACK_CONTENT_GATES', true );
+		}
+		global $wp_meta_boxes;
+		$wp_meta_boxes = [];
+		Group_Subscription_Settings::add_group_subscription_meta_box( 'shop_subscription', $hook_arg );
+		return isset( $wp_meta_boxes['shop_subscription']['normal']['high']['newspack-group-subscription'] );
+	}
+
+	/**
+	 * On the legacy (non-HPOS) order editor WP core passes a WP_Post as the second
+	 * `add_meta_boxes` argument. The metabox must still register for subscriptions.
+	 */
+	public function test_metabox_registers_on_legacy_cpt_editor() {
+		$subscription = $this->make_subscription_with_product( [ 'enabled' => 'yes' ] );
+		$post         = new WP_Post(
+			(object) [
+				'ID'        => $subscription->get_id(),
+				'post_type' => 'shop_subscription',
+			] 
+		);
+
+		$this->assertTrue(
+			$this->register_metabox_returns_registered( $post ),
+			'Group subscription metabox should register on the legacy CPT editor (WP_Post hook argument).'
+		);
+	}
+
+	/**
+	 * Under HPOS the second `add_meta_boxes` argument is the WC_Subscription object.
+	 */
+	public function test_metabox_registers_on_hpos_editor() {
+		$subscription = $this->make_subscription_with_product( [ 'enabled' => 'yes' ] );
+
+		$this->assertTrue(
+			$this->register_metabox_returns_registered( $subscription ),
+			'Group subscription metabox should register under HPOS (WC_Subscription hook argument).'
+		);
+	}
+
+	/**
+	 * A post that is not a subscription must never get the metabox, in either mode.
+	 */
+	public function test_metabox_not_registered_for_non_subscription_post() {
+		$this->make_subscription_with_product( [ 'enabled' => 'yes' ] );
+		$not_a_subscription = new WP_Post(
+			(object) [
+				'ID'        => 999999,
+				'post_type' => 'shop_order',
+			] 
+		);
+
+		$this->assertFalse(
+			$this->register_metabox_returns_registered( $not_a_subscription ),
+			'Metabox must not register for a post that is not a subscription.'
+		);
 	}
 }
