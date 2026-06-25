@@ -455,6 +455,45 @@ class Newspack_Test_Idempotent_Send extends WP_UnitTestCase {
 		$this->assertArrayNotHasKey( self::SENT_KEY, $entity->persisted );
 	}
 
+	/**
+	 * The throwing-send path uses the SAME verified release as the false-return
+	 * path: if the claim-release save is swallowed by WC (returns success but
+	 * persists nothing), the helper detects the un-landed release, emits a
+	 * Manager-visible degraded log, and STILL rethrows the ORIGINAL send error.
+	 * The secondary verify/log work must never mask that original error, and
+	 * the surviving claim must not go unlogged.
+	 */
+	public function test_throwing_send_with_swallowed_release_logs_and_rethrows() {
+		$entity   = $this->make_entity();
+		$args     = $this->with_read_fresh( $this->args( $calls ), $entity );
+		$logged   = [];
+		$listener = function ( $code ) use ( &$logged ) {
+			$logged[] = $code;
+		};
+		add_action( 'newspack_log', $listener );
+
+		$args['send'] = function () use ( $entity ) {
+			$entity->swallow_saves = true; // Release save "succeeds" but persists nothing.
+			throw new \RuntimeException( 'wp_mail filter blew up' );
+		};
+
+		try {
+			Idempotent_Send::send( $entity, $args );
+			$this->fail( 'The original exception must propagate even when the release is swallowed.' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertSame( 'wp_mail filter blew up', $e->getMessage(), 'The ORIGINAL send error must be rethrown, not a cleanup error.' );
+		} finally {
+			remove_action( 'newspack_log', $listener );
+		}
+
+		$this->assertArrayHasKey( self::PENDING_KEY, $entity->persisted, 'A swallowed release leaves the claim; it must not be silently dropped.' );
+		$this->assertContains(
+			'newspack_idempotent_send_release_failed',
+			$logged,
+			'A swallowed release after a throwing send must emit a Manager-visible degraded log.'
+		);
+	}
+
 	// --------------------------------------------------------------------
 	// Value-match, non-array claim, multi-key clear, grace filter.
 	// --------------------------------------------------------------------

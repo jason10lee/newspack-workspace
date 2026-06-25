@@ -208,15 +208,31 @@ final class Idempotent_Send {
 		}
 
 		// 2. Send. A throwing callback (e.g. a wp_mail filter/action) would
-		// orphan the durable claim; release it best-effort, then rethrow so
-		// the caller's per-pair Throwable handling still sees the original
-		// error rather than a swallowed throw plus a stuck claim.
+		// orphan the durable claim; release it with the SAME verified-release
+		// + degraded-log path as the false-return branch below, then rethrow
+		// so the caller's per-pair Throwable handling still sees the original
+		// error. The release is wrapped so a verifier or logging failure can
+		// never mask that original send error.
 		try {
 			$sent = (bool) call_user_func( $args['send'] );
-		} catch ( \Throwable $e ) {
-			$entity->delete_meta_data( $pending_key );
-			self::save_with_retry( $entity, $save_attempts );
-			throw $e;
+		} catch ( \Throwable $send_error ) {
+			try {
+				$entity->delete_meta_data( $pending_key );
+				$release = self::persisted( $entity, $args, $save_attempts, $pending_key, '' );
+				if ( ! $release['ok'] ) {
+					self::log_degraded(
+						$args,
+						'newspack_idempotent_send_release_failed',
+						sprintf( 'Send threw for "%s" and releasing the pending claim did not land; a retry may be delayed up to %ds.', $idem, $grace ),
+						$release['last_error']
+					);
+				}
+			} catch ( \Throwable $cleanup_error ) {
+				// Intentionally swallowed: a cleanup, verifier, or logging
+				// failure must not mask the original send error rethrown below.
+				unset( $cleanup_error );
+			}
+			throw $send_error;
 		}
 
 		if ( ! $sent ) {
