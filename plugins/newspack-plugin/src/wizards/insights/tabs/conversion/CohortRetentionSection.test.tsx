@@ -84,8 +84,9 @@ describe( 'CohortRetentionSection', () => {
 		// First cohort cell is 5.1 (Registration → conversion).
 		const cell51 = container.querySelectorAll( '.newspack-insights__conversion-cohort-cell' )[ 0 ];
 		const ys = Array.from( cell51.querySelectorAll( '.newspack-insights__line-point' ) ).map( p => parseFloat( p.getAttribute( 'cy' ) ?? '0' ) );
-		// Autoscaled: the 0.02 peak reaches the top band (cy small). With yMax=1 it
-		// would sit near the bottom (cy ≈ 149 of the 160-tall chart).
-		expect( Math.min( ...ys ) ).toBeLessThan( 80 );
+		// Autoscaled: the 0.02 peak reaches the top band (cy ≈ 8). With the old
+		// yMax=1 it would sit near the bottom (cy ≈ 149 of the 160-tall chart),
+		// so a tight ceiling guards against a regression to the fixed axis.
+		expect( Math.min( ...ys ) ).toBeLessThan( 20 );
 	} );
 } );

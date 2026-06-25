@@ -2,7 +2,9 @@
  * CohortRetentionSection (NPPD-1609, Section 5).
  *
  * Two stacked multi-series cohort LineCharts (registration → conversion,
- * subscriber retention), each with a hardcoded reference-line target.
+ * subscriber retention). 5.2 keeps a fixed 0–100% axis with a 70% retention
+ * target line; 5.1 autoscales with no default reference line (the hardcoded
+ * 15% benchmark was removed — a self-relative baseline is planned).
  * Snapshot — refreshed weekly, independent of the date picker.
  *
  * Phase 2: both metrics (5.1, 5.2) are `coming_soon` (Phase B). Each

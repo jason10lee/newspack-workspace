@@ -1548,7 +1548,8 @@ final class Conversion_Metric {
 	 * Reads the weekly pre-warmed snapshot via Cache::peek; on a cold cache it
 	 * schedules a one-off background refresh and returns the graceful
 	 * `coming_soon` envelope (never computes the expensive curve inline). The
-	 * `reference_line` key React reads unconditionally is always present.
+	 * `reference_line` key is always present in the envelope (null for 5.1 — the
+	 * chart autoscales with no default line).
 	 *
 	 * @param DateTimeInterface $start Window start (ignored — snapshot).
 	 * @param DateTimeInterface $end   Window end (ignored — snapshot).
