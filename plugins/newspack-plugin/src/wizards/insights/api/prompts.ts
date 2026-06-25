@@ -83,8 +83,9 @@ export interface PromptsDistributionData extends PromptsErrorFields {
 }
 
 /**
- * One row in the Performance by prompt table (Table 7.1). The 15-key
- * schema was locked by Task 3.3 (NPPD-1607). `prompt_title` comes
+ * One row in the Performance by prompt table (Table 7.1). The row
+ * schema was locked by Task 3.3 (NPPD-1607; `intent_label` added in
+ * NPPD-1758). `prompt_title` comes
  * straight from the event params, no WP enrichment needed. Donation /
  * subscription columns report *conversions* (Woo-completed outcomes),
  * not attempts, matching the Gates v1.1 decision (NPPD-1684). Count and
@@ -96,6 +97,9 @@ export interface PromptsPerformanceByPromptRow {
 	popup_id: number;
 	prompt_title: string;
 	intent: string;
+	// Friendly display label (NPPD-1758); null when the intent has no override,
+	// in which case the table falls back to humanizing `intent`.
+	intent_label: string | null;
 	placement: string;
 	impressions: number;
 	unique_viewers: number;
@@ -116,6 +120,9 @@ export interface PromptsPerformanceByPromptRow {
  */
 export interface PromptsPerformanceByIntentRow {
 	intent: string;
+	// Friendly display label (NPPD-1758); null when the intent has no override,
+	// in which case the table falls back to humanizing `intent`.
+	intent_label: string | null;
 	impressions: number;
 	unique_viewers: number;
 	ctr: number | null;

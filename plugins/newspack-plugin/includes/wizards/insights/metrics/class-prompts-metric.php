@@ -78,6 +78,11 @@ final class Prompts_Metric {
 		'donation'                 => 'Donation',
 		'registration'             => 'Registration',
 		'newsletters_subscription' => 'Newsletter signup',
+		// NPPD-1758: checkout-button prompts emit `action_type = 'checkout'` (NPPD-1755).
+		// Reader-facing framing 'Subscription' (Katie's call), consistent with the tab's
+		// Subscription Conversion Rate card. Unmapped intents fall back to a frontend
+		// humanizer, so this map only needs the friendly overrides.
+		'checkout'                 => 'Subscription',
 	];
 
 	/**
@@ -1492,6 +1497,10 @@ final class Prompts_Metric {
 				'popup_id'                     => $popup_id,
 				'prompt_title'                 => (string) ( $row['prompt_title'] ?? '' ),
 				'intent'                       => $intent,
+				// Friendly display label (NPPD-1758), single source of truth shared with
+				// the per-intent table. Null when the intent has no friendly override, so
+				// the frontend falls back to its humanizer (preserving title-casing).
+				'intent_label'                 => self::INTENT_LABELS[ $intent ] ?? null,
 				'placement'                    => (string) ( $row['placement'] ?? '' ),
 				'impressions'                  => $impressions,
 				'unique_viewers'               => (int) ( $row['unique_viewers'] ?? 0 ),
@@ -1516,9 +1525,10 @@ final class Prompts_Metric {
 	/**
 	 * Per-intent breakdown (donation / registration / newsletter signup).
 	 *
-	 * Pure BQ → row mapping; no Woo or WP enrichment. Intent labels come from
-	 * {@see self::INTENT_LABELS}; an unknown `intent` value falls back to its
-	 * raw form so a hub-side catalog change isn't silently swallowed.
+	 * Pure BQ → row mapping; no Woo or WP enrichment. Friendly labels come from
+	 * {@see self::INTENT_LABELS} as `intent_label`; an unknown `intent` yields a
+	 * null label (the raw `intent` is still returned alongside it, so a hub-side
+	 * catalog change isn't silently swallowed — the frontend humanizes it).
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
@@ -1548,7 +1558,9 @@ final class Prompts_Metric {
 			$intent   = (string) ( $row['intent'] ?? '' );
 			$mapped[] = [
 				'intent'               => $intent,
-				'intent_label'         => self::INTENT_LABELS[ $intent ] ?? $intent,
+				// Null when no friendly override exists, so the frontend humanizer fills
+				// in (preserving title-casing); mapped intents use the label (NPPD-1758).
+				'intent_label'         => self::INTENT_LABELS[ $intent ] ?? null,
 				'impressions'          => (int) ( $row['impressions'] ?? 0 ),
 				'unique_viewers'       => (int) ( $row['unique_viewers'] ?? 0 ),
 				'ctr'                  => isset( $row['ctr'] ) && null !== $row['ctr'] ? (float) $row['ctr'] : null,

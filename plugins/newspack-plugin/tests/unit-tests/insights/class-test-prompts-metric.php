@@ -1643,6 +1643,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 				'popup_id',
 				'prompt_title',
 				'intent',
+				'intent_label',
 				'placement',
 				'impressions',
 				'unique_viewers',
@@ -1796,12 +1797,31 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 					'form_submission_rate' => 0.1,
 					'dismissal_rate'       => 0.04,
 				],
+				// NPPD-1758: checkout-button prompts emit action_type='checkout'.
+				[
+					'intent'               => 'checkout',
+					'impressions'          => 1500,
+					'unique_viewers'       => 400,
+					'ctr'                  => 0.12,
+					'form_submission_rate' => 0.0,
+					'dismissal_rate'       => 0.05,
+				],
+				// An intent with no friendly override → intent_label is null (the
+				// frontend humanizes the raw value).
+				[
+					'intent'               => 'undefined',
+					'impressions'          => 100,
+					'unique_viewers'       => 50,
+					'ctr'                  => 0.01,
+					'form_submission_rate' => 0.0,
+					'dismissal_rate'       => 0.0,
+				],
 			]
 		);
 		$result = $metric->get_performance_by_intent( $this->start(), $this->end() );
 
 		$this->assertSame( 'populated', $result['state'] );
-		$this->assertCount( 3, $result['rows'] );
+		$this->assertCount( 5, $result['rows'] );
 
 		$this->assertSame( 'donation', $result['rows'][0]['intent'] );
 		$this->assertSame( 'Donation', $result['rows'][0]['intent_label'] );
@@ -1812,6 +1832,14 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 
 		$this->assertSame( 'newsletters_subscription', $result['rows'][2]['intent'] );
 		$this->assertSame( 'Newsletter signup', $result['rows'][2]['intent_label'] );
+
+		// NPPD-1758: 'checkout' → reader-facing 'Subscription'.
+		$this->assertSame( 'checkout', $result['rows'][3]['intent'] );
+		$this->assertSame( 'Subscription', $result['rows'][3]['intent_label'] );
+
+		// Unmapped intent → null label, so the frontend falls back to humanizing.
+		$this->assertSame( 'undefined', $result['rows'][4]['intent'] );
+		$this->assertNull( $result['rows'][4]['intent_label'] );
 	}
 
 	/**
