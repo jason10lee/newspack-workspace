@@ -886,10 +886,11 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Direct subscription rate = popup-attributed conversions ÷ impressions of the
-	 * SAME popups. Popup 9's 500 impressions are excluded because popup 9 had no
-	 * subscription conversions — proving the per-popup keying (denominator 200, not
-	 * 700).
+	 * Forward-compat fallback (NPPD-1759): until the hub ships `checkout_impressions`,
+	 * the direct subscription rate keeps today's per-popup keying — popup-attributed
+	 * conversions ÷ impressions of the SAME popups. Popup 9's 500 impressions are
+	 * excluded because popup 9 had no subscription conversions (denominator 200, not
+	 * 700). These rows carry no `checkout_impressions` key, so the fallback runs.
 	 */
 	public function test_subscription_conversion_direct_rate_per_popup_over_impressions() {
 		$metric = $this->make_direct_subscription_metric(
@@ -904,6 +905,44 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		$this->assertSame( 0.25, $rate['value'] );
 		$this->assertTrue( $rate['computable'] );
 		$this->assertSame( 200, $rate['denominator'], 'denominator is popup 1 only, not the unrelated popup 9' );
+	}
+
+	/**
+	 * NPPD-1759: once the hub exposes `checkout_impressions`, the direct subscription
+	 * rate prefers it — a TAB-LEVEL capability denominator (summed across ALL
+	 * checkout-capable popups), dropping the per-popup keying. Conversions are summed
+	 * across the whole popup surface. Here popup 9 is checkout-capable but did NOT
+	 * convert, yet its 100 capable impressions still enter the denominator (300 total),
+	 * which the old per-popup keying would have excluded — proving the keying is gone.
+	 */
+	public function test_subscription_conversion_direct_prefers_checkout_impressions_column() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn(
+			[
+				// Checkout-CAPABLE and converting (Undefined intent — a "50% off" promo).
+				[
+					'popup_id'             => 1,
+					'intent'               => 'undefined',
+					'impressions'          => 1000,
+					'checkout_impressions' => 200,
+				],
+				// Checkout-capable but did NOT convert — still in the capability denominator.
+				[
+					'popup_id'             => 9,
+					'intent'               => 'registration',
+					'impressions'          => 500,
+					'checkout_impressions' => 100,
+				],
+			]
+		);
+
+		$metric = $this->make_direct_subscription_metric( $proxy, $this->subscribers_with_popup( 50, 0.0 ), true );
+		$rate   = $metric->get_subscription_conversion_direct( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $rate['state'] );
+		$this->assertSame( 300, $rate['denominator'], 'tab-level checkout_impressions sum (200 + 100), not the per-popup-keyed 200' );
+		$this->assertEqualsWithDelta( 0.16667, $rate['value'], 0.0001, '50 conversions / 300 checkout-capable impressions' );
+		$this->assertTrue( $rate['computable'] );
 	}
 
 	/**
@@ -1506,6 +1545,81 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 
 		$this->assertSame( 0, $result['rows'][0]['donation_conversions'] );
 		$this->assertSame( 0.0, $result['rows'][0]['donation_conversion_rate'], 'capable-but-no-conversion is a real 0% over donation_impressions, not an em-dash' );
+	}
+
+	/**
+	 * NPPD-1759 (capability path): a subscription-CAPABLE prompt (non-zero hub
+	 * `checkout_impressions`) surfaces its subscriptions + a rate over the checkout-
+	 * capable impressions, not total — symmetric with the donation capability column
+	 * and the gates paywall column. Here an Undefined-intent "50% off" promo carries a
+	 * checkout block: 3 / 500 capable impressions, not / 1000 total.
+	 */
+	public function test_performance_by_prompt_subscription_rate_prefers_checkout_impressions() {
+		$row = array_merge(
+			$this->performance_row( 77, '50% off promo', 'undefined', 1000 ),
+			[ 'checkout_impressions' => 500 ] // Checkout-capable despite non-registration intent.
+		);
+		$proxy = $this->make_performance_proxy( [ $row ], [], [] );
+
+		add_filter( 'newspack_insights_woocommerce_active', '__return_true' ); // Removed in tear_down.
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_prompt_attributed_donation_conversions' )->willReturn( [] );
+		$subscribers = $this->createMock( Subscribers_Metric::class );
+		$subscribers->method( 'get_attributed_subscription_conversions' )->willReturn(
+			[
+				'by_gate'  => [],
+				'by_popup' => [
+					'77' => [
+						'conversions' => 3,
+						'revenue'     => 150.0,
+					],
+				],
+			]
+		);
+
+		$metric = new Prompts_Metric( $proxy, null, null, $donors, $subscribers );
+		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
+
+		$this->assertSame( 3, $result['rows'][0]['subscription_conversions'] );
+		$this->assertEqualsWithDelta( 0.006, $result['rows'][0]['subscription_conversion_rate'], 0.0001, '3 / 500 checkout-capable impressions, not / 1000 total' );
+	}
+
+	/**
+	 * NPPD-1759 (capability gate): the subscription column is now CAPABILITY-gated, not
+	 * map-gated. A prompt that converted (is in the subscription map) but is NOT
+	 * checkout-capable (`checkout_impressions` = 0) gets null subscription columns —
+	 * the capability gate overrides map membership. This is the behavior change from
+	 * the interim map-membership gate; a checkout block is what makes the rate apply.
+	 */
+	public function test_performance_by_prompt_subscription_not_capable_when_checkout_impressions_zero() {
+		$row = array_merge(
+			$this->performance_row( 77, 'Registration only', 'registration', 1000 ),
+			[ 'checkout_impressions' => 0 ] // No checkout block → not subscription-capable.
+		);
+		$proxy = $this->make_performance_proxy( [ $row ], [], [] );
+
+		add_filter( 'newspack_insights_woocommerce_active', '__return_true' ); // Removed in tear_down.
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_prompt_attributed_donation_conversions' )->willReturn( [] );
+		$subscribers = $this->createMock( Subscribers_Metric::class );
+		$subscribers->method( 'get_attributed_subscription_conversions' )->willReturn(
+			[
+				'by_gate'  => [],
+				'by_popup' => [
+					// Popup converted, but the capability column (0) gates it out anyway.
+					'77' => [
+						'conversions' => 4,
+						'revenue'     => 0.0,
+					],
+				],
+			]
+		);
+
+		$metric = new Prompts_Metric( $proxy, null, null, $donors, $subscribers );
+		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
+
+		$this->assertSame( 0, $result['rows'][0]['subscription_conversions'], 'capability gate (checkout_impressions 0) overrides map membership' );
+		$this->assertNull( $result['rows'][0]['subscription_conversion_rate'], 'a non-checkout-capable prompt gets an em-dash, not a rate' );
 	}
 
 	/**
