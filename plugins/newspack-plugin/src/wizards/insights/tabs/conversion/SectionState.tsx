@@ -8,7 +8,7 @@
  *   - 'populated'   → the section's content (children)
  *
  * Mirrors the tab-local Prompts `SectionState` and adds the
- * `coming_soon` arm for Phase-B deferred metrics.
+ * `coming_soon` arm for deferred metrics.
  */
 
 /**
@@ -30,10 +30,12 @@ export interface SectionStateProps {
 	state: ConversionMetricState;
 	/** Copy shown when the query succeeded with no rows. */
 	emptyMessage: string;
+	/** Optional override for the `coming_soon` copy (defaults to the generic message). */
+	comingSoonMessage?: string;
 	children: React.ReactNode;
 }
 
-const SectionState = ( { state, emptyMessage, children }: SectionStateProps ) => {
+const SectionState = ( { state, emptyMessage, comingSoonMessage, children }: SectionStateProps ) => {
 	if ( state === 'error' ) {
 		return (
 			<p className="newspack-insights__section-error" role="alert">
@@ -49,7 +51,10 @@ const SectionState = ( { state, emptyMessage, children }: SectionStateProps ) =>
 		return (
 			<p className="newspack-insights__section-coming-soon" role="note">
 				<Icon icon={ scheduled } size={ 20 } />
-				<span>{ __( 'Coming soon. This metric is being built and will be available in a future update.', 'newspack-plugin' ) }</span>
+				<span>
+					{ comingSoonMessage ??
+						__( 'Coming soon. This metric is being built and will be available in a future update.', 'newspack-plugin' ) }
+				</span>
 			</p>
 		);
 	}

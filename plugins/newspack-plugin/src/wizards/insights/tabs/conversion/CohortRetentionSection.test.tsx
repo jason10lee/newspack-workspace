@@ -1,7 +1,7 @@
 /**
  * Tests for CohortRetentionSection (Section 5).
  *
- * Both 5.1 and 5.2 are Phase-B coming_soon metrics. Covers:
+ * Covers:
  *   - Section structure (heading, both cohort titles)
  *   - coming_soon treatment (default fixture)
  *   - empty treatment
@@ -42,15 +42,16 @@ describe( 'CohortRetentionSection', () => {
 		expect( screen.getByText( 'Subscriber retention' ) ).toBeInTheDocument();
 	} );
 
-	it( 'renders the coming_soon treatment for both cohort charts (Phase B)', () => {
+	it( 'renders the cohort coming_soon message for both charts', () => {
 		render( <CohortRetentionSection current={ makeConversionWindow( { cohortState: 'coming_soon' } ) } /> );
-		// Both charts should show coming_soon
-		expect( screen.getAllByText( /Coming soon/ ) ).toHaveLength( 2 );
+		expect(
+			screen.getAllByText( 'Cohort data is being prepared. Check back in a few minutes, then click Refresh now to load it.' )
+		).toHaveLength( 2 );
 	} );
 
 	it( 'renders the empty treatment when state is empty', () => {
 		render( <CohortRetentionSection current={ makeConversionWindow( { cohortState: 'empty' } ) } /> );
-		expect( screen.getAllByText( 'Cohort data will appear after the first weekly refresh.' ) ).toHaveLength( 2 );
+		expect( screen.getAllByText( 'No cohort data available yet.' ) ).toHaveLength( 2 );
 	} );
 
 	it( 'renders the error treatment when state is error', () => {
