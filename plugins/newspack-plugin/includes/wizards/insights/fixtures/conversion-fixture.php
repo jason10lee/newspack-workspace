@@ -40,8 +40,8 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 	];
 
 	// Phase-B sections — 4.2/4.3/4.4 are 'populated' (implemented; all-history
-	// snapshots, so identical across variants); 5.1/5.2 remain 'coming_soon'.
-	// Each preserves the extra keys React reads unconditionally.
+	// snapshots, so identical across variants); 5.1/5.2 are 'populated' snapshots
+	// (mock curves). Each preserves the extra keys React reads unconditionally.
 	$deferred = static function () {
 		return [
 			// 4.2 — time-to-subscribe (multi-series, per-source cumulative).
@@ -189,16 +189,170 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 				'visibility'        => 'hidden',
 				'visibility_reason' => 'insufficient_data',
 			],
-			// 5.1 — registration-to-conversion cohort (reference_line off; autoscaled).
+			// 5.1 — registration-to-conversion cohort (snapshot; autoscaled, no reference line).
 			'registration_to_conversion_cohort'    => [
-				'state'          => 'coming_soon',
-				'cohorts'        => [],
+				'state'          => 'populated',
+				'cohorts'        => [
+					[
+						'label'  => '2025-07',
+						'points' => [
+							[
+								'period' => 0,
+								'value'  => 0.0,
+							],
+							[
+								'period' => 3,
+								'value'  => 0.008,
+							],
+							[
+								'period' => 6,
+								'value'  => 0.015,
+							],
+							[
+								'period' => 9,
+								'value'  => 0.019,
+							],
+							[
+								'period' => 12,
+								'value'  => 0.022,
+							],
+						],
+					],
+					[
+						'label'  => '2025-10',
+						'points' => [
+							[
+								'period' => 0,
+								'value'  => 0.0,
+							],
+							[
+								'period' => 3,
+								'value'  => 0.010,
+							],
+							[
+								'period' => 6,
+								'value'  => 0.017,
+							],
+							[
+								'period' => 9,
+								'value'  => 0.021,
+							],
+						],
+					],
+					[
+						'label'  => '2026-01',
+						'points' => [
+							[
+								'period' => 0,
+								'value'  => 0.0,
+							],
+							[
+								'period' => 3,
+								'value'  => 0.012,
+							],
+							[
+								'period' => 6,
+								'value'  => 0.018,
+							],
+						],
+					],
+					[
+						'label'  => '2026-04',
+						'points' => [
+							[
+								'period' => 0,
+								'value'  => 0.0,
+							],
+							[
+								'period' => 2,
+								'value'  => 0.009,
+							],
+						],
+					],
+				],
 				'reference_line' => null,
 			],
-			// 5.2 — subscriber retention cohort (reference_line preserved).
+			// 5.2 — subscriber retention cohort (snapshot; 70% reference line).
 			'subscriber_retention_cohort'          => [
-				'state'          => 'coming_soon',
-				'cohorts'        => [],
+				'state'          => 'populated',
+				'cohorts'        => [
+					[
+						'label'  => '2025-07',
+						'points' => [
+							[
+								'period' => 0,
+								'value'  => 1.0,
+							],
+							[
+								'period' => 3,
+								'value'  => 0.88,
+							],
+							[
+								'period' => 6,
+								'value'  => 0.79,
+							],
+							[
+								'period' => 9,
+								'value'  => 0.73,
+							],
+							[
+								'period' => 12,
+								'value'  => 0.69,
+							],
+						],
+					],
+					[
+						'label'  => '2025-10',
+						'points' => [
+							[
+								'period' => 0,
+								'value'  => 1.0,
+							],
+							[
+								'period' => 3,
+								'value'  => 0.90,
+							],
+							[
+								'period' => 6,
+								'value'  => 0.82,
+							],
+							[
+								'period' => 9,
+								'value'  => 0.76,
+							],
+						],
+					],
+					[
+						'label'  => '2026-01',
+						'points' => [
+							[
+								'period' => 0,
+								'value'  => 1.0,
+							],
+							[
+								'period' => 3,
+								'value'  => 0.91,
+							],
+							[
+								'period' => 6,
+								'value'  => 0.84,
+							],
+						],
+					],
+					[
+						'label'  => '2026-04',
+						'points' => [
+							[
+								'period' => 0,
+								'value'  => 1.0,
+							],
+							[
+								'period' => 2,
+								'value'  => 0.94,
+							],
+						],
+					],
+				],
 				'reference_line' => [
 					'value' => 0.70,
 					'label' => __( '70% at 12 months', 'newspack-plugin' ),

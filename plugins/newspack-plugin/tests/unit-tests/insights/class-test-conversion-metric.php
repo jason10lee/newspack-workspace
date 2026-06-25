@@ -1901,14 +1901,15 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'hidden', $current['subscriber_to_donor_lag_distribution']['visibility'] );
 		$this->assertSame( 'insufficient_data', $current['subscriber_to_donor_lag_distribution']['visibility_reason'] );
 
-		// 5.1 — registration cohort (reference_line off; autoscaled).
-		$this->assertSame( 'coming_soon', $current['registration_to_conversion_cohort']['state'] );
-		$this->assertSame( [], $current['registration_to_conversion_cohort']['cohorts'] );
+		// 5.1 — registration cohort (snapshot → populated; autoscaled, no reference line).
+		$this->assertSame( 'populated', $current['registration_to_conversion_cohort']['state'] );
+		$this->assertNotEmpty( $current['registration_to_conversion_cohort']['cohorts'] );
+		$this->assertSame( '2025-07', $current['registration_to_conversion_cohort']['cohorts'][0]['label'] );
 		$this->assertNull( $current['registration_to_conversion_cohort']['reference_line'] );
 
-		// 5.2 — subscriber retention cohort (reference_line).
-		$this->assertSame( 'coming_soon', $current['subscriber_retention_cohort']['state'] );
-		$this->assertSame( [], $current['subscriber_retention_cohort']['cohorts'] );
+		// 5.2 — subscriber retention cohort (snapshot → populated; 70% reference line).
+		$this->assertSame( 'populated', $current['subscriber_retention_cohort']['state'] );
+		$this->assertNotEmpty( $current['subscriber_retention_cohort']['cohorts'] );
 		$this->assertSame( 0.70, $current['subscriber_retention_cohort']['reference_line']['value'] );
 	}
 
@@ -1948,9 +1949,9 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'empty', $current['top_pages_no_conversion']['state'] );
 		$this->assertSame( [], $current['top_pages_no_conversion']['rows'] );
 
-		// 4.2 is an all-history snapshot → populated; the 5.1 cohort stays coming_soon.
+		// 4.2 + the 5.1 cohort are all-history snapshots → populated regardless of variant.
 		$this->assertSame( 'populated', $current['time_to_subscribe_distribution']['state'] );
-		$this->assertSame( 'coming_soon', $current['registration_to_conversion_cohort']['state'] );
+		$this->assertSame( 'populated', $current['registration_to_conversion_cohort']['state'] );
 	}
 
 	/**
@@ -1985,9 +1986,9 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'populated', $current['at_risk_subscriber_count']['state'] );
 		$this->assertSame( 'populated', $current['lapsed_donor_count']['state'] );
 
-		// 4.2 is an all-history snapshot → populated; the 5.1 cohort stays coming_soon.
+		// 4.2 + the 5.1 cohort are all-history snapshots → populated regardless of variant.
 		$this->assertSame( 'populated', $current['time_to_subscribe_distribution']['state'] );
-		$this->assertSame( 'coming_soon', $current['registration_to_conversion_cohort']['state'] );
+		$this->assertSame( 'populated', $current['registration_to_conversion_cohort']['state'] );
 	}
 
 	/**
