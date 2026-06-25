@@ -27,7 +27,13 @@ export interface PerformanceByIntentTableProps {
 }
 
 const columns: SortableColumn< PromptsPerformanceByIntentRow >[] = [
-	{ key: 'intent', label: __( 'Intent', 'newspack-plugin' ), numeric: false, render: r => r.intent_label || humanizeTerm( r.intent ), sortValue: r => r.intent_label || r.intent },
+	{
+		key: 'intent',
+		label: __( 'Intent', 'newspack-plugin' ),
+		numeric: false,
+		render: r => r.intent_label || humanizeTerm( r.intent ),
+		sortValue: r => r.intent_label || r.intent,
+	},
 	{
 		key: 'impressions',
 		label: __( 'Impressions', 'newspack-plugin' ),

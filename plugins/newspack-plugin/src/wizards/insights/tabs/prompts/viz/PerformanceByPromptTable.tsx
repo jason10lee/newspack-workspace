@@ -40,7 +40,13 @@ const columns: SortableColumn< PromptsPerformanceByPromptRow >[] = [
 		render: r => <a href={ getPostEditUrl( r.popup_id ) }>{ r.prompt_title }</a>,
 		sortValue: r => r.prompt_title,
 	},
-	{ key: 'intent', label: __( 'Intent', 'newspack-plugin' ), numeric: false, render: r => r.intent_label || humanizeTerm( r.intent ), sortValue: r => r.intent_label || r.intent },
+	{
+		key: 'intent',
+		label: __( 'Intent', 'newspack-plugin' ),
+		numeric: false,
+		render: r => r.intent_label || humanizeTerm( r.intent ),
+		sortValue: r => r.intent_label || r.intent,
+	},
 	{
 		key: 'placement',
 		label: __( 'Placement', 'newspack-plugin' ),
