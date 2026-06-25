@@ -329,11 +329,10 @@ class Test_Conversion_REST_Controller extends WP_UnitTestCase {
 		$this->assertSame( 'populated', $current['influenced_registration_rate_7d']['state'] );
 		$this->assertSame( 'populated', $current['top_pages_no_conversion']['state'] );
 
-		// 4.2 is implemented (all-history snapshot → populated in the fixture);
-		// 5.1/5.2 cohorts are still coming_soon stubs.
+		// 4.2 + 5.1/5.2 cohorts are all-history snapshots → populated in the fixture.
 		$this->assertSame( 'populated', $current['time_to_subscribe_distribution']['state'] );
-		$this->assertSame( 'coming_soon', $current['registration_to_conversion_cohort']['state'] );
-		$this->assertSame( 'coming_soon', $current['subscriber_retention_cohort']['state'] );
+		$this->assertSame( 'populated', $current['registration_to_conversion_cohort']['state'] );
+		$this->assertSame( 'populated', $current['subscriber_retention_cohort']['state'] );
 	}
 
 	/**
@@ -375,15 +374,14 @@ class Test_Conversion_REST_Controller extends WP_UnitTestCase {
 		$this->assertSame( 'populated', $current['influenced_registration_rate_7d']['state'] );
 		$this->assertFalse( $current['influenced_registration_rate_7d']['computable'] );
 
-		// 4.2 is an all-history snapshot → populated in the fixture regardless of
-		// the window variant (5.1/5.2 cohorts remain coming_soon).
+		// 4.2 + 5.1/5.2 cohorts are all-history snapshots → populated regardless of variant.
 		$this->assertSame( 'populated', $current['time_to_subscribe_distribution']['state'] );
 	}
 
 	/**
 	 * Fixture-mode error variant: BQ (hub) metrics are 'error', local-only
-	 * metrics stay 'populated', deferred stay 'coming_soon'. NPPD-1745: with the
-	 * scoped banner, all-hub-error → tab_error true (fixture updated to match).
+	 * metrics stay 'populated', snapshot sections stay 'populated'. NPPD-1745:
+	 * with the scoped banner, all-hub-error → tab_error true (fixture updated).
 	 */
 	public function test_fixture_error_variant_via_metric() {
 		$payload = Conversion_Metric::get_fixture( 'error', false );
@@ -395,7 +393,7 @@ class Test_Conversion_REST_Controller extends WP_UnitTestCase {
 		$this->assertSame( 'error', $current['reader_lifecycle_funnel']['state'] );
 		$this->assertSame( 'bigquery_proxy_http_error', $current['reader_lifecycle_funnel']['error_code'] );
 		$this->assertSame( 'populated', $current['stale_registered_count']['state'] );
-		$this->assertSame( 'coming_soon', $current['registration_to_conversion_cohort']['state'] );
+		$this->assertSame( 'populated', $current['registration_to_conversion_cohort']['state'] );
 	}
 
 	/**

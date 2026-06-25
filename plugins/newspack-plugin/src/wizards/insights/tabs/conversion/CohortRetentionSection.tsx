@@ -7,8 +7,7 @@
  * 15% benchmark was removed — a self-relative baseline is planned).
  * Snapshot — refreshed weekly, independent of the date picker.
  *
- * Phase 2: both metrics (5.1, 5.2) are `coming_soon` (Phase B). Each
- * chart's rendering is gated on the metric's `state` envelope.
+ * Each chart's rendering is gated on the metric's `state` envelope.
  */
 
 /**
@@ -48,12 +47,19 @@ interface CohortChartProps {
 const CohortChart = ( { title, data, yMax, referenceLine }: CohortChartProps ) => (
 	<div className="newspack-insights__conversion-cohort-cell">
 		<h3 className="newspack-insights__conversion-subheading">{ title }</h3>
-		<SectionState state={ data.state } emptyMessage={ __( 'Cohort data will appear after the first weekly refresh.', 'newspack-plugin' ) }>
+		<SectionState
+			state={ data.state }
+			comingSoonMessage={ __(
+				'Cohort data is being prepared. Check back in a few minutes, then click Refresh now to load it.',
+				'newspack-plugin'
+			) }
+			emptyMessage={ __( 'No cohort data available yet.', 'newspack-plugin' ) }
+		>
 			<LineChart
 				series={ toCohortSeries( data ) }
 				referenceLine={ referenceLine }
 				yMax={ yMax }
-				emptyMessage={ __( 'Cohort data will appear after the first weekly refresh.', 'newspack-plugin' ) }
+				emptyMessage={ __( 'No cohort data available yet.', 'newspack-plugin' ) }
 			/>
 		</SectionState>
 	</div>
