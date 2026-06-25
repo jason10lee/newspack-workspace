@@ -147,3 +147,57 @@ describe( 'PerJourneyConversionFunnelsSection — per-leg states (NPPD-1742)', (
 		expect( screen.getByText( /250 registered readers saw a donation prompt, but none donated/ ) ).toBeInTheDocument();
 	} );
 } );
+
+describe( 'PerJourneyConversionFunnelsSection — registration leg states (NPPD-1743)', () => {
+	const registrationLeg = ( opts: Parameters< typeof conversionLeg >[ 0 ] = {} ) =>
+		conversionLeg( { labels: [ 'Anonymous', 'Saw a conversion surface', 'Registered' ], ...opts } );
+
+	it( 'no_opportunity: nobody entered the journey → swaps the funnel for the no-opportunity note', () => {
+		render(
+			<PerJourneyConversionFunnelsSection
+				current={ makeConversionWindow( { anonymousToRegisteredFunnel: registrationLeg( { state: 'empty' } ) } ) }
+			/>
+		);
+		// The leg is always visible; the heading stays and the no_opportunity copy shows.
+		expect( heading( 'Anonymous → Registered' ) ).toBeInTheDocument();
+		expect( screen.getByText( /No readers entered the registration journey in this timeframe/ ) ).toBeInTheDocument();
+	} );
+
+	it( 'no_conversions: keeps the funnel and annotates with {N} = prior-stage base', () => {
+		render(
+			<PerJourneyConversionFunnelsSection
+				current={ makeConversionWindow( {
+					anonymousToRegisteredFunnel: registrationLeg( { entry: 1000, prior: 600, conversion: 0 } ),
+				} ) }
+			/>
+		);
+		expect( screen.getByText( /600 readers saw a registration prompt or gate, but none registered/ ) ).toBeInTheDocument();
+		expect( screen.queryByText( /No readers entered the registration journey/ ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'with registrations: renders the normal funnel with no empty-state note', () => {
+		render(
+			<PerJourneyConversionFunnelsSection
+				current={ makeConversionWindow( {
+					anonymousToRegisteredFunnel: registrationLeg( { entry: 1000, prior: 600, conversion: 200 } ),
+				} ) }
+			/>
+		);
+		expect( screen.queryByText( /No readers entered the registration journey/ ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( /but none registered/ ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'registrations but zero prior-stage base: normal funnel, no contradictory no_conversions note', () => {
+		// Guards the priorStage===0 edge: readers registered but nobody reached the
+		// saw-a-surface stage, so the "{0} saw a prompt or gate" note must not render.
+		render(
+			<PerJourneyConversionFunnelsSection
+				current={ makeConversionWindow( {
+					anonymousToRegisteredFunnel: registrationLeg( { entry: 1000, prior: 0, conversion: 0 } ),
+				} ) }
+			/>
+		);
+		expect( screen.queryByText( /saw a registration prompt or gate/ ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( /No readers entered the registration journey/ ) ).not.toBeInTheDocument();
+	} );
+} );

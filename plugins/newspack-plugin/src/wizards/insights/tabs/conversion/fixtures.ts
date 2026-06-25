@@ -53,11 +53,13 @@ const gatedFunnel = ( visibility: ConversionVisibility, state: ConversionMetricS
 } );
 
 /**
- * A config-matrix conversion leg (NPPD-1742) — Section 2.2 / 2.3. Builds a
- * three-stage gated funnel with controllable entry/prior/conversion counts so
- * tests can drive the funnel-shaped states: entry 0 → no_opportunity; entry > 0
- * & conversion 0 → no_conversions; all > 0 → normal. `visibility: 'hidden'`
- * models an unconfigured stream (reason `'not_configured'`).
+ * A config-matrix conversion leg (NPPD-1742) — Section 2.2 / 2.3, and the
+ * always-visible registration leg (NPPD-1743). Builds a three-stage gated funnel
+ * with controllable entry/prior/conversion counts so tests can drive the
+ * funnel-shaped states: entry 0 → no_opportunity; entry > 0 & conversion 0 →
+ * no_conversions; all > 0 → normal. `visibility: 'hidden'` models an
+ * unconfigured stream (reason `'not_configured'`). `labels` overrides the stage
+ * labels for legs other than subscription/donation.
  */
 export const conversionLeg = (
 	opts: {
@@ -67,18 +69,27 @@ export const conversionLeg = (
 		prior?: number;
 		conversion?: number;
 		reason?: ConversionVisibilityReason;
+		labels?: [ string, string, string ];
 	} = {}
 ): ConversionGatedFunnelData => {
-	const { visibility = 'visible', state = 'populated', entry = 1000, prior = 400, conversion = 80, reason } = opts;
+	const {
+		visibility = 'visible',
+		state = 'populated',
+		entry = 1000,
+		prior = 400,
+		conversion = 80,
+		reason,
+		labels = [ 'Registered', 'Saw a conversion-intent surface', 'Converted' ],
+	} = opts;
 	const top = entry > 0 ? entry : 1;
 	return {
 		state,
 		stages:
 			state === 'populated'
 				? [
-						{ label: 'Registered', count: entry, pct_of_top: entry / top },
-						{ label: 'Saw a conversion-intent surface', count: prior, pct_of_top: prior / top },
-						{ label: 'Converted', count: conversion, pct_of_top: conversion / top },
+						{ label: labels[ 0 ], count: entry, pct_of_top: entry / top },
+						{ label: labels[ 1 ], count: prior, pct_of_top: prior / top },
+						{ label: labels[ 2 ], count: conversion, pct_of_top: conversion / top },
 				  ]
 				: [],
 		visibility,
@@ -138,6 +149,8 @@ export interface ConversionWindowOverrides {
 	subscriptionVisibility?: ConversionVisibility;
 	/** Config-matrix visibility for the donation leg (2.3), NPPD-1742. */
 	donationVisibility?: ConversionVisibility;
+	/** Full override of the registration leg (for the funnel-shaped states), NPPD-1743. */
+	anonymousToRegisteredFunnel?: ConversionGatedFunnelData;
 	/** Full override of the subscription leg (for the funnel-shaped states). */
 	registeredToSubscriberFunnel?: ConversionGatedFunnelData;
 	/** Full override of the donation leg (for the funnel-shaped states). */
@@ -168,8 +181,11 @@ export const makeConversionWindow = ( overrides: ConversionWindowOverrides = {} 
 		'Newsletter subscriber',
 		'Subscriber or donor'
 	),
-	// Section 2 — Phase A, wired.
-	anonymous_to_registered_funnel: funnel( 'populated', 'Anonymous', 'Saw a conversion surface', 'Registered' ),
+	// Section 2 — Phase A, wired. Registration leg is always visible (NPPD-1743)
+	// and carries the gated shape so it can use the shared empty-state cell.
+	anonymous_to_registered_funnel:
+		overrides.anonymousToRegisteredFunnel ??
+		conversionLeg( { entry: 5000, prior: 1800, conversion: 600, labels: [ 'Anonymous', 'Saw a conversion surface', 'Registered' ] } ),
 	registered_to_subscriber_funnel:
 		overrides.registeredToSubscriberFunnel ?? conversionLeg( { visibility: overrides.subscriptionVisibility ?? 'visible' } ),
 	registered_to_donor_funnel: overrides.registeredToDonorFunnel ?? conversionLeg( { visibility: overrides.donationVisibility ?? 'visible' } ),

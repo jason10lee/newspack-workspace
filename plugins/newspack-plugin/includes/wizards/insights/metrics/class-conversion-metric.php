@@ -562,15 +562,31 @@ final class Conversion_Metric {
 	// --- Section 2: Per-journey conversion funnels ----------------------
 
 	/**
-	 * Anonymous → Registered funnel (2.1) — three stages. Dispatches
-	 * `conversion_journey_funnel_anon_to_registered`; the hub returns one row
-	 * with step_1_anonymous, step_2_saw_conversion_surface, step_3_registered.
+	 * Anonymous → Registered funnel (2.1) — three stages. Always rendered: there
+	 * is no configuration gate for the registration journey (every site can
+	 * register readers), so the leg is stamped `visibility: 'visible'` and its
+	 * empty states are data-driven (NPPD-1743), mirroring the subscription and
+	 * donation legs' funnel-shaped empty-state treatment from NPPD-1742.
+	 *
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
+	 * @return array{state: string, stages: array<int, array{label: string, count: int, pct_of_top: float}>, visibility: string, visibility_reason: string|null}
+	 */
+	public function get_anonymous_to_registered_funnel( DateTimeInterface $start, DateTimeInterface $end ): array {
+		return $this->with_leg_visibility( $this->compute_anonymous_to_registered_funnel( $start, $end ) );
+	}
+
+	/**
+	 * Build the Anonymous → Registered funnel payload (no visibility gating).
+	 * Dispatches `conversion_journey_funnel_anon_to_registered`; the hub returns
+	 * one row with step_1_anonymous, step_2_saw_conversion_surface,
+	 * step_3_registered.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array{state: string, stages: array<int, array{label: string, count: int, pct_of_top: float}>}
 	 */
-	public function get_anonymous_to_registered_funnel( DateTimeInterface $start, DateTimeInterface $end ): array {
+	private function compute_anonymous_to_registered_funnel( DateTimeInterface $start, DateTimeInterface $end ): array {
 		$rows = $this->proxy->query( 'conversion_journey_funnel_anon_to_registered', $start, $end );
 		if ( is_wp_error( $rows ) ) {
 			return $this->error_collection( 'stages', $rows );

@@ -323,6 +323,11 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertArrayNotHasKey( 'pending', $result );
 		$this->assertCount( 3, $result['stages'] );
 
+		// NPPD-1743: registration leg is always visible (no config gate) so it
+		// carries the same gated shape the subscription/donation legs do.
+		$this->assertSame( 'visible', $result['visibility'] );
+		$this->assertNull( $result['visibility_reason'] );
+
 		// Stage 1: top → pct_of_top must be 1.0.
 		$this->assertSame( 500, $result['stages'][0]['count'] );
 		$this->assertSame( 1.0, $result['stages'][0]['pct_of_top'] );
@@ -366,6 +371,10 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 
 		$this->assertSame( 'empty', $result['state'] );
 		$this->assertSame( [], $result['stages'] );
+		// Always visible even with no rows — drives the data-driven no_opportunity
+		// empty state rather than hiding the leg (NPPD-1743).
+		$this->assertSame( 'visible', $result['visibility'] );
+		$this->assertNull( $result['visibility_reason'] );
 	}
 
 	/**
@@ -381,6 +390,10 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'bigquery_proxy_http_error', $result['error_code'] );
 		$this->assertSame( 'HTTP 503', $result['error_message'] );
 		$this->assertSame( [], $result['stages'] );
+		// The visibility stamp is unconditional — even an errored leg renders
+		// (the cell shows the shared error treatment), never hidden (NPPD-1743).
+		$this->assertSame( 'visible', $result['visibility'] );
+		$this->assertNull( $result['visibility_reason'] );
 	}
 
 	// --- C4: get_source_mix_registrations ----------------------------------
@@ -1794,6 +1807,10 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		// Section 2 — per-journey funnels.
 		$this->assertSame( 'populated', $current['anonymous_to_registered_funnel']['state'] );
 		$this->assertCount( 3, $current['anonymous_to_registered_funnel']['stages'] );
+		// Registration leg fixture must carry the same always-visible shape as
+		// live (NPPD-1743), so fixture mode matches production.
+		$this->assertSame( 'visible', $current['anonymous_to_registered_funnel']['visibility'] );
+		$this->assertNull( $current['anonymous_to_registered_funnel']['visibility_reason'] );
 		$this->assertSame( 'populated', $current['registered_to_subscriber_funnel']['state'] );
 		$this->assertSame( 'populated', $current['registered_to_donor_funnel']['state'] );
 

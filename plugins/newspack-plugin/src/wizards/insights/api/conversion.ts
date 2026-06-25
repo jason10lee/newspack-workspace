@@ -210,7 +210,10 @@ export interface ConversionWindow {
 	// Section 1 — The reader lifecycle.
 	reader_lifecycle_funnel: ConversionFunnelData;
 	// Section 2 — Per-journey conversion funnels.
-	anonymous_to_registered_funnel: ConversionFunnelData;
+	// The registration leg is always visible (no config gate), but carries the
+	// same gated shape so it can use the shared empty-state cell (NPPD-1743):
+	// `visibility: 'visible'`, `visibility_reason: null`.
+	anonymous_to_registered_funnel: ConversionGatedFunnelData;
 	// Subscription / donation legs carry the config-matrix visibility gate
 	// (NPPD-1742): `visibility: 'hidden'` + reason `'not_configured'` when the
 	// publisher doesn't run that reader-revenue stream.
