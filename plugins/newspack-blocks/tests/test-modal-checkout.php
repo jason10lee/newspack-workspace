@@ -17,7 +17,7 @@ if ( ! function_exists( 'wcs_is_product_limited_for_user' ) ) {
 	 *
 	 * @return bool
 	 */
-	function wcs_is_product_limited_for_user( $product, $user_id ) {
+	function wcs_is_product_limited_for_user( $product, $user_id ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Mock WooCommerce Subscriptions global.
 		global $newspack_blocks_test_limited_product_id, $newspack_blocks_test_limited_user_id;
 
 		return (
@@ -37,7 +37,7 @@ if ( ! function_exists( 'wcs_get_product_limitation' ) ) {
 	 *
 	 * @return string
 	 */
-	function wcs_get_product_limitation( $product_id ) {
+	function wcs_get_product_limitation( $product_id ) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Mock WooCommerce Subscriptions global.
 		unset( $product_id );
 		return 'any';
 	}
