@@ -75,6 +75,7 @@ export interface ConversionScalarMetric extends ConversionErrorFields {
 	computable: boolean;
 	denominator: number | null;
 	placeholder_type: ConversionPlaceholderType;
+	data_missing: boolean;
 }
 
 /* --- Section 1 / 2: funnels ----------------------------------------- */

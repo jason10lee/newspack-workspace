@@ -26,6 +26,7 @@ const errorScalar = (): ConversionScalarMetric => ( {
 	computable: false,
 	denominator: null,
 	placeholder_type: 'rate',
+	data_missing: false,
 } );
 
 describe( 'CrossTabInfluencedAttributionSection', () => {
@@ -53,5 +54,19 @@ describe( 'CrossTabInfluencedAttributionSection', () => {
 		expect( screen.getByText( 'Data temporarily unavailable.' ) ).toBeInTheDocument();
 		// The card must NOT fall through to showing a plain "0".
 		expect( screen.queryByText( '0' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'shows the data-missing note when an influenced scalar is missing required data', () => {
+		const current = makeConversionWindow();
+		current.influenced_subscription_rate_14d = {
+			state: 'populated',
+			value: 0,
+			computable: false,
+			denominator: null,
+			placeholder_type: 'rate',
+			data_missing: true,
+		};
+		render( <CrossTabInfluencedAttributionSection current={ current } previous={ null } /> );
+		expect( screen.getByText( 'Some data could not be loaded.' ) ).toBeInTheDocument();
 	} );
 } );
