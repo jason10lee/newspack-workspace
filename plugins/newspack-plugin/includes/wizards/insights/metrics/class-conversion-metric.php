@@ -327,6 +327,7 @@ final class Conversion_Metric {
 			'computable'       => false,
 			'denominator'      => null,
 			'placeholder_type' => $placeholder_type,
+			'data_missing'     => false,
 			'error_code'       => $error->get_error_code(),
 			'error_message'    => $error->get_error_message(),
 		];
@@ -341,15 +342,17 @@ final class Conversion_Metric {
 	 * @param bool      $computable       Whether the value is a real computed figure.
 	 * @param int|null  $denominator      Optional denominator.
 	 * @param string    $placeholder_type One of 'count', 'rate', 'currency', 'decimal'.
+	 * @param bool      $data_missing     True when the row is present but lacks required columns (schema drift).
 	 * @return array
 	 */
-	private function populated_scalar( $value, bool $computable, ?int $denominator, string $placeholder_type ): array {
+	private function populated_scalar( $value, bool $computable, ?int $denominator, string $placeholder_type, bool $data_missing = false ): array {
 		return [
 			'state'            => 'populated',
 			'value'            => $value,
 			'computable'       => $computable,
 			'denominator'      => $denominator,
 			'placeholder_type' => $placeholder_type,
+			'data_missing'     => $data_missing,
 		];
 	}
 
@@ -409,9 +412,14 @@ final class Conversion_Metric {
 			return $this->error_scalar( $placeholder_type, $rows );
 		}
 		$zero = 'decimal' === $placeholder_type ? 0.0 : 0;
-		if ( empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( $row_key, $rows[0] ) ) {
-			// Query succeeded with no usable value → non-computable zero.
+		if ( empty( $rows ) ) {
+			// No rows → empty window, legitimately no data.
 			return $this->populated_scalar( $zero, false, null, $placeholder_type );
+		}
+		if ( ! is_array( $rows[0] ) || ! array_key_exists( $row_key, $rows[0] ) ) {
+			// Row present but unusable (missing required column / malformed shape)
+			// → schema drift or bad deploy. Non-computable, flagged as missing data.
+			return $this->populated_scalar( $zero, false, null, $placeholder_type, true );
 		}
 		$value = $rows[0][ $row_key ];
 		// SAFE_DIVIDE returns NULL when the denominator is zero — a legitimate
@@ -456,9 +464,13 @@ final class Conversion_Metric {
 		if ( is_wp_error( $rows ) ) {
 			return $this->error_scalar( 'rate', $rows );
 		}
-		if ( empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( $rate_key, $rows[0] ) || ! array_key_exists( $denominator_key, $rows[0] ) ) {
-			// Query succeeded with no usable row → non-computable zero.
+		if ( empty( $rows ) ) {
+			// No rows → empty window, legitimately no data.
 			return $this->populated_scalar( 0.0, false, null, 'rate' );
+		}
+		if ( ! is_array( $rows[0] ) || ! array_key_exists( $rate_key, $rows[0] ) || ! array_key_exists( $denominator_key, $rows[0] ) ) {
+			// Row present but unusable → schema drift. Non-computable, flagged.
+			return $this->populated_scalar( 0.0, false, null, 'rate', true );
 		}
 		$denominator = $rows[0][ $denominator_key ];
 		if ( ! is_numeric( $denominator ) ) {
