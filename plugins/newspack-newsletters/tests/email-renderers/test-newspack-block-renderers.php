@@ -195,6 +195,49 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Post-item text links render black and underlined (matching MJML); image
+	 * links are left alone.
+	 *
+	 * The package renders post title / "continue reading" links with no colour
+	 * (so they fall to the client's default blue) and no underline. Since the
+	 * posts-inserter has no post-editor equivalent, the override restyles its text
+	 * links to the MJML newsletter look. Image-wrapping anchors must be untouched.
+	 */
+	public function test_posts_inserter_styles_text_links_for_email() {
+		Editor_Bootstrap::init();
+
+		$inner = '<div class="wp-block-columns"><!-- wp:column --><div class="wp-block-column">'
+			. '<!-- wp:image --><figure class="wp-block-image"><a href="https://example.com/p"><img src="https://example.com/i.jpg" alt=""/></a></figure><!-- /wp:image -->'
+			. '<!-- wp:heading --><h3 class="wp-block-heading"><a href="https://example.com/p">My Post Title</a></h3><!-- /wp:heading -->'
+			. '</div><!-- /wp:column --></div>';
+		$content = $this->serialize_posts_inserter(
+			[
+				[
+					'blockName'    => 'core/columns',
+					'attrs'        => [],
+					'innerHTML'    => $inner,
+					'innerContent' => [ $inner ],
+					'innerBlocks'  => [],
+				],
+			]
+		);
+		$html = Renderer_Controller::render_wc( get_post( $this->create_newsletter_with_content( $content ) ) );
+
+		// The post title link is black + underlined (style order-independent).
+		$this->assertMatchesRegularExpression(
+			'/<a\b[^>]*style="(?=[^"]*text-decoration:\s*underline)(?=[^"]*color:\s*#000000)[^"]*"[^>]*>\s*My Post Title/i',
+			$html,
+			'Expected the post title link to render black and underlined for email.'
+		);
+		// Image-wrapping anchors are not given the text-link underline.
+		$this->assertDoesNotMatchRegularExpression(
+			'/<a\b[^>]*text-decoration:\s*underline[^>]*><img/i',
+			$html,
+			'Expected image-wrapping links to be left alone.'
+		);
+	}
+
+	/**
 	 * The share builder wraps the content in a single anchor with the href.
 	 */
 	public function test_share_builder_wraps_anchor() {

@@ -46,7 +46,52 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 		if ( ! is_array( $children ) ) {
 			return '';
 		}
-		return self::render_inserted_blocks( $children );
+		return self::apply_email_styles( self::render_inserted_blocks( $children ) );
+	}
+
+	/**
+	 * Vertical gap between the meta blocks within a post item (title, subtitle,
+	 * date, excerpt, continue-reading), replacing the package's uniform 16px.
+	 *
+	 * The posts-inserter has no post-editor equivalent, so it matches the tighter
+	 * MJML newsletter look rather than the package default.
+	 */
+	const META_GAP = '8px';
+
+	/**
+	 * Vertical gap between consecutive post items. The package concatenates the
+	 * inserted children with no gap, so each item after the first gets this top
+	 * margin to separate the posts.
+	 */
+	const POST_GAP = '24px';
+
+	/**
+	 * Restyle the rendered post items to match the MJML newsletter look.
+	 *
+	 * Two adjustments, since the posts-inserter has no post-editor equivalent and
+	 * matches MJML:
+	 * 1. Post title / "continue reading" links: the package renders them with no
+	 *    colour (→ the client's default blue) and `text-decoration: none`. Set
+	 *    them black + underlined. Anchors are bare at this stage; the CSS inliner
+	 *    adds its styles downstream but preserves existing inline styles, so this
+	 *    wins. Image-wrapping anchors are skipped via the lookahead.
+	 * 2. Block spacing: collapse the package's uniform 16px gap to META_GAP.
+	 * 3. Root padding: each child renders as a top-level block and so gets the
+	 *    email's 24px root padding again — on top of the posts-inserter block's
+	 *    own root padding — double-indenting the posts. Zero the inner root
+	 *    padding so the posts line up flush with the other blocks.
+	 *
+	 * @param string $html Rendered posts-inserter HTML.
+	 * @return string
+	 */
+	private static function apply_email_styles( string $html ): string {
+		$html = (string) preg_replace(
+			'/<a\b([^>]*)>(?!\s*<img)/i',
+			'<a$1 style="text-decoration: underline; color: #000000;">',
+			$html
+		);
+		$html = (string) preg_replace( '/margin-top:\s*16px/i', 'margin-top: ' . self::META_GAP, $html );
+		return (string) preg_replace( '/padding-left:\s*24px;\s*padding-right:\s*24px/i', 'padding-left: 0; padding-right: 0', $html );
 	}
 
 	/**
@@ -65,18 +110,29 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 	 * @return string The concatenated rendered HTML, in child order.
 	 */
 	public static function render_inserted_blocks( array $children ): string {
-		$html = '';
+		$html  = '';
+		$index = 0;
 		foreach ( $children as $child ) {
 			if ( ! is_array( $child ) ) {
 				continue;
 			}
-			// Wrap a named child back into its delimiter so the outer block is
-			// email-rendered (its render_email_callback fires). A child without a
-			// block name is unexpected — the editor always stores one — but fall
-			// back to rendering its inner HTML so content is never dropped.
-			$html .= empty( $child['blockName'] )
-				? do_blocks( (string) ( $child['innerHTML'] ?? '' ) )
-				: do_blocks( self::serialize_inserted_block( $child ) );
+			// A child without a block name is unexpected — the editor always stores
+			// one — but fall back to rendering its inner HTML so content is never
+			// dropped.
+			if ( empty( $child['blockName'] ) ) {
+				$html .= do_blocks( (string) ( $child['innerHTML'] ?? '' ) );
+				++$index;
+				continue;
+			}
+			// Separate consecutive post items: give every item after the first a top
+			// margin (the package renders the concatenated children with no gap).
+			if ( $index > 0 ) {
+				$child['attrs']['style']['spacing']['margin']['top'] = self::POST_GAP;
+			}
+			// Wrap the child back into its delimiter so the outer block is
+			// email-rendered (its render_email_callback fires).
+			$html .= do_blocks( self::serialize_inserted_block( $child ) );
+			++$index;
 		}
 		return $html;
 	}
