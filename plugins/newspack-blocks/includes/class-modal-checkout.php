@@ -1770,40 +1770,68 @@ final class Modal_Checkout {
 	}
 
 	/**
+	 * Get validated cart item context for the modal checkout product summary.
+	 *
+	 * @param \WC_Cart $cart Cart object.
+	 *
+	 * @return array|null
+	 */
+	private static function get_cart_product_summary_context( $cart ) {
+		if ( ! $cart || 1 !== $cart->get_cart_contents_count() ) {
+			return null;
+		}
+		$cart_item_key = array_key_first( $cart->get_cart() );
+		$cart_item     = $cart->get_cart_item( $cart_item_key );
+
+		// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce hooks.
+		$product    = apply_filters( 'woocommerce_cart_item_product', $cart_item['data'], $cart_item, $cart_item_key );
+		$is_visible = $product && $product->exists() && $cart_item['quantity'] > 0 && apply_filters( 'woocommerce_checkout_cart_item_visible', true, $cart_item, $cart_item_key );
+		// phpcs:enable
+
+		return [
+			'cart_item_key' => $cart_item_key,
+			'cart_item'     => $cart_item,
+			'product'       => $product,
+			'is_visible'    => $is_visible,
+		];
+	}
+
+	/**
 	 * Get the cart product summary shown at the top of modal checkout.
 	 *
-	 * @param \WC_Cart|null $cart Cart object.
+	 * @param \WC_Cart|null $cart    Cart object.
+	 * @param array|null    $context Validated cart item context.
 	 */
-	private static function get_cart_product_summary( $cart = null ) {
+	private static function get_cart_product_summary( $cart = null, $context = null ) {
 		if ( ! $cart ) {
 			if ( ! function_exists( 'WC' ) ) {
 				return '';
 			}
 			$cart = \WC()->cart;
 		}
-		if ( ! $cart || 1 !== $cart->get_cart_contents_count() ) {
-			return '';
-		}
-		$cart_item_key = array_key_first( $cart->get_cart() );
-		$cart_item     = $cart->get_cart_item( $cart_item_key );
-		$_product      = apply_filters( 'woocommerce_cart_item_product', $cart_item['data'], $cart_item, $cart_item_key );
-		if ( ! $_product || ! $_product->exists() || $cart_item['quantity'] <= 0 || ! apply_filters( 'woocommerce_checkout_cart_item_visible', true, $cart_item, $cart_item_key ) ) {
+		$context = $context ? $context : self::get_cart_product_summary_context( $cart );
+		if ( ! $context || ! $context['is_visible'] ) {
 			return '';
 		}
 
+		$cart_item_key    = $context['cart_item_key'];
+		$cart_item        = $context['cart_item'];
+		$product          = $context['product'];
 		$allowed_html     = self::get_cart_product_summary_allowed_html();
+		// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce hooks.
 		$product_name     = apply_filters(
 			'woocommerce_cart_item_name',
-			$_product->get_name(),
+			$product->get_name(),
 			$cart_item,
 			$cart_item_key
-		); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
+		);
 		$product_subtotal = apply_filters(
 			'woocommerce_cart_item_subtotal',
-			$cart->get_product_subtotal( $_product, $cart_item['quantity'] ),
+			$cart->get_product_subtotal( $product, $cart_item['quantity'] ),
 			$cart_item,
 			$cart_item_key
-		); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
+		);
+		// phpcs:enable
 
 		ob_start();
 		echo wp_kses( $product_name, $allowed_html ) . ': ';
@@ -1874,25 +1902,20 @@ final class Modal_Checkout {
 		if ( 1 !== $cart->get_cart_contents_count() ) {
 			return;
 		}
-		$cart_item_key = array_key_first( $cart->get_cart() );
-		$cart_item = $cart->get_cart_item( $cart_item_key );
-		$product_id = $cart_item['variation_id'] ? $cart_item['variation_id'] : $cart_item['product_id'];
-		$class_prefix = self::get_class_prefix();
+		$summary_context = self::get_cart_product_summary_context( $cart );
+		$class_prefix    = self::get_class_prefix();
 		?>
 			<div class="<?php echo esc_attr( "order-details-summary {$class_prefix}__box {$class_prefix}__box--text-center" ); ?>">
 			<?php
-			// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce hooks.
-			$_product = apply_filters( 'woocommerce_cart_item_product', $cart_item['data'], $cart_item, $cart_item_key );
-			if ( $_product && $_product->exists() && $cart_item['quantity'] > 0 && apply_filters( 'woocommerce_checkout_cart_item_visible', true, $cart_item, $cart_item_key ) ) :
+			if ( $summary_context && $summary_context['is_visible'] ) :
 				?>
 				<p id="modal-checkout-product-details" data-checkout='<?php echo wp_json_encode( Checkout_Data::get_checkout_data( $cart ) ); ?>'>
 					<strong>
-						<?php echo self::get_cart_product_summary( $cart ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+						<?php echo self::get_cart_product_summary( $cart, $summary_context ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 					</strong>
 				</p>
 				<?php
 			endif;
-			// phpcs:enable
 			?>
 			</div>
 		<?php
