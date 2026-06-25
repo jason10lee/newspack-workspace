@@ -224,6 +224,11 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 					return true;
 				}
 				let productSummaryRequest = false;
+				function getCheckoutPostData() {
+					const $checkoutForm = $( 'form.checkout' );
+					// Repeat-trial checks can only resolve once the checkout form includes a billing email.
+					return $checkoutForm.length ? $checkoutForm.serialize() : '';
+				}
 				function requestUpdatedProductSummary() {
 					if ( productSummaryRequest ) {
 						productSummaryRequest.abort();
@@ -233,6 +238,8 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						method: 'POST',
 						data: {
 							action: 'get_cart_product_summary',
+							modal_checkout: 1,
+							post_data: getCheckoutPostData(),
 						},
 						success: response => {
 							if ( productSummaryRequest === request ) {
@@ -302,6 +309,8 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						method: 'POST',
 						data: {
 							action: 'get_cart_total',
+							modal_checkout: 1,
+							post_data: getCheckoutPostData(),
 						},
 						success: response => {
 							if ( response && cartTotalRequest === request ) {
