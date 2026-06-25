@@ -5,11 +5,11 @@
 		color: wp-colors.$gray-700;
 	}
 
-	// Goal picker: a 2-column grid of selectable cards (title + description),
+	// Goal picker: a single-column stack of selectable cards (title + description),
 	// shown in place of the goal dropdown when creating a rule.
 	&__goal-grid {
 		display: grid;
-		grid-template-columns: 1fr 1fr;
+		grid-template-columns: 1fr;
 		gap: 12px;
 	}
 
