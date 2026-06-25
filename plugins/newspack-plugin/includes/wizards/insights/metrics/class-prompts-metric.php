@@ -1459,7 +1459,8 @@ final class Prompts_Metric {
 			// Subscription is CAPABILITY-gated (NPPD-1759), symmetric with the donation
 			// column below and the gates paywall column: a prompt is subscription-capable
 			// when its per-popup `checkout_impressions` (seen events carrying a checkout-
-			// button block, NPPD-1755/1756) is non-zero. This catches an "Undefined"-intent
+			// button block, NPPD-1755 emission / NPPD-1759 hub column) is non-zero. This
+			// catches an "Undefined"-intent
 			// "50% off" promo that drives subscriptions — the order carries the popup id
 			// regardless of `action_type`, which collapses to 'undefined' for a multi-block
 			// prompt. Until the hub exposes the column, fall back to today's behavior — map
