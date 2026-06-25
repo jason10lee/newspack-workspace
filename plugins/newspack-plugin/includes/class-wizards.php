@@ -49,7 +49,6 @@ class Wizards {
 				[
 					'sections' => [
 						'custom-events'    => 'Newspack\Wizards\Newspack\Custom_Events_Section',
-						'emails'           => 'Newspack\Wizards\Newspack\Emails_Section',
 						'social-pixels'    => 'Newspack\Wizards\Newspack\Pixels_Section',
 						'recirculation'    => 'Newspack\Wizards\Newspack\Recirculation_Section',
 						'syndication'      => 'Newspack\Wizards\Newspack\Syndication_Section',
@@ -64,7 +63,13 @@ class Wizards {
 			),
 			'advertising-display-ads' => new Advertising_Display_Ads(),
 			'advertising-sponsors'    => new Advertising_Sponsors(),
-			'audience'                => new Audience_Wizard(),
+			'audience'                => new Audience_Wizard(
+				[
+					'sections' => [
+						'emails' => 'Newspack\Wizards\Newspack\Emails_Section',
+					],
+				]
+			),
 			'audience-campaigns'      => new Audience_Campaigns(),
 			'audience-content-gates'  => new Audience_Content_Gates(),
 			'audience-donations'      => new Audience_Donations(),
@@ -85,25 +90,6 @@ class Wizards {
 		// dynamic-pricing engine plugin is active (it owns the rules REST).
 		if ( class_exists( 'Automattic\\WooCommerce\\DynamicPricing\\Dynamic_Pricing' ) ) {
 			self::$wizards['audience-pricing-rules'] = new Audience_Pricing_Rules();
-		}
-
-		// Insights wizard + section init are gated together. The wizard's
-		// own constructor short-circuits when the feature flag is off and
-		// each section's init() self-gates too, but registering the
-		// instance and firing eight no-op init()s leaves stale state in
-		// self::$wizards (which Wizards::get_url() and Wizards::menu_order()
-		// read from). Keeping the gate at this layer is the single source
-		// of truth.
-		if ( Insights_Wizard::is_enabled() ) {
-			self::$wizards['insights'] = new Insights_Wizard();
-			Insights_Section_Audience::init();
-			Insights_Section_Engagement::init();
-			Insights_Section_Conversion::init();
-			Insights_Section_Gates::init();
-			Insights_Section_Prompts::init();
-			Insights_Section_Subscribers::init();
-			Insights_Section_Donors::init();
-			Insights_Section_Advertising::init();
 		}
 	}
 
