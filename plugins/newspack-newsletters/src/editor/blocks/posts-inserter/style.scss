@@ -75,28 +75,6 @@
 	}
 }
 
-// The post-inserter editor preview is a scaled BlockPreview that renders the
-// inserted blocks with the editor's (fluid) type scale, so it drifts from the
-// de-fluid WC email. Pin the post-item type scale and spacing to the email's
-// values so the editor preview reads the same: 24px headings, 16px body, and an
-// 8px gap between the title, subtitle, date, excerpt, and continue-reading. The
-// gap between posts is left to the preview's own layout.
-.newspack-posts-inserter__preview .block-editor-block-preview__content {
-	.wp-block-heading {
-		font-size: 24px;
-		line-height: 1.2;
-	}
-
-	.wp-block-column p {
-		font-size: 16px;
-		line-height: 1.5;
-	}
-
-	.wp-block-column > * + * {
-		margin-top: 8px;
-	}
-}
-
 // FormTokenField
 
 .newspack-newsletters-query-controls {

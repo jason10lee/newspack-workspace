@@ -15,6 +15,40 @@ import { useCustomFontsInIframe } from '../../../newsletter-editor/styling';
 import classnames from 'classnames';
 
 /**
+ * Post-item typography and spacing for the preview, matching the values the WC
+ * email renderer produces: title 24px / subtitle 16px / body 16px, an 8px gap
+ * between the title, subtitle, date, excerpt and continue-reading link. The
+ * preview is an iframed `BlockPreview`, so this can't live in the block's editor
+ * stylesheet (the outer document) — it's injected straight into the iframe. The
+ * inserted blocks carry authored inline font sizes (e.g. the date's 20px) that
+ * the email normalises away, so `!important` is needed to beat them.
+ */
+const POST_ITEM_PREVIEW_STYLES = `
+	h3.wp-block-heading {
+		font-size: 24px !important;
+		line-height: 1.2 !important;
+		font-weight: 700 !important;
+	}
+	h4.wp-block-heading {
+		font-size: 16px !important;
+		line-height: 1.2 !important;
+		font-weight: 700 !important;
+	}
+	.wp-block-column p {
+		font-size: 16px !important;
+		line-height: 1.5 !important;
+		font-weight: 400 !important;
+	}
+	.wp-block-column > * {
+		margin-top: 0 !important;
+		margin-bottom: 0 !important;
+	}
+	.wp-block-column > * + * {
+		margin-top: 8px !important;
+	}
+`;
+
+/**
  * Posts Preview component.
  */
 const PostsPreview = ( { isReady, blocks, className, viewportWidth }, ref ) => {
@@ -68,10 +102,38 @@ const PostsPreview = ( { isReady, blocks, className, viewportWidth }, ref ) => {
 		};
 	}, [] );
 
+	// Inject the email-matching post-item typography into the preview iframe.
+	const usePostItemStyles = useRefEffect( node => {
+		const applyStyle = () => {
+			const iframe = node.querySelector( 'iframe[title="Editor canvas"]' );
+			if ( ! iframe ) {
+				return;
+			}
+			const injectStyle = () => {
+				const doc = iframe.contentDocument;
+				if ( ! doc || doc.getElementById( 'newspack-posts-inserter-preview-typography' ) ) {
+					return;
+				}
+				const styleEl = doc.createElement( 'style' );
+				styleEl.id = 'newspack-posts-inserter-preview-typography';
+				styleEl.textContent = POST_ITEM_PREVIEW_STYLES;
+				doc.head.appendChild( styleEl );
+			};
+			injectStyle();
+			iframe.addEventListener( 'load', injectStyle );
+		};
+		const observer = new MutationObserver( applyStyle );
+		observer.observe( node, { childList: true } );
+		applyStyle();
+		return () => {
+			observer.disconnect();
+		};
+	}, [] );
+
 	return (
 		<div
 			className={ classnames( 'newspack-posts-inserter__preview', className ) }
-			ref={ useMergeRefs( [ ref, useIframeBorderFix, useLayoutStyle, useCustomFontsInIframe() ] ) }
+			ref={ useMergeRefs( [ ref, useIframeBorderFix, useLayoutStyle, usePostItemStyles, useCustomFontsInIframe() ] ) }
 		>
 			{ ! isReady && <Spinner /> }
 			{ isReady && blocks?.length > 0 && <BlockPreview blocks={ blocks } viewportWidth={ viewportWidth } /> }
