@@ -86,6 +86,8 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 	const [ publicize, setPublicize ] = useState( Boolean( rule?.publicize ) );
 	const [ path, setPath ] = useState< string >( rule?.intent ?? ( isNew ? '' : 'custom' ) );
 	const [ intentNote, setIntentNote ] = useState( rule?.intent_note ?? '' );
+	// On a new rule the goal cards collapse to the chosen one once picked; "picking" reopens the full list.
+	const [ picking, setPicking ] = useState( false );
 	// The deal name auto-fills from the goal until the publisher types their own.
 	const [ titleIsAuto, setTitleIsAuto ] = useState( isNew && ! rule?.title );
 	const recipe = path && path in RECIPES ? RECIPES[ path as PricingPath ] : null;
@@ -95,6 +97,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 	// presets nothing but its scope default.
 	const choosePath = ( next: string ) => {
 		setPath( next );
+		setPicking( false );
 		if ( ! ( next in RECIPES ) ) {
 			return;
 		}
@@ -287,7 +290,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 					) }
 				/>
 				<VStack spacing={ 4 }>
-					{ isNew ? (
+					{ isNew && ( path === '' || picking ) && (
 						<div className="newspack-pricing-rules__goal-grid">
 							{ pathOptions().map( opt => {
 								const selected = path === opt.value;
@@ -305,7 +308,19 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 								);
 							} ) }
 						</div>
-					) : (
+					) }
+					{ isNew && path !== '' && ! picking && (
+						<div className="newspack-pricing-rules__goal-grid">
+							<div className="newspack-pricing-rules__goal-card is-selected">
+								<span className="newspack-pricing-rules__goal-card-title">{ intentLabel( path ) }</span>
+								<span className="newspack-pricing-rules__goal-card-desc">{ pathDescription( path as PricingPath ) }</span>
+							</div>
+							<Button variant="link" onClick={ () => setPicking( true ) }>
+								{ __( 'Change', 'newspack-plugin' ) }
+							</Button>
+						</div>
+					) }
+					{ ! isNew && (
 						<p className="description">
 							{ __( 'Goal:', 'newspack-plugin' ) } <strong>{ intentLabel( path ) }</strong>
 							<br />
