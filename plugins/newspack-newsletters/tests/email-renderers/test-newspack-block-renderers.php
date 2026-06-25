@@ -243,7 +243,8 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 	public function test_share_builder_wraps_anchor() {
 		$result = Share::build_share_html( 'mailto:?body=x', 'Share this' );
 
-		$this->assertStringContainsString( '<a href="mailto:?body=x">', $result, 'Expected the anchor to carry the share href.' );
+		$this->assertStringContainsString( '<a href="mailto:?body=x"', $result, 'Expected the anchor to carry the share href.' );
+		$this->assertMatchesRegularExpression( '/<a\b[^>]*style="(?=[^"]*text-decoration:\s*underline)(?=[^"]*color:\s*inherit)[^"]*"/i', $result, 'Expected the anchor to be underlined and inherit the text colour, matching the editor default.' );
 		$this->assertStringContainsString( 'Share this', $result, 'Expected the link text to be preserved.' );
 		$this->assertStringContainsString( 'newspack-newsletters-share-block', $result, 'Expected the share-block paragraph class.' );
 		$this->assertSame( 1, substr_count( $result, '<a ' ), 'Expected exactly one anchor in the share markup.' );

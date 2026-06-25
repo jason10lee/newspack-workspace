@@ -86,8 +86,12 @@ class Share extends Abstract_Block_Renderer {
 		if ( '' === $href ) {
 			return '';
 		}
+		// Match the editor's default link rendering: underlined and inheriting the
+		// text colour. The package's CSS inliner otherwise gives the anchor the
+		// client-default blue with no underline; it preserves existing inline
+		// styles, so styling the anchor here wins.
 		return sprintf(
-			'<p class="newspack-newsletters-share-block"><a href="%1$s">%2$s</a></p>',
+			'<p class="newspack-newsletters-share-block"><a href="%1$s" style="text-decoration: underline; color: inherit;">%2$s</a></p>',
 			esc_url( $href, [ 'http', 'https', 'mailto' ] ),
 			wp_kses_post( $content )
 		);
