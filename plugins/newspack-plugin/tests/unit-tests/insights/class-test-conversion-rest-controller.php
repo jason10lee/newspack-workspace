@@ -456,9 +456,20 @@ class Test_Conversion_REST_Controller extends WP_UnitTestCase {
 		$controller = new class() {
 			use Cached_Controller_Trait;
 
+			/**
+			 * Cache source for the test controller.
+			 *
+			 * @return string
+			 */
 			protected function cache_source(): string {
 				return Cache::SOURCE_BIGQUERY;
 			}
+
+			/**
+			 * Tab slug for the test controller.
+			 *
+			 * @return string
+			 */
 			protected function tab_slug(): string {
 				return 'test';
 			}
