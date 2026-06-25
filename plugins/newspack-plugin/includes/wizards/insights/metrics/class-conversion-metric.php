@@ -66,6 +66,7 @@ use Newspack\Insights\Subscribers_Metric;
  *   computable: bool,
  *   denominator: int|null,
  *   placeholder_type: string,
+ *   data_missing: bool,
  *   error_code?: string,
  *   error_message?: string,
  * }

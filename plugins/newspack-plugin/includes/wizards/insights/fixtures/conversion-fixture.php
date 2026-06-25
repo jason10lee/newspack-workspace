@@ -220,6 +220,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 			'computable'       => false,
 			'denominator'      => null,
 			'placeholder_type' => 'rate',
+			'data_missing'     => false,
 			'error_code'       => 'bigquery_proxy_http_error',
 			'error_message'    => 'HTTP 500',
 		];
@@ -289,6 +290,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 					'computable'       => true,
 					'denominator'      => null,
 					'placeholder_type' => 'count',
+					'data_missing'     => false,
 				],
 				'at_risk_subscriber_count'         => [
 					'state'            => 'populated',
@@ -296,6 +298,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 					'computable'       => true,
 					'denominator'      => null,
 					'placeholder_type' => 'count',
+					'data_missing'     => false,
 				],
 				'lapsed_donor_count'               => [
 					'state'            => 'populated',
@@ -303,6 +306,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 					'computable'       => true,
 					'denominator'      => null,
 					'placeholder_type' => 'count',
+					'data_missing'     => false,
 				],
 			],
 			$deferred()
@@ -336,6 +340,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 				'computable'       => false,
 				'denominator'      => 'rate' === $type ? 0 : null,
 				'placeholder_type' => $type,
+				'data_missing'     => false,
 			];
 		};
 		$current = array_merge(
@@ -412,6 +417,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 			'computable'       => $computable,
 			'denominator'      => $denominator,
 			'placeholder_type' => $type,
+			'data_missing'     => false,
 		];
 	};
 
