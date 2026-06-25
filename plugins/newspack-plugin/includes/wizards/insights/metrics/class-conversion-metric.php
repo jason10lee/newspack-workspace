@@ -74,12 +74,14 @@ use Newspack\Insights\Subscribers_Metric;
 final class Conversion_Metric {
 
 	/**
-	 * Cache key prefix. Bumped when the response shape changes so cached
-	 * payloads from a prior shape don't break a deploy.
+	 * Response-shape version mixed into the conversion cache key via the REST
+	 * controller's `cache_schema_version()`. Bump the v-suffix whenever the Tab 3
+	 * response shape changes so cached payloads from a prior shape don't survive
+	 * a deploy. Bumped to v2 for the `data_missing` scalar field.
 	 *
 	 * @var string
 	 */
-	const CACHE_PREFIX = 'newspack_insights_tab3_v1:';
+	const CACHE_PREFIX = 'newspack_insights_tab3_v2:';
 
 	/**
 	 * Tab slug used as the Cache namespace for Section 5 snapshots.
