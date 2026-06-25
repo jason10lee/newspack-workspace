@@ -144,6 +144,7 @@ class EditorAssetsTest extends WP_UnitTestCase {
 		do_action( 'enqueue_block_assets' );
 
 		self::assertTrue( wp_script_is( 'newspack-popups-blocks', 'enqueued' ) );
+		self::assertTrue( wp_style_is( 'newspack-popups-blocks', 'enqueued' ) );
 		self::assertFalse( wp_script_is( 'newspack-popups', 'enqueued' ) );
 	}
 
