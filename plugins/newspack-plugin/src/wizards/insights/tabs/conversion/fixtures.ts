@@ -18,6 +18,7 @@ import type {
 	ConversionGatedCumulativeSingle,
 	ConversionGatedFunnelData,
 	ConversionMetricState,
+	ConversionReferenceLine,
 	ConversionScalarMetric,
 	ConversionSourceMixData,
 	ConversionTopPagesTable,
@@ -116,10 +117,10 @@ const cumulativeMulti = ( state: ConversionMetricState = 'coming_soon' ): Conver
 	],
 } );
 
-const cohort = ( value: number, label: string, state: ConversionMetricState = 'coming_soon' ): ConversionCohortData => ( {
+const cohort = ( referenceLine: ConversionReferenceLine | null, state: ConversionMetricState = 'coming_soon' ): ConversionCohortData => ( {
 	state,
 	cohorts: [],
-	reference_line: { value, label },
+	reference_line: referenceLine,
 } );
 
 const weekly = ( state: ConversionMetricState = 'coming_soon' ): ConversionWeeklyTrendsData => ( {
@@ -183,8 +184,8 @@ export const makeConversionWindow = ( overrides: ConversionWindowOverrides = {} 
 	time_to_donate_distribution: cumulativeMulti( 'coming_soon' ),
 	subscriber_to_donor_lag_distribution: gatedCumulativeSingle( overrides.lagVisibility ?? 'hidden', 'coming_soon' ),
 	// Section 5 — Phase B coming_soon.
-	registration_to_conversion_cohort: cohort( 0.15, '15% at 6 months', overrides.cohortState ?? 'coming_soon' ),
-	subscriber_retention_cohort: cohort( 0.7, '70% at 12 months', overrides.cohortState ?? 'coming_soon' ),
+	registration_to_conversion_cohort: cohort( null, overrides.cohortState ?? 'coming_soon' ),
+	subscriber_retention_cohort: cohort( { value: 0.7, label: '70% at 12 months' }, overrides.cohortState ?? 'coming_soon' ),
 	// Section 6 — Phase A, wired.
 	weekly_conversion_rates: weekly( overrides.weeklyTrendsState ?? 'populated' ),
 	// Section 7 — Phase A, wired (scalar).
