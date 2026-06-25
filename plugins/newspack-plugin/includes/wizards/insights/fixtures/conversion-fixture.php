@@ -189,14 +189,11 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 				'visibility'        => 'hidden',
 				'visibility_reason' => 'insufficient_data',
 			],
-			// 5.1 — registration-to-conversion cohort (reference_line preserved).
+			// 5.1 — registration-to-conversion cohort (reference_line off; autoscaled).
 			'registration_to_conversion_cohort'    => [
 				'state'          => 'coming_soon',
 				'cohorts'        => [],
-				'reference_line' => [
-					'value' => 0.15,
-					'label' => __( '15% at 6 months', 'newspack-plugin' ),
-				],
+				'reference_line' => null,
 			],
 			// 5.2 — subscriber retention cohort (reference_line preserved).
 			'subscriber_retention_cohort'          => [

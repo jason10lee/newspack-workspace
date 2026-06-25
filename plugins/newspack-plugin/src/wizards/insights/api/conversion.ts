@@ -169,7 +169,7 @@ export interface ConversionCohortSeries {
 export interface ConversionCohortData extends ConversionErrorFields {
 	state: ConversionMetricState;
 	cohorts: ConversionCohortSeries[];
-	reference_line: ConversionReferenceLine;
+	reference_line: ConversionReferenceLine | null;
 }
 
 /* --- Section 6: weekly conversion-rate trends ----------------------- */

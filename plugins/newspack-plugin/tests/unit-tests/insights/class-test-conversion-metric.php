@@ -180,7 +180,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 
 	/**
 	 * C23 coming_soon: returns state 'coming_soon' with an empty 'cohorts'
-	 * collection, preserved reference_line (0.15), and no 'pending' key.
+	 * collection, reference_line null (default line off), and no 'pending' key.
 	 */
 	public function test_registration_to_conversion_cohort_is_coming_soon() {
 		[ $start, $end ] = $this->window();
@@ -190,8 +190,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'cohorts', $result );
 		$this->assertSame( [], $result['cohorts'] );
 		$this->assertArrayHasKey( 'reference_line', $result );
-		$this->assertSame( 0.15, $result['reference_line']['value'] );
-		$this->assertNotSame( '', $result['reference_line']['label'] );
+		$this->assertNull( $result['reference_line'] );
 		$this->assertArrayNotHasKey( 'pending', $result );
 	}
 
@@ -1867,10 +1866,10 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'hidden', $current['subscriber_to_donor_lag_distribution']['visibility'] );
 		$this->assertSame( 'insufficient_data', $current['subscriber_to_donor_lag_distribution']['visibility_reason'] );
 
-		// 5.1 — registration cohort (reference_line).
+		// 5.1 — registration cohort (reference_line off; autoscaled).
 		$this->assertSame( 'coming_soon', $current['registration_to_conversion_cohort']['state'] );
 		$this->assertSame( [], $current['registration_to_conversion_cohort']['cohorts'] );
-		$this->assertSame( 0.15, $current['registration_to_conversion_cohort']['reference_line']['value'] );
+		$this->assertNull( $current['registration_to_conversion_cohort']['reference_line'] );
 
 		// 5.2 — subscriber retention cohort (reference_line).
 		$this->assertSame( 'coming_soon', $current['subscriber_retention_cohort']['state'] );
@@ -2725,7 +2724,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 0.25, $points[1] );
 		$this->assertSame( 0.25, $points[2] );
 		$this->assertSame( 0.5, $points[3] );
-		$this->assertSame( 0.15, $result['reference_line']['value'] );
+		$this->assertNull( $result['reference_line'] );
 	}
 
 	/**
@@ -2751,7 +2750,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * 5.1 compute: no readers → empty state, reference_line preserved.
+	 * 5.1 compute: no readers → empty state, reference_line null.
 	 */
 	public function test_compute_registration_cohort_empty() {
 		$subs_metric = $this->createMock( Subscribers_Metric::class );
@@ -2764,7 +2763,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$result = $metric->compute_registration_to_conversion_cohort();
 		$this->assertSame( 'empty', $result['state'] );
 		$this->assertSame( [], $result['cohorts'] );
-		$this->assertSame( 0.15, $result['reference_line']['value'] );
+		$this->assertNull( $result['reference_line'] );
 	}
 
 	/**
@@ -2962,10 +2961,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 						],
 					],
 				],
-				'reference_line' => [
-					'value' => 0.15,
-					'label' => 'x',
-				],
+				'reference_line' => null,
 			],
 			'subscriber_retention_cohort'       => [
 				'state'          => 'empty',
@@ -2985,14 +2981,14 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Cold cache → coming_soon envelope with reference_line preserved (no throw).
+	 * Cold cache → coming_soon envelope with reference_line null (no throw).
 	 */
 	public function test_registration_cohort_getter_cold_cache_coming_soon() {
 		[ $start, $end ] = $this->window();
 		$result          = $this->metric->get_registration_to_conversion_cohort( $start, $end );
 		$this->assertSame( 'coming_soon', $result['state'] );
 		$this->assertSame( [], $result['cohorts'] );
-		$this->assertSame( 0.15, $result['reference_line']['value'] );
+		$this->assertNull( $result['reference_line'] );
 	}
 
 	/**
