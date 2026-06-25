@@ -66,6 +66,7 @@ use Newspack\Insights\Subscribers_Metric;
  *   computable: bool,
  *   denominator: int|null,
  *   placeholder_type: string,
+ *   data_missing: bool,
  *   error_code?: string,
  *   error_message?: string,
  * }
@@ -73,12 +74,14 @@ use Newspack\Insights\Subscribers_Metric;
 final class Conversion_Metric {
 
 	/**
-	 * Cache key prefix. Bumped when the response shape changes so cached
-	 * payloads from a prior shape don't break a deploy.
+	 * Response-shape version mixed into the conversion cache key via the REST
+	 * controller's `cache_schema_version()`. Bump the v-suffix whenever the Tab 3
+	 * response shape changes so cached payloads from a prior shape don't survive
+	 * a deploy. Bumped to v2 for the `data_missing` scalar field.
 	 *
 	 * @var string
 	 */
-	const CACHE_PREFIX = 'newspack_insights_tab3_v1:';
+	const CACHE_PREFIX = 'newspack_insights_tab3_v2:';
 
 	/**
 	 * Tab slug used as the Cache namespace for Section 5 snapshots.
@@ -327,6 +330,7 @@ final class Conversion_Metric {
 			'computable'       => false,
 			'denominator'      => null,
 			'placeholder_type' => $placeholder_type,
+			'data_missing'     => false,
 			'error_code'       => $error->get_error_code(),
 			'error_message'    => $error->get_error_message(),
 		];
@@ -341,15 +345,17 @@ final class Conversion_Metric {
 	 * @param bool      $computable       Whether the value is a real computed figure.
 	 * @param int|null  $denominator      Optional denominator.
 	 * @param string    $placeholder_type One of 'count', 'rate', 'currency', 'decimal'.
+	 * @param bool      $data_missing     True when the row is present but lacks required columns (schema drift).
 	 * @return array
 	 */
-	private function populated_scalar( $value, bool $computable, ?int $denominator, string $placeholder_type ): array {
+	private function populated_scalar( $value, bool $computable, ?int $denominator, string $placeholder_type, bool $data_missing = false ): array {
 		return [
 			'state'            => 'populated',
 			'value'            => $value,
 			'computable'       => $computable,
 			'denominator'      => $denominator,
 			'placeholder_type' => $placeholder_type,
+			'data_missing'     => $data_missing,
 		];
 	}
 
@@ -386,9 +392,11 @@ final class Conversion_Metric {
 	/**
 	 * Run a scalar catalog query and extract a single value from the first row.
 	 *
-	 * A proxy WP_Error becomes state 'error'. A successful query with no usable
-	 * value (empty rows, missing key, non-numeric, or count drift) becomes a
-	 * 'populated' non-computable zero.
+	 * A proxy WP_Error becomes state 'error'. An empty result or a SAFE_DIVIDE
+	 * null becomes a benign 'populated' non-computable zero. A row present but
+	 * missing the required column becomes a non-computable zero flagged
+	 * `data_missing` (schema drift). A non-numeric or count-drift value becomes
+	 * state 'error'.
 	 *
 	 * @param string            $query_name        Catalog `query_name`.
 	 * @param string            $row_key           Column to extract from the first row.
@@ -409,14 +417,20 @@ final class Conversion_Metric {
 			return $this->error_scalar( $placeholder_type, $rows );
 		}
 		$zero = 'decimal' === $placeholder_type ? 0.0 : 0;
-		if ( empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( $row_key, $rows[0] ) ) {
-			// Query succeeded with no usable value → non-computable zero.
+		if ( empty( $rows ) ) {
+			// No rows → empty window, legitimately no data.
 			return $this->populated_scalar( $zero, false, null, $placeholder_type );
+		}
+		if ( ! is_array( $rows[0] ) || ! array_key_exists( $row_key, $rows[0] ) ) {
+			// Row present but unusable (missing required column / malformed shape)
+			// → schema drift or bad deploy. Non-computable, flagged as missing data.
+			return $this->populated_scalar( $zero, false, null, $placeholder_type, true );
 		}
 		$value = $rows[0][ $row_key ];
 		// SAFE_DIVIDE returns NULL when the denominator is zero — a legitimate
 		// "no eligible events to compute a rate" case, not a schema regression.
-		// Same handling as the missing-key branch above: non-computable zero.
+		// Benign → non-computable zero, NOT flagged data_missing (unlike the
+		// missing-column branch above).
 		if ( null === $value ) {
 			return $this->populated_scalar( $zero, false, null, $placeholder_type );
 		}
@@ -456,9 +470,13 @@ final class Conversion_Metric {
 		if ( is_wp_error( $rows ) ) {
 			return $this->error_scalar( 'rate', $rows );
 		}
-		if ( empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( $rate_key, $rows[0] ) || ! array_key_exists( $denominator_key, $rows[0] ) ) {
-			// Query succeeded with no usable row → non-computable zero.
+		if ( empty( $rows ) ) {
+			// No rows → empty window, legitimately no data.
 			return $this->populated_scalar( 0.0, false, null, 'rate' );
+		}
+		if ( ! is_array( $rows[0] ) || ! array_key_exists( $rate_key, $rows[0] ) || ! array_key_exists( $denominator_key, $rows[0] ) ) {
+			// Row present but unusable → schema drift. Non-computable, flagged.
+			return $this->populated_scalar( 0.0, false, null, 'rate', true );
 		}
 		$denominator = $rows[0][ $denominator_key ];
 		if ( ! is_numeric( $denominator ) ) {

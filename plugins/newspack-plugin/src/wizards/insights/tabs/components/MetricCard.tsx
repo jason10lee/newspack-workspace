@@ -84,6 +84,8 @@ export interface MetricCardProps {
 	error?: string;
 	/** Metric needs configuration (e.g. coverage area not set). */
 	notConfigured?: boolean;
+	/** A present hub row was missing required column(s) — renders the data-missing note. */
+	dataMissing?: boolean;
 	/**
 	 * Native tooltip for the value (e.g. the full amount behind an abbreviated
 	 * "$1.2M"). Overrides the title the currency formatter derives on its own.
@@ -148,19 +150,20 @@ const MetricCard = ( props: MetricCardProps ) => {
 		overlay,
 		error,
 		notConfigured,
+		dataMissing,
 		valueTitle,
 		zeroFallback,
 		notCapableMessage,
 		notComputableMessage,
 	} = props;
 
-	// Shared graceful-failure state (missing dimension / not configured / error).
-	if ( overlay || error || notConfigured ) {
+	// Shared graceful-failure state (missing dimension / not configured / error / data missing).
+	if ( overlay || error || notConfigured || dataMissing ) {
 		return (
 			<Card __experimentalCoreCard className="newspack-insights__metric-card newspack-insights__metric-card--note">
 				<div className="newspack-insights__metric-card-label">{ label }</div>
 				<div className="newspack-insights__metric-card-body">
-					<MetricNote overlay={ overlay } error={ !! error } notConfigured={ notConfigured } />
+					<MetricNote overlay={ overlay } error={ !! error } notConfigured={ notConfigured } dataMissing={ dataMissing } />
 				</div>
 				{ description && <div className="newspack-insights__metric-card-description">{ description }</div> }
 			</Card>

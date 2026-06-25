@@ -16,6 +16,7 @@ namespace Newspack\Tests\Insights;
 use Newspack\Insights\Cache;
 use Newspack\Insights\Conversion_Metric;
 use Newspack\Insights\Conversion_REST_Controller;
+use Newspack\Insights\Cached_Controller_Trait;
 use WP_REST_Request;
 use WP_REST_Server;
 use WP_UnitTestCase;
@@ -444,6 +445,65 @@ class Test_Conversion_REST_Controller extends WP_UnitTestCase {
 		$method = new ReflectionMethod( Conversion_REST_Controller::class, 'is_window_all_error' );
 		$method->setAccessible( true );
 		return (bool) $method->invoke( null, $window, $woocommerce_active );
+	}
+
+	/**
+	 * Default: a controller that doesn't override cache_schema_version() keeps
+	 * the canonical four-part window key — no version component, so unrelated
+	 * tabs aren't cache-busted by this mechanism.
+	 */
+	public function test_cache_key_has_no_version_prefix_by_default() {
+		$controller = new class() {
+			use Cached_Controller_Trait;
+
+			/**
+			 * Cache source for the test controller.
+			 *
+			 * @return string
+			 */
+			protected function cache_source(): string {
+				return Cache::SOURCE_BIGQUERY;
+			}
+
+			/**
+			 * Tab slug for the test controller.
+			 *
+			 * @return string
+			 */
+			protected function tab_slug(): string {
+				return 'test';
+			}
+		};
+		$request = new WP_REST_Request( 'GET', self::ROUTE );
+		$request->set_param( 'start', '2026-01-01' );
+		$request->set_param( 'end', '2026-01-31' );
+
+		$method = new ReflectionMethod( $controller, 'versioned_cache_key_parts' );
+		$method->setAccessible( true );
+		$parts = $method->invoke( $controller, $request );
+
+		$this->assertCount( 4, $parts );
+		$this->assertSame( '2026-01-01', $parts[0] );
+	}
+
+	/**
+	 * Conversion overrides cache_schema_version() with its CACHE_PREFIX, so the
+	 * version is the first cache-key component — bumping CACHE_PREFIX on a
+	 * response-shape change busts stale-shape transients on deploy.
+	 */
+	public function test_conversion_cache_key_includes_schema_version() {
+		$controller = new Conversion_REST_Controller();
+		$request    = new WP_REST_Request( 'GET', self::ROUTE );
+		$request->set_param( 'start', '2026-01-01' );
+		$request->set_param( 'end', '2026-01-31' );
+
+		$method = new ReflectionMethod( Conversion_REST_Controller::class, 'versioned_cache_key_parts' );
+		$method->setAccessible( true );
+		$parts = $method->invoke( $controller, $request );
+
+		$this->assertCount( 5, $parts );
+		$this->assertSame( Conversion_Metric::CACHE_PREFIX, $parts[0] );
+		$this->assertContains( '2026-01-01', $parts );
 	}
 
 	/**

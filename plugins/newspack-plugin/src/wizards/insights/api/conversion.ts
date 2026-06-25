@@ -68,6 +68,8 @@ export interface ConversionErrorFields {
 /**
  * Standard scorecard metric payload (Sections 7 and 8.1–8.3).
  * `state` is 'error' | 'populated' | 'coming_soon' (scalars have no 'empty' state).
+ * `data_missing` flags a non-computable zero caused by a hub row missing required
+ * column(s) (schema drift) so the card can warn instead of showing a misleading zero.
  */
 export interface ConversionScalarMetric extends ConversionErrorFields {
 	state: 'error' | 'populated' | 'coming_soon';
@@ -75,6 +77,7 @@ export interface ConversionScalarMetric extends ConversionErrorFields {
 	computable: boolean;
 	denominator: number | null;
 	placeholder_type: ConversionPlaceholderType;
+	data_missing: boolean;
 }
 
 /* --- Section 1 / 2: funnels ----------------------------------------- */

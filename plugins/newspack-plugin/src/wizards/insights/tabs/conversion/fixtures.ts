@@ -39,6 +39,7 @@ const scalar = (
 	computable: state === 'populated',
 	denominator: null,
 	placeholder_type,
+	data_missing: false,
 } );
 
 const funnel = ( state: ConversionMetricState, ...labels: string[] ): ConversionFunnelData => ( {

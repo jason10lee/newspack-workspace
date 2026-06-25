@@ -688,6 +688,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'populated', $result['state'] );
 		$this->assertArrayNotHasKey( 'pending', $result );
 		$this->assertTrue( $result['computable'] );
+		$this->assertFalse( $result['data_missing'] );
 		$this->assertSame( 'rate', $result['placeholder_type'] );
 		$this->assertEqualsWithDelta( 0.37, $result['value'], 1e-9 );
 	}
@@ -702,7 +703,22 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 
 		$this->assertSame( 'populated', $result['state'] );
 		$this->assertFalse( $result['computable'] );
+		$this->assertFalse( $result['data_missing'] );
 		$this->assertEqualsWithDelta( 0.0, $result['value'], 1e-9 );
+	}
+
+	/**
+	 * C7 missing column: a non-empty row lacking the rate column → non-computable
+	 * zero flagged as missing data (schema drift), NOT a benign empty zero.
+	 */
+	public function test_influenced_registration_rate_7d_flags_data_missing_on_missing_column() {
+		$metric          = new Conversion_Metric( $this->proxy_returning( [ [ 'unexpected_column' => 1 ] ] ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_influenced_registration_rate_7d( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertFalse( $result['computable'] );
+		$this->assertTrue( $result['data_missing'] );
 	}
 
 	/**
@@ -1107,6 +1123,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 0.0, $result['value'] );
 		$this->assertFalse( $result['computable'] );
 		$this->assertSame( 0, $result['denominator'] );
+		$this->assertFalse( $result['data_missing'] );
 	}
 
 	/**
@@ -1175,6 +1192,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertFalse( $result['computable'] );
 		$this->assertSame( 0.0, $result['value'] );
 		$this->assertNull( $result['denominator'] );
+		$this->assertTrue( $result['data_missing'] );
 	}
 
 	// --- C15: get_influenced_donation_rate_14d ------------------------------
