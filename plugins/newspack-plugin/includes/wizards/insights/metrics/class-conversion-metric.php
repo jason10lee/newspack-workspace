@@ -389,9 +389,11 @@ final class Conversion_Metric {
 	/**
 	 * Run a scalar catalog query and extract a single value from the first row.
 	 *
-	 * A proxy WP_Error becomes state 'error'. A successful query with no usable
-	 * value (empty rows, missing key, non-numeric, or count drift) becomes a
-	 * 'populated' non-computable zero.
+	 * A proxy WP_Error becomes state 'error'. An empty result or a SAFE_DIVIDE
+	 * null becomes a benign 'populated' non-computable zero. A row present but
+	 * missing the required column becomes a non-computable zero flagged
+	 * `data_missing` (schema drift). A non-numeric or count-drift value becomes
+	 * state 'error'.
 	 *
 	 * @param string            $query_name        Catalog `query_name`.
 	 * @param string            $row_key           Column to extract from the first row.
@@ -424,7 +426,8 @@ final class Conversion_Metric {
 		$value = $rows[0][ $row_key ];
 		// SAFE_DIVIDE returns NULL when the denominator is zero — a legitimate
 		// "no eligible events to compute a rate" case, not a schema regression.
-		// Same handling as the missing-key branch above: non-computable zero.
+		// Benign → non-computable zero, NOT flagged data_missing (unlike the
+		// missing-column branch above).
 		if ( null === $value ) {
 			return $this->populated_scalar( $zero, false, null, $placeholder_type );
 		}
