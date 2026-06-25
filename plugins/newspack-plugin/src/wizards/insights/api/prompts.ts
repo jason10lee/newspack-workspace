@@ -83,8 +83,9 @@ export interface PromptsDistributionData extends PromptsErrorFields {
 }
 
 /**
- * One row in the Performance by prompt table (Table 7.1). The 15-key
- * schema was locked by Task 3.3 (NPPD-1607). `prompt_title` comes
+ * One row in the Performance by prompt table (Table 7.1). The row
+ * schema was locked by Task 3.3 (NPPD-1607; `intent_label` added in
+ * NPPD-1758). `prompt_title` comes
  * straight from the event params, no WP enrichment needed. Donation /
  * subscription columns report *conversions* (Woo-completed outcomes),
  * not attempts, matching the Gates v1.1 decision (NPPD-1684). Count and

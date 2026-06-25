@@ -233,8 +233,8 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 					],
 				],
 			],
-			// Section 7 — Performance breakdown. The locked 15-key schema for
-			// per-prompt rows (Task 3.3): null conversion-rate cells exercise the
+			// Section 7 — Performance breakdown. The locked per-prompt row schema
+			// (Task 3.3; + intent_label NPPD-1758): null conversion-rate cells exercise the
 			// em-dash path for the wrong-intent columns; real 0.0 cells render
 			// as "0.0%".
 			'performance_by_prompt'                      => [

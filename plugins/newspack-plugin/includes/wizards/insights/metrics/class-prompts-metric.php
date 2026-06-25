@@ -1447,9 +1447,10 @@ final class Prompts_Metric {
 	/**
 	 * Per-intent breakdown (donation / registration / newsletter signup).
 	 *
-	 * Pure BQ → row mapping; no Woo or WP enrichment. Intent labels come from
-	 * {@see self::INTENT_LABELS}; an unknown `intent` value falls back to its
-	 * raw form so a hub-side catalog change isn't silently swallowed.
+	 * Pure BQ → row mapping; no Woo or WP enrichment. Friendly labels come from
+	 * {@see self::INTENT_LABELS} as `intent_label`; an unknown `intent` yields a
+	 * null label (the raw `intent` is still returned alongside it, so a hub-side
+	 * catalog change isn't silently swallowed — the frontend humanizes it).
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
