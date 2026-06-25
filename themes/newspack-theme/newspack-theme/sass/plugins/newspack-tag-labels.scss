@@ -36,12 +36,13 @@ amp-script .tag-labels {
 }
 /* stylelint-enable */
 
-// Tag labels render after the category / sponsor label and sit on the same line,
-// mirroring the sponsor → category convention. The category (or sponsor) `.cat-links`
-// is immediately followed by the tag-labels `.cat-links.tag-labels` in every context
-// (single posts, home, archive, search, and the Content Loop / Carousel blocks), so
-// keep the preceding label inline-block and space the tag labels that follow it.
-.cat-links:has( + .tag-labels ) {
+// Tag labels render after the category (and sponsor) label and sit on the same line,
+// mirroring the sponsor → category convention. The category `.cat-links` is immediately
+// followed by the tag-labels `.cat-links.tag-labels` in every context (single posts,
+// home, archive, search, and the Content Loop / Carousel blocks), so keep it inline-block
+// and space the tag labels that follow it. The sponsor `.cat-links.sponsor-label` keeps
+// its own layout (from newspack-sponsors), so it is excluded here.
+.cat-links:not( .sponsor-label ):has( + .tag-labels ) {
 	display: inline-block;
 }
 .cat-links + .tag-labels {
@@ -49,13 +50,15 @@ amp-script .tag-labels {
 	margin-left: 0.5em;
 }
 
-// In the Content Loop (`.wpnbha`) and Carousel (`.wpnbpc`) blocks, `.cat-links` is set
-// to `display: flex` (block-level), which would stack the category and the tag labels
-// that follow it. Re-assert `inline-flex` with higher specificity so the category and
-// tag labels share one line, matching single posts and the sponsor convention.
+// In the Content Loop (`.wpnbha`) and Carousel (`.wpnbpc`) blocks the category
+// `.cat-links` is block-level (`display: flex` in `.wpnbha`, default block in `.wpnbpc`),
+// which would stack the category and the tag labels that follow it. Re-assert
+// `inline-flex` with higher specificity so the category and tag labels share one line.
+// Sponsor rows (`.cat-links.sponsor-label`) are excluded so their own `flex`/`gap`
+// layout wins deterministically.
 .wpnbha,
 .wpnbpc {
-	.cat-links:has( + .tag-labels ),
+	.cat-links:not( .sponsor-label ):has( + .tag-labels ),
 	.cat-links + .tag-labels {
 		display: inline-flex;
 	}
