@@ -88,13 +88,13 @@ class EditorAssetsTest extends WP_UnitTestCase {
 		}
 
 		$asset_fixtures = [
-			'blocks.asset.php'           => "<?php return [ 'dependencies' => [ 'wp-blocks' ], 'version' => 'test' ];\n",
+			'blocks.asset.php'           => "<?php return [ 'dependencies' => [ 'wp-blocks' ], 'version' => 'blocks-test' ];\n",
 			'blocks.js'                  => '',
 			'blocks.css'                 => '',
-			'editor.asset.php'           => "<?php return [ 'dependencies' => [ 'wp-components', 'wp-plugins' ], 'version' => 'test' ];\n",
+			'editor.asset.php'           => "<?php return [ 'dependencies' => [ 'wp-components', 'wp-plugins' ], 'version' => 'editor-test' ];\n",
 			'editor.js'                  => '',
 			'editor.css'                 => '',
-			'documentSettings.asset.php' => "<?php return [ 'dependencies' => [ 'wp-components', 'wp-plugins' ], 'version' => 'test' ];\n",
+			'documentSettings.asset.php' => "<?php return [ 'dependencies' => [ 'wp-components', 'wp-plugins' ], 'version' => 'document-settings-test' ];\n",
 			'documentSettings.js'        => '',
 		];
 
@@ -108,6 +108,17 @@ class EditorAssetsTest extends WP_UnitTestCase {
 			file_put_contents( $path, $contents );
 			$this->created_asset_files[] = $path;
 		}
+	}
+
+	/**
+	 * Get generated asset metadata.
+	 *
+	 * @param string $filename Asset metadata filename.
+	 *
+	 * @return array Asset metadata.
+	 */
+	private function get_asset_metadata( $filename ) {
+		return require trailingslashit( dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist' ) . $filename;
 	}
 
 	/**
@@ -145,6 +156,8 @@ class EditorAssetsTest extends WP_UnitTestCase {
 
 		self::assertTrue( wp_script_is( 'newspack-popups-blocks', 'enqueued' ) );
 		self::assertTrue( wp_style_is( 'newspack-popups-blocks', 'enqueued' ) );
+		self::assertSame( $this->get_asset_metadata( 'blocks.asset.php' )['version'], wp_scripts()->registered['newspack-popups-blocks']->ver );
+		self::assertSame( $this->get_asset_metadata( 'blocks.asset.php' )['version'], wp_styles()->registered['newspack-popups-blocks']->ver );
 		self::assertFalse( wp_script_is( 'newspack-popups', 'enqueued' ) );
 	}
 
@@ -161,6 +174,8 @@ class EditorAssetsTest extends WP_UnitTestCase {
 		self::assertTrue( wp_script_is( 'newspack-popups', 'enqueued' ) );
 		self::assertTrue( wp_style_is( 'newspack-popups-editor', 'enqueued' ) );
 		self::assertContains( 'wp-plugins', wp_scripts()->registered['newspack-popups']->deps );
+		self::assertSame( $this->get_asset_metadata( 'editor.asset.php' )['version'], wp_scripts()->registered['newspack-popups']->ver );
+		self::assertSame( $this->get_asset_metadata( 'editor.asset.php' )['version'], wp_styles()->registered['newspack-popups-editor']->ver );
 	}
 
 	/**
@@ -174,6 +189,7 @@ class EditorAssetsTest extends WP_UnitTestCase {
 		self::assertTrue( wp_script_is( 'newspack-popups', 'enqueued' ) );
 		self::assertStringContainsString( 'documentSettings.js', wp_scripts()->registered['newspack-popups']->src );
 		self::assertContains( 'wp-plugins', wp_scripts()->registered['newspack-popups']->deps );
+		self::assertSame( $this->get_asset_metadata( 'documentSettings.asset.php' )['version'], wp_scripts()->registered['newspack-popups']->ver );
 		self::assertFalse( wp_style_is( 'newspack-popups-editor', 'enqueued' ) );
 	}
 

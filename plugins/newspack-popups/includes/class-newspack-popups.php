@@ -710,7 +710,7 @@ final class Newspack_Popups {
 		$dist_dir           = dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist';
 		$blocks_asset_path  = trailingslashit( $dist_dir ) . 'blocks.asset.php';
 		$blocks_script_path = trailingslashit( $dist_dir ) . 'blocks.js';
-		if ( ! file_exists( $blocks_asset_path ) || ! file_exists( $blocks_script_path ) ) {
+		if ( ! self::build_assets_exist( [ $blocks_asset_path, $blocks_script_path ] ) ) {
 			return;
 		}
 
@@ -718,8 +718,8 @@ final class Newspack_Popups {
 		\wp_enqueue_script(
 			'newspack-popups-blocks',
 			plugins_url( '../dist/blocks.js', __FILE__ ),
-			$blocks_asset['dependencies'],
-			filemtime( $blocks_script_path ),
+			$blocks_asset['dependencies'] ?? [],
+			$blocks_asset['version'] ?? filemtime( $blocks_script_path ),
 			true
 		);
 
@@ -735,16 +735,48 @@ final class Newspack_Popups {
 		);
 
 		$blocks_style_path = trailingslashit( $dist_dir ) . 'blocks.css';
-		if ( file_exists( $blocks_style_path ) ) {
+		if ( self::build_assets_exist( [ $blocks_style_path ] ) ) {
 			\wp_register_style(
 				'newspack-popups-blocks',
 				plugins_url( '../dist/blocks.css', __FILE__ ),
 				[],
-				filemtime( $blocks_style_path )
+				$blocks_asset['version'] ?? filemtime( $blocks_style_path )
 			);
 			wp_style_add_data( 'newspack-popups-blocks', 'rtl', 'replace' );
 			wp_enqueue_style( 'newspack-popups-blocks' );
 		}
+	}
+
+	/**
+	 * Check that generated build assets exist.
+	 *
+	 * @param string[] $asset_paths Build asset paths.
+	 *
+	 * @return bool Whether all assets exist.
+	 */
+	private static function build_assets_exist( $asset_paths ) {
+		$missing_asset_paths = array_filter(
+			$asset_paths,
+			function ( $asset_path ) {
+				return ! file_exists( $asset_path );
+			}
+		);
+
+		if ( empty( $missing_asset_paths ) ) {
+			return true;
+		}
+
+		$plugin_dir     = trailingslashit( dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) );
+		$relative_paths = array_map(
+			function ( $asset_path ) use ( $plugin_dir ) {
+				return str_replace( $plugin_dir, '', $asset_path );
+			},
+			$missing_asset_paths
+		);
+
+		error_log( sprintf( 'Newspack Popups build assets missing: %s', implode( ', ', $relative_paths ) ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+
+		return false;
 	}
 
 	/**
@@ -770,7 +802,7 @@ final class Newspack_Popups {
 				// But it's a supported post type.
 				$document_settings_asset_path  = dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/documentSettings.asset.php';
 				$document_settings_script_path = dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/documentSettings.js';
-				if ( ! file_exists( $document_settings_asset_path ) || ! file_exists( $document_settings_script_path ) ) {
+				if ( ! self::build_assets_exist( [ $document_settings_asset_path, $document_settings_script_path ] ) ) {
 					return;
 				}
 
@@ -778,8 +810,8 @@ final class Newspack_Popups {
 				\wp_enqueue_script(
 					'newspack-popups',
 					plugins_url( '../dist/documentSettings.js', __FILE__ ),
-					$document_settings_asset['dependencies'],
-					filemtime( $document_settings_script_path ),
+					$document_settings_asset['dependencies'] ?? [],
+					$document_settings_asset['version'] ?? filemtime( $document_settings_script_path ),
 					true
 				);
 			}
@@ -789,7 +821,7 @@ final class Newspack_Popups {
 
 		$editor_asset_path  = dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/editor.asset.php';
 		$editor_script_path = dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/editor.js';
-		if ( ! file_exists( $editor_asset_path ) || ! file_exists( $editor_script_path ) ) {
+		if ( ! self::build_assets_exist( [ $editor_asset_path, $editor_script_path ] ) ) {
 			return;
 		}
 
@@ -797,8 +829,8 @@ final class Newspack_Popups {
 		\wp_enqueue_script(
 			'newspack-popups',
 			plugins_url( '../dist/editor.js', __FILE__ ),
-			$editor_asset['dependencies'],
-			filemtime( $editor_script_path ),
+			$editor_asset['dependencies'] ?? [],
+			$editor_asset['version'] ?? filemtime( $editor_script_path ),
 			true
 		);
 
@@ -832,12 +864,12 @@ final class Newspack_Popups {
 			]
 		);
 		$editor_style_path = dirname( NEWSPACK_POPUPS_PLUGIN_FILE ) . '/dist/editor.css';
-		if ( file_exists( $editor_style_path ) ) {
+		if ( self::build_assets_exist( [ $editor_style_path ] ) ) {
 			\wp_enqueue_style(
 				'newspack-popups-editor',
 				plugins_url( '../dist/editor.css', __FILE__ ),
-				null,
-				filemtime( $editor_style_path )
+				[],
+				$editor_asset['version'] ?? filemtime( $editor_style_path )
 			);
 		}
 	}
