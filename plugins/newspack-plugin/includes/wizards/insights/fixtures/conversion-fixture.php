@@ -229,8 +229,16 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 			[
 				// Section 1.
 				'reader_lifecycle_funnel'          => array_merge( $error, [ 'stages' => [] ] ),
-				// Section 2.
-				'anonymous_to_registered_funnel'   => array_merge( $error, [ 'stages' => [] ] ),
+				// Section 2. Registration leg is always visible (NPPD-1743) — carries
+				// the gated shape live code now stamps via with_leg_visibility().
+				'anonymous_to_registered_funnel'   => array_merge(
+					$error,
+					[
+						'stages'            => [],
+						'visibility'        => 'visible',
+						'visibility_reason' => null,
+					]
+				),
 				// Config-matrix legs (NPPD-1742): configured (visible); the query errored.
 				'registered_to_subscriber_funnel'  => array_merge(
 					$error,
@@ -343,8 +351,15 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 			[
 				// Section 1.
 				'reader_lifecycle_funnel'          => $empty_stages,
-				// Section 2.
-				'anonymous_to_registered_funnel'   => $empty_stages,
+				// Section 2. Registration leg always visible (NPPD-1743), no rows →
+				// component renders the funnel-shaped no_opportunity treatment.
+				'anonymous_to_registered_funnel'   => array_merge(
+					$empty_stages,
+					[
+						'visibility'        => 'visible',
+						'visibility_reason' => null,
+					]
+				),
 				// Config-matrix legs (NPPD-1742): configured (visible) but no rows →
 				// the component renders the funnel-shaped no_opportunity treatment.
 				'registered_to_subscriber_funnel'  => array_merge(
@@ -664,10 +679,12 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 					'state'  => 'populated',
 					'stages' => $s1_stages,
 				],
-				// Section 2.
+				// Section 2. Registration leg always visible (NPPD-1743).
 				'anonymous_to_registered_funnel'   => [
-					'state'  => 'populated',
-					'stages' => $a2r_stages,
+					'state'             => 'populated',
+					'stages'            => $a2r_stages,
+					'visibility'        => 'visible',
+					'visibility_reason' => null,
 				],
 				// Config-matrix legs (NPPD-1742): visible in the populated fixture.
 				'registered_to_subscriber_funnel'  => [

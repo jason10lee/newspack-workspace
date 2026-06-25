@@ -1807,6 +1807,10 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		// Section 2 — per-journey funnels.
 		$this->assertSame( 'populated', $current['anonymous_to_registered_funnel']['state'] );
 		$this->assertCount( 3, $current['anonymous_to_registered_funnel']['stages'] );
+		// Registration leg fixture must carry the same always-visible shape as
+		// live (NPPD-1743), so fixture mode matches production.
+		$this->assertSame( 'visible', $current['anonymous_to_registered_funnel']['visibility'] );
+		$this->assertNull( $current['anonymous_to_registered_funnel']['visibility_reason'] );
 		$this->assertSame( 'populated', $current['registered_to_subscriber_funnel']['state'] );
 		$this->assertSame( 'populated', $current['registered_to_donor_funnel']['state'] );
 
