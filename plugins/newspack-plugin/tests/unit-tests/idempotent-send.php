@@ -73,6 +73,14 @@ class Newspack_Test_Idempotent_Send extends WP_UnitTestCase {
 			 */
 			public $throw_saves = false;
 			/**
+			 * When true, save() returns success but commits nothing — models
+			 * WC_Abstract_Order::save() swallowing a write failure and still
+			 * returning the object id.
+			 *
+			 * @var bool
+			 */
+			public $swallow_saves = false;
+			/**
 			 * Constructor.
 			 *
 			 * @param array $persisted Initial persisted meta.
@@ -120,7 +128,9 @@ class Newspack_Test_Idempotent_Send extends WP_UnitTestCase {
 				if ( $this->throw_saves ) {
 					throw new \RuntimeException( 'transient save failure' );
 				}
-				$this->persisted = $this->staged;
+				if ( ! $this->swallow_saves ) {
+					$this->persisted = $this->staged;
+				}
 				return true;
 			}
 		};
@@ -147,6 +157,22 @@ class Newspack_Test_Idempotent_Send extends WP_UnitTestCase {
 			'logger_header' => 'NEWSPACK-TEST',
 			'clear_on_send' => [ self::SEEDED_KEY ],
 		];
+	}
+
+	/**
+	 * Attach a `read_fresh` verifier that reads the entity's DURABLE store
+	 * (modelling a forced-fresh DB read), so the helper's persistence
+	 * verification is exercised against what actually committed.
+	 *
+	 * @param array  $args   Send args.
+	 * @param object $entity The fake entity.
+	 * @return array
+	 */
+	private function with_read_fresh( array $args, $entity ): array {
+		$args['read_fresh'] = function ( $key ) use ( $entity ) {
+			return $entity->persisted[ $key ] ?? '';
+		};
+		return $args;
 	}
 
 	// --------------------------------------------------------------------
@@ -250,7 +276,9 @@ class Newspack_Test_Idempotent_Send extends WP_UnitTestCase {
 		$claim_seen    = null;
 		$saves_at_send = null;
 		$calls         = 0;
-		$args          = $this->args( $calls );
+		// With a read_fresh verifier so the happy path exercises (and must not
+		// false-fail) the persistence verification.
+		$args          = $this->with_read_fresh( $this->args( $calls ), $entity );
 		$args['send']  = function () use ( $entity, &$claim_seen, &$saves_at_send, &$calls ) {
 			++$calls;
 			$claim_seen    = $entity->persisted[ self::PENDING_KEY ] ?? null;
@@ -356,6 +384,75 @@ class Newspack_Test_Idempotent_Send extends WP_UnitTestCase {
 		$this->assertSame( 0, $calls, 'The send callback must not run without a durable claim.' );
 		$this->assertSame( Idempotent_Send::DEFAULT_SAVE_ATTEMPTS, $entity->save_calls, 'The claim save is retried to the budget.' );
 		$this->assertArrayNotHasKey( self::PENDING_KEY, $entity->persisted, 'No claim is durably written when its save fails.' );
+	}
+
+	// --------------------------------------------------------------------
+	// Verified persistence — WC swallows save() failures (a non-throwing
+	// save() is not proof of persistence). With a read_fresh verifier the
+	// helper re-reads the durable store and treats an unpersisted marker as
+	// a failure, even though save() "succeeded".
+	// --------------------------------------------------------------------
+
+	/**
+	 * Claim path: save() succeeds (no throw) but commits nothing — the WC
+	 * swallow case. The read_fresh verifier catches that the claim never
+	 * landed, so the helper does NOT send.
+	 */
+	public function test_no_send_when_claim_save_silently_swallows() {
+		$entity                = $this->make_entity();
+		$entity->swallow_saves = true; // save() returns success but persists nothing.
+		$result                = Idempotent_Send::send( $entity, $this->with_read_fresh( $this->args( $calls ), $entity ) );
+
+		$this->assertFalse( $result, 'A claim that did not durably persist must not lead to a send.' );
+		$this->assertSame( 0, $calls, 'The send callback must not run when the claim is unverified.' );
+		$this->assertArrayNotHasKey( self::PENDING_KEY, $entity->persisted );
+	}
+
+	/**
+	 * Confirm path: the mail is accepted, but the SENT-marker save() succeeds
+	 * without persisting (WC swallow). The verifier catches it: the helper
+	 * still returns true (a send happened), the SENT marker is NOT durable,
+	 * and the PENDING claim survives for the next post-grace pass to reconcile.
+	 */
+	public function test_confirm_unverified_keeps_claim_when_sent_marker_swallowed() {
+		$entity       = $this->make_entity();
+		$calls        = 0;
+		$args         = $this->with_read_fresh( $this->args( $calls ), $entity );
+		$args['send'] = function () use ( $entity, &$calls ) {
+			++$calls;
+			$entity->swallow_saves = true; // Confirm save returns ok but persists nothing.
+			return true;
+		};
+
+		$result = Idempotent_Send::send( $entity, $args );
+
+		$this->assertTrue( $result, 'A confirmed send returns true even if the SENT marker is not durable.' );
+		$this->assertSame( 1, $calls );
+		$this->assertArrayNotHasKey( self::SENT_KEY, $entity->persisted, 'SENT must not be durable when its save was swallowed.' );
+		$this->assertArrayHasKey( self::PENDING_KEY, $entity->persisted, 'The claim must survive so a later pass can reconcile.' );
+	}
+
+	/**
+	 * A throwing send callback (e.g. a wp_mail filter that throws) must
+	 * release the durable claim and rethrow, so the caller's per-pair
+	 * Throwable handling still sees the original error and no orphan claim is
+	 * left to suppress retries.
+	 */
+	public function test_throwing_send_releases_claim_and_rethrows() {
+		$entity       = $this->make_entity();
+		$args         = $this->with_read_fresh( $this->args( $calls ), $entity );
+		$args['send'] = function () {
+			throw new \RuntimeException( 'wp_mail filter blew up' );
+		};
+
+		try {
+			Idempotent_Send::send( $entity, $args );
+			$this->fail( 'The original exception must propagate.' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertSame( 'wp_mail filter blew up', $e->getMessage() );
+		}
+		$this->assertArrayNotHasKey( self::PENDING_KEY, $entity->persisted, 'A throwing send must release (not orphan) the claim.' );
+		$this->assertArrayNotHasKey( self::SENT_KEY, $entity->persisted );
 	}
 
 	// --------------------------------------------------------------------

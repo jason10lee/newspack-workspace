@@ -650,6 +650,16 @@ class Card_Expiry_Warning {
 		$token_id   = $token->get_id();
 		$expiry_key = $token_id . ':' . $token->get_expiry_month() . '/' . $token->get_expiry_year();
 
+		// Reload with a forced-fresh meta read before gating or sending. The
+		// cron loads every pair up front, and the CLI loads + filters before
+		// its confirmation prompt, so this object's in-memory meta can be stale
+		// by now — a marker written by a concurrent pass after discovery would
+		// otherwise be invisible to the gate and to the helper's claim check.
+		$fresh = self::reload_fresh( $subscription );
+		if ( $fresh ) {
+			$subscription = $fresh;
+		}
+
 		if ( self::is_already_processed( $subscription, $token_id, $expiry_key, $bypass_idempotency ) ) {
 			return false;
 		}
@@ -740,8 +750,40 @@ class Card_Expiry_Warning {
 				'logger_header' => 'NEWSPACK-CARD-EXPIRY',
 				'save_attempts' => self::SENT_MARKER_SAVE_ATTEMPTS,
 				'clear_on_send' => [ self::SEEDED_META_PREFIX . $token_id ],
+				// Verify each marker actually persisted via a forced-fresh read
+				// — WC_Abstract_Order::save() swallows write failures, so a
+				// non-throwing save() is not proof the meta landed.
+				'read_fresh'    => function ( $key ) use ( $subscription ) {
+					$fresh = self::reload_fresh( $subscription );
+					return $fresh ? $fresh->get_meta( $key, true ) : '';
+				},
+				'context'       => [ 'subscription_id' => $subscription->get_id() ],
 			]
 		);
+	}
+
+	/**
+	 * Reload a subscription with its meta forced fresh from storage.
+	 *
+	 * `WC_Data::read_meta_data( true )` issues a direct data-store read,
+	 * bypassing the in-memory/object meta cache — so this reflects what is
+	 * actually persisted, even after a `save()` that WooCommerce reported as
+	 * successful but that did not land. Used both to refresh a possibly-stale
+	 * discovery object before acting and as the helper's `read_fresh` verifier.
+	 *
+	 * @param object $subscription The subscription (needs get_id()).
+	 * @return \WC_Subscription|null Fresh subscription, or null if unavailable.
+	 */
+	private static function reload_fresh( $subscription ) {
+		if ( ! is_object( $subscription ) || ! method_exists( $subscription, 'get_id' ) || ! function_exists( 'wcs_get_subscription' ) ) {
+			return null;
+		}
+		$fresh = \wcs_get_subscription( $subscription->get_id() );
+		if ( ! $fresh ) {
+			return null;
+		}
+		$fresh->read_meta_data( true );
+		return $fresh;
 	}
 
 	/**

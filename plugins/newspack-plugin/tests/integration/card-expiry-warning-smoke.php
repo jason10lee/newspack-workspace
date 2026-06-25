@@ -52,7 +52,7 @@ use Newspack\Reader_Activation;
 // these as global so both scopes see the same variables.
 global $passed, $total, $mails, $cleanup;
 $passed  = 0;
-$total   = 12;
+$total   = 14; // 11 single-check scenarios + 2 in scenario 12 (two-phase) + cleanup.
 $mails   = [];
 $cleanup = []; // Closures executed in reverse order during cleanup.
 
