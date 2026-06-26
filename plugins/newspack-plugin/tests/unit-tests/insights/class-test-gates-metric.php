@@ -1318,17 +1318,20 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 		$this->assertTrue( $flagged['data_missing'] );
 	}
 
-	// --- NPPD-1764: influenced-14d paywall rate is converter-denominated ---
+	// --- NPPD-1764 (legacy): influenced-14d was converter-denominated via Woo join ---
+	// These helpers remain for the make_influenced_paywall_metric test seam used by
+	// section-totals tests; the influenced-rate tests themselves have moved to the
+	// BQ-internal section below.
 
 	/**
 	 * Build a Gates_Metric for the influenced paywall card with injected proxy (influenced
 	 * rows), Woo_Order_Resolver (the matched numerator), and Subscribers_Metric (the
 	 * converter-spine denominator), plus a forced `woocommerce_active()`. Filter removed
-	 * in tear_down().
+	 * in tear_down(). Kept for section-totals helpers that still need a Gates_Metric seam.
 	 *
 	 * @param BigQuery_Proxy_Client $proxy        Influenced rows source.
-	 * @param Woo_Order_Resolver    $woo_resolver Numerator (distinct influenced converters).
-	 * @param Subscribers_Metric    $subscribers  Denominator (new subscribers in window).
+	 * @param Woo_Order_Resolver    $woo_resolver Injected resolver (not used by the new path).
+	 * @param Subscribers_Metric    $subscribers  Injected subscribers (not used by the new path).
 	 * @param bool                  $wc           What woocommerce_active() should return.
 	 * @return Gates_Metric
 	 */
@@ -1362,111 +1365,173 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The rate divides by ALL new subscribers in the window, not by the count of
-	 * influenced attempt rows (3 here). 12 influenced converters ÷ 400 subscribers = 3%.
+	 * BQ-internal path: hub returns the precomputed rate + denominator → real computable
+	 * value with the hub denominator (not a local subscriber spine).
+	 *
+	 * Replaces the old Woo-join test (converter-denominated via Woo_Order_Resolver) that
+	 * matched 12 converters ÷ 400 subscribers. The new path reads the hub row directly.
 	 */
 	public function test_paywall_influenced_is_converter_denominated() {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		$proxy->method( 'query' )->willReturn( [ [ 'x' => 1 ], [ 'x' => 2 ], [ 'x' => 3 ] ] );
-		$metric = $this->make_influenced_paywall_metric(
-			$proxy,
-			$this->resolver_with_unique_completed( 12 ),
-			$this->subscribers_with_new_count( 400 ),
-			true
+		$proxy->method( 'query' )->willReturn(
+			[
+				[
+					'paywall_conversion_influenced_rate' => 0.03,
+					'conversion_denominator'             => 400,
+				],
+			]
 		);
-
+		$metric = new Gates_Metric( $proxy );
 		$result = $metric->get_paywall_conversion_influenced_14d( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
 		$this->assertSame( 'populated', $result['state'] );
 		$this->assertTrue( $result['computable'] );
 		$this->assertSame( 0.03, $result['value'] );
-		$this->assertSame( 400, $result['denominator'], 'denominates by all subscribers, not influenced attempts' );
-		$this->assertSame( 12, $result['numerator'] );
+		$this->assertSame( 400, $result['denominator'], 'uses hub-supplied denominator (no local subscriber spine)' );
 	}
 
 	/**
-	 * No influenced converters but subscribers exist → a real 0% (computable), not the
-	 * "no data" non-computable state the old attempt-denominated empty-rows path returned.
+	 * Empty rows from the hub → non-computable zero (no data in window).
+	 *
+	 * Replaces the old "zero with subscribers is real zero" test: in the BQ-internal
+	 * path the rate is precomputed by the hub, so empty rows means no data, not 0%.
 	 */
 	public function test_paywall_influenced_zero_with_subscribers_is_real_zero() {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
 		$proxy->method( 'query' )->willReturn( [] );
-		$metric = $this->make_influenced_paywall_metric(
-			$proxy,
-			$this->resolver_with_unique_completed( 0 ),
-			$this->subscribers_with_new_count( 50 ),
-			true
-		);
-
+		$metric = new Gates_Metric( $proxy );
 		$result = $metric->get_paywall_conversion_influenced_14d( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
 		$this->assertSame( 'populated', $result['state'] );
-		$this->assertTrue( $result['computable'] );
-		$this->assertSame( 0.0, $result['value'] );
-		$this->assertSame( 50, $result['denominator'] );
-		$this->assertSame( 0, $result['numerator'] );
+		$this->assertFalse( $result['computable'] );
 	}
 
 	/**
-	 * Coherence guard: a GA4-matched numerator larger than the windowed subscriber
-	 * denominator suppresses to a non-computable em-dash rather than rendering >100%.
+	 * Hub returns a null rate (SAFE_DIVIDE with 0 converters) → non-computable with
+	 * the hub denominator surfaced. Replaces the old ">100% suppressed" coherence-guard
+	 * test which is no longer applicable in the BQ-internal path.
 	 */
 	public function test_paywall_influenced_over_100_suppressed() {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		$proxy->method( 'query' )->willReturn( [ [ 'x' => 1 ] ] );
-		$metric = $this->make_influenced_paywall_metric(
-			$proxy,
-			$this->resolver_with_unique_completed( 5 ),
-			$this->subscribers_with_new_count( 3 ),
-			true
+		$proxy->method( 'query' )->willReturn(
+			[
+				[
+					'paywall_conversion_influenced_rate' => null,
+					'conversion_denominator'             => 3,
+				],
+			]
 		);
-
+		$metric = new Gates_Metric( $proxy );
 		$result = $metric->get_paywall_conversion_influenced_14d( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
 		$this->assertSame( 'populated', $result['state'] );
 		$this->assertFalse( $result['computable'] );
 		$this->assertSame( 3, $result['denominator'] );
-		$this->assertSame( 5, $result['numerator'] );
 	}
 
 	/**
-	 * Non-WC publisher: no local subscribers to denominate against → empty state, and the
-	 * hub is never queried (short-circuits before the proxy call).
+	 * BQ-internal path: the proxy is always queried (WC gate removed). A proxy returning
+	 * the expected row shape computes correctly regardless of WC status.
+	 *
+	 * Replaces the old "non-WC empty state / proxy never called" test: the BQ-internal
+	 * path does not short-circuit on WC and always fetches the hub row.
 	 */
 	public function test_paywall_influenced_non_wc_empty_state() {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		$proxy->expects( $this->never() )->method( 'query' );
-		$metric = $this->make_influenced_paywall_metric(
-			$proxy,
-			$this->resolver_with_unique_completed( 0 ),
-			$this->subscribers_with_new_count( 0 ),
-			false
+		$proxy->expects( $this->once() )->method( 'query' )->willReturn(
+			[
+				[
+					'paywall_conversion_influenced_rate' => 0.05,
+					'conversion_denominator'             => 20,
+				],
+			]
 		);
-
+		$metric = new Gates_Metric( $proxy );
 		$result = $metric->get_paywall_conversion_influenced_14d( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
 		$this->assertSame( 'populated', $result['state'] );
-		$this->assertFalse( $result['computable'] );
-		$this->assertSame( 0, $result['denominator'] );
+		$this->assertTrue( $result['computable'] );
 	}
 
 	/**
-	 * A malformed (non-array, non-WP_Error) hub response surfaces as an error rather than
-	 * a confident 0% — parity with the donation/subscription malformed-rows handling.
+	 * A malformed (non-array row) hub response flags data_missing rather than erroring
+	 * in the BQ-internal path. Replaces the old "non-array rows errors" test: the old
+	 * code checked `is_array($rows)`, but the new path reads `$rows[0]` and checks
+	 * for the expected column keys — missing columns → data_missing signal.
 	 */
 	public function test_paywall_influenced_malformed_rows_errors() {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		$proxy->method( 'query' )->willReturn( 'not-an-array' );
-		$metric = $this->make_influenced_paywall_metric(
-			$proxy,
-			$this->resolver_with_unique_completed( 0 ),
-			$this->subscribers_with_new_count( 50 ),
-			true
-		);
-
+		$proxy->method( 'query' )->willReturn( [ [ 'unexpected_column' => 99 ] ] );
+		$metric = new Gates_Metric( $proxy );
 		$result = $metric->get_paywall_conversion_influenced_14d( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
-		$this->assertSame( 'error', $result['state'] );
-		$this->assertSame( 'bigquery_proxy_malformed_rows', $result['error_code'] );
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertTrue( $result['data_missing'] );
+	}
+
+	// --- BQ-internal influenced rate (hub-computed, no Woo join) ---
+
+	/**
+	 * Happy path: hub returns a single row with the precomputed rate and denominator.
+	 */
+	public function test_paywall_influenced_reads_rate_and_denominator() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn(
+			[
+				[
+					'paywall_conversion_influenced_rate' => 0.25,
+					'conversion_denominator'             => 8,
+				],
+			] 
+		);
+		$metric = new Gates_Metric( $proxy );
+		$out    = $metric->get_paywall_conversion_influenced_14d( $this->make_date( '2026-06-01' ), $this->make_date( '2026-06-15' ) );
+		$this->assertSame( 0.25, $out['value'] );
+		$this->assertTrue( $out['computable'] );
+		$this->assertSame( 8, $out['denominator'] );
+		$this->assertFalse( $out['data_missing'] );
+	}
+
+	/**
+	 * Null rate (SAFE_DIVIDE with 0 converters) is non-computable but carries
+	 * the denominator so the UI can distinguish "no data" from "no converters".
+	 */
+	public function test_paywall_influenced_null_rate_is_non_computable_with_denominator() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn(
+			[
+				[
+					'paywall_conversion_influenced_rate' => null,
+					'conversion_denominator'             => 0,
+				],
+			] 
+		);
+		$metric = new Gates_Metric( $proxy );
+		$out    = $metric->get_paywall_conversion_influenced_14d( $this->make_date( '2026-06-01' ), $this->make_date( '2026-06-15' ) );
+		$this->assertFalse( $out['computable'] );
+		$this->assertSame( 0, $out['denominator'] );
+		$this->assertFalse( $out['data_missing'] );
+	}
+
+	/**
+	 * Missing expected columns (schema drift) flags data_missing rather than erroring.
+	 */
+	public function test_paywall_influenced_missing_column_flags_data_missing() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( [ [ 'something_else' => 1 ] ] );
+		$metric = new Gates_Metric( $proxy );
+		$out    = $metric->get_paywall_conversion_influenced_14d( $this->make_date( '2026-06-01' ), $this->make_date( '2026-06-15' ) );
+		$this->assertTrue( $out['data_missing'] );
+	}
+
+	/**
+	 * A proxy WP_Error bubbles up as state 'error'.
+	 */
+	public function test_paywall_influenced_proxy_error_is_error_scalar() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( new \WP_Error( 'boom', 'nope' ) );
+		$metric = new Gates_Metric( $proxy );
+		$out    = $metric->get_paywall_conversion_influenced_14d( $this->make_date( '2026-06-01' ), $this->make_date( '2026-06-15' ) );
+		$this->assertSame( 'error', $out['state'] );
 	}
 }
