@@ -1127,6 +1127,27 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * C14 malformed: a non-integer numeric denominator (e.g. 8.5) is invalid for a
+	 * count and errors rather than being silently truncated.
+	 */
+	public function test_influenced_subscription_rate_14d_errors_on_non_integer_denominator() {
+		$metric          = new Conversion_Metric(
+			$this->proxy_returning(
+				[
+					[
+						'influenced_subscription_rate' => 0.3,
+						'conversion_denominator'       => 8.5,
+					],
+				]
+			)
+		);
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_influenced_subscription_rate_14d( $start, $end );
+
+		$this->assertSame( 'error', $result['state'] );
+	}
+
+	/**
 	 * C14 error: a proxy WP_Error surfaces as an error scalar.
 	 */
 	public function test_influenced_subscription_rate_14d_returns_error_on_proxy_error() {
