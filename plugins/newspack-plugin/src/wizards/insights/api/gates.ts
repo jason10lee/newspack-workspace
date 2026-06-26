@@ -126,7 +126,7 @@ export interface GatesWindow {
 	// Section 3 empty-state totals (NPPD-1694): drive the Paid section's
 	// no_opportunity / no_conversions / normal decision. Derived server-side from
 	// the scalars above — no extra query.
-	paywall_attempts_total: number;
+	paywall_impressions_total: number;
 	paywall_conversions_total: number;
 	// Section 4 — How readers convert.
 	conversion_funnel: GatesFunnelData;

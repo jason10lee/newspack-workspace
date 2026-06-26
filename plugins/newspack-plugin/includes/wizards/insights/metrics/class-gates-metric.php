@@ -793,7 +793,7 @@ final class Gates_Metric {
 	 * Pure derivation from already-computed scalars — no extra query. The
 	 * section component reads these to choose between the normal scorecard
 	 * render and an `<EmptyMetricSection>`:
-	 *   - `paywall_attempts_total` = the Direct rate denominator (sessions with a
+	 *   - `paywall_impressions_total` = the Direct rate denominator (sessions with a
 	 *     paywall impression; this is the {N} in the "no conversions" copy).
 	 *   - `paywall_conversions_total` = the most inclusive conversion count across
 	 *     attributions (max of Direct and Influenced numerators), so a section
@@ -802,11 +802,11 @@ final class Gates_Metric {
 	 *
 	 * @param array $direct     The `paywall_conversion_direct` scalar payload.
 	 * @param array $influenced The `paywall_conversion_influenced_14d` scalar payload.
-	 * @return array{paywall_attempts_total:int, paywall_conversions_total:int}
+	 * @return array{paywall_impressions_total:int, paywall_conversions_total:int}
 	 */
 	public static function paywall_section_totals( array $direct, array $influenced ): array {
 		return [
-			'paywall_attempts_total'    => (int) ( $direct['denominator'] ?? 0 ),
+			'paywall_impressions_total' => (int) ( $direct['denominator'] ?? 0 ),
 			'paywall_conversions_total' => max(
 				(int) ( $direct['numerator'] ?? 0 ),
 				(int) ( $influenced['numerator'] ?? 0 )

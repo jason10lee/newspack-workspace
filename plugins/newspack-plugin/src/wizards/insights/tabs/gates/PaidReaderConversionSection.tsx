@@ -7,8 +7,8 @@
  *
  * When the section would render as a row of zeros it swaps the grid for a
  * single `<EmptyMetricSection>` (detection stays here, not in the orchestrator):
- *   - no paywall attempts in the window → `no_opportunity`
- *   - attempts but no conversions       → `no_conversions` (with the attempt count)
+ *   - no paywall impressions in the window → `no_opportunity`
+ *   - impressions but no conversions       → `no_conversions` (with the impression count)
  *   - otherwise the four scorecards, each carrying its count fallback so an
  *     individual zero card reads as "0 of N" / "0 conversions" rather than 0%/$0.
  */
@@ -40,10 +40,10 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 		'How effectively paywall gates convert visitors into paying subscribers. Direct counts subscriptions that happened in the same session as a paywall impression. Influenced counts subscriptions that happened in a later session within 14 days of a paywall impression. Revenue is computed from actual Woo orders, not gate-event amounts.',
 		'newspack-plugin'
 	);
-	const attemptsLabel = __( 'paywall attempts', 'newspack-plugin' );
+	const impressionsLabel = __( 'paywall impressions', 'newspack-plugin' );
 	const conversionsLabel = __( 'conversions', 'newspack-plugin' );
 
-	const attempts = current.paywall_attempts_total;
+	const impressions = current.paywall_impressions_total;
 	const conversions = current.paywall_conversions_total;
 
 	// The section totals are derived from the Direct denominator and the Direct/
@@ -51,19 +51,19 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 	// coercing the totals to 0. A zero total is only a *genuine* empty state when
 	// both source metrics actually computed; if either errored we fall through to
 	// the scorecards so each card surfaces its own error treatment rather than a
-	// misleading "no paywall attempts" / "no conversions" empty state. (Direct and
+	// misleading "no paywall impressions" / "no conversions" empty state. (Direct and
 	// Influenced are separate queries and can fail independently.)
 	const dataKnown = current.paywall_conversion_direct.state !== 'error' && current.paywall_conversion_influenced_14d.state !== 'error';
 
 	// Empty states (NPPD-1694). Order matters: no opportunity before no conversions.
-	if ( dataKnown && attempts === 0 ) {
+	if ( dataKnown && impressions === 0 ) {
 		return (
 			<EmptyMetricSection
 				title={ title }
 				caption={ caption }
 				state="no_opportunity"
 				body={ __(
-					'No paywall attempts in this timeframe. Your paywall gates may not be reaching readers — could be a placement question, a frequency question, or simply that the timeframe doesn’t include enough traffic. See the per-gate breakdown below for configuration details.',
+					'No paywall impressions in this timeframe. Your paywall gates may not be reaching readers — could be a placement question, a frequency question, or simply that the timeframe doesn’t include enough traffic. See the per-gate breakdown below for configuration details.',
 					'newspack-plugin'
 				) }
 			/>
@@ -75,7 +75,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 				title={ title }
 				caption={ caption }
 				state="no_conversions"
-				signalCount={ attempts }
+				signalCount={ impressions }
 				body={ __(
 					'No paywall conversions in this timeframe. Your paywall reached {N} readers, but none completed a paid subscription within the 14-day attribution window. Worth a look at your checkout flow or pricing. See the per-gate breakdown below.',
 					'newspack-plugin'
@@ -100,7 +100,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 						zeroFallback: {
 							numerator: current.paywall_conversion_direct.numerator ?? undefined,
 							denominator: current.paywall_conversion_direct.denominator ?? undefined,
-							attemptsLabel,
+							attemptsLabel: impressionsLabel,
 						},
 					} ) }
 				/>
@@ -116,7 +116,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 						zeroFallback: {
 							numerator: current.paywall_conversion_influenced_14d.numerator ?? undefined,
 							denominator: current.paywall_conversion_influenced_14d.denominator ?? undefined,
-							attemptsLabel,
+							attemptsLabel: impressionsLabel,
 						},
 					} ) }
 				/>
@@ -130,15 +130,15 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 						current: current.total_paywall_revenue_direct,
 						previous: previous?.total_paywall_revenue_direct,
 						// Currency total: conversions ride on the scalar's `denominator`;
-						// attempts come from the section total — but only when the Direct
-						// scalar computed. Otherwise `attempts` is an unreliable 0, so pass
+						// impressions come from the section total — but only when the Direct
+						// scalar computed. Otherwise `impressions` is an unreliable 0, so pass
 						// undefined and let the card render its own value/error treatment
-						// instead of a misleading "No paywall attempts".
+						// instead of a misleading "No paywall impressions".
 						zeroFallback: {
 							numerator: current.total_paywall_revenue_direct.denominator ?? undefined,
-							denominator: dataKnown ? attempts : undefined,
+							denominator: dataKnown ? impressions : undefined,
 							currencyRole: 'total',
-							attemptsLabel,
+							attemptsLabel: impressionsLabel,
 							conversionsLabel,
 						},
 					} ) }
@@ -151,9 +151,9 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 						previous: previous?.avg_revenue_per_paywall_conversion,
 						zeroFallback: {
 							numerator: current.avg_revenue_per_paywall_conversion.denominator ?? undefined,
-							denominator: dataKnown ? attempts : undefined,
+							denominator: dataKnown ? impressions : undefined,
 							currencyRole: 'average',
-							attemptsLabel,
+							attemptsLabel: impressionsLabel,
 							conversionsLabel,
 						},
 					} ) }

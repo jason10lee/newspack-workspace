@@ -69,7 +69,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 		// (NPPD-1694).
 		$current['registration_impressions_total'] = null;
 		$current['registrations_total']            = null;
-		$current['paywall_attempts_total']         = 0;
+		$current['paywall_impressions_total']         = 0;
 		$current['paywall_conversions_total']      = 0;
 		$collections = [
 			'conversion_funnel'      => 'stages',
@@ -109,7 +109,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 		// these fields exist in the response, they're just empty for this window.
 		$current['registration_impressions_total'] = 0;
 		$current['registrations_total']            = 0;
-		$current['paywall_attempts_total']         = 0;
+		$current['paywall_impressions_total']         = 0;
 		$current['paywall_conversions_total']      = 0;
 		$current['conversion_funnel']      = [
 			'state'  => 'empty',
@@ -166,7 +166,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 			'registration_impressions_total'     => (int) round( 14000 * $f ),
 			'registrations_total'                => (int) round( 1476 * $f ),
 			// Section 3 empty-state totals (NPPD-1694).
-			'paywall_attempts_total'             => (int) round( 320 * $f ),
+			'paywall_impressions_total'          => (int) round( 320 * $f ),
 			'paywall_conversions_total'          => (int) round( 11 * $f ),
 			// Section 4 — How readers convert. Funnel uses a mid-size publisher's
 			// shape so both drop-off deltas exceed 20% and render in the error color.
@@ -290,7 +290,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 		// 17 paywall attempts, zero conversions → the section's `no_conversions`
 		// empty state with {N} = 17 (a mid-size publisher's live scenario).
 		$current                              = $build( 1.0 );
-		$current['paywall_attempts_total']    = 17;
+		$current['paywall_impressions_total']    = 17;
 		$current['paywall_conversions_total'] = 0;
 		return [
 			'tab_error' => false,

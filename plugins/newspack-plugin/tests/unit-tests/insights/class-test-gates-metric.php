@@ -975,7 +975,7 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 			]
 		);
 
-		$this->assertSame( 17, $totals['paywall_attempts_total'] );
+		$this->assertSame( 17, $totals['paywall_impressions_total'] );
 		// max( direct 2, influenced 5 ) — don't hide Influenced-only conversions.
 		$this->assertSame( 5, $totals['paywall_conversions_total'] );
 	}
@@ -996,7 +996,7 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 			]
 		);
 
-		$this->assertSame( 17, $totals['paywall_attempts_total'] );
+		$this->assertSame( 17, $totals['paywall_impressions_total'] );
 		$this->assertSame( 0, $totals['paywall_conversions_total'] );
 	}
 
@@ -1015,11 +1015,11 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 				'numerator'   => 0,
 			]
 		);
-		$this->assertSame( 0, $zero['paywall_attempts_total'] );
+		$this->assertSame( 0, $zero['paywall_impressions_total'] );
 		$this->assertSame( 0, $zero['paywall_conversions_total'] );
 
 		$missing = Gates_Metric::paywall_section_totals( [], [] );
-		$this->assertSame( 0, $missing['paywall_attempts_total'] );
+		$this->assertSame( 0, $missing['paywall_impressions_total'] );
 		$this->assertSame( 0, $missing['paywall_conversions_total'] );
 	}
 

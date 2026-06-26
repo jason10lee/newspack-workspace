@@ -37,7 +37,7 @@ const makeWindow = ( over: Partial< GatesWindow > = {} ): GatesWindow => ( {
 	paywall_conversion_influenced_14d: scalar(),
 	total_paywall_revenue_direct: scalar( { placeholder_type: 'currency' } ),
 	avg_revenue_per_paywall_conversion: scalar( { placeholder_type: 'currency' } ),
-	paywall_attempts_total: 0,
+	paywall_impressions_total: 0,
 	paywall_conversions_total: 0,
 	// NPPD-1702 Free-section totals — required by the type; null (absent) here
 	// since these tests exercise the Paid section, which never reads them.
@@ -50,19 +50,19 @@ const makeWindow = ( over: Partial< GatesWindow > = {} ): GatesWindow => ( {
 } );
 
 describe( 'PaidReaderConversionSection empty states', () => {
-	it( 'renders no_opportunity when there are no paywall attempts', () => {
-		const current = makeWindow( { paywall_attempts_total: 0, paywall_conversions_total: 0 } );
+	it( 'renders no_opportunity when there are no paywall impressions', () => {
+		const current = makeWindow( { paywall_impressions_total: 0, paywall_conversions_total: 0 } );
 		const { container } = render( <PaidReaderConversionSection current={ current } previous={ null } /> );
 
 		expect( container.querySelector( '[data-empty-state="no_opportunity"]' ) ).toBeInTheDocument();
 		// Body is asserted on the container — the Notice's speak() duplicates it into a
 		// global live-region, so a screen-level text query would match twice.
-		expect( container ).toHaveTextContent( 'No paywall attempts in this timeframe' );
+		expect( container ).toHaveTextContent( 'No paywall impressions in this timeframe' );
 		expect( screen.queryByText( 'Paywall Conversion (Direct)' ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'renders no_conversions with the attempt count interpolated when attempts > 0 and conversions = 0', () => {
-		const current = makeWindow( { paywall_attempts_total: 17, paywall_conversions_total: 0 } );
+	it( 'renders no_conversions with the impression count interpolated when impressions > 0 and conversions = 0', () => {
+		const current = makeWindow( { paywall_impressions_total: 17, paywall_conversions_total: 0 } );
 		const { container } = render( <PaidReaderConversionSection current={ current } previous={ null } /> );
 
 		expect( container.querySelector( '[data-empty-state="no_conversions"]' ) ).toBeInTheDocument();
@@ -72,7 +72,7 @@ describe( 'PaidReaderConversionSection empty states', () => {
 
 	it( 'renders the four scorecards (no empty state) when the section has data', () => {
 		const current = makeWindow( {
-			paywall_attempts_total: 320,
+			paywall_impressions_total: 320,
 			paywall_conversions_total: 11,
 			paywall_conversion_direct: scalar( { value: 0.021, numerator: 7, denominator: 320 } ),
 			paywall_conversion_influenced_14d: scalar( { value: 0.038, numerator: 11, denominator: 290 } ),
@@ -87,18 +87,18 @@ describe( 'PaidReaderConversionSection empty states', () => {
 	} );
 
 	it( 'does NOT show an empty state when the Direct scalar errored — renders the scorecards instead', () => {
-		// An errored Direct query leaves paywall_attempts_total at 0 (null denominator).
-		// That must not be mistaken for a genuine "no paywall attempts" empty state — the
+		// An errored Direct query leaves paywall_impressions_total at 0 (null denominator).
+		// That must not be mistaken for a genuine "no paywall impressions" empty state — the
 		// cards should render so the errored one surfaces its own error treatment.
 		const current = makeWindow( {
-			paywall_attempts_total: 0,
+			paywall_impressions_total: 0,
 			paywall_conversions_total: 0,
 			paywall_conversion_direct: scalar( { state: 'error', computable: false, error_message: 'BQ down' } ),
 		} );
 		const { container } = render( <PaidReaderConversionSection current={ current } previous={ null } /> );
 
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
-		expect( container ).not.toHaveTextContent( 'No paywall attempts in this timeframe' );
+		expect( container ).not.toHaveTextContent( 'No paywall impressions in this timeframe' );
 		expect( screen.getByText( 'Paywall Conversion (Direct)' ) ).toBeInTheDocument();
 	} );
 
@@ -107,7 +107,7 @@ describe( 'PaidReaderConversionSection empty states', () => {
 		// (its null numerator coerces to 0 in paywall_section_totals). The section must
 		// not render the no_conversions empty state and hide the errored Influenced card.
 		const current = makeWindow( {
-			paywall_attempts_total: 17,
+			paywall_impressions_total: 17,
 			paywall_conversions_total: 0,
 			paywall_conversion_direct: scalar( { value: 0, numerator: 0, denominator: 17 } ),
 			paywall_conversion_influenced_14d: scalar( { state: 'error', computable: false, error_message: 'BQ down' } ),
@@ -126,7 +126,7 @@ describe( 'PaidReaderConversionSection empty states', () => {
 		// Section has data (Influenced converted) so it renders scorecards, but the
 		// Direct rate card has 0 of 320 and the Direct revenue card has 0 conversions.
 		const current = makeWindow( {
-			paywall_attempts_total: 320,
+			paywall_impressions_total: 320,
 			paywall_conversions_total: 11,
 			paywall_conversion_direct: scalar( { value: 0, computable: true, numerator: 0, denominator: 320 } ),
 			paywall_conversion_influenced_14d: scalar( { value: 0.038, numerator: 11, denominator: 290 } ),
