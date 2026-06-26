@@ -45,11 +45,11 @@ export interface MetricCardOverlay {
  * `0 conversions`, or the `—` null glyph with an explanatory secondary line).
  *
  * Keyed on two counts, regardless of card `format`:
- *   - `denominator` — the "opportunity" count (paywall attempts / regwall impressions)
+ *   - `denominator` — the "opportunity" count (paywall / regwall impressions)
  *   - `numerator`   — the conversions count (for currency cards, the conversions companion)
  *
  * The decision is driven by these counts, NOT by `value`: a real $0 alongside N
- * conversions still reads as data, while 0 conversions out of N attempts reads
+ * conversions still reads as data, while 0 conversions out of N impressions reads
  * as an honest zero. `currencyRole` distinguishes the two currency behaviors
  * (ticket: a total card shows `0 conversions`; an average card shows `—` with a
  * "No conversions…" secondary). It is ignored for `format='percent'`.
@@ -58,7 +58,7 @@ export interface MetricCardZeroFallback {
 	numerator?: number;
 	denominator?: number;
 	currencyRole?: 'total' | 'average';
-	/** Plural noun for the "No … in this timeframe" line, e.g. "paywall attempts". */
+	/** Plural noun for the "No … in this timeframe" line, e.g. "paywall impressions". */
 	attemptsLabel: string;
 	/** Plural noun for the conversions line, e.g. "conversions". */
 	conversionsLabel?: string;
@@ -198,12 +198,12 @@ const MetricCard = ( props: MetricCardProps ) => {
 		const conversionsNoun = conversionsLabel ?? __( 'conversions', 'newspack-plugin' );
 		const noneInWindow = ( pluralNoun: string ) =>
 			sprintf(
-				/* translators: %s is a plural noun, e.g. "paywall attempts". */
+				/* translators: %s is a plural noun, e.g. "paywall impressions". */
 				__( 'No %s in this timeframe', 'newspack-plugin' ),
 				pluralNoun
 			);
 		if ( denominator === 0 ) {
-			// Nothing happened at all → em-dash + "No <attempts> in this timeframe".
+			// Nothing happened at all → em-dash + "No <impressions> in this timeframe".
 			fallbackHero = EM_DASH;
 			fallbackSecondary = noneInWindow( attemptsLabel );
 		} else if ( numerator === 0 && typeof denominator === 'number' && denominator > 0 ) {

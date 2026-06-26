@@ -662,6 +662,56 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * NPPD-1817: the numerator is restricted to donation-CAPABLE popups, so a
+	 * converting-but-not-capable popup (donation_impressions = 0) is excluded from the
+	 * rate — keeping the numerator on the same population as the capable-impressions
+	 * denominator and reconciling with the per-prompt table (which zeroes its row). The
+	 * excluded conversion still belongs to the count/revenue cards, which sum all.
+	 */
+	public function test_donation_conversion_direct_excludes_non_capable_converting_popup() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn(
+			[
+				// Donation-capable + converting.
+				[
+					'popup_id'             => 1,
+					'intent'               => 'donation',
+					'impressions'          => 1000,
+					'donation_impressions' => 300,
+				],
+				// Converting but NOT donation-capable (no donate block) → excluded from the rate.
+				[
+					'popup_id'             => 2,
+					'intent'               => 'undefined',
+					'impressions'          => 800,
+					'donation_impressions' => 0,
+				],
+			]
+		);
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_prompt_attributed_donation_conversions' )->willReturn(
+			[
+				'1' => [
+					'conversions' => 30,
+					'revenue'     => 0.0,
+				],
+				'2' => [
+					'conversions' => 20,
+					'revenue'     => 0.0,
+				],
+			]
+		);
+
+		$metric = $this->make_direct_donation_metric( $proxy, $donors, true );
+		$rate   = $metric->get_donation_conversion_direct( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $rate['state'] );
+		$this->assertSame( 300, $rate['denominator'], 'only the capable popup contributes impressions' );
+		$this->assertSame( 0.1, $rate['value'], '30 capable conversions / 300 (popup 2\'s 20 conversions excluded)' );
+		$this->assertTrue( $rate['computable'] );
+	}
+
+	/**
 	 * No donation impressions → no denominator → not computable (em-dash),
 	 * distinct from the real 0% below.
 	 */
@@ -942,6 +992,59 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'populated', $rate['state'] );
 		$this->assertSame( 300, $rate['denominator'], 'tab-level checkout_impressions sum (200 + 100), not the per-popup-keyed 200' );
 		$this->assertEqualsWithDelta( 0.16667, $rate['value'], 0.0001, '50 conversions / 300 checkout-capable impressions' );
+		$this->assertTrue( $rate['computable'] );
+	}
+
+	/**
+	 * NPPD-1817: the numerator is restricted to checkout-CAPABLE popups, so a
+	 * converting-but-not-capable popup (checkout_impressions = 0) is excluded from the
+	 * rate — keeping the numerator on the same population as the capable-impressions
+	 * denominator and reconciling with the per-prompt table (which zeroes its row). The
+	 * excluded conversion still belongs to the count/revenue cards, which sum all.
+	 */
+	public function test_subscription_conversion_direct_excludes_non_capable_converting_popup() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn(
+			[
+				// Checkout-capable + converting.
+				[
+					'popup_id'             => 1,
+					'intent'               => 'undefined',
+					'impressions'          => 1000,
+					'checkout_impressions' => 300,
+				],
+				// Converting but NOT checkout-capable (no checkout block) → excluded from the rate.
+				[
+					'popup_id'             => 2,
+					'intent'               => 'registration',
+					'impressions'          => 800,
+					'checkout_impressions' => 0,
+				],
+			]
+		);
+		$subscribers = $this->createMock( Subscribers_Metric::class );
+		$subscribers->method( 'get_attributed_subscription_conversions' )->willReturn(
+			[
+				'by_gate'  => [],
+				'by_popup' => [
+					'1' => [
+						'conversions' => 30,
+						'revenue'     => 0.0,
+					],
+					'2' => [
+						'conversions' => 20,
+						'revenue'     => 0.0,
+					],
+				],
+			]
+		);
+
+		$metric = $this->make_direct_subscription_metric( $proxy, $subscribers, true );
+		$rate   = $metric->get_subscription_conversion_direct( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $rate['state'] );
+		$this->assertSame( 300, $rate['denominator'], 'only the capable popup contributes impressions' );
+		$this->assertSame( 0.1, $rate['value'], '30 capable conversions / 300 (popup 2\'s 20 conversions excluded)' );
 		$this->assertTrue( $rate['computable'] );
 	}
 

@@ -836,10 +836,26 @@ final class Prompts_Metric {
 			return $this->error_scalar( 'rate', $impressions );
 		}
 
+		// NPPD-1817: restrict the numerator to donation-CAPABLE popups (per-popup
+		// `donation_impressions` > 0) so it shares the capable-impressions denominator's
+		// population and reconciles with the per-prompt table, which credits a donation
+		// conversion only to a capable row. A converting-but-not-capable popup is excluded
+		// here; its conversion still counts in the count + revenue cards. When the hub
+		// hasn't shipped `donation_impressions`, the map is null and we keep counting all
+		// attributed conversions, pairing with the intent-sum fallback denominator.
+		$capability_impressions = $this->fetch_capability_impressions_by_popup( 'donation_impressions', $start, $end );
+		if ( is_wp_error( $capability_impressions ) ) {
+			return $this->error_scalar( 'rate', $capability_impressions );
+		}
+		// `null` (column absent) → count all attributed conversions (pre-column behavior,
+		// paired with the intent-sum fallback denominator); an array → restrict to donation-
+		// capable popups.
 		$by_popup    = $this->donors_metric()->get_prompt_attributed_donation_conversions( $start, $end );
 		$conversions = 0;
-		foreach ( $by_popup as $row ) {
-			$conversions += (int) $row['conversions'];
+		foreach ( $by_popup as $popup_id => $row ) {
+			if ( ! is_array( $capability_impressions ) || (int) ( $capability_impressions[ (string) $popup_id ] ?? 0 ) > 0 ) {
+				$conversions += (int) $row['conversions'];
+			}
 		}
 
 		// Shared coherence guard + em-dash semantics (also drives the per-prompt
@@ -988,6 +1004,53 @@ final class Prompts_Metric {
 	}
 
 	/**
+	 * Per-popup capability-impressions map for a capability column
+	 * (`donation_impressions` / `checkout_impressions`) on the hub's
+	 * `prompts_performance_by_prompt` rows, keyed by popup id (string).
+	 *
+	 * Used to capability-RESTRICT the Direct conversion-rate numerators (NPPD-1817):
+	 * a popup is capability-capable when its column value is > 0, so the rate's
+	 * numerator (conversions) describes the same population as its capable-impressions
+	 * denominator — and reconciles with the per-prompt table, which already credits a
+	 * conversion only to a capable row. Without this, a converting-but-not-capable
+	 * popup inflates the scalar numerator over a denominator that excludes its
+	 * impressions (the NPPD-1746 scalar/table divergence class).
+	 *
+	 * Returns `null` when NO row carries the column (the hub hasn't shipped it yet), so
+	 * the caller keeps its pre-column numerator behavior. The map includes every row
+	 * that carries the column; the capable subset is the entries with value > 0.
+	 *
+	 * @param string            $column Capability column name.
+	 * @param DateTimeInterface $start  Window start.
+	 * @param DateTimeInterface $end    Window end.
+	 * @return array<string, int>|null|\WP_Error Map, null if the column is absent, or the proxy error.
+	 */
+	private function fetch_capability_impressions_by_popup( string $column, DateTimeInterface $start, DateTimeInterface $end ) {
+		$rows = $this->fetch_performance_by_prompt_rows( $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $rows;
+		}
+		if ( ! is_array( $rows ) ) {
+			return new \WP_Error( 'bigquery_proxy_malformed_rows', __( 'The query returned an unexpected shape.', 'newspack-plugin' ) );
+		}
+		$map = null;
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) || ! isset( $row[ $column ] ) ) {
+				continue;
+			}
+			if ( null === $map ) {
+				$map = [];
+			}
+			$popup_id = (string) ( $row['popup_id'] ?? '' );
+			if ( '' === $popup_id ) {
+				continue;
+			}
+			$map[ $popup_id ] = (int) $row[ $column ];
+		}
+		return $map;
+	}
+
+	/**
 	 * Per-popup impressions map from the hub's `prompts_performance_by_prompt` rows
 	 * (NPPD-1746), keyed by popup id (string). Used as the per-popup-keyed
 	 * denominator source for the direct subscription rate: subscription-intent
@@ -1104,12 +1167,22 @@ final class Prompts_Metric {
 		}
 
 		if ( null !== $checkout_impressions ) {
-			// Capability denominator (preferred): conversions across ALL converting
-			// popups ÷ total checkout-capable impressions, population-matched the same
-			// way the donation rate-direct is.
+			// Capability denominator (preferred): checkout-capable conversions ÷ total
+			// checkout-capable impressions. NPPD-1817: the numerator is restricted to
+			// checkout-CAPABLE popups (per-popup `checkout_impressions` > 0) so it shares
+			// the denominator's population and reconciles with the per-prompt table, which
+			// credits a subscription conversion only to a capable row. A converting-but-
+			// not-capable popup is excluded here; its conversion still counts in the
+			// count + revenue cards (those sum all attributed conversions).
+			$capability_impressions = $this->fetch_capability_impressions_by_popup( 'checkout_impressions', $start, $end );
+			if ( is_wp_error( $capability_impressions ) ) {
+				return $this->error_scalar( 'rate', $capability_impressions );
+			}
 			$conversions = 0;
-			foreach ( $by_popup as $row ) {
-				$conversions += (int) $row['conversions'];
+			foreach ( $by_popup as $popup_id => $row ) {
+				if ( ! is_array( $capability_impressions ) || (int) ( $capability_impressions[ (string) $popup_id ] ?? 0 ) > 0 ) {
+					$conversions += (int) $row['conversions'];
+				}
 			}
 			$impressions = $checkout_impressions;
 		} else {
