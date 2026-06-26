@@ -239,9 +239,11 @@ final class Gates_Metric {
 	 *                                    computed locally (the paywall Woo join); null
 	 *                                    everywhere the count isn't available, e.g. the
 	 *                                    precomputed-rate regwall cards.
+	 * @param bool      $data_missing     True when the payload was built from a schema
+	 *                                    that is missing expected columns (drift signal).
 	 * @return array
 	 */
-	private function populated_scalar( $value, bool $computable, ?int $denominator, string $placeholder_type, ?int $numerator = null ): array {
+	private function populated_scalar( $value, bool $computable, ?int $denominator, string $placeholder_type, ?int $numerator = null, bool $data_missing = false ): array {
 		return [
 			'state'            => 'populated',
 			'value'            => $value,
@@ -249,6 +251,7 @@ final class Gates_Metric {
 			'denominator'      => $denominator,
 			'numerator'        => $numerator,
 			'placeholder_type' => $placeholder_type,
+			'data_missing'     => $data_missing,
 		];
 	}
 

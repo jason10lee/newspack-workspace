@@ -1301,6 +1301,23 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 		$this->assertNull( $totals['registrations_total'] );
 	}
 
+	// --- C1: data_missing flag on populated_scalar ---
+
+	/**
+	 * Populated_scalar carries a `data_missing` flag (default false); callers can
+	 * set it to true to signal schema drift without changing the payload shape.
+	 */
+	public function test_populated_scalar_includes_data_missing_flag() {
+		$metric = new Gates_Metric();
+		$ref    = new \ReflectionMethod( $metric, 'populated_scalar' );
+		$ref->setAccessible( true );
+		$default = $ref->invoke( $metric, 1.0, true, 5, 'rate' );
+		$this->assertArrayHasKey( 'data_missing', $default );
+		$this->assertFalse( $default['data_missing'] );
+		$flagged = $ref->invoke( $metric, 0.0, false, null, 'rate', null, true );
+		$this->assertTrue( $flagged['data_missing'] );
+	}
+
 	// --- NPPD-1764: influenced-14d paywall rate is converter-denominated ---
 
 	/**
