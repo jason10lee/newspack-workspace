@@ -844,8 +844,14 @@ final class Prompts_Metric {
 		// hasn't shipped `donation_impressions`, the map is null and we keep counting all
 		// attributed conversions, pairing with the intent-sum fallback denominator.
 		$capability_impressions = $this->fetch_capability_impressions_by_popup( 'donation_impressions', $start, $end );
-		$by_popup               = $this->donors_metric()->get_prompt_attributed_donation_conversions( $start, $end );
-		$conversions            = 0;
+		if ( is_wp_error( $capability_impressions ) ) {
+			return $this->error_scalar( 'rate', $capability_impressions );
+		}
+		// `null` (column absent) → count all attributed conversions (pre-column behavior,
+		// paired with the intent-sum fallback denominator); an array → restrict to donation-
+		// capable popups.
+		$by_popup    = $this->donors_metric()->get_prompt_attributed_donation_conversions( $start, $end );
+		$conversions = 0;
 		foreach ( $by_popup as $popup_id => $row ) {
 			if ( ! is_array( $capability_impressions ) || (int) ( $capability_impressions[ (string) $popup_id ] ?? 0 ) > 0 ) {
 				$conversions += (int) $row['conversions'];
@@ -1169,7 +1175,10 @@ final class Prompts_Metric {
 			// not-capable popup is excluded here; its conversion still counts in the
 			// count + revenue cards (those sum all attributed conversions).
 			$capability_impressions = $this->fetch_capability_impressions_by_popup( 'checkout_impressions', $start, $end );
-			$conversions            = 0;
+			if ( is_wp_error( $capability_impressions ) ) {
+				return $this->error_scalar( 'rate', $capability_impressions );
+			}
+			$conversions = 0;
 			foreach ( $by_popup as $popup_id => $row ) {
 				if ( ! is_array( $capability_impressions ) || (int) ( $capability_impressions[ (string) $popup_id ] ?? 0 ) > 0 ) {
 					$conversions += (int) $row['conversions'];
