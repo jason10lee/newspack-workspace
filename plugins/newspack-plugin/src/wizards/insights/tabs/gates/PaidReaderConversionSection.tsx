@@ -77,7 +77,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 				state="no_conversions"
 				signalCount={ impressions }
 				body={ __(
-					'No paywall conversions in this timeframe. Your paywall reached {N} readers, but none completed a paid subscription within the 14-day attribution window. Worth a look at your checkout flow or pricing. See the per-gate breakdown below.',
+					'No paywall conversions in this timeframe. Your paywall was shown {N} times, but none led to a paid subscription within the 14-day attribution window. Worth a look at your checkout flow or pricing. See the per-gate breakdown below.',
 					'newspack-plugin'
 				) }
 			/>

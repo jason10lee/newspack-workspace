@@ -66,7 +66,7 @@ describe( 'PaidReaderConversionSection empty states', () => {
 		const { container } = render( <PaidReaderConversionSection current={ current } previous={ null } /> );
 
 		expect( container.querySelector( '[data-empty-state="no_conversions"]' ) ).toBeInTheDocument();
-		expect( container ).toHaveTextContent( 'Your paywall reached 17 readers' );
+		expect( container ).toHaveTextContent( 'Your paywall was shown 17 times' );
 		expect( screen.queryByText( 'Paywall Conversion (Direct)' ) ).not.toBeInTheDocument();
 	} );
 
