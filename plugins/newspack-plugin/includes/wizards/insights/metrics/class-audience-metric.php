@@ -758,8 +758,9 @@ final class Audience_Metric {
 	}
 
 	/**
-	 * Detect which supporter products the publisher sells. Side-effect free.
-	 * Used to shape (or hide) the Supporter Type pie.
+	 * Detect which supporter products the publisher sells, to shape (or hide) the
+	 * Supporter Type pie. Read-only apart from the shared donation classifier's own
+	 * 1-hour cache priming on a miss.
 	 *
 	 * Donations resolve through the single shared {@see Donation_Product_Classifier}
 	 * (NPPD-1767) — the same source Subscribers (Tab 6), Donors (Tab 7), and the Tab 3
