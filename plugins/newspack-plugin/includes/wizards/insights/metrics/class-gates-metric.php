@@ -524,6 +524,52 @@ final class Gates_Metric {
 		return $map;
 	}
 
+	/**
+	 * Per-gate `checkout_impressions` map (NPPD-1817) from the hub's
+	 * `gates_performance_by_gate` rows, keyed by gate post id (string). Used to
+	 * capability-RESTRICT the direct paywall rate: a gate is paywall-capable when its
+	 * `checkout_impressions` (seen events on the gate carrying a checkout button) is
+	 * > 0, so the rate's numerator (conversions) shares its capable-impressions
+	 * denominator's population and reconciles with the per-gate table, which credits a
+	 * paywall conversion only to a capable gate. Without this, a converting-but-not-
+	 * capable gate inflates the numerator over a denominator that excludes its
+	 * impressions (the NPPD-1746 scalar/table divergence class).
+	 *
+	 * Distinct from {@see self::fetch_gate_impressions_by_gate()}, which conflates a
+	 * present-but-zero `checkout_impressions` with the pre-column total-impressions
+	 * fallback; this map exposes only rows that actually carry the column, returning
+	 * `null` when none do (hub hasn't shipped NPPD-1749) so the caller keeps the
+	 * pre-column per-gate-keyed denominator.
+	 *
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
+	 * @return array<string, int>|null|\WP_Error Map, null if the column is absent, or the proxy error.
+	 */
+	private function fetch_checkout_impressions_by_gate( DateTimeInterface $start, DateTimeInterface $end ) {
+		$rows = $this->fetch_performance_by_gate_rows( $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $rows;
+		}
+		if ( ! is_array( $rows ) ) {
+			return new \WP_Error( 'bigquery_proxy_malformed_rows', __( 'The query returned an unexpected shape.', 'newspack-plugin' ) );
+		}
+		$map = null;
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) || ! isset( $row['checkout_impressions'] ) ) {
+				continue;
+			}
+			$gate_id = (string) ( $row['gate_post_id'] ?? '' );
+			if ( '' === $gate_id || '0' === $gate_id ) {
+				continue;
+			}
+			if ( null === $map ) {
+				$map = [];
+			}
+			$map[ $gate_id ] = (int) $row['checkout_impressions'];
+		}
+		return $map;
+	}
+
 	// --- Section 1: Gate exposure ---------------------------------------
 
 	/**
@@ -604,33 +650,56 @@ final class Gates_Metric {
 	 * @return array
 	 */
 	public function get_paywall_conversion_direct( DateTimeInterface $start, DateTimeInterface $end ): array {
-		// NPPD-1746: rate = gate-attributed subscription conversions (Woo order meta,
-		// anonymous-inclusive) ÷ impressions of the SAME gates (hub,
-		// `gates_performance_by_gate`). PER-GATE keyed: the denominator is restricted
-		// to the gates that actually converted, keeping numerator and denominator on
-		// the same population. Numerator local, denominator hub → 'hybrid' (see the
+		// NPPD-1746/1817: rate = gate-attributed subscription conversions (Woo order
+		// meta, anonymous-inclusive) ÷ paywall-capable gate impressions (hub,
+		// `gates_performance_by_gate`). When the hub exposes per-gate `checkout_impressions`
+		// (NPPD-1749), numerator and denominator are both restricted to paywall-CAPABLE
+		// gates so they share a population and reconcile with the per-gate table; until
+		// then it falls back to the per-gate-keyed total-impressions denominator over the
+		// gates that converted. Numerator local, denominator hub → 'hybrid' (see the
 		// Gates controller METRIC_SOURCES): a hub impressions failure makes the rate
-		// genuinely uncomputable and counts toward the tab-error banner. Same
-		// coherence guard as the prompts subscription/donation rate-direct. Replaces
-		// the prior attempt-row denominator (`gates_paywall_conversion_direct`), which
-		// undercounted via the GA4 cookie → customer_id join.
+		// genuinely uncomputable and counts toward the tab-error banner. Same coherence
+		// guard as the prompts subscription/donation rate-direct. Replaces the prior
+		// attempt-row denominator (`gates_paywall_conversion_direct`), which undercounted
+		// via the GA4 cookie → customer_id join.
 		if ( ! $this->woocommerce_active() ) {
 			// Non-WC publisher: no local conversions to count. Empty state, not a fake
 			// 0% (NPPD-1737 Option A scoping).
 			return $this->populated_scalar( 0.0, false, 0, 'rate', 0 );
 		}
 
-		$impressions_by_gate = $this->fetch_gate_impressions_by_gate( $start, $end );
-		if ( is_wp_error( $impressions_by_gate ) ) {
-			return $this->error_scalar( 'rate', $impressions_by_gate );
+		$by_gate                = $this->subscribers_metric()->get_attributed_subscription_conversions( $start, $end )['by_gate'];
+		$capability_impressions = $this->fetch_checkout_impressions_by_gate( $start, $end );
+		if ( is_wp_error( $capability_impressions ) ) {
+			return $this->error_scalar( 'rate', $capability_impressions );
 		}
 
-		$by_gate     = $this->subscribers_metric()->get_attributed_subscription_conversions( $start, $end )['by_gate'];
 		$conversions = 0;
 		$impressions = 0;
-		foreach ( $by_gate as $gate_id => $row ) {
-			$conversions += (int) $row['conversions'];
-			$impressions += (int) ( $impressions_by_gate[ (string) $gate_id ] ?? 0 );
+		if ( is_array( $capability_impressions ) ) {
+			// NPPD-1817: the hub exposes per-gate `checkout_impressions` (NPPD-1749), so
+			// restrict BOTH sides to paywall-CAPABLE gates (checkout_impressions > 0) — a
+			// tab-level capable denominator that reconciles with the per-gate table (which
+			// credits a paywall conversion only to a capable gate). A converting-but-not-
+			// capable gate is excluded from both the numerator and the denominator.
+			foreach ( $capability_impressions as $gate_id => $gate_impressions ) {
+				if ( $gate_impressions <= 0 ) {
+					continue;
+				}
+				$impressions += $gate_impressions;
+				$conversions += (int) ( $by_gate[ $gate_id ]['conversions'] ?? 0 );
+			}
+		} else {
+			// Forward-compat fallback (hub hasn't shipped `checkout_impressions` yet):
+			// per-gate-keyed total impressions, restricted to the gates that converted.
+			$impressions_by_gate = $this->fetch_gate_impressions_by_gate( $start, $end );
+			if ( is_wp_error( $impressions_by_gate ) ) {
+				return $this->error_scalar( 'rate', $impressions_by_gate );
+			}
+			foreach ( $by_gate as $gate_id => $row ) {
+				$conversions += (int) $row['conversions'];
+				$impressions += (int) ( $impressions_by_gate[ (string) $gate_id ] ?? 0 );
+			}
 		}
 
 		$rate = $this->rate_value( $conversions, $impressions );
