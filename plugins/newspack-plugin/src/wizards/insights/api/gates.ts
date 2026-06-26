@@ -1,0 +1,192 @@
+/**
+ * Gates API client (NPPD-1604).
+ *
+ * Thin wrapper around `@wordpress/api-fetch` for the single Tab 4
+ * endpoint: `GET /newspack-insights/v1/gates`. Type definitions
+ * mirror the PHP response shape assembled by `Gates_REST_Controller`.
+ *
+ * Every metric carries an explicit `state`: 'error' (query failed —
+ * with `error_code` / `error_message`), 'empty' (succeeded, no rows),
+ * or 'populated'. Scalars use 'error' | 'populated' only. The
+ * `tab_error` flag is true only when every section is in the error state.
+ */
+
+/**
+ * WordPress dependencies
+ */
+import apiFetch from '@wordpress/api-fetch';
+
+/**
+ * Internal dependencies
+ */
+import { type CachedEnvelope } from '../state/insightsCache';
+
+/**
+ * The kind of placeholder a metric renders. Encoded server-side so
+ * the React format layer doesn't have to guess from the field name.
+ */
+export type GatesPlaceholderType = 'count' | 'rate' | 'currency' | 'decimal';
+
+/** Collection metrics report all three states; scalars use 'error' | 'populated'. */
+export type GatesMetricState = 'error' | 'empty' | 'populated';
+
+/** Fields present on any metric in the error state. */
+export interface GatesErrorFields {
+	error_code?: string;
+	error_message?: string;
+}
+
+/**
+ * Standard scorecard metric payload. `state` is 'error' or 'populated'
+ * (an absent value is a non-computable zero, not an 'empty' state).
+ */
+export interface GatesScalarMetric extends GatesErrorFields {
+	state: 'error' | 'populated';
+	value: number;
+	computable: boolean;
+	denominator: number | null;
+	/**
+	 * Numerator behind a rate (NPPD-1694). A number (possibly 0) only on rate
+	 * scorecards whose count is computed locally — the paywall Woo join. Null
+	 * elsewhere, including the precomputed-rate regwall cards and currency cards
+	 * (whose conversions count rides on `denominator`).
+	 */
+	numerator: number | null;
+	placeholder_type: GatesPlaceholderType;
+}
+
+export interface GatesFunnelStage {
+	label: string;
+	count: number;
+	pct_of_top: number;
+}
+
+export interface GatesFunnelData extends GatesErrorFields {
+	state: GatesMetricState;
+	stages: GatesFunnelStage[];
+}
+
+export interface GatesDistributionBucket {
+	label: string;
+	count: number;
+	pct: number;
+}
+
+export interface GatesDistributionData extends GatesErrorFields {
+	state: GatesMetricState;
+	buckets: GatesDistributionBucket[];
+}
+
+/**
+ * One row in the Performance by gate table, enriched server-side with each
+ * gate's `wp_posts.post_title` keyed on `gate_post_id`.
+ */
+export interface GatesPerformanceRow {
+	gate_post_id: number;
+	gate_name: string;
+	impressions: number;
+	unique_viewers: number;
+	registrations: number;
+	regwall_conversion_rate: number | null;
+	// NPPD-1686: true paid OUTCOMES per gate (Woo order-meta conversions ÷ the gate's
+	// checkout-capable impressions), replacing the old engagement-intent paywall_attempts.
+	// null = not paywall-capable (regwall-only gate) or non-WC publisher → em-dash.
+	paywall_conversions: number | null;
+	paywall_conversion_rate: number | null;
+}
+
+export interface GatesPerformanceTable extends GatesErrorFields {
+	state: GatesMetricState;
+	rows: GatesPerformanceRow[];
+}
+
+export interface GatesWindow {
+	window: { start: string; end: string };
+	// Section 1 — Gate exposure.
+	total_gate_impressions: GatesScalarMetric;
+	unique_readers_reached: GatesScalarMetric;
+	avg_exposures_per_reader: GatesScalarMetric;
+	sessions_with_gate: GatesScalarMetric;
+	// Section 2 — Free reader conversion.
+	regwall_conversion_direct: GatesScalarMetric;
+	regwall_conversion_influenced_7d: GatesScalarMetric;
+	// Section 2 empty-state totals (NPPD-1702): drive the Free section's
+	// no_opportunity / no_conversions / normal decision. Derived server-side from
+	// the regwall scalars — no extra query. `null` (not 0) when the hub count
+	// fields aren't deployed yet, so the section degrades to today's percentage
+	// render. An absent field is not a zero: a present 0 is a real "no impressions"
+	// signal; null is "the hub hasn't shipped the count fields." See NPPD-1702.
+	registration_impressions_total: number | null;
+	registrations_total: number | null;
+	// Section 3 — Paid reader conversion.
+	paywall_conversion_direct: GatesScalarMetric;
+	paywall_conversion_influenced_14d: GatesScalarMetric;
+	total_paywall_revenue_direct: GatesScalarMetric;
+	avg_revenue_per_paywall_conversion: GatesScalarMetric;
+	// Section 3 empty-state totals (NPPD-1694): drive the Paid section's
+	// no_opportunity / no_conversions / normal decision. Derived server-side from
+	// the scalars above — no extra query.
+	paywall_impressions_total: number;
+	paywall_conversions_total: number;
+	// Section 4 — How readers convert.
+	conversion_funnel: GatesFunnelData;
+	exposures_distribution: GatesDistributionData;
+	// Section 5 — Performance by gate.
+	performance_by_gate: GatesPerformanceTable;
+}
+
+export interface GatesResponse {
+	/**
+	 * True only when every section in the current window is in the error
+	 * state. React renders a tab-level error banner when set.
+	 */
+	tab_error: boolean;
+	current: GatesWindow;
+	previous: GatesWindow | null;
+}
+
+export interface GatesQuery {
+	start: string;
+	end: string;
+	compare_start?: string;
+	compare_end?: string;
+}
+
+const ENDPOINT = '/newspack-insights/v1/gates';
+
+const queryString = ( query: GatesQuery ): string => {
+	const params = new URLSearchParams();
+	params.set( 'start', query.start );
+	params.set( 'end', query.end );
+	if ( query.compare_start && query.compare_end ) {
+		params.set( 'compare_start', query.compare_start );
+		params.set( 'compare_end', query.compare_end );
+	}
+	// Forward the `_fixture_state` URL param so fixture mode's render variants
+	// (empty / error / free_no_conversions / free_fields_absent /
+	// paid_no_conversions / paid_zero_cards) are reachable from
+	// the UI for smoke testing. A no-op in production: the server ignores it
+	// unless NEWSPACK_INSIGHTS_FIXTURE_MODE is enabled.
+	if ( typeof window !== 'undefined' ) {
+		const fixtureState = new URLSearchParams( window.location.search ).get( '_fixture_state' );
+		if ( fixtureState ) {
+			params.set( '_fixture_state', fixtureState );
+		}
+	}
+	return params.toString();
+};
+
+/**
+ * Fetch Tab 4 data for the given window pair.
+ */
+export const fetchGatesData = async ( query: GatesQuery ): Promise< CachedEnvelope< GatesResponse > > =>
+	apiFetch< CachedEnvelope< GatesResponse > >( {
+		path: `${ ENDPOINT }?${ queryString( query ) }`,
+		method: 'GET',
+	} );
+
+export const refreshGatesData = async ( query: GatesQuery ): Promise< CachedEnvelope< GatesResponse > > =>
+	apiFetch< CachedEnvelope< GatesResponse > >( {
+		path: `${ ENDPOINT }/refresh?${ queryString( query ) }`,
+		method: 'POST',
+	} );

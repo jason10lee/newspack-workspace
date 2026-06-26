@@ -751,6 +751,12 @@ function wc_get_product( $product_id ) {
 	global $products_database;
 	return $products_database[ $product_id ] ?? false;
 }
+function wc_get_products( $args = [] ) {
+	// Test-controlled product query. Returns the IDs a test stages in
+	// $GLOBALS['newspack_test_wc_products'] (default empty), enough for callers that
+	// only need an existence / id-set check (e.g. the Audience supporter-type pie).
+	return $GLOBALS['newspack_test_wc_products'] ?? [];
+}
 function wcs_get_subscription_status_name( $status ) {
 	return ucfirst( $status );
 }

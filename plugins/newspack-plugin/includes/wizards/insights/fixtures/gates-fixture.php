@@ -1,0 +1,321 @@
+<?php
+/**
+ * Newspack Insights — Gates (Tab 4) fixture payload (NPPD-1604).
+ *
+ * Realistic mock data for UI smoke testing without a BigQuery proxy connection,
+ * served by Gates_REST_Controller when NEWSPACK_INSIGHTS_FIXTURE_MODE is on. The
+ * optional `_fixture_state` request param selects a render path:
+ *   - 'populated' (default) — every section has data; the funnel uses a mid-size
+ *     publisher's 25,000 / 2,000 / 400 shape so both drop-off deltas render red.
+ *   - 'empty'    — every section reports the empty state (succeeded, no rows).
+ *   - 'error'    — every section reports the error state (tab banner shows).
+ *   - 'free_no_conversions' / 'free_fields_absent' — Free-section empty-state
+ *     smoke variants (NPPD-1702); see the Paid variants below for the pattern.
+ *     `free_fields_absent` models the pre-hub-deploy state where the new count
+ *     fields are absent and the section degrades to today's percentage render.
+ *
+ * Returns a closure so the single required file can build any variant. Never
+ * enable fixture mode in production.
+ *
+ * @package Newspack
+ */
+
+defined( 'ABSPATH' ) || exit;
+
+return function ( string $variant = 'populated', bool $compare = false ): array {
+	$now    = function_exists( 'current_datetime' ) ? current_datetime() : new DateTimeImmutable();
+	$end    = $now;
+	$start  = $now->modify( '-29 days' );
+	$window = [
+		'start' => $start->format( 'Y-m-d' ),
+		'end'   => $end->format( 'Y-m-d' ),
+	];
+
+	$scalar_types = [
+		'total_gate_impressions'             => 'count',
+		'unique_readers_reached'             => 'count',
+		'avg_exposures_per_reader'           => 'decimal',
+		'sessions_with_gate'                 => 'rate',
+		'regwall_conversion_direct'          => 'rate',
+		'regwall_conversion_influenced_7d'   => 'rate',
+		'paywall_conversion_direct'          => 'rate',
+		'paywall_conversion_influenced_14d'  => 'rate',
+		'total_paywall_revenue_direct'       => 'currency',
+		'avg_revenue_per_paywall_conversion' => 'currency',
+	];
+
+	$zero_value = static function ( string $type ) {
+		return 'count' === $type ? 0 : 0.0;
+	};
+
+	// --- Error variant: every section failed to load. ---
+	if ( 'error' === $variant ) {
+		$current = [ 'window' => $window ];
+		foreach ( $scalar_types as $key => $type ) {
+			$current[ $key ] = [
+				'state'            => 'error',
+				'value'            => $zero_value( $type ),
+				'computable'       => false,
+				'denominator'      => null,
+				'numerator'        => null,
+				'placeholder_type' => $type,
+				'error_code'       => 'bigquery_proxy_http_error',
+				'error_message'    => 'HTTP 500',
+			];
+		}
+		// Scalar section-total metadata — the regwall totals are null in an
+		// all-error window (the errored scalars carry null counts, so
+		// regwall_section_totals returns null; NPPD-1702), the paywall totals zero
+		// (NPPD-1694).
+		$current['registration_impressions_total'] = null;
+		$current['registrations_total']            = null;
+		$current['paywall_impressions_total']         = 0;
+		$current['paywall_conversions_total']      = 0;
+		$collections = [
+			'conversion_funnel'      => 'stages',
+			'exposures_distribution' => 'buckets',
+			'performance_by_gate'    => 'rows',
+		];
+		foreach ( $collections as $key => $rows_key ) {
+			$current[ $key ] = [
+				'state'         => 'error',
+				'error_code'    => 'bigquery_proxy_http_error',
+				'error_message' => 'HTTP 500',
+				$rows_key       => [],
+			];
+		}
+		return [
+			'tab_error' => true,
+			'current'   => $current,
+			'previous'  => null,
+		];
+	}
+
+	// --- Empty variant: queries succeeded with no rows. ---
+	if ( 'empty' === $variant ) {
+		$current = [ 'window' => $window ];
+		foreach ( $scalar_types as $key => $type ) {
+			$current[ $key ] = [
+				'state'            => 'populated',
+				'value'            => $zero_value( $type ),
+				'computable'       => false,
+				'denominator'      => 'rate' === $type ? 0 : null,
+				'numerator'        => 'rate' === $type ? 0 : null,
+				'placeholder_type' => $type,
+			];
+		}
+		// Zero impressions / attempts → both Free (NPPD-1702) and Paid (NPPD-1694)
+		// sections render their no_opportunity empty state. Present 0, not null:
+		// these fields exist in the response, they're just empty for this window.
+		$current['registration_impressions_total'] = 0;
+		$current['registrations_total']            = 0;
+		$current['paywall_impressions_total']         = 0;
+		$current['paywall_conversions_total']      = 0;
+		$current['conversion_funnel']      = [
+			'state'  => 'empty',
+			'stages' => [],
+		];
+		$current['exposures_distribution'] = [
+			'state'   => 'empty',
+			'buckets' => [],
+		];
+		$current['performance_by_gate']    = [
+			'state' => 'empty',
+			'rows'  => [],
+		];
+		return [
+			'tab_error' => false,
+			'current'   => $current,
+			'previous'  => null,
+		];
+	}
+
+	// --- Populated variant (default). ---
+	$scalar = static function ( $value, $denominator, string $type, $numerator = null ) {
+		return [
+			'state'            => 'populated',
+			'value'            => $value,
+			'computable'       => true,
+			'denominator'      => $denominator,
+			'numerator'        => $numerator,
+			'placeholder_type' => $type,
+		];
+	};
+
+	$build = static function ( float $f ) use ( $scalar, $window ) {
+		return [
+			'window'                             => $window,
+			// Section 1 — Gate exposure.
+			'total_gate_impressions'             => $scalar( (int) round( 26171 * $f ), null, 'count' ),
+			'unique_readers_reached'             => $scalar( (int) round( 14820 * $f ), null, 'count' ),
+			'avg_exposures_per_reader'           => $scalar( round( 1.8 * $f, 1 ), null, 'decimal' ),
+			'sessions_with_gate'                 => $scalar( round( 0.34 * $f, 3 ), null, 'rate' ),
+			// Section 2 — Free reader conversion.
+			'regwall_conversion_direct'          => $scalar( round( 0.071 * $f, 3 ), (int) round( 14000 * $f ), 'rate', (int) round( 994 * $f ) ),
+			'regwall_conversion_influenced_7d'   => $scalar( round( 0.123 * $f, 3 ), (int) round( 12000 * $f ), 'rate', (int) round( 1476 * $f ) ),
+			// Section 3 — Paid reader conversion. Paywall rate cards carry both
+			// numerator (matched Woo orders) and denominator (attempts) so fixture
+			// mode exercises the NPPD-1694 count fallback.
+			'paywall_conversion_direct'          => $scalar( round( 0.021 * $f, 3 ), (int) round( 320 * $f ), 'rate', (int) round( 7 * $f ) ),
+			'paywall_conversion_influenced_14d'  => $scalar( round( 0.038 * $f, 3 ), (int) round( 290 * $f ), 'rate', (int) round( 11 * $f ) ),
+			'total_paywall_revenue_direct'       => $scalar( round( 4180.5 * $f, 2 ), (int) round( 47 * $f ), 'currency' ),
+			'avg_revenue_per_paywall_conversion' => $scalar( round( 88.95 * $f, 2 ), (int) round( 47 * $f ), 'currency' ),
+			// Section 2 empty-state totals (NPPD-1702). int|null in production; the
+			// populated fixture models the post-hub-deploy world where the count
+			// fields are present (`free_fields_absent` models the pre-deploy path).
+			'registration_impressions_total'     => (int) round( 14000 * $f ),
+			'registrations_total'                => (int) round( 1476 * $f ),
+			// Section 3 empty-state totals (NPPD-1694).
+			'paywall_impressions_total'          => (int) round( 320 * $f ),
+			'paywall_conversions_total'          => (int) round( 11 * $f ),
+			// Section 4 — How readers convert. Funnel uses a mid-size publisher's
+			// shape so both drop-off deltas exceed 20% and render in the error color.
+			'conversion_funnel'                  => [
+				'state'  => 'populated',
+				'stages' => [
+					[
+						'label'      => __( 'Impression', 'newspack-plugin' ),
+						'count'      => (int) round( 25000 * $f ),
+						'pct_of_top' => 1.0,
+					],
+					[
+						'label'      => __( 'Engagement', 'newspack-plugin' ),
+						'count'      => (int) round( 2000 * $f ),
+						'pct_of_top' => 0.08,
+					],
+					[
+						'label'      => __( 'Conversion', 'newspack-plugin' ),
+						'count'      => (int) round( 400 * $f ),
+						'pct_of_top' => 0.016,
+					],
+				],
+			],
+			'exposures_distribution'             => [
+				'state'   => 'populated',
+				'buckets' => [
+					[
+						'label' => __( '1 exposure', 'newspack-plugin' ),
+						'count' => (int) round( 210 * $f ),
+						'pct'   => 0.49,
+					],
+					[
+						'label' => __( '2 exposures', 'newspack-plugin' ),
+						'count' => (int) round( 120 * $f ),
+						'pct'   => 0.28,
+					],
+					[
+						'label' => __( '3–5 exposures', 'newspack-plugin' ),
+						'count' => (int) round( 70 * $f ),
+						'pct'   => 0.16,
+					],
+					[
+						'label' => __( '6+ exposures', 'newspack-plugin' ),
+						'count' => (int) round( 31 * $f ),
+						'pct'   => 0.07,
+					],
+				],
+			],
+			// Section 5 — Performance by gate. Null rate cells exercise the em-dash path.
+			'performance_by_gate'                => [
+				'state' => 'populated',
+				'rows'  => [
+					[
+						'gate_post_id'            => 101,
+						'gate_name'               => 'Newsletter regwall',
+						'impressions'             => (int) round( 14000 * $f ),
+						'unique_viewers'          => (int) round( 8200 * $f ),
+						'registrations'           => (int) round( 540 * $f ),
+						'regwall_conversion_rate' => 0.066,
+						'paywall_attempts'        => 0,
+						'paywall_attempt_rate'    => null,
+					],
+					[
+						'gate_post_id'            => 102,
+						'gate_name'               => 'Subscriber paywall',
+						'impressions'             => (int) round( 9800 * $f ),
+						'unique_viewers'          => (int) round( 5100 * $f ),
+						'registrations'           => 0,
+						'regwall_conversion_rate' => null,
+						'paywall_attempts'        => (int) round( 320 * $f ),
+						'paywall_attempt_rate'    => 0.065,
+					],
+					[
+						'gate_post_id'            => 103,
+						'gate_name'               => 'Article meter',
+						'impressions'             => (int) round( 6300 * $f ),
+						'unique_viewers'          => (int) round( 3900 * $f ),
+						'registrations'           => (int) round( 180 * $f ),
+						'regwall_conversion_rate' => 0.046,
+						'paywall_attempts'        => (int) round( 95 * $f ),
+						'paywall_attempt_rate'    => 0.024,
+					],
+				],
+			],
+		];
+	};
+
+	// --- Free-section empty-state smoke variants (NPPD-1702). ---
+	if ( 'free_no_conversions' === $variant ) {
+		// 14,000 registration gate impressions, zero registrations → the Free
+		// section's `no_conversions` empty state with {N} = 14,000.
+		$current                                    = $build( 1.0 );
+		$current['registrations_total']             = 0;
+		$current['regwall_conversion_direct']       = $scalar( 0.0, 14000, 'rate', 0 );
+		$current['regwall_conversion_influenced_7d'] = $scalar( 0.0, 12000, 'rate', 0 );
+		return [
+			'tab_error' => false,
+			'current'   => $current,
+			'previous'  => null,
+		];
+	}
+	if ( 'free_fields_absent' === $variant ) {
+		// The production-safety crux (NPPD-1702): the hub count fields are NOT yet
+		// deployed. The regwall scalars carry null counts and the section totals are
+		// null — so the Free section must degrade to today's percentage scorecards,
+		// no empty state. This is the default until Derrick's hub change ships.
+		$current                                     = $build( 1.0 );
+		$current['regwall_conversion_direct']        = $scalar( 0.071, null, 'rate' );
+		$current['regwall_conversion_influenced_7d'] = $scalar( 0.123, null, 'rate' );
+		$current['registration_impressions_total']   = null;
+		$current['registrations_total']              = null;
+		return [
+			'tab_error' => false,
+			'current'   => $current,
+			'previous'  => null,
+		];
+	}
+
+	// --- Paid-section empty-state smoke variants (NPPD-1694). ---
+	if ( 'paid_no_conversions' === $variant ) {
+		// 17 paywall attempts, zero conversions → the section's `no_conversions`
+		// empty state with {N} = 17 (a mid-size publisher's live scenario).
+		$current                              = $build( 1.0 );
+		$current['paywall_impressions_total']    = 17;
+		$current['paywall_conversions_total'] = 0;
+		return [
+			'tab_error' => false,
+			'current'   => $current,
+			'previous'  => null,
+		];
+	}
+	if ( 'paid_zero_cards' === $variant ) {
+		// Section has data (Influenced converted) so the grid renders, but the
+		// Direct cards are zero → exercises the per-card count fallback:
+		// "0 of 320" (rate), "0 conversions" (currency total), "—" (currency avg).
+		$current                                       = $build( 1.0 );
+		$current['paywall_conversion_direct']          = $scalar( 0.0, 320, 'rate', 0 );
+		$current['total_paywall_revenue_direct']       = $scalar( 0.0, 0, 'currency' );
+		$current['avg_revenue_per_paywall_conversion'] = $scalar( 0.0, 0, 'currency' );
+		return [
+			'tab_error' => false,
+			'current'   => $current,
+			'previous'  => null,
+		];
+	}
+
+	return [
+		'tab_error' => false,
+		'current'   => $build( 1.0 ),
+		'previous'  => $compare ? $build( 0.9 ) : null,
+	];
+};

@@ -1,0 +1,154 @@
+/**
+ * OpportunityBucketsSection (NPPD-1609, Section 8).
+ *
+ * Three snapshot scorecards (stale registered readers, at-risk
+ * subscribers, lapsed donors) above a full-width "top pages that don't
+ * convert" table (8.4). The scorecards are current-state counts — no
+ * comparison deltas.
+ *
+ * Phase 2: scalar metrics (8.1–8.3) use `state` ('error' | 'populated' |
+ * 'coming_soon'). The table (8.4) uses the full `ConversionMetricState`
+ * and is gated via SectionState. The `scalarToMetricCardProps` helper maps
+ * `coming_soon` to `pending: true` on the MetricCard.
+ */
+
+/**
+ * WordPress dependencies
+ */
+import { __, sprintf } from '@wordpress/i18n';
+
+/**
+ * Internal dependencies
+ */
+import type { ConversionTopPageRow, ConversionWindow } from '../../api/conversion';
+import MetricCard from '../components/MetricCard';
+import SectionHeading from '../components/SectionHeading';
+import { formatNumber, formatPercent } from '../components/format';
+import { scalarToMetricCardProps } from './scalarToCard';
+import SortableTable, { type SortableColumn } from '../components/SortableTable';
+import SectionState from './SectionState';
+
+export interface OpportunityBucketsSectionProps {
+	current: ConversionWindow;
+}
+
+const TOP_PAGES_ROW_LIMIT = 25;
+
+const TOP_PAGES_COLUMNS: SortableColumn< ConversionTopPageRow >[] = [
+	{
+		key: 'page_title',
+		label: __( 'Article', 'newspack-plugin' ),
+		numeric: false,
+		render: row => {
+			// Reject non-http(s) schemes (e.g. javascript:) before rendering — the row
+			// originates in BigQuery and is trusted, but cheap defense-in-depth.
+			const safe = typeof row.page_url === 'string' && /^https?:\/\//i.test( row.page_url );
+			return safe ? (
+				<a href={ row.page_url } target="_blank" rel="noreferrer">
+					{ row.page_title }
+				</a>
+			) : (
+				row.page_title
+			);
+		},
+		sortValue: row => row.page_title,
+	},
+	{
+		key: 'pageviews',
+		label: __( 'Pageviews', 'newspack-plugin' ),
+		numeric: true,
+		render: row => formatNumber( row.pageviews ),
+		sortValue: row => row.pageviews,
+	},
+	{
+		key: 'unique_readers',
+		label: __( 'Unique readers', 'newspack-plugin' ),
+		numeric: true,
+		render: row => formatNumber( row.unique_readers ),
+		sortValue: row => row.unique_readers,
+	},
+	{
+		key: 'conversion_rate',
+		label: __( 'Conversion rate', 'newspack-plugin' ),
+		numeric: true,
+		render: row => formatPercent( row.conversion_rate ),
+		sortValue: row => row.conversion_rate,
+	},
+];
+
+const OpportunityBucketsSection = ( { current }: OpportunityBucketsSectionProps ) => (
+	<section
+		className="newspack-insights__section newspack-insights__section--opportunity-buckets"
+		aria-labelledby="newspack-insights-conversion-opportunity-heading"
+	>
+		<SectionHeading
+			id="newspack-insights-conversion-opportunity-heading"
+			title={ __( 'Opportunity buckets', 'newspack-plugin' ) }
+			description={ __(
+				'Where the funnel has slack. These are diagnostic counts and underperforming articles — readers and content that could move with attention.',
+				'newspack-plugin'
+			) }
+		/>
+		<div className="newspack-insights__metric-grid">
+			<MetricCard
+				{ ...scalarToMetricCardProps( {
+					label: __( 'Stale Registered Readers', 'newspack-plugin' ),
+					description: __( 'Registered but never converted, no activity in 90 days', 'newspack-plugin' ),
+					current: current.stale_registered_count,
+				} ) }
+			/>
+			<MetricCard
+				{ ...scalarToMetricCardProps( {
+					label: __( 'At-Risk Subscribers', 'newspack-plugin' ),
+					description: __( 'Active subscribers with a failed-payment retry scheduled', 'newspack-plugin' ),
+					current: current.at_risk_subscriber_count,
+				} ) }
+			/>
+			<MetricCard
+				{ ...scalarToMetricCardProps( {
+					label: __( 'Lapsed Donors', 'newspack-plugin' ),
+					description: __( 'Donors with no donation in the last 365 days', 'newspack-plugin' ),
+					current: current.lapsed_donor_count,
+				} ) }
+			/>
+		</div>
+		<div className="newspack-insights__conversion-top-pages">
+			<h3 className="newspack-insights__conversion-subheading">{ __( 'Top articles that don’t convert', 'newspack-plugin' ) }</h3>
+			<SectionState
+				state={ current.top_pages_no_conversion.state }
+				emptyMessage={ sprintf(
+					/* translators: %s: minimum pageview count for an article to qualify (formatted). */
+					__(
+						'No qualifying articles yet. Articles with at least %s pageviews and a measurable conversion rate will appear here.',
+						'newspack-plugin'
+					),
+					formatNumber( current.top_pages_no_conversion.threshold_pageviews )
+				) }
+			>
+				<SortableTable
+					columns={ TOP_PAGES_COLUMNS }
+					rows={ current.top_pages_no_conversion.rows }
+					getRowKey={ row => row.post_id }
+					defaultSortKey="pageviews"
+					initialRowLimit={ TOP_PAGES_ROW_LIMIT }
+					emptyMessage={ sprintf(
+						/* translators: %s: minimum pageview count for an article to qualify (formatted). */
+						__(
+							'No qualifying articles yet. Articles with at least %s pageviews and a measurable conversion rate will appear here.',
+							'newspack-plugin'
+						),
+						formatNumber( current.top_pages_no_conversion.threshold_pageviews )
+					) }
+				/>
+			</SectionState>
+			<p className="newspack-insights__conversion-top-pages-note">
+				{ __(
+					'These articles get traffic but don’t drive registrations. Consider adding a gate or prompt where engagement is high but conversion is low.',
+					'newspack-plugin'
+				) }
+			</p>
+		</div>
+	</section>
+);
+
+export default OpportunityBucketsSection;

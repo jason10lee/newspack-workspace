@@ -1,0 +1,485 @@
+<?php
+/**
+ * Newspack Insights Wizard (NPPD-1602).
+ *
+ * Top-level wizard chrome for the Insights page. Tab routing happens
+ * entirely on the React side via URL query persistence; this PHP wizard
+ * registers the admin page and localizes the boot config (tab visibility,
+ * default date range, timezone, settings URL).
+ *
+ * Section classes (Insights_Section_*) live alongside this file and exist
+ * for future per-tab REST endpoint registration when each tab's data layer
+ * lands in subsequent issues.
+ *
+ * @package Newspack
+ */
+
+namespace Newspack;
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Insights Wizard.
+ */
+class Insights_Wizard extends Wizard {
+
+	/**
+	 * Admin page slug.
+	 *
+	 * @var string
+	 */
+	protected $slug = 'newspack-insights';
+
+	/**
+	 * Capability required to access this wizard.
+	 *
+	 * @var string
+	 */
+	protected $capability = 'manage_options';
+
+	/**
+	 * Parent menu item slug. Nests under the top-level Newspack admin menu,
+	 * matching the Setup wizard's precedent.
+	 *
+	 * @var string
+	 */
+	public $parent_menu = 'newspack-dashboard';
+
+	/**
+	 * Checks if the feature is enabled.
+	 *
+	 * True when:
+	 * - NEWSPACK_INSIGHTS_ENABLED is defined and true.
+	 *
+	 * Feature-flagged for gradual rollout.
+	 * Remove this gate once fully released.
+	 *
+	 * @return bool True if the feature is enabled, false otherwise.
+	 */
+	public static function is_enabled() {
+		/**
+		 * Enables the Newspack Insights feature.
+		 *
+		 * @constant NEWSPACK_INSIGHTS_ENABLED
+		 * @type     bool
+		 * @default  Insights feature disabled
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_INSIGHTS_ENABLED', true );
+		 */
+		return defined( 'NEWSPACK_INSIGHTS_ENABLED' ) && NEWSPACK_INSIGHTS_ENABLED;
+	}
+
+	/**
+	 * Whether the Gates preview tab (Tab 4 / NPPD-1604) is enabled
+	 * for this environment.
+	 *
+	 * Independent from {@see self::is_enabled()} so the preview can
+	 * be flipped on only where it's wanted (development, staging,
+	 * canary), separately from the broader Insights wizard rollout.
+	 * Once Phase 2 (NPPD-1630) lands and the tab is no longer a
+	 * placeholder, this gate can be retired in favor of the standard
+	 * Insights flag plus a runtime feature-detection check.
+	 *
+	 * @return bool True when the Gates preview should appear in the
+	 *              Insights tab nav and have its REST route active.
+	 */
+	public static function is_gates_preview_enabled(): bool {
+		/**
+		 * Enables the Gates tab preview (Phase 1, placeholder data).
+		 *
+		 * @constant NEWSPACK_INSIGHTS_GATES_PREVIEW
+		 * @type     bool
+		 * @default  Gates preview tab hidden
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_INSIGHTS_GATES_PREVIEW', true );
+		 */
+		return defined( 'NEWSPACK_INSIGHTS_GATES_PREVIEW' ) && NEWSPACK_INSIGHTS_GATES_PREVIEW;
+	}
+
+	/**
+	 * Whether the Advertising tab (Tab 8 / NPPD-1663) is enabled for this
+	 * environment.
+	 *
+	 * Independent from {@see self::is_enabled()} so the GAM-backed Advertising
+	 * orchestrator (its REST route and Action Scheduler refresh) only registers
+	 * where wanted, separately from the broader Insights rollout.
+	 *
+	 * @return bool True when Tab 8's data layer should be active.
+	 */
+	public static function is_advertising_enabled(): bool {
+		/**
+		 * Enables the Advertising tab (Tab 8) GAM orchestrator.
+		 *
+		 * @constant NEWSPACK_INSIGHTS_ADVERTISING_ENABLED
+		 * @type     bool
+		 * @default  Advertising tab disabled
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_INSIGHTS_ADVERTISING_ENABLED', true );
+		 */
+		return defined( 'NEWSPACK_INSIGHTS_ADVERTISING_ENABLED' ) && NEWSPACK_INSIGHTS_ADVERTISING_ENABLED;
+	}
+
+	/**
+	 * Globally disable the Insights cache for development / debugging.
+	 *
+	 * @constant NEWSPACK_INSIGHTS_CACHE_DISABLED
+	 * @type     bool
+	 * @default  Caching enabled
+	 * @status   stable
+	 *
+	 * @example define( 'NEWSPACK_INSIGHTS_CACHE_DISABLED', true );
+	 */
+
+	/**
+	 * Constructor.
+	 *
+	 * Bails before parent registration when the feature flag is disabled,
+	 * so no menu item, asset enqueue, or admin hooks are registered.
+	 */
+	public function __construct() {
+		if ( ! self::is_enabled() ) {
+			return;
+		}
+		parent::__construct();
+	}
+
+	/**
+	 * Get the name for this wizard.
+	 *
+	 * @return string
+	 */
+	public function get_name() {
+		return esc_html__( 'Insights', 'newspack-plugin' );
+	}
+
+	/**
+	 * Enqueue the shared modern-wizard bundle and localize boot config.
+	 *
+	 * The React view is registered in src/wizards/index.tsx under the
+	 * 'newspack-insights' key.
+	 */
+	public function enqueue_scripts_and_styles() {
+		parent::enqueue_scripts_and_styles();
+
+		if ( filter_input( INPUT_GET, 'page', FILTER_SANITIZE_FULL_SPECIAL_CHARS ) !== $this->slug ) {
+			return;
+		}
+
+		wp_enqueue_script( 'newspack-wizards' );
+
+		wp_localize_script( 'newspack-wizards', 'newspackInsights', $this->get_boot_config() );
+	}
+
+	/**
+	 * Cache key for the donation-activity detection result.
+	 *
+	 * @var string
+	 */
+	const DONATION_ACTIVITY_TRANSIENT = 'newspack_insights_has_donation_activity';
+
+	/**
+	 * Trailing window, in days, over which a completed donation order keeps the
+	 * Donors tab visible. Matches the active-donor recency leg the donor
+	 * storage adapters use ({@see \Newspack\Insights\HPOS_Donors_Storage}),
+	 * so the visibility gate and the tab's own metrics agree on what counts
+	 * as "has donations". (Active subscriptions keep the tab visible
+	 * regardless of this window — see {@see self::build_donation_activity_sql()}.)
+	 *
+	 * @var int
+	 */
+	const DONATION_ACTIVITY_WINDOW_DAYS = 365;
+
+	/**
+	 * Donors tab visibility. True when the publisher has active donation
+	 * activity — an active donation subscription, or a completed donation
+	 * order in the trailing {@see self::DONATION_ACTIVITY_WINDOW_DAYS} days
+	 * (the same two-leg definition the Donors metrics use for an active
+	 * donor). A publisher who collects donations through a third-party
+	 * platform — or who has no active donation subscription and no
+	 * Newspack-native WooCommerce donation order in over a year — does not
+	 * get the tab, because its metrics would have nothing to report.
+	 *
+	 * Product existence is NOT a useful signal: every Newspack publisher
+	 * receives the canonical donation product family on install regardless
+	 * of whether they ever collect donations, so a product-existence
+	 * check showed Tab 7 on every site, including the many publishers
+	 * who have never taken a donation. Recent activity is the right
+	 * heuristic — an active donation subscription, or a single qualifying
+	 * donation order in the trailing window, gates the tab visible.
+	 *
+	 * Result is cached for 24h via {@see self::DONATION_ACTIVITY_TRANSIENT}.
+	 * State transitions ("publisher started taking donations") are rare
+	 * and one-way, so aggressive caching is correct. Tests / manual
+	 * invalidation can call {@see self::force_refresh_donation_activity()}.
+	 *
+	 * Returns false immediately when the donation product ID set is
+	 * empty (nothing the activity query could match) without running
+	 * the EXISTS query. Falls back to true if the classifier class
+	 * isn't loaded (defensive — preserves visibility so the missing
+	 * dependency can be diagnosed rather than silently hiding the tab).
+	 *
+	 * @return bool
+	 */
+	private static function has_donation_activity(): bool {
+		$cached = get_transient( self::DONATION_ACTIVITY_TRANSIENT );
+		if ( 'yes' === $cached ) {
+			return true;
+		}
+		if ( 'no' === $cached ) {
+			return false;
+		}
+
+		$has_activity = self::compute_donation_activity();
+		set_transient( self::DONATION_ACTIVITY_TRANSIENT, $has_activity ? 'yes' : 'no', DAY_IN_SECONDS );
+		return $has_activity;
+	}
+
+	/**
+	 * Force-recompute the donation activity flag, bypassing and
+	 * refreshing the cache. Useful for tests and for the case where a
+	 * publisher just received their first donation.
+	 *
+	 * @return bool The freshly computed activity flag.
+	 */
+	public static function force_refresh_donation_activity(): bool {
+		delete_transient( self::DONATION_ACTIVITY_TRANSIENT );
+		// Recompute from live state: also clear the donation-product set and
+		// backend caches the activity query depends on, so a just-configured
+		// donation (or a test) isn't evaluated against a stale product set or
+		// backend.
+		if ( class_exists( '\Newspack\Insights\Donation_Product_Classifier' ) ) {
+			\Newspack\Insights\Donation_Product_Classifier::flush_cache();
+		}
+		if ( class_exists( '\Newspack\Insights\Storage_Detector' ) ) {
+			\Newspack\Insights\Storage_Detector::force_refresh();
+		}
+		$has_activity = self::compute_donation_activity();
+		set_transient( self::DONATION_ACTIVITY_TRANSIENT, $has_activity ? 'yes' : 'no', DAY_IN_SECONDS );
+		return $has_activity;
+	}
+
+	/**
+	 * Run the activity query without consulting the cache.
+	 *
+	 * @return bool
+	 */
+	private static function compute_donation_activity(): bool {
+		if ( ! class_exists( '\Newspack\Insights\Donation_Product_Classifier' ) ) {
+			// Defensive: keep tab visible so the missing dep can be diagnosed.
+			return true;
+		}
+		$donation_ids = \Newspack\Insights\Donation_Product_Classifier::get_donation_product_ids();
+		if ( empty( $donation_ids ) ) {
+			return false;
+		}
+
+		// Dispatch by backend so we read from the authoritative orders
+		// source rather than scanning a potentially stale legacy CPT
+		// table on HPOS sites (or vice versa).
+		$backend = class_exists( '\Newspack\Insights\Storage_Detector' )
+			? \Newspack\Insights\Storage_Detector::detect()
+			: 'legacy';
+
+		$donations_list = implode( ',', array_map( 'intval', $donation_ids ) );
+
+		global $wpdb;
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return (bool) (int) $wpdb->get_var( self::build_donation_activity_sql( $backend, $donations_list ) );
+		// phpcs:enable
+	}
+
+	/**
+	 * Build the query that tests for active donation activity.
+	 *
+	 * Mirrors the two-leg "active donor" definition the Donors metrics use
+	 * ({@see \Newspack\Insights\HPOS_Donors_Storage::get_active_donors()}) so
+	 * the gate and the tab's own scorecards agree on whether there's anything
+	 * to show. A publisher is active if EITHER:
+	 *
+	 *  - they have an **active donation subscription** (`shop_subscription` in
+	 *    `wc-active`), regardless of date — this keeps recurring donors
+	 *    (annual subscribers, and subscribers whose latest renewal order is
+	 *    pending/on-hold after a retry) visible, which a shop_order-only
+	 *    recency check would wrongly hide; OR
+	 *  - they have a **completed donation order** (`shop_order` in
+	 *    `wc-completed` / `wc-processing`) in the trailing
+	 *    {@see self::DONATION_ACTIVITY_WINDOW_DAYS}-day window — this also
+	 *    covers one-time gifts and subscription renewals, which post their own
+	 *    dated `shop_order` rows.
+	 *
+	 * The order leg resolves products via `wc_order_product_lookup`, the same
+	 * table the metrics use, so the two can't disagree at the margins: if that
+	 * analytics table is unpopulated the tab's metrics are empty too, so
+	 * hiding stays consistent. Lapsed subscription statuses (`wc-cancelled`,
+	 * `wc-expired`, …) and refunded/failed/pending orders are intentionally
+	 * excluded — they aren't active activity. `UTC_TIMESTAMP()` matches the
+	 * UTC `*_gmt` columns.
+	 *
+	 * Returned as a string (rather than executed in place) so the query shape
+	 * is unit-testable without WooCommerce order tables installed.
+	 *
+	 * @param string $backend        Storage backend: 'hpos' or 'legacy'.
+	 * @param string $donations_list Comma-separated, integer-sanitized product IDs.
+	 * @return string SQL string.
+	 */
+	private static function build_donation_activity_sql( string $backend, string $donations_list ): string {
+		global $wpdb;
+		$prefix = $wpdb->prefix;
+		$days   = (int) self::DONATION_ACTIVITY_WINDOW_DAYS;
+
+		if ( 'hpos' === $backend ) {
+			return "SELECT (
+				EXISTS (
+					SELECT 1 FROM {$prefix}wc_orders o
+					JOIN {$prefix}woocommerce_order_items oi
+						ON oi.order_id = o.id AND oi.order_item_type = 'line_item'
+					JOIN {$prefix}woocommerce_order_itemmeta oim
+						ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+					WHERE o.type = 'shop_subscription'
+					  AND o.status = 'wc-active'
+					  AND oim.meta_value IN ($donations_list)
+				)
+				OR EXISTS (
+					SELECT 1 FROM {$prefix}wc_orders o
+					JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = o.id
+					WHERE o.type = 'shop_order'
+					  AND o.status IN ('wc-completed', 'wc-processing')
+					  AND o.date_created_gmt >= DATE_SUB( UTC_TIMESTAMP(), INTERVAL {$days} DAY )
+					  AND opl.product_id IN ($donations_list)
+				)
+			) AS has_activity";
+		}
+
+		return "SELECT (
+			EXISTS (
+				SELECT 1 FROM {$prefix}posts p
+				JOIN {$prefix}woocommerce_order_items oi
+					ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
+				JOIN {$prefix}woocommerce_order_itemmeta oim
+					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+				WHERE p.post_type = 'shop_subscription'
+				  AND p.post_status = 'wc-active'
+				  AND oim.meta_value IN ($donations_list)
+			)
+			OR EXISTS (
+				SELECT 1 FROM {$prefix}posts p
+				JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = p.ID
+				WHERE p.post_type = 'shop_order'
+				  AND p.post_status IN ('wc-completed', 'wc-processing')
+				  AND p.post_date_gmt >= DATE_SUB( UTC_TIMESTAMP(), INTERVAL {$days} DAY )
+				  AND opl.product_id IN ($donations_list)
+			)
+		) AS has_activity";
+	}
+
+	/**
+	 * Whether the Advertising (Tab 8) nav entry should render. Requires the
+	 * feature flag, plus either an active Google Ad Manager ad provider or
+	 * fixture mode (so the tab is testable without a GAM connection).
+	 *
+	 * @return bool
+	 */
+	private static function is_advertising_tab_visible(): bool {
+		if ( ! self::is_advertising_enabled() ) {
+			return false;
+		}
+		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
+			return true;
+		}
+		return \Newspack\Insights\Advertising_Metric::is_tab_visible();
+	}
+
+	/**
+	 * Build the boot config consumed by the React entry.
+	 *
+	 * @return array
+	 */
+	protected function get_boot_config() {
+		// current_datetime() returns DateTimeImmutable; modify() returns a new
+		// instance and does not mutate $today. -29 days yields an inclusive
+		// 30-day window ending today (today + 29 prior days = 30 days).
+		$today      = current_datetime();
+		$thirty_ago = $today->modify( '-29 days' );
+
+		return [
+			// Tab visibility. The audience/engagement/conversion/prompts
+			// tabs are stubbed to true until their data layers land (each
+			// needs BQ for proper feature detection, NPPD-1598).
+			// Advertising (Tab 8, NPPD-1618) has a real data layer: it shows
+			// when its feature flag is enabled AND either Google Ad Manager is
+			// the active ad provider (Advertising_Metric::is_tab_visible() ===
+			// Client::is_gam_active()) or fixture mode is on for dev testing.
+			// See is_advertising_tab_visible(). Subscribers stays all-on for now;
+			// Tab 6 visibility detection (non-donation subscription
+			// product presence) is a separate follow-up. Donors hides
+			// when there's no recent donation activity — has_donation_activity()
+			// uses the Donation_Product_Classifier to find donation
+			// products, then checks for an active donation subscription or a qualifying donation order in the
+			// trailing DONATION_ACTIVITY_WINDOW_DAYS window (cached for a day). Gates is
+			// gated to the preview constant NEWSPACK_INSIGHTS_GATES_PREVIEW
+			// while Phase 1 (placeholder data) is being validated.
+			'tabs'                => [
+				'audience'    => true,
+				'engagement'  => true,
+				'conversion'  => true,
+				'gates'       => self::is_gates_preview_enabled(),
+				'prompts'     => true,
+				'subscribers' => true,
+				'donors'      => self::has_donation_activity(),
+				'advertising' => self::is_advertising_tab_visible(),
+			],
+			'defaultDateRange'    => [
+				'preset' => 'last-30',
+				'start'  => $thirty_ago->format( 'Y-m-d' ),
+				'end'    => $today->format( 'Y-m-d' ),
+			],
+			'defaultComparison'   => false,
+			'timezone'            => wp_timezone_string(),
+			'adminUrl'            => admin_url(),
+			'settingsUrl'         => admin_url( 'admin.php?page=newspack-settings' ),
+			'siteKitUrl'          => self::get_site_kit_url(),
+			// Publisher (site) name, shown in the PDF export document header
+			// (NPPD-1661). Resolved at render time from the site's own title —
+			// never a hardcoded name. Decode entities: `blogname` is stored
+			// HTML-escaped (e.g. "Ben &amp; Jerry's"), and React escapes again
+			// on render, so a raw get_bloginfo() would print the literal entity.
+			// Hand React the decoded string and let it do the single escaping.
+			'publisherName'       => wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ),
+			// Feedback abandon-beacon (NPPD-1728). navigator.sendBeacon can't set
+			// request headers, so the client needs the absolute REST URL plus a
+			// `wp_rest` nonce as a query param. apiFetch carries its own nonce for
+			// the normal submit/dismiss path, but the beacon can't reuse it and
+			// `window.wpApiSettings` isn't enqueued on this page — so hand both to
+			// the client explicitly here.
+			'feedbackBeaconUrl'   => rest_url( 'newspack-insights/v1/feedback' ),
+			'feedbackBeaconNonce' => wp_create_nonce( 'wp_rest' ),
+		];
+	}
+
+	/**
+	 * Admin URL for connecting Google Analytics through Site Kit, used by the
+	 * Audience and Engagement connect banner when GA4 isn't connected
+	 * (NPPD-1731). GA4 is owned upstream by Site Kit, so the banner points
+	 * there rather than at Newspack → Connections.
+	 *
+	 * Precedence mirrors Newspack Settings and the Dashboard:
+	 *  - Site Kit set up with the Analytics module → deep link to the GA4 service.
+	 *  - Site Kit active but Analytics not yet connected → Site Kit's setup splash.
+	 *  - Site Kit not installed at all → Newspack → Connections, where it gets
+	 *    installed (the splash URL would 404 without the plugin present).
+	 *
+	 * @return string
+	 */
+	private static function get_site_kit_url(): string {
+		if ( google_site_kit_available() ) {
+			return admin_url( 'admin.php?page=googlesitekit-settings#/connected-services/analytics-4' );
+		}
+		if ( GoogleSiteKit::is_active() ) {
+			return admin_url( 'admin.php?page=googlesitekit-splash' );
+		}
+		return admin_url( 'admin.php?page=newspack-settings' );
+	}
+}

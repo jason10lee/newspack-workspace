@@ -1,0 +1,268 @@
+/**
+ * Newspack Insights wizard chrome (NPPD-1602)
+ *
+ * Page shell (admin header, tab navigation, footer, content max-width)
+ * is owned by the design-system Wizard component. This file scopes
+ * Insights-only chrome: the renderAboveSections control row
+ * (DateRangePicker + ComparisonToggle), the empty state, LastUpdated,
+ * tab fallback, tab stub, and section header containers.
+ *
+ * Also forwards the shared cross-tab chrome — sections, metric cards,
+ * tables, tab loading/error — from `tabs/components/sections.scss` so
+ * every tab inherits them without having to import on its own.
+ *
+ * Per-component metric viz styles live in
+ * packages/components/src/<component>/ and don't belong here.
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "tabs/components/sections";
+@use "components/feedback";
+@use "print";
+
+.newspack-insights {
+	color: wp-colors.$gray-900;
+
+	// Date range picker + comparison toggle row rendered via the
+	// Wizard's renderAboveSections slot. Sits above the section
+	// content, right-aligned to mirror the old header-right placement.
+	&__header-controls {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 16px;
+		margin-bottom: 24px;
+
+		@media ( max-width: 782px ) {
+			justify-content: flex-start;
+		}
+	}
+
+	// While a tab is loading (chunk Suspense fallback OR in-tab loading view),
+	// hide the date range + comparison controls — they're non-interactive
+	// while data is fetching, and removing visual noise lets the tab loading
+	// animation own the user's attention.
+	.newspack-wizard__content:has( .newspack-insights__tab-loading ),
+	.newspack-wizard__content:has( .newspack-insights__tab-fallback ) {
+		.newspack-insights__header-controls {
+			display: none;
+		}
+	}
+
+	&__last-updated {
+		font-size: 13px;
+		font-weight: 400;
+		line-height: 1.4;
+		color: wp-colors.$gray-600;
+	}
+
+	&__settings-link {
+		font-size: 13px;
+		font-weight: 500;
+		color: var(--wp-admin-theme-color);
+		text-decoration: none;
+
+		&:hover,
+		&:focus-visible {
+			text-decoration: underline;
+		}
+
+		&:focus-visible {
+			outline: 2px solid var(--wp-admin-theme-color);
+			outline-offset: 2px;
+		}
+	}
+
+	// Empty state — rendered when no tabs are visible (rare; only when all
+	// feature-detection checks fail). Header still renders so the Settings
+	// link is reachable.
+
+	&__empty {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		min-height: 320px;
+		padding: 48px 24px;
+		text-align: center;
+		gap: 12px;
+	}
+
+	&__empty-title {
+		font-size: 22px;
+		font-weight: 600;
+		line-height: 1.2;
+		color: wp-colors.$gray-900;
+		margin: 0;
+	}
+
+	&__empty-message {
+		font-size: 14px;
+		font-weight: 400;
+		line-height: 1.4;
+		color: wp-colors.$gray-700;
+		max-width: 480px;
+		margin: 0;
+	}
+
+	// Date range picker
+
+	&__date-range-picker {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+
+	// SelectControl + CheckboxControl from @wordpress/components carry
+	// their own admin-pattern styles, focus rings, and a11y. We only
+	// keep a wrapper override here for the SelectControl so it sits
+	// flush with the picker row (the component's default margin-bottom
+	// is opted out via __nextHasNoMarginBottom on the JS side).
+	&__date-range-picker-select {
+		width: auto;
+	}
+
+	&__date-range-picker-custom {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+
+		input[type="date"] {
+			font-size: 13px;
+			padding: 6px 8px;
+			border: 1px solid wp-colors.$gray-300;
+			border-radius: 4px;
+			background: #fff;
+			color: wp-colors.$gray-900;
+
+			&:focus-visible {
+				outline: 2px solid var(--wp-admin-theme-color);
+				outline-offset: 1px;
+			}
+		}
+	}
+
+	&__date-range-picker-sep {
+		color: wp-colors.$gray-600;
+		font-size: 13px;
+	}
+
+	// Tab content area
+
+	&__tab-fallback {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 320px;
+		padding: 64px 24px;
+	}
+
+	// Tab stub ("Coming soon")
+
+	&__tab-stub {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		min-height: 320px;
+		padding: 48px 24px;
+		text-align: center;
+		gap: 8px;
+	}
+
+	&__tab-stub-title {
+		font-size: 22px;
+		font-weight: 600;
+		line-height: 1.2;
+		color: wp-colors.$gray-900;
+		margin: 0;
+	}
+
+	&__tab-stub-message {
+		font-size: 14px;
+		font-weight: 400;
+		color: wp-colors.$gray-600;
+		margin: 0;
+	}
+
+	// Wraps a section's heading + caption alongside an optional
+	// flex-end slot used by each tab's first section to host
+	// LastUpdated. When the slot is empty the wrapper still flows
+	// correctly with just the text side.
+	&__section-header-container {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 16px;
+
+		@media ( max-width: 782px ) {
+			flex-direction: column;
+			align-items: stretch;
+			gap: 8px;
+		}
+	}
+
+	&__section-header-text {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		flex: 1 1 auto;
+		min-width: 0;
+	}
+
+	&__last-updated-wrap {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+
+		.newspack-insights__last-updated {
+			font-size: 11px;
+			color: wp-colors.$gray-600;
+			white-space: nowrap;
+		}
+	}
+
+	&__refresh-menu .components-dropdown-menu__toggle {
+		padding: 0 4px;
+	}
+
+	&__cooldown-notice {
+		margin: 0 0 16px;
+	}
+
+	// Shared info callout (NPPD-1618). Self-contained box chrome — background +
+	// uniform border — defined here in the wizard's global stylesheet (imported
+	// by `insights/index.tsx`, so it loads on EVERY Insights view) rather than in
+	// a per-tab partial. This guarantees the callout looks identical on every tab
+	// and component regardless of which lazy tab-chunk CSS is loaded.
+	//
+	// We paint the full box explicitly instead of leaning on `@wordpress/components`
+	// Notice: its `status="info"` variant ships NO `.is-info` rule, so a bare
+	// `.components-notice` is just a white box with a 4px left accent border — no
+	// background, no full border. The compound `&.components-notice` selector
+	// (0,2,0) outranks WP's `.components-notice` (0,1,0) regardless of load order,
+	// so the custom chrome can't be lost to the cascade. Variant skins (e.g.
+	// `--preview`) override only the background on top of this shared box.
+	&__info-callout.components-notice {
+		margin: 0;
+		background-color: wp-colors.$gray-100;
+		border: 1px solid wp-colors.$gray-300;
+		border-radius: 4px;
+		color: wp-colors.$gray-900;
+	}
+
+	&__info-callout-title {
+		margin: 0;
+		font-size: 14px;
+	}
+}
+
+// Suppress the generic wizard chunk-loading message ("Loading Insights…")
+// on the Insights page so the Insights-specific tab loading animation
+// owns the first-paint experience without a visual hand-off flash.
+// Scoped to #newspack-insights — the WordPress admin uses the page slug
+// as the React mount node id — so this only affects the Insights page.
+#newspack-insights .newspack-wizard__loader {
+	display: none;
+}

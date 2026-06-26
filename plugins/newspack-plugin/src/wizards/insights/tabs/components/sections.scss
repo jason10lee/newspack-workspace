@@ -1,0 +1,367 @@
+/**
+ * Newspack Insights — shared tab chrome (NPPD-1602/1616)
+ *
+ * Generic visuals that every Insights tab inherits: section wrappers
+ * and headings, the metric card chrome + responsive grid, the table
+ * treatment (incl. nested-variation rows), and tab-level loading /
+ * error blocks. Tab-specific styles (e.g. Tab 6's tenure card,
+ * Tab 7's donor-cohort layout) live alongside their tab orchestrator.
+ *
+ * Loaded by `src/wizards/insights/style.scss` so all tabs pick up
+ * the chrome without each having to import it.
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-insights {
+
+	// Tab-level status blocks shown by orchestrators between data
+	// fetch and first render.
+
+	// Initial load: a centered spinner (Newspack Waiting) where the tab body
+	// will render, matching the inter-tab Suspense fallback. When the tab supplies
+	// progressive copy, a muted single-line message stacks beneath the spinner.
+	&__tab-loading {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 16px;
+		min-height: 320px;
+		padding: 32px 24px;
+
+		&-message {
+			margin: 0;
+			font-size: 13px;
+			color: wp-colors.$gray-700;
+			text-align: center;
+		}
+	}
+
+	&__tab-error {
+		padding: 32px 24px;
+		text-align: center;
+		font-size: 14px;
+		color: wp-colors.$alert-red;
+
+		&-detail {
+			margin-top: 8px;
+			font-size: 13px;
+			color: wp-colors.$gray-600;
+			font-family: monospace;
+		}
+	}
+
+	// Sections are pure spacing — no background, no border. The cards
+	// inside them carry the chrome (per spec).
+
+	&__section {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+	}
+
+	&__section-empty {
+		margin: 0;
+		padding: 20px;
+		background-color: #fff;
+		border: 1px solid wp-colors.$gray-200;
+		border-radius: 4px;
+		font-size: 14px;
+		font-weight: 400;
+		color: wp-colors.$gray-700;
+	}
+
+	// Scorecard grid — responsive: auto-fill with a 220px minimum per
+	// column. Each card stretches to fill its column.
+
+	&__metric-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+		gap: 16px;
+	}
+
+	// The Prompts conversion sections carry longer scorecard titles (e.g.
+	// "Registration Conversion (Influenced, 7d)") that wrap to three lines, while
+	// the default label reserves two — so cards with a 3-line title push their
+	// hero value/em-dash down and the row reads as staggered. Reserve a third line
+	// in just these sections so every hero aligns; exposure/engagement titles fit
+	// in two lines and keep the tighter default.
+	&__section--free-reader,
+	&__section--paid-reader,
+	&__section--revenue {
+		.newspack-insights__metric-card-label {
+			min-height: calc(12px * 1.4 * 3);
+		}
+	}
+
+	// Card chrome (white background, gray-200 border, 4px radius) is
+	// provided by the newspack Card component (rendered via
+	// `__experimentalCoreCard`, which delegates to WP Core's <Card>).
+	// We layer the colored top accent on the outer card and the
+	// internal scorecard layout (label → hero value → description) on
+	// the inner body wrapper that CoreCard wraps children in.
+	// Min-height 180px keeps cards uniform across the grid AND gives
+	// the centered hero value room to breathe between label and
+	// description.
+	//
+	// Internal layout (three regions, fixed order):
+	//   label  — top, left-aligned (spec's uppercase chip)
+	//   body   — flex: 1, hero sits at the top of this region,
+	//            left-aligned. Vertical position consistent across
+	//            cards because all cards share the same label height
+	//            + body padding.
+	//   description — pinned to the bottom edge, left-aligned
+	//
+	// Every card carries the brand-color top accent so a row reads as
+	// a single coherent unit.
+
+	&__metric-card {
+		border-top: 3px solid var(--wp-admin-theme-color);
+		// Clip the top accent to the CoreCard's rounded corners so the
+		// 3px colored bar doesn't visually overhang the radius.
+		border-radius: 4px 4px 0 0;
+
+		// CoreCard wraps children in a `.newspack-card--core__body` div, so
+		// the flex layout that pins description to the bottom (and the
+		// scorecard padding + min-height) belongs on that inner wrapper, not
+		// the outer card. We also zero out the default 16px 24px padding
+		// CoreCard applies to grandchild divs of its body — our own padding
+		// owns the spacing.
+		.newspack-card--core__body {
+			display: flex;
+			flex-direction: column;
+			padding: 24px 28px;
+			min-height: 180px;
+
+			// Match CoreCard's own selector to win the cascade — it
+			// pads non-CardBody/Media/Divider grandchild divs at
+			// 16px 24px by default; our outer padding above already
+			// owns the spacing. The body sub-region gets its own
+			// 16px top padding re-applied at matching specificity.
+			> div:not(.components-card__body):not(.components-card__media):not(.components-card__divider) {
+				padding: 0;
+
+				&.newspack-insights__metric-card-body {
+					padding: 16px 0 0;
+				}
+			}
+		}
+
+		&-label {
+			font-size: 12px;
+			font-weight: 600;
+			line-height: 1.4;
+			letter-spacing: 0.05em;
+			text-transform: uppercase;
+			color: wp-colors.$gray-700;
+			// Reserve two lines of vertical space so a long label that
+			// wraps ("MONTHLY RECURRING REVENUE") doesn't push its hero
+			// number down relative to neighboring cards whose labels fit
+			// on one line. 12px font × 1.4 line-height × 2 lines.
+			min-height: calc(12px * 1.4 * 2);
+		}
+
+		&-body {
+			flex: 1 1 auto;
+			display: flex;
+			flex-direction: column;
+			justify-content: flex-start; // hero sits at the top, just under the label
+			align-items: flex-start;     // left-aligned to match label
+			gap: 8px;
+			// Top padding is applied on the higher-specificity selector
+			// inside `.newspack-card--core__body` above so it beats
+			// CoreCard's default grandchild-div padding.
+		}
+
+		&-value {
+			margin: 0;
+			// Explicit font stack + lockdown to prevent the wp-admin chrome's
+			// inherited font from flipping between cards (the bug was: digits
+			// in "35" rendered slim, "$738.33" rendered heavier with a slight
+			// optical slant — different chars resolving in different
+			// fallback fonts because no explicit family was declared). The
+			// stack matches @wordpress/base-styles' admin body font.
+			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+				Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+			font-size: 44px;
+			font-weight: 500;
+			font-style: normal;
+			line-height: 1.05;
+			letter-spacing: -0.01em;
+			color: wp-colors.$gray-900;
+			font-variant-numeric: tabular-nums;
+			font-feature-settings: "tnum" 1;
+			font-synthesis: none;
+			text-align: left;
+		}
+
+		// Count-fallback heroes ("0 of 17", "0 conversions") are short phrases,
+		// not single numbers — the 44px number scale overflows the narrow card
+		// (NPPD-1694). Render them smaller and let them wrap so they stay inside
+		// the border. The em-dash null glyph keeps the full hero scale.
+		&-value--count {
+			font-size: 24px;
+			line-height: 1.2;
+			letter-spacing: 0;
+			overflow-wrap: break-word;
+		}
+
+		&-secondary {
+			margin: -4px 0 0;
+			font-size: 13px;
+			font-weight: 400;
+			line-height: 1.4;
+			color: wp-colors.$gray-700;
+			font-variant-numeric: tabular-nums;
+		}
+
+		&-delta {
+			font-size: 13px;
+			font-weight: 600;
+			font-variant-numeric: tabular-nums;
+
+			// Directional glyph (↑/↓) prefixed to the delta; inherits the delta
+			// tone color. Direction is factual; color is good/bad.
+			&-arrow {
+				margin-right: 3px;
+				letter-spacing: 0.02em;
+			}
+
+			// Spec calls for newspack-colors $success-600 / $error-600.
+			// Chrome stylesheet only imports @wordpress/base-styles, so
+			// using its alert tokens here keeps the import surface tight;
+			// swap to newspack-colors when (if) those tokens get wired in.
+			&--positive {
+				color: wp-colors.$alert-green;
+			}
+
+			&--negative {
+				color: wp-colors.$alert-red;
+			}
+
+			&--neutral {
+				color: wp-colors.$gray-600;
+			}
+		}
+
+		&-description {
+			margin: 16px 0 0;
+			font-size: 13px;
+			font-weight: 400;
+			line-height: 1.4;
+			color: wp-colors.$gray-700;
+			text-align: left;
+		}
+
+		// Empty-state variant: same card chrome as a populated metric
+		// (preserves grid alignment) but the body slot renders an
+		// explanatory line instead of a hero value. Used by sections
+		// where a per-metric "no data yet" message reads cleaner than
+		// collapsing to a section-wide block.
+		&--empty {
+			.newspack-insights__metric-card-empty-note {
+				margin: 16px 0 0;
+				font-size: 13px;
+				font-weight: 400;
+				line-height: 1.4;
+				color: wp-colors.$gray-700;
+			}
+		}
+	}
+
+	// Table — card wraps the table, table fills (padding 0 on
+	// wrapper). Header bg per spec gray-100. The variation row pattern
+	// is generic: any nested parent/child data shape can use it.
+
+	&__table-wrap {
+		overflow-x: auto;
+		min-width: 0;
+		background-color: #fff;
+		border: 1px solid wp-colors.$gray-200;
+		border-radius: 4px;
+	}
+
+	// "See more" / "See less" toggle below an expandable MetricTable.
+	&__table-toggle {
+		display: inline-block;
+		margin-top: 8px;
+		padding: 0;
+		background: transparent;
+		border: 0;
+		cursor: pointer;
+		font-size: 13px;
+		font-weight: 600;
+		color: var( --wp-admin-theme-color );
+
+		&:hover,
+		&:focus {
+			text-decoration: underline;
+		}
+	}
+
+	&__table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 14px;
+
+		th,
+		td {
+			padding: 12px 20px;
+			text-align: left;
+			border-bottom: 1px solid wp-colors.$gray-200;
+		}
+
+		th {
+			font-size: 12px;
+			font-weight: 600;
+			letter-spacing: 0.04em;
+			text-transform: uppercase;
+			color: wp-colors.$gray-700;
+			background-color: wp-colors.$gray-100;
+			border-bottom: 1px solid wp-colors.$gray-300;
+		}
+
+		tbody tr:last-child td {
+			border-bottom: 0;
+		}
+
+		// Right-align numeric cells AND their headers. Qualified with td/th so it
+		// beats the base `th, td { text-align: left }` rule (equal specificity,
+		// later source order) — without the qualifier the bare `-num` class loses
+		// and numbers render left-aligned.
+		td#{&}-num,
+		th#{&}-num {
+			text-align: right;
+			font-variant-numeric: tabular-nums;
+		}
+
+		// Em-dash for cells where the column doesn't apply to the row (e.g. a
+		// regwall has no paywall attempts). Muted (gray-600) so it reads as "not
+		// applicable" and is distinct from a real, default-colored zero — a zero
+		// is a tracked data point; an em-dash is "this metric doesn't apply here."
+		&-na {
+			color: wp-colors.$gray-600;
+		}
+
+		// Nested variation/child rows sit directly under their parent.
+		// Same chrome as parent rows, no background change, just a
+		// slightly lighter text color (gray-700) and an indent on the
+		// first cell so the nesting reads at a glance.
+		//
+		// The indent rule targets `td:first-child` rather than a
+		// per-cell modifier class because the modifier would be
+		// specificity (0,1,0) and lose to the base `.table td` rule
+		// (0,2,1). `&-row--variation td:first-child` is (0,2,2) which
+		// wins the cascade cleanly.
+		&-row--variation {
+			td {
+				color: wp-colors.$gray-700;
+			}
+
+			td:first-child {
+				padding-left: 44px; // 20px table padding + 24px indent
+			}
+		}
+	}
+}

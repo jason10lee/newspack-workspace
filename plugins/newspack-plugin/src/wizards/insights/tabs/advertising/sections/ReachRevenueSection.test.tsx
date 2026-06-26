@@ -1,0 +1,100 @@
+/**
+ * Tests for ReachRevenueSection empty states (NPPD-1697): the whole-section
+ * no_opportunity collapse, the per-card no-revenue treatment on Total Revenue,
+ * and the error-guard (an errored metric must NOT collapse / mask its error).
+ *
+ * The is_loading short-circuit is verified at the tab level in
+ * AdvertisingTab.test.tsx (sections never see is_loading).
+ */
+
+/**
+ * External dependencies
+ */
+import { render, screen } from '@testing-library/react';
+
+/**
+ * Internal dependencies
+ */
+import ReachRevenueSection from './ReachRevenueSection';
+import type { InsightsWindow } from '../../../api/advertising';
+
+const metrics = ( over: InsightsWindow = {} ): InsightsWindow => ( {
+	total_impressions: { value: 2400000, computable: true, type: 'count' },
+	total_revenue: { value: 4200, computable: true, type: 'currency' },
+	direct_vs_programmatic: {
+		type: 'breakdown',
+		computable: true,
+		rows: [
+			{ label: 'direct', revenue: 2520, impressions: 1320000 },
+			{ label: 'programmatic', revenue: 1680, impressions: 1080000 },
+		],
+	},
+	...over,
+} );
+
+/** Read a MetricCard's hero value by label (skips non-card nodes). */
+const cardValueByLabel = ( container: HTMLElement, label: string ): string => {
+	const labelEl = Array.from( container.querySelectorAll( '.newspack-insights__metric-card-label' ) ).find( el => el.textContent === label );
+	return labelEl?.closest( '.newspack-insights__metric-card' )?.querySelector( '.newspack-insights__metric-card-value' )?.textContent ?? '';
+};
+
+describe( 'ReachRevenueSection empty states', () => {
+	it( 'collapses to a no_opportunity EmptyMetricSection when hasWindowActivity is false', () => {
+		const current = metrics( {
+			total_impressions: { value: 0, computable: true, type: 'count' },
+			total_revenue: { value: 0, computable: true, type: 'currency' },
+			direct_vs_programmatic: { type: 'breakdown', computable: false, rows: [] },
+		} );
+		const { container } = render( <ReachRevenueSection current={ current } previous={ null } hasWindowActivity={ false } /> );
+
+		expect( container.querySelector( '[data-empty-state="no_opportunity"]' ) ).toBeInTheDocument();
+		// Assert on the container — the Notice's speak() duplicates copy into a live-region.
+		expect( container ).toHaveTextContent( 'No ad impressions in this timeframe' );
+		expect( screen.queryByText( 'Total Impressions' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'renders the per-card no-revenue treatment on Total Revenue when impressions run but revenue is zero', () => {
+		const current = metrics( {
+			total_revenue: { value: 0, computable: true, type: 'currency' },
+		} );
+		// hasWindowActivity is true here (impressions > 0) — only the revenue card changes.
+		// Prior window has lower impressions so the impressions card has a real delta to render.
+		const previous = metrics( { total_impressions: { value: 2000000, computable: true, type: 'count' } } );
+		const { container } = render( <ReachRevenueSection current={ current } previous={ previous } hasWindowActivity /> );
+
+		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
+		// Real impressions count still shown — section not collapsed.
+		expect( screen.getByText( '2,400,000' ) ).toBeInTheDocument();
+		expect( screen.getByText( '2,400,000 impressions, but no revenue this timeframe' ) ).toBeInTheDocument();
+
+		const cardByLabel = ( label: string ) =>
+			Array.from( container.querySelectorAll( '.newspack-insights__metric-card-label' ) )
+				.find( el => el.textContent === label )
+				?.closest( '.newspack-insights__metric-card' );
+		// The Total Revenue card shows $0 with the period delta suppressed.
+		expect( cardByLabel( 'Total Revenue' )?.querySelector( '.newspack-insights__metric-card-delta' ) ).toBeNull();
+		// Special-casing the revenue card must NOT suppress the sibling impressions
+		// card's normal period comparison.
+		expect( cardByLabel( 'Total Impressions' )?.querySelector( '.newspack-insights__metric-card-delta' ) ).not.toBeNull();
+	} );
+
+	it( 'does NOT collapse or show no-revenue when a metric errored — the card surfaces its own error', () => {
+		const current = metrics( {
+			total_revenue: { value: null, computable: false, error: 'GAM report failed' },
+		} );
+		const { container } = render( <ReachRevenueSection current={ current } previous={ null } hasWindowActivity={ undefined } /> );
+
+		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( /but no revenue this timeframe/ ) ).not.toBeInTheDocument();
+		// The errored revenue card shows the shared graceful-failure note.
+		expect( screen.getByText( 'Data temporarily unavailable.' ) ).toBeInTheDocument();
+	} );
+
+	it( 'renders the normal scorecards when populated', () => {
+		const { container } = render( <ReachRevenueSection current={ metrics() } previous={ null } hasWindowActivity /> );
+
+		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
+		expect( cardValueByLabel( container, 'Total Impressions' ) ).toBe( '2,400,000' );
+		expect( screen.getByText( 'Total Revenue' ) ).toBeInTheDocument();
+	} );
+} );

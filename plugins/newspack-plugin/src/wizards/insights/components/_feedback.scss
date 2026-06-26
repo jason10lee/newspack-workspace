@@ -1,0 +1,109 @@
+/**
+ * Newspack Insights — per-tab feedback affordance (NPPD-1728, Slice 1).
+ *
+ * Footer-anchored tier-1 "Was this tab useful?" prompt + thumb control,
+ * rendered by `TabSection`. Styled to the muted MetricNote scale (13px,
+ * gray-600) so it reads as native chrome rather than a CTA. Loaded by
+ * `src/wizards/insights/style.scss`.
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-insights {
+
+	// Footer band that holds the feedback affordance, separated from the tab
+	// body by a hairline rule. Hidden in print (the PDF export owns its own
+	// footer).
+	&__tab-footer {
+		margin-top: 32px;
+		padding-top: 16px;
+		border-top: 1px solid wp-colors.$gray-200;
+
+		@media print {
+			display: none;
+		}
+	}
+
+	&__tab-feedback-row {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		// Match the MetricNote scale so the prompt reads as muted chrome.
+		font-size: 13px;
+		line-height: 1.4;
+		color: wp-colors.$gray-600;
+	}
+
+	&__tab-feedback-prompt {
+		color: wp-colors.$gray-600;
+	}
+
+	&__tab-feedback-actions {
+		display: flex;
+		align-items: center;
+		gap: 2px;
+	}
+
+	// Small, muted icon buttons. The pressed (chosen) thumb takes the admin
+	// accent so the selection reads at a glance.
+	&__tab-feedback-thumb.components-button.has-icon {
+		min-width: 28px;
+		height: 28px;
+		padding: 4px;
+		color: wp-colors.$gray-600;
+
+		svg {
+			width: 18px;
+			height: 18px;
+		}
+
+		&:hover:not([aria-disabled="true"]) {
+			color: wp-colors.$gray-900;
+		}
+
+		&.is-pressed {
+			color: var( --wp-admin-theme-color );
+		}
+
+		&[aria-disabled="true"] {
+			cursor: default;
+		}
+	}
+
+	&__tab-feedback-error {
+		color: wp-colors.$alert-red;
+	}
+
+	// The acknowledgment Snackbar floats bottom-center over the page, matching
+	// the WP-core SnackbarList placement (which we don't use for a single ack).
+	&__tab-feedback-snackbar {
+		position: fixed;
+		left: 50%;
+		bottom: 24px;
+		transform: translateX( -50% );
+		z-index: 100000;
+
+		@media print {
+			display: none;
+		}
+	}
+
+	// Tier-2 modal. The WP-core Modal owns its chrome (overlay, header, close);
+	// these classes are flat (the modal renders in a portal outside the
+	// `.newspack-insights` root), so `&__x` here is concatenation, not nesting.
+	&__feedback-modal-intro {
+		margin: 0 0 16px;
+		color: wp-colors.$gray-700;
+	}
+
+	&__feedback-modal-comment {
+		margin-bottom: 16px;
+	}
+
+	&__feedback-modal-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 8px;
+		margin-top: 24px;
+	}
+}

@@ -1,0 +1,139 @@
+/**
+ * Newspack Insights — Tab 4 (Gates) styles (NPPD-1604, Phase 1)
+ *
+ * Tab 4-specific layout only. The shared Insights chrome (sections,
+ * metric cards, table with empty state, tab loading/error) lives in
+ * `tabs/components/sections.scss` and is loaded by the wizard's main
+ * `style.scss`. The funnel and distribution component styles now live in
+ * `tabs/components/_insights-charts.scss` (shared across tabs); only the
+ * tab-local section/grid layout remains here.
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "../../../../../packages/colors/colors.module" as colors;
+@use "../components/insights-charts";
+
+.newspack-insights {
+	&__gates-tab {
+		display: flex;
+		flex-direction: column;
+		gap: 32px;
+	}
+
+	// The Direct vs Influenced explainer chrome comes from the shared
+	// `.newspack-insights__info-callout` rule in the wizard's global
+	// `style.scss` — see DirectVsInfluencedCallout / InfoCallout (NPPD-1618).
+
+	// Two-card row (Section 2). The shared metric-grid is auto-fill
+	// with a 220px minimum; for the dedicated two-card sections we
+	// cap at two equal columns instead of letting more squeeze in.
+	&__metric-grid--pair {
+		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+	}
+
+	// Section 4 — funnel + distribution side-by-side at equal width,
+	// stacking under 720px container width.
+	&__gates-convert-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+		gap: 24px;
+		align-items: start;
+	}
+
+	&__gates-convert-col {
+		min-width: 0; // allow the column to shrink within the grid
+	}
+
+	// Collection-section error treatment (funnel / distribution / performance).
+	&__section-error {
+		display: flex;
+		align-items: flex-start;
+		gap: 6px;
+		margin: 0;
+		padding: 16px 0;
+		font-size: 13px;
+		line-height: 1.5;
+		color: colors.$error-600;
+	}
+
+	// Empty state row inside the Performance by gate table.
+	&__gates-performance-empty {
+		padding: 32px 20px;
+		text-align: center;
+		font-style: italic;
+		color: wp-colors.$gray-700;
+	}
+
+	// Sortable table affordances (Tab 4 Performance by gate). When
+	// other tables across Tabs 6/7 want sortable headers, lift these
+	// styles into the shared sections.scss and the SortableHeader
+	// component along with them.
+	&__table--sortable {
+		.newspack-insights__table-sort-cell {
+			// Eliminate the th's default padding because the button
+			// inside owns the click target and re-paints the padding
+			// itself; without this, half the cell isn't clickable.
+			padding: 0;
+		}
+
+		.newspack-insights__table-sort {
+			// Button fills the cell so any click anywhere in the th
+			// triggers the sort.
+			display: flex;
+			align-items: center;
+			gap: 4px;
+			width: 100%;
+			padding: 12px 20px;
+			background: transparent;
+			border: 0;
+			cursor: pointer;
+			text-align: inherit;
+			font: inherit;
+			color: inherit;
+			letter-spacing: inherit;
+			text-transform: inherit;
+
+			&:hover {
+				background-color: wp-colors.$gray-200;
+			}
+
+			&:focus-visible {
+				outline: 2px solid var(--wp-admin-theme-color);
+				outline-offset: -2px;
+			}
+		}
+
+		// Numeric columns are right-aligned, so reverse the button's
+		// content order: label first → indicator pinned to the right
+		// edge. Non-numeric columns keep left-to-right (label then
+		// indicator) but with margin-right: auto on the label.
+		.newspack-insights__table-num .newspack-insights__table-sort {
+			justify-content: flex-end;
+			text-align: right;
+		}
+
+		.newspack-insights__table-sort-label {
+			// Push the indicator to whichever side the cell is aligned
+			// against; this collapses with the parent button's
+			// justify-content rule above.
+			flex: 1 1 auto;
+		}
+
+		.newspack-insights__table-sort-indicator {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			opacity: 0.3;
+			color: wp-colors.$gray-700;
+		}
+
+		.newspack-insights__table-sort:hover .newspack-insights__table-sort-indicator {
+			opacity: 0.7;
+		}
+
+		.newspack-insights__table-sort.is-active .newspack-insights__table-sort-indicator {
+			opacity: 1;
+			color: wp-colors.$gray-900;
+		}
+	}
+}
