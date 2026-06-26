@@ -173,9 +173,9 @@ final class Prompts_Metric {
 		'newsletter_signup_conversion_direct'        => 'hub',
 		'newsletter_signup_conversion_influenced_7d' => 'hub',
 		'donation_conversion_direct'                 => 'hybrid', // Local order-meta numerator + hub donation-impressions denominator.
-		'donation_conversion_influenced_14d'         => 'hub',
+		'donation_conversion_influenced_14d'         => 'hybrid', // NPPD-1822: hub influenced numerator + local Woo new-donor-spine denominator (converter-denominated).
 		'subscription_conversion_direct'             => 'hybrid', // NPPD-1746: local order-meta (popup) numerator + hub per-popup-impressions denominator.
-		'subscription_conversion_influenced_14d'     => 'hub',
+		'subscription_conversion_influenced_14d'     => 'hybrid', // NPPD-1822: hub influenced numerator + local Woo new-subscriber-spine denominator (converter-denominated).
 		'donation_revenue_direct'                    => 'local',   // Pure Woo order meta; survives a hub outage.
 		'donation_revenue_influenced_14d'            => 'hub',
 		'subscription_revenue_direct'                => 'local',   // NPPD-1746: pure Woo order meta (popup surface); survives a hub outage.
@@ -1110,25 +1110,40 @@ final class Prompts_Metric {
 	}
 
 	/**
-	 * Donation conversion rate, influenced (14-day lookback).
+	 * Donation conversion rate, influenced (14-day lookback), converter-denominated (NPPD-1822).
+	 *
+	 * = distinct donors whose conversion had a prompt exposure in a PRIOR session within 14d
+	 * ÷ ALL new donors in the window. "Of our donors, what share were prompt-influenced" —
+	 * user-level, matching the doc's framing and the Gates paywall rate (NPPD-1764). Replaces
+	 * the prior attempt-denominated rate (÷ `count($joined['rows'])`), which keyed off
+	 * influenced checkout attempts and read inflated.
+	 *
+	 * Numerator stays hub/GA4-cross-session-sourced and Woo-matched (distinct converting
+	 * users); it remains anonymous-undercounted (NPPD-1685) until NPPD-1747. Denominator is
+	 * the anonymous-inclusive Woo new-donor spine. The GA4-matched numerator is not a strict
+	 * subset of it, so `rate_value()` suppresses any >100% to a non-computable em-dash. Local
+	 * denominator + hub numerator → 'hybrid' (see METRIC_SOURCES).
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
 	public function get_donation_conversion_influenced_14d( DateTimeInterface $start, DateTimeInterface $end ): array {
+		if ( ! $this->woocommerce_active() ) {
+			// Non-WC publisher: no local donors to denominate against. Empty state, not a
+			// fake 0% (NPPD-1737 Option A scoping).
+			return $this->populated_scalar( 0.0, false, 0, 'rate' );
+		}
 		$joined = $this->fetch_paid_attempts_woo_join( 'prompts_donation_conversion_influenced_14d', $start, $end );
 		if ( is_wp_error( $joined ) ) {
 			return $this->error_scalar( 'rate', $joined );
 		}
-		$denominator = count( $joined['rows'] );
-		$numerator   = $joined['conversions'];
-		return $this->populated_scalar(
-			$denominator > 0 ? $numerator / $denominator : 0.0,
-			$denominator > 0,
-			$denominator,
-			'rate'
-		);
+		$numerator   = $this->woo_resolver->count_unique_completed_users( $joined['rows'] );
+		$denominator = $this->donors_metric()->get_new_donors_in_window( $start, $end );
+		$rate        = $this->rate_value( $numerator, $denominator );
+		return null === $rate
+			? $this->populated_scalar( 0.0, false, $denominator, 'rate' )
+			: $this->populated_scalar( $rate, true, $denominator, 'rate' );
 	}
 
 	/**
@@ -1208,25 +1223,33 @@ final class Prompts_Metric {
 	}
 
 	/**
-	 * Subscription conversion rate, influenced (14-day lookback).
+	 * Subscription conversion rate, influenced (14-day lookback), converter-denominated (NPPD-1822).
+	 *
+	 * = distinct subscribers whose conversion had a prompt exposure in a PRIOR session within
+	 * 14d ÷ ALL new subscribers in the window. Subscription sibling of
+	 * {@see self::get_donation_conversion_influenced_14d()}; same converter framing, em-dash
+	 * coherence guard, and 'hybrid' source. Numerator completeness → NPPD-1747.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
 	public function get_subscription_conversion_influenced_14d( DateTimeInterface $start, DateTimeInterface $end ): array {
+		if ( ! $this->woocommerce_active() ) {
+			// Non-WC publisher: no local subscribers to denominate against. Empty state, not
+			// a fake 0% (NPPD-1737 Option A scoping).
+			return $this->populated_scalar( 0.0, false, 0, 'rate' );
+		}
 		$joined = $this->fetch_paid_attempts_woo_join( 'prompts_subscription_conversion_influenced_14d', $start, $end );
 		if ( is_wp_error( $joined ) ) {
 			return $this->error_scalar( 'rate', $joined );
 		}
-		$denominator = count( $joined['rows'] );
-		$numerator   = $joined['conversions'];
-		return $this->populated_scalar(
-			$denominator > 0 ? $numerator / $denominator : 0.0,
-			$denominator > 0,
-			$denominator,
-			'rate'
-		);
+		$numerator   = $this->woo_resolver->count_unique_completed_users( $joined['rows'] );
+		$denominator = $this->subscribers_metric()->get_new_subscribers_in_window( $start, $end );
+		$rate        = $this->rate_value( $numerator, $denominator );
+		return null === $rate
+			? $this->populated_scalar( 0.0, false, $denominator, 'rate' )
+			: $this->populated_scalar( $rate, true, $denominator, 'rate' );
 	}
 
 	// --- Section 5: Revenue from prompts --------------------------------
