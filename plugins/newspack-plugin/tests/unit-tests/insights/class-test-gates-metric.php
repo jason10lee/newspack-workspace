@@ -1432,4 +1432,24 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 		$this->assertFalse( $result['computable'] );
 		$this->assertSame( 0, $result['denominator'] );
 	}
+
+	/**
+	 * A malformed (non-array, non-WP_Error) hub response surfaces as an error rather than
+	 * a confident 0% — parity with the donation/subscription malformed-rows handling.
+	 */
+	public function test_paywall_influenced_malformed_rows_errors() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( 'not-an-array' );
+		$metric = $this->make_influenced_paywall_metric(
+			$proxy,
+			$this->resolver_with_unique_completed( 0 ),
+			$this->subscribers_with_new_count( 50 ),
+			true
+		);
+
+		$result = $metric->get_paywall_conversion_influenced_14d( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_malformed_rows', $result['error_code'] );
+	}
 }

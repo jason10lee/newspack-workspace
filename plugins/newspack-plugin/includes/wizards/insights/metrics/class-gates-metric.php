@@ -467,13 +467,17 @@ final class Gates_Metric {
 		if ( is_wp_error( $rows ) ) {
 			return $this->error_scalar( 'rate', $rows );
 		}
+		if ( ! is_array( $rows ) ) {
+			// Malformed hub response (not an array): surface as an error, not a confident
+			// 0% — parity with the donation/subscription malformed-rows handling (NPPD-1745
+			// #3). An empty array is valid (0 influenced) and handled below.
+			return $this->error_scalar( 'rate', new \WP_Error( 'bigquery_proxy_malformed_rows', __( 'The query returned an unexpected shape.', 'newspack-plugin' ) ) );
+		}
 
 		// Numerator: distinct subscribers whose conversion was paywall-influenced (the
-		// hub influenced rows, Woo-matched). Empty/malformed rows → 0 influenced, which
-		// is a real 0% against the subscriber denominator below — not "no data".
-		$numerator = is_array( $rows ) && ! empty( $rows )
-			? $this->woo_resolver->count_unique_completed_users( $rows )
-			: 0;
+		// hub influenced rows, Woo-matched). Empty rows → 0 influenced, which is a real
+		// 0% against the subscriber denominator below — not "no data".
+		$numerator = empty( $rows ) ? 0 : $this->woo_resolver->count_unique_completed_users( $rows );
 
 		// Denominator: all new subscribers in the window (converters), not influenced
 		// attempts — anonymous-inclusive, the same Woo spine the source-mix totals use.

@@ -41,6 +41,9 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 		'newspack-plugin'
 	);
 	const impressionsLabel = __( 'paywall impressions', 'newspack-plugin' );
+	// The Influenced rate is converter-denominated (NPPD-1764): its denominator is all
+	// new subscribers in the window, not paywall impressions.
+	const subscribersLabel = __( 'subscribers', 'newspack-plugin' );
 	const conversionsLabel = __( 'conversions', 'newspack-plugin' );
 
 	const impressions = current.paywall_impressions_total;
@@ -108,7 +111,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 					{ ...scalarToMetricCardProps( {
 						label: __( 'Paywall Conversion (Influenced, 14d)', 'newspack-plugin' ),
 						description: __(
-							'Readers who subscribed in a later session within 14 days of seeing a paywall ÷ readers who saw a paywall',
+							'Subscribers whose conversion followed a paywall exposure in a prior session within 14 days ÷ all new subscribers',
 							'newspack-plugin'
 						),
 						current: current.paywall_conversion_influenced_14d,
@@ -116,7 +119,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 						zeroFallback: {
 							numerator: current.paywall_conversion_influenced_14d.numerator ?? undefined,
 							denominator: current.paywall_conversion_influenced_14d.denominator ?? undefined,
-							attemptsLabel: impressionsLabel,
+							attemptsLabel: subscribersLabel,
 						},
 					} ) }
 				/>
