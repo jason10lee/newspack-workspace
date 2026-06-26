@@ -196,6 +196,19 @@ class Test_Gates_REST_Controller extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Gates_REST_Controller overrides cache_schema_version() with Gates_Metric::CACHE_PREFIX
+	 * (tab4_v2), so bumping the prefix on a response-shape change busts stale-shape
+	 * transients on deploy.
+	 */
+	public function test_gates_controller_cache_version_is_tab4_v2_prefix() {
+		$controller = new Gates_REST_Controller();
+		$ref        = new \ReflectionMethod( $controller, 'cache_schema_version' );
+		$ref->setAccessible( true );
+		$this->assertSame( Gates_Metric::CACHE_PREFIX, $ref->invoke( $controller ) );
+		$this->assertStringContainsString( 'v2', Gates_Metric::CACHE_PREFIX );
+	}
+
+	/**
 	 * NPPD-1745 #5 drift guard, mirrored to Gates: every state-bearing metric that
 	 * build_window() emits must have a METRIC_SOURCES entry, or it would silently
 	 * drop out of the banner decision with no test to catch it.

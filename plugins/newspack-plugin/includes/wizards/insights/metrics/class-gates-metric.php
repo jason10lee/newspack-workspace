@@ -48,7 +48,7 @@ final class Gates_Metric {
 	 *
 	 * @var string
 	 */
-	const CACHE_PREFIX = 'newspack_insights_tab4_v1:';
+	const CACHE_PREFIX = 'newspack_insights_tab4_v2:';
 
 	/**
 	 * Data-source classification per metric key (NPPD-1746), the Gates-tab twin of
