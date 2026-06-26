@@ -183,6 +183,12 @@ class Test_Gates_REST_Controller extends WP_UnitTestCase {
 		$this->assertSame( 'hybrid', Gates_Metric::METRIC_SOURCES['paywall_conversion_direct'] );
 		$this->assertSame( 'populated', $window['paywall_conversion_direct']['state'] );
 
+		// Paywall influenced is fully hub-computed (BQ-internal rate + denominator, no
+		// local Woo component) — it must error on hub outage, not short-circuit to
+		// populated like a hybrid card.
+		$this->assertSame( 'hub', Gates_Metric::METRIC_SOURCES['paywall_conversion_influenced_14d'] );
+		$this->assertSame( 'error', $window['paywall_conversion_influenced_14d']['state'] );
+
 		$this->assertTrue(
 			$this->invoke_is_window_all_error( $window, false ),
 			'non-WC: the hybrid card is skipped, so all-pure-hub-errored fires the banner'
@@ -193,6 +199,19 @@ class Test_Gates_REST_Controller extends WP_UnitTestCase {
 			$this->invoke_is_window_all_error( $window, true ),
 			'WC-active: a populated hybrid card is a real survivor → no banner'
 		);
+	}
+
+	/**
+	 * Gates_REST_Controller overrides cache_schema_version() with Gates_Metric::CACHE_PREFIX
+	 * (tab4_v2), so bumping the prefix on a response-shape change busts stale-shape
+	 * transients on deploy.
+	 */
+	public function test_gates_controller_cache_version_is_tab4_v2_prefix() {
+		$controller = new Gates_REST_Controller();
+		$ref        = new \ReflectionMethod( $controller, 'cache_schema_version' );
+		$ref->setAccessible( true );
+		$this->assertSame( Gates_Metric::CACHE_PREFIX, $ref->invoke( $controller ) );
+		$this->assertStringContainsString( 'v2', Gates_Metric::CACHE_PREFIX );
 	}
 
 	/**

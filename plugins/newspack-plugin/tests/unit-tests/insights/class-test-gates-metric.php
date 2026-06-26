@@ -12,7 +12,6 @@ use DateTimeZone;
 use Newspack\Insights\BigQuery_Proxy_Client;
 use Newspack\Insights\Gates_Metric;
 use Newspack\Insights\Subscribers_Metric;
-use Newspack\Insights\Woo_Order_Resolver;
 use WP_UnitTestCase;
 
 /**
@@ -214,7 +213,7 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 	 */
 	private function make_direct_paywall_metric( ?BigQuery_Proxy_Client $proxy, Subscribers_Metric $subscribers, bool $wc ): Gates_Metric {
 		add_filter( 'newspack_insights_woocommerce_active', $wc ? '__return_true' : '__return_false' );
-		return new Gates_Metric( $proxy, null, $subscribers );
+		return new Gates_Metric( $proxy, $subscribers );
 	}
 
 	/**
@@ -962,7 +961,8 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 
 	/**
 	 * Paid section totals: attempts come from the Direct denominator; conversions
-	 * are the inclusive max across Direct and Influenced numerators.
+	 * are the inclusive max of the Direct numerator and the Influenced denominator
+	 * (the BQ-internal converter count — the Influenced metric has no numerator).
 	 */
 	public function test_paywall_section_totals_normal_data() {
 		$totals = Gates_Metric::paywall_section_totals(
@@ -971,19 +971,19 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 				'numerator'   => 2,
 			],
 			[
-				'denominator' => 290,
-				'numerator'   => 5,
+				'denominator' => 8,
+				'numerator'   => null,
 			]
 		);
 
 		$this->assertSame( 17, $totals['paywall_impressions_total'] );
-		// max( direct 2, influenced 5 ) — don't hide Influenced-only conversions.
-		$this->assertSame( 5, $totals['paywall_conversions_total'] );
+		// max( direct numerator 2, influenced denominator 8 ) — don't hide Influenced converters.
+		$this->assertSame( 8, $totals['paywall_conversions_total'] );
 	}
 
 	/**
 	 * Paid section totals: attempts > 0 but zero conversions in either attribution
-	 * → the section's no_conversions trigger.
+	 * (no Direct conversions, no Influenced converters) → the no_conversions trigger.
 	 */
 	public function test_paywall_section_totals_zero_conversions() {
 		$totals = Gates_Metric::paywall_section_totals(
@@ -992,13 +992,35 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 				'numerator'   => 0,
 			],
 			[
-				'denominator' => 290,
-				'numerator'   => 0,
+				'denominator' => 0,
+				'numerator'   => null,
 			]
 		);
 
 		$this->assertSame( 17, $totals['paywall_impressions_total'] );
 		$this->assertSame( 0, $totals['paywall_conversions_total'] );
+	}
+
+	/**
+	 * Regression (PR #443 review): an Influenced-only window — zero Direct
+	 * conversions but a positive Influenced result — must still render. The
+	 * BQ-internal Influenced metric reports its converter count as `denominator`
+	 * (no numerator), so the section total picks it up and the scorecards are not
+	 * hidden behind the "No paywall conversions" empty state.
+	 */
+	public function test_paywall_section_totals_influenced_only_renders() {
+		$totals = Gates_Metric::paywall_section_totals(
+			[
+				'denominator' => 17,
+				'numerator'   => 0,
+			],
+			[
+				'denominator' => 8,
+				'numerator'   => null,
+			]
+		);
+
+		$this->assertSame( 8, $totals['paywall_conversions_total'] );
 	}
 
 	/**
@@ -1301,155 +1323,141 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 		$this->assertNull( $totals['registrations_total'] );
 	}
 
-	// --- NPPD-1764: influenced-14d paywall rate is converter-denominated ---
+	// --- C1: data_missing flag on populated_scalar ---
 
 	/**
-	 * Build a Gates_Metric for the influenced paywall card with injected proxy (influenced
-	 * rows), Woo_Order_Resolver (the matched numerator), and Subscribers_Metric (the
-	 * converter-spine denominator), plus a forced `woocommerce_active()`. Filter removed
-	 * in tear_down().
-	 *
-	 * @param BigQuery_Proxy_Client $proxy        Influenced rows source.
-	 * @param Woo_Order_Resolver    $woo_resolver Numerator (distinct influenced converters).
-	 * @param Subscribers_Metric    $subscribers  Denominator (new subscribers in window).
-	 * @param bool                  $wc           What woocommerce_active() should return.
-	 * @return Gates_Metric
+	 * Populated_scalar carries a `data_missing` flag (default false); callers can
+	 * set it to true to signal schema drift without changing the payload shape.
 	 */
-	private function make_influenced_paywall_metric( BigQuery_Proxy_Client $proxy, Woo_Order_Resolver $woo_resolver, Subscribers_Metric $subscribers, bool $wc ): Gates_Metric {
-		add_filter( 'newspack_insights_woocommerce_active', $wc ? '__return_true' : '__return_false' );
-		return new Gates_Metric( $proxy, $woo_resolver, $subscribers );
+	public function test_populated_scalar_includes_data_missing_flag() {
+		$metric = new Gates_Metric();
+		$ref    = new \ReflectionMethod( $metric, 'populated_scalar' );
+		$ref->setAccessible( true );
+		$default = $ref->invoke( $metric, 1.0, true, 5, 'rate' );
+		$this->assertArrayHasKey( 'data_missing', $default );
+		$this->assertFalse( $default['data_missing'] );
+		$flagged = $ref->invoke( $metric, 0.0, false, null, 'rate', null, true );
+		$this->assertTrue( $flagged['data_missing'] );
 	}
 
 	/**
-	 * Stub Subscribers_Metric reporting a fixed new-subscribers-in-window count.
-	 *
-	 * @param int $new_subscribers New subscribers in the window.
-	 * @return Subscribers_Metric
+	 * Gates_Metric no longer depends on Woo_Order_Resolver. Verifies structurally
+	 * (via reflection on constructor parameters and typed properties) that the
+	 * dependency is gone, and that the class instantiates with zero arguments.
 	 */
-	private function subscribers_with_new_count( int $new_subscribers ): Subscribers_Metric {
-		$subscribers = $this->createMock( Subscribers_Metric::class );
-		$subscribers->method( 'get_new_subscribers_in_window' )->willReturn( $new_subscribers );
-		return $subscribers;
+	public function test_constructor_needs_no_woo_order_resolver() {
+		$class    = new \ReflectionClass( \Newspack\Insights\Gates_Metric::class );
+		$resolver = \Newspack\Insights\Woo_Order_Resolver::class;
+
+		foreach ( $class->getConstructor()->getParameters() as $param ) {
+			$type = $param->getType();
+			$name = $type instanceof \ReflectionNamedType ? ltrim( $type->getName(), '\\' ) : null;
+			$this->assertNotSame( $resolver, $name, 'Constructor must not depend on Woo_Order_Resolver.' );
+		}
+		foreach ( $class->getProperties() as $property ) {
+			$type = $property->getType();
+			$name = $type instanceof \ReflectionNamedType ? ltrim( $type->getName(), '\\' ) : null;
+			$this->assertNotSame( $resolver, $name, 'No property may be typed Woo_Order_Resolver.' );
+		}
+
+		$this->assertInstanceOf( \Newspack\Insights\Gates_Metric::class, new \Newspack\Insights\Gates_Metric() );
 	}
 
 	/**
-	 * Stub Woo_Order_Resolver reporting a fixed distinct-completed-users count.
-	 *
-	 * @param int $count Distinct influenced converters.
-	 * @return Woo_Order_Resolver
+	 * A non-integer numeric denominator (e.g. 8.5) is malformed for a count and
+	 * errors rather than being silently truncated.
 	 */
-	private function resolver_with_unique_completed( int $count ): Woo_Order_Resolver {
-		$resolver = $this->createMock( Woo_Order_Resolver::class );
-		$resolver->method( 'count_unique_completed_users' )->willReturn( $count );
-		return $resolver;
-	}
-
-	/**
-	 * The rate divides by ALL new subscribers in the window, not by the count of
-	 * influenced attempt rows (3 here). 12 influenced converters ÷ 400 subscribers = 3%.
-	 */
-	public function test_paywall_influenced_is_converter_denominated() {
+	public function test_paywall_influenced_non_integer_denominator_errors() {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		$proxy->method( 'query' )->willReturn( [ [ 'x' => 1 ], [ 'x' => 2 ], [ 'x' => 3 ] ] );
-		$metric = $this->make_influenced_paywall_metric(
-			$proxy,
-			$this->resolver_with_unique_completed( 12 ),
-			$this->subscribers_with_new_count( 400 ),
-			true
+		$proxy->method( 'query' )->willReturn(
+			[
+				[
+					'paywall_conversion_influenced_rate' => 0.25,
+					'conversion_denominator'             => 8.5,
+				],
+			]
 		);
-
-		$result = $metric->get_paywall_conversion_influenced_14d( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
-
-		$this->assertSame( 'populated', $result['state'] );
-		$this->assertTrue( $result['computable'] );
-		$this->assertSame( 0.03, $result['value'] );
-		$this->assertSame( 400, $result['denominator'], 'denominates by all subscribers, not influenced attempts' );
-		$this->assertSame( 12, $result['numerator'] );
+		$metric = new Gates_Metric( $proxy );
+		$out    = $metric->get_paywall_conversion_influenced_14d( $this->make_date( '2026-06-01' ), $this->make_date( '2026-06-15' ) );
+		$this->assertSame( 'error', $out['state'] );
 	}
 
 	/**
-	 * No influenced converters but subscribers exist → a real 0% (computable), not the
-	 * "no data" non-computable state the old attempt-denominated empty-rows path returned.
+	 * Empty rows from the hub → non-computable (no data in window).
 	 */
-	public function test_paywall_influenced_zero_with_subscribers_is_real_zero() {
+	public function test_paywall_influenced_empty_rows_is_non_computable() {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
 		$proxy->method( 'query' )->willReturn( [] );
-		$metric = $this->make_influenced_paywall_metric(
-			$proxy,
-			$this->resolver_with_unique_completed( 0 ),
-			$this->subscribers_with_new_count( 50 ),
-			true
-		);
-
-		$result = $metric->get_paywall_conversion_influenced_14d( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
-
-		$this->assertSame( 'populated', $result['state'] );
-		$this->assertTrue( $result['computable'] );
-		$this->assertSame( 0.0, $result['value'] );
-		$this->assertSame( 50, $result['denominator'] );
-		$this->assertSame( 0, $result['numerator'] );
-	}
-
-	/**
-	 * Coherence guard: a GA4-matched numerator larger than the windowed subscriber
-	 * denominator suppresses to a non-computable em-dash rather than rendering >100%.
-	 */
-	public function test_paywall_influenced_over_100_suppressed() {
-		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		$proxy->method( 'query' )->willReturn( [ [ 'x' => 1 ] ] );
-		$metric = $this->make_influenced_paywall_metric(
-			$proxy,
-			$this->resolver_with_unique_completed( 5 ),
-			$this->subscribers_with_new_count( 3 ),
-			true
-		);
-
+		$metric = new Gates_Metric( $proxy );
 		$result = $metric->get_paywall_conversion_influenced_14d( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
 		$this->assertSame( 'populated', $result['state'] );
 		$this->assertFalse( $result['computable'] );
-		$this->assertSame( 3, $result['denominator'] );
-		$this->assertSame( 5, $result['numerator'] );
+	}
+
+	// --- BQ-internal influenced rate (hub-computed, no Woo join) ---
+
+	/**
+	 * Happy path: hub returns a single row with the precomputed rate and denominator.
+	 */
+	public function test_paywall_influenced_reads_rate_and_denominator() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn(
+			[
+				[
+					'paywall_conversion_influenced_rate' => 0.25,
+					'conversion_denominator'             => 8,
+				],
+			] 
+		);
+		$metric = new Gates_Metric( $proxy );
+		$out    = $metric->get_paywall_conversion_influenced_14d( $this->make_date( '2026-06-01' ), $this->make_date( '2026-06-15' ) );
+		$this->assertSame( 0.25, $out['value'] );
+		$this->assertTrue( $out['computable'] );
+		$this->assertSame( 8, $out['denominator'] );
+		$this->assertFalse( $out['data_missing'] );
 	}
 
 	/**
-	 * Non-WC publisher: no local subscribers to denominate against → empty state, and the
-	 * hub is never queried (short-circuits before the proxy call).
+	 * Null rate (SAFE_DIVIDE with 0 converters) is non-computable but carries
+	 * the denominator so the UI can distinguish "no data" from "no converters".
 	 */
-	public function test_paywall_influenced_non_wc_empty_state() {
+	public function test_paywall_influenced_null_rate_is_non_computable_with_denominator() {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		$proxy->expects( $this->never() )->method( 'query' );
-		$metric = $this->make_influenced_paywall_metric(
-			$proxy,
-			$this->resolver_with_unique_completed( 0 ),
-			$this->subscribers_with_new_count( 0 ),
-			false
+		$proxy->method( 'query' )->willReturn(
+			[
+				[
+					'paywall_conversion_influenced_rate' => null,
+					'conversion_denominator'             => 0,
+				],
+			] 
 		);
-
-		$result = $metric->get_paywall_conversion_influenced_14d( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
-
-		$this->assertSame( 'populated', $result['state'] );
-		$this->assertFalse( $result['computable'] );
-		$this->assertSame( 0, $result['denominator'] );
+		$metric = new Gates_Metric( $proxy );
+		$out    = $metric->get_paywall_conversion_influenced_14d( $this->make_date( '2026-06-01' ), $this->make_date( '2026-06-15' ) );
+		$this->assertFalse( $out['computable'] );
+		$this->assertSame( 0, $out['denominator'] );
+		$this->assertFalse( $out['data_missing'] );
 	}
 
 	/**
-	 * A malformed (non-array, non-WP_Error) hub response surfaces as an error rather than
-	 * a confident 0% — parity with the donation/subscription malformed-rows handling.
+	 * Missing expected columns (schema drift) flags data_missing rather than erroring.
 	 */
-	public function test_paywall_influenced_malformed_rows_errors() {
+	public function test_paywall_influenced_missing_column_flags_data_missing() {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		$proxy->method( 'query' )->willReturn( 'not-an-array' );
-		$metric = $this->make_influenced_paywall_metric(
-			$proxy,
-			$this->resolver_with_unique_completed( 0 ),
-			$this->subscribers_with_new_count( 50 ),
-			true
-		);
+		$proxy->method( 'query' )->willReturn( [ [ 'something_else' => 1 ] ] );
+		$metric = new Gates_Metric( $proxy );
+		$out    = $metric->get_paywall_conversion_influenced_14d( $this->make_date( '2026-06-01' ), $this->make_date( '2026-06-15' ) );
+		$this->assertTrue( $out['data_missing'] );
+	}
 
-		$result = $metric->get_paywall_conversion_influenced_14d( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
-
-		$this->assertSame( 'error', $result['state'] );
-		$this->assertSame( 'bigquery_proxy_malformed_rows', $result['error_code'] );
+	/**
+	 * A proxy WP_Error bubbles up as state 'error'.
+	 */
+	public function test_paywall_influenced_proxy_error_is_error_scalar() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( new \WP_Error( 'boom', 'nope' ) );
+		$metric = new Gates_Metric( $proxy );
+		$out    = $metric->get_paywall_conversion_influenced_14d( $this->make_date( '2026-06-01' ), $this->make_date( '2026-06-15' ) );
+		$this->assertSame( 'error', $out['state'] );
 	}
 }

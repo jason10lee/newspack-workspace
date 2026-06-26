@@ -39,6 +39,8 @@ export interface GatesErrorFields {
 /**
  * Standard scorecard metric payload. `state` is 'error' or 'populated'
  * (an absent value is a non-computable zero, not an 'empty' state).
+ * `data_missing` flags a non-computable zero caused by a hub row missing required
+ * column(s) (schema drift) so the card can warn instead of showing a misleading zero.
  */
 export interface GatesScalarMetric extends GatesErrorFields {
 	state: 'error' | 'populated';
@@ -47,12 +49,14 @@ export interface GatesScalarMetric extends GatesErrorFields {
 	denominator: number | null;
 	/**
 	 * Numerator behind a rate (NPPD-1694). A number (possibly 0) only on rate
-	 * scorecards whose count is computed locally — the paywall Woo join. Null
-	 * elsewhere, including the precomputed-rate regwall cards and currency cards
-	 * (whose conversions count rides on `denominator`).
+	 * scorecards whose count is computed locally — the paywall direct order-meta
+	 * conversions. Null elsewhere, including the precomputed-rate regwall/paywall
+	 * influenced cards and currency cards (whose conversions count rides on
+	 * `denominator`).
 	 */
 	numerator: number | null;
 	placeholder_type: GatesPlaceholderType;
+	data_missing: boolean;
 }
 
 export interface GatesFunnelStage {

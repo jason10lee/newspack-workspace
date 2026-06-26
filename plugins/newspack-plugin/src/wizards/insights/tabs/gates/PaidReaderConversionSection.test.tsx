@@ -22,6 +22,7 @@ const scalar = ( over: Partial< GatesScalarMetric > = {} ): GatesScalarMetric =>
 	denominator: null,
 	numerator: null,
 	placeholder_type: 'rate',
+	data_missing: false,
 	...over,
 } );
 

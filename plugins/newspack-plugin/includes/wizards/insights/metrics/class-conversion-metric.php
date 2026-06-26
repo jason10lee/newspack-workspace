@@ -479,10 +479,13 @@ final class Conversion_Metric {
 			return $this->populated_scalar( 0.0, false, null, 'rate', true );
 		}
 		$denominator = $rows[0][ $denominator_key ];
-		if ( ! is_numeric( $denominator ) ) {
+		// The denominator is a BigQuery COUNT(DISTINCT) — a non-negative integer. Reject any
+		// non-integer numeric (e.g. 8.5) rather than silently truncating it, matching the
+		// integer-only count validation in Gates_Metric and Prompts_Metric.
+		if ( ! is_numeric( $denominator ) || (float) $denominator !== (float) (int) $denominator ) {
 			return $this->error_scalar(
 				'rate',
-				new \WP_Error( 'bigquery_proxy_malformed_value', __( 'The query returned a non-numeric denominator.', 'newspack-plugin' ) )
+				new \WP_Error( 'bigquery_proxy_malformed_value', __( 'The query returned a non-integer denominator.', 'newspack-plugin' ) )
 			);
 		}
 		$denominator = (int) $denominator;

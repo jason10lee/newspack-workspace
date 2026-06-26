@@ -25,7 +25,6 @@ use DateTimeInterface;
 use DateTimeZone;
 use Newspack\Insights\BigQuery_Proxy_Client;
 use Newspack\Insights\Subscribers_Metric;
-use Newspack\Insights\Woo_Order_Resolver;
 
 /**
  * Tab 4 metric orchestrator.
@@ -49,7 +48,7 @@ final class Gates_Metric {
 	 *
 	 * @var string
 	 */
-	const CACHE_PREFIX = 'newspack_insights_tab4_v1:';
+	const CACHE_PREFIX = 'newspack_insights_tab4_v2:';
 
 	/**
 	 * Data-source classification per metric key (NPPD-1746), the Gates-tab twin of
@@ -75,7 +74,7 @@ final class Gates_Metric {
 		'regwall_conversion_direct'          => 'hub',
 		'regwall_conversion_influenced_7d'   => 'hub',
 		'paywall_conversion_direct'          => 'hybrid', // NPPD-1746: local order-meta (gate) numerator + hub per-gate-impressions denominator.
-		'paywall_conversion_influenced_14d'  => 'hybrid', // NPPD-1764: hub influenced numerator + local Woo subscriber-spine denominator (converter-denominated).
+		'paywall_conversion_influenced_14d'  => 'hub',    // BQ-internal influenced rate + denominator (no local Woo); see regwall_conversion_influenced_7d.
 		'total_paywall_revenue_direct'       => 'local',  // NPPD-1746: pure Woo order meta (gate surface); survives a hub outage.
 		'avg_revenue_per_paywall_conversion' => 'local',  // NPPD-1746: derived from the same order-meta source as total revenue.
 		'conversion_funnel'                  => 'hub',
@@ -89,13 +88,6 @@ final class Gates_Metric {
 	 * @var BigQuery_Proxy_Client
 	 */
 	private BigQuery_Proxy_Client $proxy;
-
-	/**
-	 * Resolver used to match BQ paywall attempts against Woo orders.
-	 *
-	 * @var Woo_Order_Resolver
-	 */
-	private Woo_Order_Resolver $woo_resolver;
 
 	/**
 	 * Per-request memo for `gates_performance_by_gate` hub rows, keyed by `Ymd|Ymd`
@@ -112,9 +104,8 @@ final class Gates_Metric {
 	/**
 	 * Subscribers_Metric collaborator (NPPD-1746). Owns the WC-native subscription
 	 * storage used to source the DIRECT paywall conversion + revenue metrics (gate
-	 * surface) from order meta instead of the GA4 attempt → Woo_Order_Resolver join.
+	 * surface) from order meta.
 	 * Lazily built on first direct-paywall call ({@see self::subscribers_metric()}).
-	 * Influenced (14d) paywall metrics still use the resolver.
 	 *
 	 * @var Subscribers_Metric|null
 	 */
@@ -124,16 +115,13 @@ final class Gates_Metric {
 	 * Constructor. Optionally inject collaborators (used in tests).
 	 *
 	 * @param BigQuery_Proxy_Client|null $proxy              Injected proxy client, or null to lazy-resolve.
-	 * @param Woo_Order_Resolver|null    $woo_resolver       Injected Woo resolver, or null to lazy-create.
 	 * @param Subscribers_Metric|null    $subscribers_metric Injected subscribers collaborator (NPPD-1746), or null to lazy-create.
 	 */
 	public function __construct(
 		?BigQuery_Proxy_Client $proxy = null,
-		?Woo_Order_Resolver $woo_resolver = null,
 		?Subscribers_Metric $subscribers_metric = null
 	) {
 		$this->proxy              = $proxy ?? new BigQuery_Proxy_Client();
-		$this->woo_resolver       = $woo_resolver ?? new Woo_Order_Resolver();
 		$this->subscribers_metric = $subscribers_metric;
 	}
 
@@ -239,9 +227,11 @@ final class Gates_Metric {
 	 *                                    computed locally (the paywall Woo join); null
 	 *                                    everywhere the count isn't available, e.g. the
 	 *                                    precomputed-rate regwall cards.
+	 * @param bool      $data_missing     True when the payload was built from a schema
+	 *                                    that is missing expected columns (drift signal).
 	 * @return array
 	 */
-	private function populated_scalar( $value, bool $computable, ?int $denominator, string $placeholder_type, ?int $numerator = null ): array {
+	private function populated_scalar( $value, bool $computable, ?int $denominator, string $placeholder_type, ?int $numerator = null, bool $data_missing = false ): array {
 		return [
 			'state'            => 'populated',
 			'value'            => $value,
@@ -249,6 +239,7 @@ final class Gates_Metric {
 			'denominator'      => $denominator,
 			'numerator'        => $numerator,
 			'placeholder_type' => $placeholder_type,
+			'data_missing'     => $data_missing,
 		];
 	}
 
@@ -422,73 +413,57 @@ final class Gates_Metric {
 	}
 
 	/**
-	 * Compute the influenced-14d paywall conversion rate, converter-denominated (NPPD-1764).
+	 * Read a BQ-internal influenced rate metric: one row carrying a precomputed
+	 * SAFE_DIVIDE rate (null when there are no converters) and an integer denominator.
 	 *
-	 * = distinct subscribers in the window whose conversion had a paywall-capable gate
-	 * exposure in a PRIOR session within 14d ÷ ALL new subscribers in the window. I.e.
-	 * "of our subscribers, what share were paywall-influenced" — user-level, matching the
-	 * doc's conceptual framing and Tab 3's 7.1–7.4 converter framing (NPPD-1766). (The
-	 * Direct rate is exposure-denominated by design — a different lens — so the two are
-	 * intentionally not the same base.)
-	 *
-	 * Replaces the prior attempt-denominated rate (÷ `count($rows)`), which keyed the
-	 * denominator off influenced checkout *attempts* — deflated on anonymous-conversion-
-	 * heavy publishers, so the rate read inflated.
-	 *
-	 * - **Numerator** stays hub/GA4-cross-session-sourced and Woo-matched (`count_unique_
-	 *   completed_users`): order meta has no session timing to place a prior-session
-	 *   exposure, so influenced can't move to the order-meta model the way Direct did.
-	 *   It remains anonymous-undercounted (NPPD-1685); NPPD-1747 improves its completeness
-	 *   for the whole influenced family — do NOT build a gates-specific cross-session join.
-	 * - **Denominator** is the anonymous-inclusive Woo identity spine
-	 *   ({@see Subscribers_Metric::get_new_subscribers_in_window()}). Because the GA4-matched
-	 *   numerator is not a strict subset of it, `rate_value()` suppresses any >100% to a
-	 *   non-computable em-dash (the coherence guard, parity with the Direct/Prompts rates).
-	 *
-	 * Local denominator + hub numerator → 'hybrid' (see METRIC_SOURCES).
-	 *
-	 * @param string            $query_name Catalog name (the influenced rows to match).
-	 * @param DateTimeInterface $start      Window start.
-	 * @param DateTimeInterface $end        Window end.
+	 * @param string            $query_name      Catalog query name.
+	 * @param string            $rate_key        Rate column key.
+	 * @param string            $denominator_key Denominator column key.
+	 * @param DateTimeInterface $start           Window start.
+	 * @param DateTimeInterface $end             Window end.
 	 * @return array
 	 */
-	private function compute_paywall_rate_from_proxy(
+	private function compute_influenced_rate_from_proxy(
 		string $query_name,
+		string $rate_key,
+		string $denominator_key,
 		DateTimeInterface $start,
 		DateTimeInterface $end
 	): array {
-		if ( ! $this->woocommerce_active() ) {
-			// Non-WC publisher: no local subscribers to denominate against. Empty
-			// state, not a fake 0% (NPPD-1737 Option A scoping).
-			return $this->populated_scalar( 0.0, false, 0, 'rate', 0 );
-		}
-
 		$rows = $this->proxy->query( $query_name, $start, $end );
 		if ( is_wp_error( $rows ) ) {
 			return $this->error_scalar( 'rate', $rows );
 		}
-		if ( ! is_array( $rows ) ) {
-			// Malformed hub response (not an array): surface as an error, not a confident
-			// 0% — parity with the donation/subscription malformed-rows handling (NPPD-1745
-			// #3). An empty array is valid (0 influenced) and handled below.
-			return $this->error_scalar( 'rate', new \WP_Error( 'bigquery_proxy_malformed_rows', __( 'The query returned an unexpected shape.', 'newspack-plugin' ) ) );
+		if ( empty( $rows ) ) {
+			return $this->populated_scalar( 0.0, false, null, 'rate' );
 		}
-
-		// Numerator: distinct subscribers whose conversion was paywall-influenced (the
-		// hub influenced rows, Woo-matched). Empty rows → 0 influenced, which is a real
-		// 0% against the subscriber denominator below — not "no data".
-		$numerator = empty( $rows ) ? 0 : $this->woo_resolver->count_unique_completed_users( $rows );
-
-		// Denominator: all new subscribers in the window (converters), not influenced
-		// attempts — anonymous-inclusive, the same Woo spine the source-mix totals use.
-		$denominator = $this->subscribers_metric()->get_new_subscribers_in_window( $start, $end );
-
-		$rate = $this->rate_value( $numerator, $denominator );
-		return null === $rate
-			? $this->populated_scalar( 0.0, false, $denominator, 'rate', $numerator )
-			: $this->populated_scalar( $rate, true, $denominator, 'rate', $numerator );
+		if ( ! is_array( $rows[0] ) || ! array_key_exists( $rate_key, $rows[0] ) || ! array_key_exists( $denominator_key, $rows[0] ) ) {
+			return $this->populated_scalar( 0.0, false, null, 'rate', null, true );
+		}
+		$denominator = $rows[0][ $denominator_key ];
+		// The denominator is a BigQuery COUNT(DISTINCT) — a non-negative integer. Reject any
+		// non-integer numeric (e.g. 8.5) rather than silently truncating it, matching the strict
+		// count-field validation used elsewhere in this class. The ported Conversion_Metric reader
+		// is looser here; hardening it is a separate follow-up.
+		if ( ! is_numeric( $denominator ) || (float) $denominator !== (float) (int) $denominator ) {
+			return $this->error_scalar(
+				'rate',
+				new \WP_Error( 'bigquery_proxy_malformed_value', __( 'The query returned a non-integer denominator.', 'newspack-plugin' ) )
+			);
+		}
+		$denominator = (int) $denominator;
+		$rate        = $rows[0][ $rate_key ];
+		if ( null === $rate ) {
+			return $this->populated_scalar( 0.0, false, $denominator, 'rate' );
+		}
+		if ( ! is_numeric( $rate ) ) {
+			return $this->error_scalar(
+				'rate',
+				new \WP_Error( 'bigquery_proxy_malformed_value', __( 'The query returned a non-numeric value.', 'newspack-plugin' ) )
+			);
+		}
+		return $this->populated_scalar( (float) $rate, $denominator > 0, $denominator, 'rate' );
 	}
-
 
 	/**
 	 * Fetch (memoized per window) the `gates_performance_by_gate` hub rows, so the
@@ -749,12 +724,21 @@ final class Gates_Metric {
 	/**
 	 * Paywall conversion rate, influenced (14-day lookback).
 	 *
+	 * BQ-internal rate + denominator (hub computes it; no Woo join). Replaces the prior
+	 * attempt-row path which undercounted via the GA4 cookie → customer_id cast.
+	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
 	public function get_paywall_conversion_influenced_14d( DateTimeInterface $start, DateTimeInterface $end ): array {
-		return $this->compute_paywall_rate_from_proxy( 'gates_paywall_conversion_influenced_14d', $start, $end );
+		return $this->compute_influenced_rate_from_proxy(
+			'gates_paywall_conversion_influenced_14d',
+			'paywall_conversion_influenced_rate',
+			'conversion_denominator',
+			$start,
+			$end
+		);
 	}
 
 	/**
@@ -834,9 +818,13 @@ final class Gates_Metric {
 	 *   - `paywall_impressions_total` = the Direct rate denominator (sessions with a
 	 *     paywall impression; this is the {N} in the "no conversions" copy).
 	 *   - `paywall_conversions_total` = the most inclusive conversion count across
-	 *     attributions (max of Direct and Influenced numerators), so a section
-	 *     with Influenced-only conversions still renders its scorecards rather
-	 *     than hiding real data behind a "no conversions" empty state.
+	 *     attributions — `max` of the Direct numerator (gate-attributed Woo
+	 *     conversions) and the Influenced *denominator*. The BQ-internal Influenced
+	 *     metric reports `conversion_denominator` (COUNT(DISTINCT) of paywall
+	 *     converters in the window) and no numerator, so reading its denominator is
+	 *     what keeps an Influenced-only window (Direct 0, Influenced rate positive)
+	 *     rendering its scorecards rather than hiding real data behind a "no
+	 *     conversions" empty state.
 	 *
 	 * @param array $direct     The `paywall_conversion_direct` scalar payload.
 	 * @param array $influenced The `paywall_conversion_influenced_14d` scalar payload.
@@ -847,7 +835,7 @@ final class Gates_Metric {
 			'paywall_impressions_total' => (int) ( $direct['denominator'] ?? 0 ),
 			'paywall_conversions_total' => max(
 				(int) ( $direct['numerator'] ?? 0 ),
-				(int) ( $influenced['numerator'] ?? 0 )
+				(int) ( $influenced['denominator'] ?? 0 )
 			),
 		];
 	}

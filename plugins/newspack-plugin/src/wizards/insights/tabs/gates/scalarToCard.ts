@@ -46,6 +46,12 @@ export const scalarToMetricCardProps = ( props: ScalarCardProps ) => {
 	if ( current.state === 'error' ) {
 		return { label, description, error: current.error_message ?? __( 'Data temporarily unavailable.', 'newspack-plugin' ) };
 	}
+	// Schema drift (a hub row present but missing required column(s)) surfaces the
+	// shared "some data could not be loaded" note instead of a misleading zero,
+	// mirroring the Conversion tab.
+	if ( current.state === 'populated' && current.data_missing ) {
+		return { label, description, dataMissing: true };
+	}
 	return {
 		label,
 		description,
