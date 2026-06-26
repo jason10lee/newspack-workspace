@@ -961,7 +961,8 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 
 	/**
 	 * Paid section totals: attempts come from the Direct denominator; conversions
-	 * are the inclusive max across Direct and Influenced numerators.
+	 * are the inclusive max of the Direct numerator and the Influenced denominator
+	 * (the BQ-internal converter count — the Influenced metric has no numerator).
 	 */
 	public function test_paywall_section_totals_normal_data() {
 		$totals = Gates_Metric::paywall_section_totals(
@@ -970,19 +971,19 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 				'numerator'   => 2,
 			],
 			[
-				'denominator' => 290,
-				'numerator'   => 5,
+				'denominator' => 8,
+				'numerator'   => null,
 			]
 		);
 
 		$this->assertSame( 17, $totals['paywall_impressions_total'] );
-		// max( direct 2, influenced 5 ) — don't hide Influenced-only conversions.
-		$this->assertSame( 5, $totals['paywall_conversions_total'] );
+		// max( direct numerator 2, influenced denominator 8 ) — don't hide Influenced converters.
+		$this->assertSame( 8, $totals['paywall_conversions_total'] );
 	}
 
 	/**
 	 * Paid section totals: attempts > 0 but zero conversions in either attribution
-	 * → the section's no_conversions trigger.
+	 * (no Direct conversions, no Influenced converters) → the no_conversions trigger.
 	 */
 	public function test_paywall_section_totals_zero_conversions() {
 		$totals = Gates_Metric::paywall_section_totals(
@@ -991,13 +992,35 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 				'numerator'   => 0,
 			],
 			[
-				'denominator' => 290,
-				'numerator'   => 0,
+				'denominator' => 0,
+				'numerator'   => null,
 			]
 		);
 
 		$this->assertSame( 17, $totals['paywall_impressions_total'] );
 		$this->assertSame( 0, $totals['paywall_conversions_total'] );
+	}
+
+	/**
+	 * Regression (PR #443 review): an Influenced-only window — zero Direct
+	 * conversions but a positive Influenced result — must still render. The
+	 * BQ-internal Influenced metric reports its converter count as `denominator`
+	 * (no numerator), so the section total picks it up and the scorecards are not
+	 * hidden behind the "No paywall conversions" empty state.
+	 */
+	public function test_paywall_section_totals_influenced_only_renders() {
+		$totals = Gates_Metric::paywall_section_totals(
+			[
+				'denominator' => 17,
+				'numerator'   => 0,
+			],
+			[
+				'denominator' => 8,
+				'numerator'   => null,
+			]
+		);
+
+		$this->assertSame( 8, $totals['paywall_conversions_total'] );
 	}
 
 	/**

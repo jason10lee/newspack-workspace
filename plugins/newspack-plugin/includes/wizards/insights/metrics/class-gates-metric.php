@@ -818,9 +818,13 @@ final class Gates_Metric {
 	 *   - `paywall_impressions_total` = the Direct rate denominator (sessions with a
 	 *     paywall impression; this is the {N} in the "no conversions" copy).
 	 *   - `paywall_conversions_total` = the most inclusive conversion count across
-	 *     attributions (max of Direct and Influenced numerators), so a section
-	 *     with Influenced-only conversions still renders its scorecards rather
-	 *     than hiding real data behind a "no conversions" empty state.
+	 *     attributions — `max` of the Direct numerator (gate-attributed Woo
+	 *     conversions) and the Influenced *denominator*. The BQ-internal Influenced
+	 *     metric reports `conversion_denominator` (COUNT(DISTINCT) of paywall
+	 *     converters in the window) and no numerator, so reading its denominator is
+	 *     what keeps an Influenced-only window (Direct 0, Influenced rate positive)
+	 *     rendering its scorecards rather than hiding real data behind a "no
+	 *     conversions" empty state.
 	 *
 	 * @param array $direct     The `paywall_conversion_direct` scalar payload.
 	 * @param array $influenced The `paywall_conversion_influenced_14d` scalar payload.
@@ -831,7 +835,7 @@ final class Gates_Metric {
 			'paywall_impressions_total' => (int) ( $direct['denominator'] ?? 0 ),
 			'paywall_conversions_total' => max(
 				(int) ( $direct['numerator'] ?? 0 ),
-				(int) ( $influenced['numerator'] ?? 0 )
+				(int) ( $influenced['denominator'] ?? 0 )
 			),
 		];
 	}
