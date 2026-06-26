@@ -758,27 +758,42 @@ final class Audience_Metric {
 	}
 
 	/**
-	 * Detect which supporter products the publisher sells. Side-effect free:
-	 * donations are inferred from the saved donation-product option, and
-	 * subscriptions from the presence of a published WooCommerce Subscriptions
-	 * product. Used to shape (or hide) the Supporter Type pie.
+	 * Detect which supporter products the publisher sells, to shape (or hide) the
+	 * Supporter Type pie. Read-only apart from the shared donation classifier's own
+	 * 1-hour cache priming on a miss.
+	 *
+	 * Donations resolve through the single shared {@see Donation_Product_Classifier}
+	 * (NPPD-1767) — the same source Subscribers (Tab 6), Donors (Tab 7), and the Tab 3
+	 * funnels use: the union of the canonical donation family, products a publisher
+	 * checkbox-flags via `_newspack_is_donation`, and their variations. The previous
+	 * raw `newspack_donation_product_id` option alone missed checkbox-only donations
+	 * and let a donation-flagged subscription product double-count as a subscription,
+	 * so this one pie could contradict the Donors/Subscribers numbers beside it.
+	 *
+	 * Subscriptions detect off product type but exclude the donation set, so the two
+	 * categories stay complementary: a membership product flagged as a donation counts
+	 * as a donation here (matching Tabs 6/7), not a subscription.
 	 *
 	 * @return array{subscriptions:bool,donations:bool}
 	 */
 	private static function detect_supporter_products(): array {
-		$has_donations = (int) get_option( 'newspack_donation_product_id', 0 ) > 0;
+		$donation_ids  = Donation_Product_Classifier::get_donation_product_ids();
+		$has_donations = ! empty( $donation_ids );
 
 		$has_subscriptions = false;
 		if ( class_exists( 'WC_Subscriptions' ) && function_exists( 'wc_get_products' ) ) {
-			$subs = wc_get_products(
+			$sub_ids = wc_get_products(
 				[
 					'type'   => [ 'subscription', 'variable-subscription' ],
 					'status' => 'publish',
-					'limit'  => 1,
+					'limit'  => -1,
 					'return' => 'ids',
 				]
 			);
-			$has_subscriptions = ! empty( $subs );
+			// Drop products the publisher designated as donations so a flagged
+			// subscription-type product doesn't count as both categories.
+			$sub_ids           = array_diff( array_map( 'intval', $sub_ids ), $donation_ids );
+			$has_subscriptions = ! empty( $sub_ids );
 		}
 
 		return [
