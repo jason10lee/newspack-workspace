@@ -699,7 +699,11 @@ class HPOS_Storage implements Storage_Interface {
 		// attributed per product; not windowed by
 		// design (true LTV waits on the v1.1 BQ wrapper)
 		// new_subs          — WINDOWED to {start, end} via the
-		// `_schedule_start` meta join below
+		// `_schedule_start` meta join below. Gross starts:
+		// counts every sub that STARTED in-window regardless of
+		// current status, so a sub that started AND churned in the
+		// same timeframe is counted in both new_subs and
+		// churned_subs (independent events, by design)
 		// churned_subs      — WINDOWED to {start, end} via the
 		// `_schedule_cancelled` meta join below
 		//
@@ -740,7 +744,7 @@ class HPOS_Storage implements Storage_Interface {
 				COALESCE(period_meta.meta_value, '') AS sub_period,
 				COUNT(DISTINCT CASE WHEN o.status = 'wc-active' THEN o.id END) AS active_subs,
 				COUNT(DISTINCT CASE
-					WHEN st.meta_value BETWEEN %s AND %s
+					WHEN st.meta_value != '' AND st.meta_value BETWEEN %s AND %s
 					THEN o.id
 				END) AS new_subs,
 				COUNT(DISTINCT CASE

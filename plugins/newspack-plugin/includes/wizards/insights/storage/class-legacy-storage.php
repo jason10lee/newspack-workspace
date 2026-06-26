@@ -671,7 +671,11 @@ class Legacy_Storage implements Storage_Interface {
 		// active_subs       — current state
 		// active_value      — current state
 		// lifetime_revenue  — lifetime sum (intentionally not windowed)
-		// new_subs          — WINDOWED via _schedule_start postmeta
+		// new_subs          — WINDOWED via _schedule_start postmeta.
+		// Gross starts: counts every sub that started in-window
+		// regardless of current status, so a sub that started AND
+		// churned in the same timeframe is counted in both new_subs
+		// and churned_subs (independent events, by design)
 		// churned_subs      — WINDOWED via _schedule_cancelled postmeta
 		//
 		// Each subscription line item is counted toward the product it
@@ -691,7 +695,7 @@ class Legacy_Storage implements Storage_Interface {
 				COALESCE(period_meta.meta_value, '') AS sub_period,
 				COUNT(DISTINCT CASE WHEN p.post_status = 'wc-active' THEN p.ID END) AS active_subs,
 				COUNT(DISTINCT CASE
-					WHEN st.meta_value BETWEEN %s AND %s
+					WHEN st.meta_value != '' AND st.meta_value BETWEEN %s AND %s
 					THEN p.ID
 				END) AS new_subs,
 				COUNT(DISTINCT CASE
