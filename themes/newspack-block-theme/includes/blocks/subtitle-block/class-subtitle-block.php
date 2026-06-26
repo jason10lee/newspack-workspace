@@ -80,7 +80,7 @@ final class Subtitle_Block {
 			return;
 		}
 
-		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- meta-row ids only; each row value is sanitized below and the nonce is verified above.
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- only the meta-row key is read and sanitized below; the row value is never used, and the nonce is verified above.
 		foreach ( array_keys( (array) $_POST['meta'] ) as $mid ) {
 			$key = isset( $_POST['meta'][ $mid ]['key'] )
 				? sanitize_text_field( wp_unslash( $_POST['meta'][ $mid ]['key'] ) )
