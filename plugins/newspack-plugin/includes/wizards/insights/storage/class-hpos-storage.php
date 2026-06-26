@@ -698,6 +698,12 @@ class HPOS_Storage implements Storage_Interface {
 		// lifetime_revenue  — lifetime sum of subscription-record totals
 		// attributed per product; not windowed by
 		// design (true LTV waits on the v1.1 BQ wrapper)
+		// new_subs          — WINDOWED to {start, end} via the
+		// `_schedule_start` meta join below. Gross starts:
+		// counts every sub that STARTED in-window regardless of
+		// current status, so a sub that started AND churned in the
+		// same timeframe is counted in both new_subs and
+		// churned_subs (independent events, by design)
 		// churned_subs      — WINDOWED to {start, end} via the
 		// `_schedule_cancelled` meta join below
 		//
@@ -708,11 +714,12 @@ class HPOS_Storage implements Storage_Interface {
 		// per-product active_value beyond the subscription's actual total
 		// (instead it's attributed once per product — a simplification).
 		//
-		// The LEFT JOIN to `_schedule_cancelled` is required for window
-		// scoping. Active subscriptions don't have this meta set, so the
-		// left-joined row is NULL and the churned CASE naturally rejects
-		// them. Subscription Woo writes one `_schedule_cancelled` row per
-		// subscription at most, so no row multiplication.
+		// The LEFT JOINs to `_schedule_start` and `_schedule_cancelled`
+		// are required for window scoping. Subscriptions missing the meta
+		// (e.g. an active sub has no `_schedule_cancelled`) left-join to
+		// NULL and the corresponding CASE naturally rejects them. Woo
+		// writes at most one row per subscription for each of these keys,
+		// so no row multiplication.
 
 		/*
 		 * Query at the effective-product level. Woo's convention for
@@ -737,6 +744,10 @@ class HPOS_Storage implements Storage_Interface {
 				COALESCE(period_meta.meta_value, '') AS sub_period,
 				COUNT(DISTINCT CASE WHEN o.status = 'wc-active' THEN o.id END) AS active_subs,
 				COUNT(DISTINCT CASE
+					WHEN st.meta_value != '' AND st.meta_value BETWEEN %s AND %s
+					THEN o.id
+				END) AS new_subs,
+				COUNT(DISTINCT CASE
 					WHEN o.status IN ('wc-cancelled', 'wc-expired')
 					 AND sch.meta_value BETWEEN %s AND %s
 					THEN o.id
@@ -755,12 +766,16 @@ class HPOS_Storage implements Storage_Interface {
 			LEFT JOIN {$prefix}posts pp ON pp.ID = pv.post_parent
 			LEFT JOIN {$prefix}postmeta period_meta
 				ON period_meta.post_id = pv.ID AND period_meta.meta_key = '_subscription_period'
+			LEFT JOIN {$prefix}wc_orders_meta st
+				ON st.order_id = o.id AND st.meta_key = '_schedule_start'
 			LEFT JOIN {$prefix}wc_orders_meta sch
 				ON sch.order_id = o.id AND sch.meta_key = '_schedule_cancelled'
 			WHERE o.type = 'shop_subscription'
 			  AND pid_meta.meta_value NOT IN ($donations)
 			GROUP BY pv.ID, pv.post_title, pv.post_parent, parent_name, sub_period
 			ORDER BY active_subs DESC",
+			$this->fmt( $start ),
+			$this->fmt( $end ),
 			$this->fmt( $start ),
 			$this->fmt( $end )
 		);
@@ -805,6 +820,7 @@ class HPOS_Storage implements Storage_Interface {
 			$parent_name      = (string) $row['parent_name'];
 			$period           = (string) $row['sub_period'];
 			$active_subs      = (int) $row['active_subs'];
+			$new_subs         = (int) $row['new_subs'];
 			$churned_subs     = (int) $row['churned_subs'];
 			$active_value     = (float) $row['active_value'];
 			$lifetime_revenue = (float) $row['lifetime_revenue'];
@@ -817,6 +833,7 @@ class HPOS_Storage implements Storage_Interface {
 						'name'             => '' !== $parent_name ? $parent_name : __( '(unnamed product)', 'newspack-plugin' ),
 						'is_parent'        => true,
 						'active_subs'      => 0,
+						'new_subs'         => 0,
 						'churned_subs'     => 0,
 						'active_value'     => 0.0,
 						'lifetime_revenue' => 0.0,
@@ -824,6 +841,7 @@ class HPOS_Storage implements Storage_Interface {
 					];
 				}
 				$parents[ $parent_id ]['active_subs']      += $active_subs;
+				$parents[ $parent_id ]['new_subs']         += $new_subs;
 				$parents[ $parent_id ]['churned_subs']     += $churned_subs;
 				$parents[ $parent_id ]['active_value']     += $active_value;
 				$parents[ $parent_id ]['lifetime_revenue'] += $lifetime_revenue;
@@ -831,6 +849,7 @@ class HPOS_Storage implements Storage_Interface {
 					'variation_id'     => $variation_id,
 					'label'            => $this->variation_label( $period, $variation_name, $parent_name ),
 					'active_subs'      => $active_subs,
+					'new_subs'         => $new_subs,
 					'churned_subs'     => $churned_subs,
 					'active_value'     => $active_value,
 					'lifetime_revenue' => $lifetime_revenue,
@@ -842,6 +861,7 @@ class HPOS_Storage implements Storage_Interface {
 					'name'             => '' !== $variation_name ? $variation_name : __( '(unnamed product)', 'newspack-plugin' ),
 					'is_parent'        => false,
 					'active_subs'      => $active_subs,
+					'new_subs'         => $new_subs,
 					'churned_subs'     => $churned_subs,
 					'active_value'     => $active_value,
 					'lifetime_revenue' => $lifetime_revenue,

@@ -42,7 +42,7 @@ class Subscribers_Metric {
 	 *
 	 * @var string
 	 */
-	const CACHE_PREFIX = 'newspack_insights_tab6_v4:';
+	const CACHE_PREFIX = 'newspack_insights_tab6_v5:';
 
 	/**
 	 * Cache TTL for windowed and snapshot metrics (30 min).
@@ -367,7 +367,7 @@ class Subscribers_Metric {
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array<int, array{product_id: int, product_name: string, active_subs: int, churned_subs: int, active_value: float, lifetime_revenue: float}>
+	 * @return array<int, array{product_id: int, product_name: string, active_subs: int, new_subs: int, churned_subs: int, active_value: float, lifetime_revenue: float}>
 	 */
 	public function get_subscriptions_by_product( DateTimeInterface $start, DateTimeInterface $end ): array {
 		return (array) $this->cached(

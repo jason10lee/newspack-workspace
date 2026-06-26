@@ -671,6 +671,11 @@ class Legacy_Storage implements Storage_Interface {
 		// active_subs       — current state
 		// active_value      — current state
 		// lifetime_revenue  — lifetime sum (intentionally not windowed)
+		// new_subs          — WINDOWED via _schedule_start postmeta.
+		// Gross starts: counts every sub that started in-window
+		// regardless of current status, so a sub that started AND
+		// churned in the same timeframe is counted in both new_subs
+		// and churned_subs (independent events, by design)
 		// churned_subs      — WINDOWED via _schedule_cancelled postmeta
 		//
 		// Each subscription line item is counted toward the product it
@@ -689,6 +694,10 @@ class Legacy_Storage implements Storage_Interface {
 				COALESCE(pp.post_title, '') AS parent_name,
 				COALESCE(period_meta.meta_value, '') AS sub_period,
 				COUNT(DISTINCT CASE WHEN p.post_status = 'wc-active' THEN p.ID END) AS active_subs,
+				COUNT(DISTINCT CASE
+					WHEN st.meta_value != '' AND st.meta_value BETWEEN %s AND %s
+					THEN p.ID
+				END) AS new_subs,
 				COUNT(DISTINCT CASE
 					WHEN p.post_status IN ('wc-cancelled', 'wc-expired')
 					 AND sch.meta_value BETWEEN %s AND %s
@@ -710,12 +719,16 @@ class Legacy_Storage implements Storage_Interface {
 			LEFT JOIN {$prefix}posts pp ON pp.ID = pv.post_parent
 			LEFT JOIN {$prefix}postmeta period_meta
 				ON period_meta.post_id = pv.ID AND period_meta.meta_key = '_subscription_period'
+			LEFT JOIN {$prefix}postmeta st
+				ON st.post_id = p.ID AND st.meta_key = '_schedule_start'
 			LEFT JOIN {$prefix}postmeta sch
 				ON sch.post_id = p.ID AND sch.meta_key = '_schedule_cancelled'
 			WHERE p.post_type = 'shop_subscription'
 			  AND pid_meta.meta_value NOT IN ($donations)
 			GROUP BY pv.ID, pv.post_title, pv.post_parent, parent_name, sub_period
 			ORDER BY active_subs DESC",
+			$this->fmt( $start ),
+			$this->fmt( $end ),
 			$this->fmt( $start ),
 			$this->fmt( $end )
 		);
@@ -746,6 +759,7 @@ class Legacy_Storage implements Storage_Interface {
 			$parent_name      = (string) $row['parent_name'];
 			$period           = (string) $row['sub_period'];
 			$active_subs      = (int) $row['active_subs'];
+			$new_subs         = (int) $row['new_subs'];
 			$churned_subs     = (int) $row['churned_subs'];
 			$active_value     = (float) $row['active_value'];
 			$lifetime_revenue = (float) $row['lifetime_revenue'];
@@ -757,6 +771,7 @@ class Legacy_Storage implements Storage_Interface {
 						'name'             => '' !== $parent_name ? $parent_name : __( '(unnamed product)', 'newspack-plugin' ),
 						'is_parent'        => true,
 						'active_subs'      => 0,
+						'new_subs'         => 0,
 						'churned_subs'     => 0,
 						'active_value'     => 0.0,
 						'lifetime_revenue' => 0.0,
@@ -764,6 +779,7 @@ class Legacy_Storage implements Storage_Interface {
 					];
 				}
 				$parents[ $parent_id ]['active_subs']      += $active_subs;
+				$parents[ $parent_id ]['new_subs']         += $new_subs;
 				$parents[ $parent_id ]['churned_subs']     += $churned_subs;
 				$parents[ $parent_id ]['active_value']     += $active_value;
 				$parents[ $parent_id ]['lifetime_revenue'] += $lifetime_revenue;
@@ -771,6 +787,7 @@ class Legacy_Storage implements Storage_Interface {
 					'variation_id'     => $variation_id,
 					'label'            => $this->variation_label( $period, $variation_name, $parent_name ),
 					'active_subs'      => $active_subs,
+					'new_subs'         => $new_subs,
 					'churned_subs'     => $churned_subs,
 					'active_value'     => $active_value,
 					'lifetime_revenue' => $lifetime_revenue,
@@ -781,6 +798,7 @@ class Legacy_Storage implements Storage_Interface {
 					'name'             => '' !== $variation_name ? $variation_name : __( '(unnamed product)', 'newspack-plugin' ),
 					'is_parent'        => false,
 					'active_subs'      => $active_subs,
+					'new_subs'         => $new_subs,
 					'churned_subs'     => $churned_subs,
 					'active_value'     => $active_value,
 					'lifetime_revenue' => $lifetime_revenue,
