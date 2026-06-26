@@ -138,7 +138,7 @@ Donors has its own narrower interface ([`class-donors-storage-interface.php`](st
 
 ### Classifiers (`classifiers/`)
 
-[`class-donation-product-classifier.php`](classifiers/class-donation-product-classifier.php) computes the union of (a) products flagged `_newspack_is_donation`, (b) their variations, and (c) the canonical Newspack donation family. Caches the resulting ID set for 1h and invalidates on the relevant `*_post_meta` and `update_option_newspack_donation_product_id` hooks. Used by Subscribers and Donors metrics and by the wizard's `has_donation_activity()` visibility check.
+[`class-donation-product-classifier.php`](classifiers/class-donation-product-classifier.php) computes the union of (a) products flagged `_newspack_is_donation`, (b) their variations, and (c) the canonical Newspack donation family. Caches the resulting ID set for 1h and invalidates on the relevant `*_post_meta` and `update_option_newspack_donation_product_id` hooks. Used by the Subscribers, Donors, and Audience (supporter-type pie) metrics and by the wizard's `has_donation_activity()` visibility check.
 
 ### Fixtures (`fixtures/`)
 
