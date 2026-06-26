@@ -117,7 +117,16 @@ export const NoticesPanel = ( { noticesNode, notices } ) => {
 	return createPortal(
 		<div className="newspack-subscribers-demo__notices-inner">
 			{ notices.map( notice => (
-				<Notice key={ notice.id } status={ notice.status } isDismissible={ false }>
+				// `spokenMessage` is given an explicit plain-text string: without it, WP
+				// Notice defaults it to the JSX children and calls renderToString() on
+				// them during render, which walks our Button subtree and corrupts React's
+				// hook dispatcher (crashes on the next re-render).
+				<Notice
+					key={ notice.id }
+					status={ notice.status }
+					isDismissible={ false }
+					spokenMessage={ ( notice.plan ? `${ notice.plan } ` : '' ) + notice.body.replace( /<[^>]+>/g, '' ) }
+				>
 					<HStack justify="space-between" alignment="center" spacing={ 4 }>
 						<span>
 							{ notice.plan
