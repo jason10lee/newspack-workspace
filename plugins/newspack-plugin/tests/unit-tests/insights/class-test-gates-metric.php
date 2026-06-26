@@ -1318,15 +1318,45 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Gates_Metric constructor no longer requires a Woo_Order_Resolver dependency.
-	 * Verifies the class source contains no Woo_Order_Resolver reference and that
-	 * the class can be instantiated with zero arguments.
+	 * Gates_Metric no longer depends on Woo_Order_Resolver. Verifies structurally
+	 * (via reflection on constructor parameters and typed properties) that the
+	 * dependency is gone, and that the class instantiates with zero arguments.
 	 */
 	public function test_constructor_needs_no_woo_order_resolver() {
-		$ref = new \ReflectionClass( \Newspack\Insights\Gates_Metric::class );
-		$src = file_get_contents( $ref->getFileName() ); // phpcs:ignore WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown -- local file path from ReflectionClass, not a remote URL.
-		$this->assertStringNotContainsString( 'Woo_Order_Resolver', $src );
+		$class    = new \ReflectionClass( \Newspack\Insights\Gates_Metric::class );
+		$resolver = \Newspack\Insights\Woo_Order_Resolver::class;
+
+		foreach ( $class->getConstructor()->getParameters() as $param ) {
+			$type = $param->getType();
+			$name = $type instanceof \ReflectionNamedType ? ltrim( $type->getName(), '\\' ) : null;
+			$this->assertNotSame( $resolver, $name, 'Constructor must not depend on Woo_Order_Resolver.' );
+		}
+		foreach ( $class->getProperties() as $property ) {
+			$type = $property->getType();
+			$name = $type instanceof \ReflectionNamedType ? ltrim( $type->getName(), '\\' ) : null;
+			$this->assertNotSame( $resolver, $name, 'No property may be typed Woo_Order_Resolver.' );
+		}
+
 		$this->assertInstanceOf( \Newspack\Insights\Gates_Metric::class, new \Newspack\Insights\Gates_Metric() );
+	}
+
+	/**
+	 * A non-integer numeric denominator (e.g. 8.5) is malformed for a count and
+	 * errors rather than being silently truncated.
+	 */
+	public function test_paywall_influenced_non_integer_denominator_errors() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn(
+			[
+				[
+					'paywall_conversion_influenced_rate' => 0.25,
+					'conversion_denominator'             => 8.5,
+				],
+			]
+		);
+		$metric = new Gates_Metric( $proxy );
+		$out    = $metric->get_paywall_conversion_influenced_14d( $this->make_date( '2026-06-01' ), $this->make_date( '2026-06-15' ) );
+		$this->assertSame( 'error', $out['state'] );
 	}
 
 	/**
