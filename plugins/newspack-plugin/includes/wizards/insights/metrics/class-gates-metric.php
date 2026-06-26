@@ -75,7 +75,7 @@ final class Gates_Metric {
 		'regwall_conversion_direct'          => 'hub',
 		'regwall_conversion_influenced_7d'   => 'hub',
 		'paywall_conversion_direct'          => 'hybrid', // NPPD-1746: local order-meta (gate) numerator + hub per-gate-impressions denominator.
-		'paywall_conversion_influenced_14d'  => 'hub',
+		'paywall_conversion_influenced_14d'  => 'hybrid', // NPPD-1764: hub influenced numerator + local Woo subscriber-spine denominator (converter-denominated).
 		'total_paywall_revenue_direct'       => 'local',  // NPPD-1746: pure Woo order meta (gate surface); survives a hub outage.
 		'avg_revenue_per_paywall_conversion' => 'local',  // NPPD-1746: derived from the same order-meta source as total revenue.
 		'conversion_funnel'                  => 'hub',
@@ -422,9 +422,32 @@ final class Gates_Metric {
 	}
 
 	/**
-	 * Compute a paywall conversion rate from BQ rows + Woo completion join.
+	 * Compute the influenced-14d paywall conversion rate, converter-denominated (NPPD-1764).
 	 *
-	 * @param string            $query_name Catalog name (`gates_paywall_conversion_*`).
+	 * = distinct subscribers in the window whose conversion had a paywall-capable gate
+	 * exposure in a PRIOR session within 14d ÷ ALL new subscribers in the window. I.e.
+	 * "of our subscribers, what share were paywall-influenced" — user-level, matching the
+	 * doc's conceptual framing and Tab 3's 7.1–7.4 converter framing (NPPD-1766). (The
+	 * Direct rate is exposure-denominated by design — a different lens — so the two are
+	 * intentionally not the same base.)
+	 *
+	 * Replaces the prior attempt-denominated rate (÷ `count($rows)`), which keyed the
+	 * denominator off influenced checkout *attempts* — deflated on anonymous-conversion-
+	 * heavy publishers, so the rate read inflated.
+	 *
+	 * - **Numerator** stays hub/GA4-cross-session-sourced and Woo-matched (`count_unique_
+	 *   completed_users`): order meta has no session timing to place a prior-session
+	 *   exposure, so influenced can't move to the order-meta model the way Direct did.
+	 *   It remains anonymous-undercounted (NPPD-1685); NPPD-1747 improves its completeness
+	 *   for the whole influenced family — do NOT build a gates-specific cross-session join.
+	 * - **Denominator** is the anonymous-inclusive Woo identity spine
+	 *   ({@see Subscribers_Metric::get_new_subscribers_in_window()}). Because the GA4-matched
+	 *   numerator is not a strict subset of it, `rate_value()` suppresses any >100% to a
+	 *   non-computable em-dash (the coherence guard, parity with the Direct/Prompts rates).
+	 *
+	 * Local denominator + hub numerator → 'hybrid' (see METRIC_SOURCES).
+	 *
+	 * @param string            $query_name Catalog name (the influenced rows to match).
 	 * @param DateTimeInterface $start      Window start.
 	 * @param DateTimeInterface $end        Window end.
 	 * @return array
@@ -434,21 +457,36 @@ final class Gates_Metric {
 		DateTimeInterface $start,
 		DateTimeInterface $end
 	): array {
+		if ( ! $this->woocommerce_active() ) {
+			// Non-WC publisher: no local subscribers to denominate against. Empty
+			// state, not a fake 0% (NPPD-1737 Option A scoping).
+			return $this->populated_scalar( 0.0, false, 0, 'rate', 0 );
+		}
+
 		$rows = $this->proxy->query( $query_name, $start, $end );
 		if ( is_wp_error( $rows ) ) {
 			return $this->error_scalar( 'rate', $rows );
 		}
-		if ( ! is_array( $rows ) || empty( $rows ) ) {
-			// No paywall attempts in the window → a real 0% rate. Numerator and
-			// denominator are both an explicit 0 so the card's count fallback can
-			// tell "no attempts" (denominator 0) from "0 of N" (NPPD-1694).
-			return $this->populated_scalar( 0.0, false, 0, 'rate', 0 );
+		if ( ! is_array( $rows ) ) {
+			// Malformed hub response (not an array): surface as an error, not a confident
+			// 0% — parity with the donation/subscription malformed-rows handling (NPPD-1745
+			// #3). An empty array is valid (0 influenced) and handled below.
+			return $this->error_scalar( 'rate', new \WP_Error( 'bigquery_proxy_malformed_rows', __( 'The query returned an unexpected shape.', 'newspack-plugin' ) ) );
 		}
-		$denominator = count( $rows );
-		$numerator   = $this->woo_resolver->count_completed_orders( $rows );
-		// Surface the numerator (matched Woo orders) alongside the denominator so
-		// the card can render "0 of {denominator}" when no attempt converted.
-		return $this->populated_scalar( $denominator > 0 ? $numerator / $denominator : 0.0, true, $denominator, 'rate', $numerator );
+
+		// Numerator: distinct subscribers whose conversion was paywall-influenced (the
+		// hub influenced rows, Woo-matched). Empty rows → 0 influenced, which is a real
+		// 0% against the subscriber denominator below — not "no data".
+		$numerator = empty( $rows ) ? 0 : $this->woo_resolver->count_unique_completed_users( $rows );
+
+		// Denominator: all new subscribers in the window (converters), not influenced
+		// attempts — anonymous-inclusive, the same Woo spine the source-mix totals use.
+		$denominator = $this->subscribers_metric()->get_new_subscribers_in_window( $start, $end );
+
+		$rate = $this->rate_value( $numerator, $denominator );
+		return null === $rate
+			? $this->populated_scalar( 0.0, false, $denominator, 'rate', $numerator )
+			: $this->populated_scalar( $rate, true, $denominator, 'rate', $numerator );
 	}
 
 
