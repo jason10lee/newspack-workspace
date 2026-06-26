@@ -45,7 +45,7 @@ const makeWindow = ( over: Partial< GatesWindow > = {} ): GatesWindow => ( {
 	paywall_conversion_influenced_14d: scalar(),
 	total_paywall_revenue_direct: scalar( { placeholder_type: 'currency' } ),
 	avg_revenue_per_paywall_conversion: scalar( { placeholder_type: 'currency' } ),
-	paywall_attempts_total: 0,
+	paywall_impressions_total: 0,
 	paywall_conversions_total: 0,
 	// Default: hub count fields ABSENT (null) — the pre-deploy production state.
 	registration_impressions_total: null,

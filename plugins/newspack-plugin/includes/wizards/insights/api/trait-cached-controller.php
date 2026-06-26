@@ -28,6 +28,16 @@ trait Cached_Controller_Trait {
 	abstract protected function tab_slug(): string;
 
 	/**
+	 * Response-shape version mixed into the cache key. Override and bump it when
+	 * a controller's payload shape changes so cached payloads from a prior shape
+	 * don't survive a deploy. Default empty: no version component, so controllers
+	 * that don't opt in keep their existing key shape (no surprise cache-bust).
+	 */
+	protected function cache_schema_version(): string {
+		return '';
+	}
+
+	/**
 	 * Cache-aware GET wrapper.
 	 *
 	 * @param WP_REST_Request $request       Incoming request.
@@ -37,7 +47,7 @@ trait Cached_Controller_Trait {
 		$envelope = Cache::store(
 			$this->tab_slug(),
 			$this->cache_source(),
-			self::cache_key_parts( $request ),
+			$this->versioned_cache_key_parts( $request ),
 			$build_payload
 		);
 		$response = rest_ensure_response( self::wrap_envelope( $envelope ) );
@@ -58,7 +68,7 @@ trait Cached_Controller_Trait {
 		$envelope = Cache::refresh(
 			$this->tab_slug(),
 			$this->cache_source(),
-			self::cache_key_parts( $request ),
+			$this->versioned_cache_key_parts( $request ),
 			$build_payload
 		);
 		$response = rest_ensure_response( self::wrap_envelope( $envelope ) );
@@ -79,6 +89,23 @@ trait Cached_Controller_Trait {
 			$request->get_param( 'compare_start' ) ? (string) $request->get_param( 'compare_start' ) : null,
 			$request->get_param( 'compare_end' ) ? (string) $request->get_param( 'compare_end' ) : null,
 		];
+	}
+
+	/**
+	 * Canonical window key parts with the response-shape version prepended when
+	 * the controller sets one. An empty version leaves the window parts
+	 * untouched, so a non-overriding controller's cache key is unchanged.
+	 *
+	 * @param WP_REST_Request $request Incoming request.
+	 * @return array
+	 */
+	private function versioned_cache_key_parts( WP_REST_Request $request ): array {
+		$parts   = self::cache_key_parts( $request );
+		$version = $this->cache_schema_version();
+		if ( '' !== $version ) {
+			array_unshift( $parts, $version );
+		}
+		return $parts;
 	}
 
 	/**

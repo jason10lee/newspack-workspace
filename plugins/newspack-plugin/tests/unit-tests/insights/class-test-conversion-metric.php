@@ -323,6 +323,11 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertArrayNotHasKey( 'pending', $result );
 		$this->assertCount( 3, $result['stages'] );
 
+		// NPPD-1743: registration leg is always visible (no config gate) so it
+		// carries the same gated shape the subscription/donation legs do.
+		$this->assertSame( 'visible', $result['visibility'] );
+		$this->assertNull( $result['visibility_reason'] );
+
 		// Stage 1: top → pct_of_top must be 1.0.
 		$this->assertSame( 500, $result['stages'][0]['count'] );
 		$this->assertSame( 1.0, $result['stages'][0]['pct_of_top'] );
@@ -366,6 +371,10 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 
 		$this->assertSame( 'empty', $result['state'] );
 		$this->assertSame( [], $result['stages'] );
+		// Always visible even with no rows — drives the data-driven no_opportunity
+		// empty state rather than hiding the leg (NPPD-1743).
+		$this->assertSame( 'visible', $result['visibility'] );
+		$this->assertNull( $result['visibility_reason'] );
 	}
 
 	/**
@@ -381,6 +390,10 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'bigquery_proxy_http_error', $result['error_code'] );
 		$this->assertSame( 'HTTP 503', $result['error_message'] );
 		$this->assertSame( [], $result['stages'] );
+		// The visibility stamp is unconditional — even an errored leg renders
+		// (the cell shows the shared error treatment), never hidden (NPPD-1743).
+		$this->assertSame( 'visible', $result['visibility'] );
+		$this->assertNull( $result['visibility_reason'] );
 	}
 
 	// --- C4: get_source_mix_registrations ----------------------------------
@@ -675,6 +688,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'populated', $result['state'] );
 		$this->assertArrayNotHasKey( 'pending', $result );
 		$this->assertTrue( $result['computable'] );
+		$this->assertFalse( $result['data_missing'] );
 		$this->assertSame( 'rate', $result['placeholder_type'] );
 		$this->assertEqualsWithDelta( 0.37, $result['value'], 1e-9 );
 	}
@@ -689,7 +703,22 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 
 		$this->assertSame( 'populated', $result['state'] );
 		$this->assertFalse( $result['computable'] );
+		$this->assertFalse( $result['data_missing'] );
 		$this->assertEqualsWithDelta( 0.0, $result['value'], 1e-9 );
+	}
+
+	/**
+	 * C7 missing column: a non-empty row lacking the rate column → non-computable
+	 * zero flagged as missing data (schema drift), NOT a benign empty zero.
+	 */
+	public function test_influenced_registration_rate_7d_flags_data_missing_on_missing_column() {
+		$metric          = new Conversion_Metric( $this->proxy_returning( [ [ 'unexpected_column' => 1 ] ] ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_influenced_registration_rate_7d( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertFalse( $result['computable'] );
+		$this->assertTrue( $result['data_missing'] );
 	}
 
 	/**
@@ -1094,6 +1123,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 0.0, $result['value'] );
 		$this->assertFalse( $result['computable'] );
 		$this->assertSame( 0, $result['denominator'] );
+		$this->assertFalse( $result['data_missing'] );
 	}
 
 	/**
@@ -1162,6 +1192,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertFalse( $result['computable'] );
 		$this->assertSame( 0.0, $result['value'] );
 		$this->assertNull( $result['denominator'] );
+		$this->assertTrue( $result['data_missing'] );
 	}
 
 	// --- C15: get_influenced_donation_rate_14d ------------------------------
@@ -1794,6 +1825,10 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		// Section 2 — per-journey funnels.
 		$this->assertSame( 'populated', $current['anonymous_to_registered_funnel']['state'] );
 		$this->assertCount( 3, $current['anonymous_to_registered_funnel']['stages'] );
+		// Registration leg fixture must carry the same always-visible shape as
+		// live (NPPD-1743), so fixture mode matches production.
+		$this->assertSame( 'visible', $current['anonymous_to_registered_funnel']['visibility'] );
+		$this->assertNull( $current['anonymous_to_registered_funnel']['visibility_reason'] );
 		$this->assertSame( 'populated', $current['registered_to_subscriber_funnel']['state'] );
 		$this->assertSame( 'populated', $current['registered_to_donor_funnel']['state'] );
 
@@ -1866,21 +1901,22 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'hidden', $current['subscriber_to_donor_lag_distribution']['visibility'] );
 		$this->assertSame( 'insufficient_data', $current['subscriber_to_donor_lag_distribution']['visibility_reason'] );
 
-		// 5.1 — registration cohort (reference_line off; autoscaled).
-		$this->assertSame( 'coming_soon', $current['registration_to_conversion_cohort']['state'] );
-		$this->assertSame( [], $current['registration_to_conversion_cohort']['cohorts'] );
+		// 5.1 — registration cohort (snapshot → populated; autoscaled, no reference line).
+		$this->assertSame( 'populated', $current['registration_to_conversion_cohort']['state'] );
+		$this->assertNotEmpty( $current['registration_to_conversion_cohort']['cohorts'] );
+		$this->assertSame( '2025-07', $current['registration_to_conversion_cohort']['cohorts'][0]['label'] );
 		$this->assertNull( $current['registration_to_conversion_cohort']['reference_line'] );
 
-		// 5.2 — subscriber retention cohort (reference_line).
-		$this->assertSame( 'coming_soon', $current['subscriber_retention_cohort']['state'] );
-		$this->assertSame( [], $current['subscriber_retention_cohort']['cohorts'] );
+		// 5.2 — subscriber retention cohort (snapshot → populated; 70% reference line).
+		$this->assertSame( 'populated', $current['subscriber_retention_cohort']['state'] );
+		$this->assertNotEmpty( $current['subscriber_retention_cohort']['cohorts'] );
 		$this->assertSame( 0.70, $current['subscriber_retention_cohort']['reference_line']['value'] );
 	}
 
 	/**
 	 * Empty fixture: BQ-backed collections carry state:'empty' with empty
 	 * collections; scalars carry non-computable zeros; tab_error is false;
-	 * deferred sections stay 'coming_soon'.
+	 * the 5.1/5.2 cohort snapshots are populated regardless of variant.
 	 */
 	public function test_fixture_empty_variant() {
 		$payload = Conversion_Metric::get_fixture( 'empty', false );
@@ -1913,17 +1949,17 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'empty', $current['top_pages_no_conversion']['state'] );
 		$this->assertSame( [], $current['top_pages_no_conversion']['rows'] );
 
-		// 4.2 is an all-history snapshot → populated; the 5.1 cohort stays coming_soon.
+		// 4.2 + the 5.1 cohort are all-history snapshots → populated regardless of variant.
 		$this->assertSame( 'populated', $current['time_to_subscribe_distribution']['state'] );
-		$this->assertSame( 'coming_soon', $current['registration_to_conversion_cohort']['state'] );
+		$this->assertSame( 'populated', $current['registration_to_conversion_cohort']['state'] );
 	}
 
 	/**
 	 * Error fixture: BQ-backed metrics carry state:'error'; local-only metrics
 	 * (subscriber-to-donor funnel, opportunity counts) stay 'populated'; tab_error
 	 * is NOW true (NPPD-1745) because all hub-backed metrics are 'error' — the
-	 * scoped banner fires regardless of the local/coming_soon cards; deferred
-	 * sections stay 'coming_soon'.
+	 * scoped banner fires regardless of the local cards; the 5.1/5.2 cohort
+	 * snapshots are populated regardless of variant.
 	 */
 	public function test_fixture_error_variant() {
 		$payload = Conversion_Metric::get_fixture( 'error', false );
@@ -1950,9 +1986,9 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'populated', $current['at_risk_subscriber_count']['state'] );
 		$this->assertSame( 'populated', $current['lapsed_donor_count']['state'] );
 
-		// 4.2 is an all-history snapshot → populated; the 5.1 cohort stays coming_soon.
+		// 4.2 + the 5.1 cohort are all-history snapshots → populated regardless of variant.
 		$this->assertSame( 'populated', $current['time_to_subscribe_distribution']['state'] );
-		$this->assertSame( 'coming_soon', $current['registration_to_conversion_cohort']['state'] );
+		$this->assertSame( 'populated', $current['registration_to_conversion_cohort']['state'] );
 	}
 
 	/**

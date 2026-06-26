@@ -317,6 +317,64 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * NPPD-1817: with the capability column present, the numerator and denominator are
+	 * both restricted to paywall-CAPABLE gates (checkout_impressions > 0). A capable
+	 * gate that did NOT convert still enters the (tab-level) denominator; a converting-
+	 * but-not-capable gate is excluded from BOTH sides — keeping the rate on one
+	 * population and reconciling with the per-gate table. The excluded conversion still
+	 * belongs to the inclusive count surfaces.
+	 */
+	public function test_paywall_conversion_direct_restricts_numerator_to_capable_gates() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn(
+			[
+				// Capable + converting.
+				[
+					'gate_post_id'         => 77,
+					'impressions'          => 5000,
+					'checkout_impressions' => 300,
+				],
+				// Capable but did NOT convert — still in the capable denominator.
+				[
+					'gate_post_id'         => 88,
+					'impressions'          => 2000,
+					'checkout_impressions' => 100,
+				],
+				// Converting but NOT paywall-capable (no checkout button) → excluded from both sides.
+				[
+					'gate_post_id'         => 99,
+					'impressions'          => 1500,
+					'checkout_impressions' => 0,
+				],
+			]
+		);
+		$subscribers = $this->createMock( Subscribers_Metric::class );
+		$subscribers->method( 'get_attributed_subscription_conversions' )->willReturn(
+			[
+				'by_gate'  => [
+					'77' => [
+						'conversions' => 30,
+						'revenue'     => 0.0,
+					],
+					'99' => [
+						'conversions' => 20,
+						'revenue'     => 0.0,
+					],
+				],
+				'by_popup' => [],
+			]
+		);
+
+		$metric = $this->make_direct_paywall_metric( $proxy, $subscribers, true );
+		$result = $metric->get_paywall_conversion_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 400, $result['denominator'], 'tab-level capable impressions (300 + 100); non-capable gate 99 excluded' );
+		$this->assertSame( 30, $result['numerator'], 'gate 99\'s 20 conversions are excluded — not paywall-capable' );
+		$this->assertSame( 0.075, $result['value'], '30 / 400' );
+	}
+
+	/**
 	 * No impressions for the converting gate → no denominator → not computable.
 	 */
 	public function test_paywall_conversion_direct_not_computable_without_impressions() {
@@ -917,7 +975,7 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 			]
 		);
 
-		$this->assertSame( 17, $totals['paywall_attempts_total'] );
+		$this->assertSame( 17, $totals['paywall_impressions_total'] );
 		// max( direct 2, influenced 5 ) — don't hide Influenced-only conversions.
 		$this->assertSame( 5, $totals['paywall_conversions_total'] );
 	}
@@ -938,7 +996,7 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 			]
 		);
 
-		$this->assertSame( 17, $totals['paywall_attempts_total'] );
+		$this->assertSame( 17, $totals['paywall_impressions_total'] );
 		$this->assertSame( 0, $totals['paywall_conversions_total'] );
 	}
 
@@ -957,11 +1015,11 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 				'numerator'   => 0,
 			]
 		);
-		$this->assertSame( 0, $zero['paywall_attempts_total'] );
+		$this->assertSame( 0, $zero['paywall_impressions_total'] );
 		$this->assertSame( 0, $zero['paywall_conversions_total'] );
 
 		$missing = Gates_Metric::paywall_section_totals( [], [] );
-		$this->assertSame( 0, $missing['paywall_attempts_total'] );
+		$this->assertSame( 0, $missing['paywall_impressions_total'] );
 		$this->assertSame( 0, $missing['paywall_conversions_total'] );
 	}
 

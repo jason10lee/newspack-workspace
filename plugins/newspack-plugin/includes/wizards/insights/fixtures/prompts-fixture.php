@@ -233,8 +233,8 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 					],
 				],
 			],
-			// Section 7 — Performance breakdown. The locked 15-key schema for
-			// per-prompt rows (Task 3.3): null conversion-rate cells exercise the
+			// Section 7 — Performance breakdown. The locked per-prompt row schema
+			// (Task 3.3; + intent_label NPPD-1758): null conversion-rate cells exercise the
 			// em-dash path for the wrong-intent columns; real 0.0 cells render
 			// as "0.0%".
 			'performance_by_prompt'                      => [
@@ -244,6 +244,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 						'popup_id'                     => 201,
 						'prompt_title'                 => 'Support our newsroom',
 						'intent'                       => 'donation',
+						'intent_label'                 => 'Donation',
 						'placement'                    => 'overlay',
 						'impressions'                  => (int) round( 4200 * $f ),
 						'unique_viewers'               => (int) round( 2500 * $f ),
@@ -261,6 +262,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 						'popup_id'                     => 202,
 						'prompt_title'                 => 'Monthly giving',
 						'intent'                       => 'donation',
+						'intent_label'                 => 'Donation',
 						'placement'                    => 'inline',
 						'impressions'                  => (int) round( 2100 * $f ),
 						'unique_viewers'               => (int) round( 1400 * $f ),
@@ -278,6 +280,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 						'popup_id'                     => 203,
 						'prompt_title'                 => 'Become a member',
 						'intent'                       => 'registration',
+						'intent_label'                 => 'Registration',
 						'placement'                    => 'overlay',
 						'impressions'                  => (int) round( 3100 * $f ),
 						'unique_viewers'               => (int) round( 1900 * $f ),
@@ -295,6 +298,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 						'popup_id'                     => 204,
 						'prompt_title'                 => 'Unlimited access',
 						'intent'                       => 'registration',
+						'intent_label'                 => 'Registration',
 						'placement'                    => 'above-header',
 						'impressions'                  => (int) round( 1850 * $f ),
 						'unique_viewers'               => (int) round( 1200 * $f ),
@@ -312,6 +316,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 						'popup_id'                     => 205,
 						'prompt_title'                 => 'Get the morning brief',
 						'intent'                       => 'newsletters_subscription',
+						'intent_label'                 => 'Newsletter signup',
 						'placement'                    => 'inline',
 						'impressions'                  => (int) round( 1150 * $f ),
 						'unique_viewers'               => (int) round( 820 * $f ),

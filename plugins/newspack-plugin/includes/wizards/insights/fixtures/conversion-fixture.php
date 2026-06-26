@@ -40,8 +40,8 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 	];
 
 	// Phase-B sections — 4.2/4.3/4.4 are 'populated' (implemented; all-history
-	// snapshots, so identical across variants); 5.1/5.2 remain 'coming_soon'.
-	// Each preserves the extra keys React reads unconditionally.
+	// snapshots, so identical across variants); 5.1/5.2 are 'populated' snapshots
+	// (mock curves). Each preserves the extra keys React reads unconditionally.
 	$deferred = static function () {
 		return [
 			// 4.2 — time-to-subscribe (multi-series, per-source cumulative).
@@ -189,16 +189,170 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 				'visibility'        => 'hidden',
 				'visibility_reason' => 'insufficient_data',
 			],
-			// 5.1 — registration-to-conversion cohort (reference_line off; autoscaled).
+			// 5.1 — registration-to-conversion cohort (snapshot; autoscaled, no reference line).
 			'registration_to_conversion_cohort'    => [
-				'state'          => 'coming_soon',
-				'cohorts'        => [],
+				'state'          => 'populated',
+				'cohorts'        => [
+					[
+						'label'  => '2025-07',
+						'points' => [
+							[
+								'period' => 0,
+								'value'  => 0.0,
+							],
+							[
+								'period' => 3,
+								'value'  => 0.008,
+							],
+							[
+								'period' => 6,
+								'value'  => 0.015,
+							],
+							[
+								'period' => 9,
+								'value'  => 0.019,
+							],
+							[
+								'period' => 12,
+								'value'  => 0.022,
+							],
+						],
+					],
+					[
+						'label'  => '2025-10',
+						'points' => [
+							[
+								'period' => 0,
+								'value'  => 0.0,
+							],
+							[
+								'period' => 3,
+								'value'  => 0.010,
+							],
+							[
+								'period' => 6,
+								'value'  => 0.017,
+							],
+							[
+								'period' => 9,
+								'value'  => 0.021,
+							],
+						],
+					],
+					[
+						'label'  => '2026-01',
+						'points' => [
+							[
+								'period' => 0,
+								'value'  => 0.0,
+							],
+							[
+								'period' => 3,
+								'value'  => 0.012,
+							],
+							[
+								'period' => 6,
+								'value'  => 0.018,
+							],
+						],
+					],
+					[
+						'label'  => '2026-04',
+						'points' => [
+							[
+								'period' => 0,
+								'value'  => 0.0,
+							],
+							[
+								'period' => 2,
+								'value'  => 0.009,
+							],
+						],
+					],
+				],
 				'reference_line' => null,
 			],
-			// 5.2 — subscriber retention cohort (reference_line preserved).
+			// 5.2 — subscriber retention cohort (snapshot; 70% reference line).
 			'subscriber_retention_cohort'          => [
-				'state'          => 'coming_soon',
-				'cohorts'        => [],
+				'state'          => 'populated',
+				'cohorts'        => [
+					[
+						'label'  => '2025-07',
+						'points' => [
+							[
+								'period' => 0,
+								'value'  => 1.0,
+							],
+							[
+								'period' => 3,
+								'value'  => 0.88,
+							],
+							[
+								'period' => 6,
+								'value'  => 0.79,
+							],
+							[
+								'period' => 9,
+								'value'  => 0.73,
+							],
+							[
+								'period' => 12,
+								'value'  => 0.69,
+							],
+						],
+					],
+					[
+						'label'  => '2025-10',
+						'points' => [
+							[
+								'period' => 0,
+								'value'  => 1.0,
+							],
+							[
+								'period' => 3,
+								'value'  => 0.90,
+							],
+							[
+								'period' => 6,
+								'value'  => 0.82,
+							],
+							[
+								'period' => 9,
+								'value'  => 0.76,
+							],
+						],
+					],
+					[
+						'label'  => '2026-01',
+						'points' => [
+							[
+								'period' => 0,
+								'value'  => 1.0,
+							],
+							[
+								'period' => 3,
+								'value'  => 0.91,
+							],
+							[
+								'period' => 6,
+								'value'  => 0.84,
+							],
+						],
+					],
+					[
+						'label'  => '2026-04',
+						'points' => [
+							[
+								'period' => 0,
+								'value'  => 1.0,
+							],
+							[
+								'period' => 2,
+								'value'  => 0.94,
+							],
+						],
+					],
+				],
 				'reference_line' => [
 					'value' => 0.70,
 					'label' => __( '70% at 12 months', 'newspack-plugin' ),
@@ -220,6 +374,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 			'computable'       => false,
 			'denominator'      => null,
 			'placeholder_type' => 'rate',
+			'data_missing'     => false,
 			'error_code'       => 'bigquery_proxy_http_error',
 			'error_message'    => 'HTTP 500',
 		];
@@ -229,8 +384,16 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 			[
 				// Section 1.
 				'reader_lifecycle_funnel'          => array_merge( $error, [ 'stages' => [] ] ),
-				// Section 2.
-				'anonymous_to_registered_funnel'   => array_merge( $error, [ 'stages' => [] ] ),
+				// Section 2. Registration leg is always visible (NPPD-1743) — carries
+				// the gated shape live code now stamps via with_leg_visibility().
+				'anonymous_to_registered_funnel'   => array_merge(
+					$error,
+					[
+						'stages'            => [],
+						'visibility'        => 'visible',
+						'visibility_reason' => null,
+					]
+				),
 				// Config-matrix legs (NPPD-1742): configured (visible); the query errored.
 				'registered_to_subscriber_funnel'  => array_merge(
 					$error,
@@ -289,6 +452,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 					'computable'       => true,
 					'denominator'      => null,
 					'placeholder_type' => 'count',
+					'data_missing'     => false,
 				],
 				'at_risk_subscriber_count'         => [
 					'state'            => 'populated',
@@ -296,6 +460,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 					'computable'       => true,
 					'denominator'      => null,
 					'placeholder_type' => 'count',
+					'data_missing'     => false,
 				],
 				'lapsed_donor_count'               => [
 					'state'            => 'populated',
@@ -303,6 +468,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 					'computable'       => true,
 					'denominator'      => null,
 					'placeholder_type' => 'count',
+					'data_missing'     => false,
 				],
 			],
 			$deferred()
@@ -336,6 +502,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 				'computable'       => false,
 				'denominator'      => 'rate' === $type ? 0 : null,
 				'placeholder_type' => $type,
+				'data_missing'     => false,
 			];
 		};
 		$current = array_merge(
@@ -343,8 +510,15 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 			[
 				// Section 1.
 				'reader_lifecycle_funnel'          => $empty_stages,
-				// Section 2.
-				'anonymous_to_registered_funnel'   => $empty_stages,
+				// Section 2. Registration leg always visible (NPPD-1743), no rows →
+				// component renders the funnel-shaped no_opportunity treatment.
+				'anonymous_to_registered_funnel'   => array_merge(
+					$empty_stages,
+					[
+						'visibility'        => 'visible',
+						'visibility_reason' => null,
+					]
+				),
 				// Config-matrix legs (NPPD-1742): configured (visible) but no rows →
 				// the component renders the funnel-shaped no_opportunity treatment.
 				'registered_to_subscriber_funnel'  => array_merge(
@@ -412,6 +586,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 			'computable'       => $computable,
 			'denominator'      => $denominator,
 			'placeholder_type' => $type,
+			'data_missing'     => false,
 		];
 	};
 
@@ -664,10 +839,12 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 					'state'  => 'populated',
 					'stages' => $s1_stages,
 				],
-				// Section 2.
+				// Section 2. Registration leg always visible (NPPD-1743).
 				'anonymous_to_registered_funnel'   => [
-					'state'  => 'populated',
-					'stages' => $a2r_stages,
+					'state'             => 'populated',
+					'stages'            => $a2r_stages,
+					'visibility'        => 'visible',
+					'visibility_reason' => null,
 				],
 				// Config-matrix legs (NPPD-1742): visible in the populated fixture.
 				'registered_to_subscriber_funnel'  => [

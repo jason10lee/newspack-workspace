@@ -1,5 +1,5 @@
 /**
- * PerJourneyConversionFunnelsSection (NPPD-1609, Section 2; empty states NPPD-1742).
+ * PerJourneyConversionFunnelsSection (NPPD-1609, Section 2; empty states NPPD-1742, NPPD-1743).
  *
  * Funnels in a grid: anonymous → registered (2.1), registered → subscriber
  * (2.2), registered → donor (2.3), and the visibility-gated subscriber → donor
@@ -18,9 +18,10 @@
  *     note, `{N}` = the prior-stage base;
  *   - otherwise → the normal funnel.
  *
- * The registration leg (2.1) is intentionally left as-is — its empty-state
- * treatment needs hub-side registration counts and is tracked in NPPD-1743.
- * Section 2.4 keeps its own cohort-size visibility gate, unchanged.
+ * The registration leg (2.1) gets the same funnel-shaped empty states (NPPD-1743),
+ * driven by its own funnel stages (anonymous → saw a conversion surface →
+ * registered); it is always visible (no config gate). Section 2.4 keeps its own
+ * cohort-size visibility gate, unchanged.
  *
  * Body copy here is provisional, mirroring the sibling shape; final wording is
  * owned by the voice-and-tone audit (NPPD-1698).
@@ -34,7 +35,7 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
-import type { ConversionFunnelData, ConversionGatedFunnelData, ConversionWindow } from '../../api/conversion';
+import type { ConversionGatedFunnelData, ConversionWindow } from '../../api/conversion';
 import SectionHeading from '../components/SectionHeading';
 import SectionEmpty from '../components/SectionEmpty';
 import { formatNumber } from '../components/format';
@@ -57,17 +58,6 @@ const JourneyFunnel = ( { title, caption, children }: JourneyFunnelProps ) => (
 		<p className="newspack-insights__conversion-subcaption">{ caption }</p>
 		{ children }
 	</div>
-);
-
-interface StandardFunnelCellProps {
-	data: ConversionFunnelData;
-	emptyMessage: string;
-}
-
-const StandardFunnelCell = ( { data, emptyMessage }: StandardFunnelCellProps ) => (
-	<SectionState state={ data.state } emptyMessage={ emptyMessage }>
-		<Funnel stages={ data.stages } />
-	</SectionState>
 );
 
 interface GatedFunnelCellProps {
@@ -183,10 +173,18 @@ const PerJourneyConversionFunnelsSection = ( { current }: PerJourneyConversionFu
 						'newspack-plugin'
 					) }
 				>
-					<StandardFunnelCell
+					<ConversionLegCell
 						data={ current.anonymous_to_registered_funnel }
 						emptyMessage={ __(
 							'No registration funnel data yet. This will populate once registrations occur in this timeframe.',
+							'newspack-plugin'
+						) }
+						noOpportunityMessage={ __(
+							'No readers entered the registration journey in this timeframe. Try a wider date range.',
+							'newspack-plugin'
+						) }
+						noConversionsBody={ __(
+							'No new registrations in this timeframe. {N} readers saw a registration prompt or gate, but none registered — the funnel below shows where they dropped off.',
 							'newspack-plugin'
 						) }
 					/>

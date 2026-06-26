@@ -366,13 +366,14 @@ class Test_Prompts_REST_Controller extends WP_UnitTestCase {
 		$this->assertSame( 'populated', $current['performance_by_prompt']['state'] );
 		$this->assertNotEmpty( $current['performance_by_prompt']['rows'] );
 
-		// Per-prompt rows honor the locked 15-key schema from Task 3.3.
+		// Per-prompt rows honor the locked row schema (Task 3.3; + intent_label NPPD-1758).
 		$row = $current['performance_by_prompt']['rows'][0];
 		$this->assertSame(
 			[
 				'popup_id',
 				'prompt_title',
 				'intent',
+				'intent_label',
 				'placement',
 				'impressions',
 				'unique_viewers',

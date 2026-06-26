@@ -662,6 +662,56 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * NPPD-1817: the numerator is restricted to donation-CAPABLE popups, so a
+	 * converting-but-not-capable popup (donation_impressions = 0) is excluded from the
+	 * rate — keeping the numerator on the same population as the capable-impressions
+	 * denominator and reconciling with the per-prompt table (which zeroes its row). The
+	 * excluded conversion still belongs to the count/revenue cards, which sum all.
+	 */
+	public function test_donation_conversion_direct_excludes_non_capable_converting_popup() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn(
+			[
+				// Donation-capable + converting.
+				[
+					'popup_id'             => 1,
+					'intent'               => 'donation',
+					'impressions'          => 1000,
+					'donation_impressions' => 300,
+				],
+				// Converting but NOT donation-capable (no donate block) → excluded from the rate.
+				[
+					'popup_id'             => 2,
+					'intent'               => 'undefined',
+					'impressions'          => 800,
+					'donation_impressions' => 0,
+				],
+			]
+		);
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_prompt_attributed_donation_conversions' )->willReturn(
+			[
+				'1' => [
+					'conversions' => 30,
+					'revenue'     => 0.0,
+				],
+				'2' => [
+					'conversions' => 20,
+					'revenue'     => 0.0,
+				],
+			]
+		);
+
+		$metric = $this->make_direct_donation_metric( $proxy, $donors, true );
+		$rate   = $metric->get_donation_conversion_direct( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $rate['state'] );
+		$this->assertSame( 300, $rate['denominator'], 'only the capable popup contributes impressions' );
+		$this->assertSame( 0.1, $rate['value'], '30 capable conversions / 300 (popup 2\'s 20 conversions excluded)' );
+		$this->assertTrue( $rate['computable'] );
+	}
+
+	/**
 	 * No donation impressions → no denominator → not computable (em-dash),
 	 * distinct from the real 0% below.
 	 */
@@ -886,10 +936,11 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Direct subscription rate = popup-attributed conversions ÷ impressions of the
-	 * SAME popups. Popup 9's 500 impressions are excluded because popup 9 had no
-	 * subscription conversions — proving the per-popup keying (denominator 200, not
-	 * 700).
+	 * Forward-compat fallback (NPPD-1759): until the hub ships `checkout_impressions`,
+	 * the direct subscription rate keeps today's per-popup keying — popup-attributed
+	 * conversions ÷ impressions of the SAME popups. Popup 9's 500 impressions are
+	 * excluded because popup 9 had no subscription conversions (denominator 200, not
+	 * 700). These rows carry no `checkout_impressions` key, so the fallback runs.
 	 */
 	public function test_subscription_conversion_direct_rate_per_popup_over_impressions() {
 		$metric = $this->make_direct_subscription_metric(
@@ -904,6 +955,97 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		$this->assertSame( 0.25, $rate['value'] );
 		$this->assertTrue( $rate['computable'] );
 		$this->assertSame( 200, $rate['denominator'], 'denominator is popup 1 only, not the unrelated popup 9' );
+	}
+
+	/**
+	 * NPPD-1759: once the hub exposes `checkout_impressions`, the direct subscription
+	 * rate prefers it — a TAB-LEVEL capability denominator (summed across ALL
+	 * checkout-capable popups), dropping the per-popup keying. Conversions are summed
+	 * across the whole popup surface. Here popup 9 is checkout-capable but did NOT
+	 * convert, yet its 100 capable impressions still enter the denominator (300 total),
+	 * which the old per-popup keying would have excluded — proving the keying is gone.
+	 */
+	public function test_subscription_conversion_direct_prefers_checkout_impressions_column() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn(
+			[
+				// Checkout-CAPABLE and converting (Undefined intent — a "50% off" promo).
+				[
+					'popup_id'             => 1,
+					'intent'               => 'undefined',
+					'impressions'          => 1000,
+					'checkout_impressions' => 200,
+				],
+				// Checkout-capable but did NOT convert — still in the capability denominator.
+				[
+					'popup_id'             => 9,
+					'intent'               => 'registration',
+					'impressions'          => 500,
+					'checkout_impressions' => 100,
+				],
+			]
+		);
+
+		$metric = $this->make_direct_subscription_metric( $proxy, $this->subscribers_with_popup( 50, 0.0 ), true );
+		$rate   = $metric->get_subscription_conversion_direct( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $rate['state'] );
+		$this->assertSame( 300, $rate['denominator'], 'tab-level checkout_impressions sum (200 + 100), not the per-popup-keyed 200' );
+		$this->assertEqualsWithDelta( 0.16667, $rate['value'], 0.0001, '50 conversions / 300 checkout-capable impressions' );
+		$this->assertTrue( $rate['computable'] );
+	}
+
+	/**
+	 * NPPD-1817: the numerator is restricted to checkout-CAPABLE popups, so a
+	 * converting-but-not-capable popup (checkout_impressions = 0) is excluded from the
+	 * rate — keeping the numerator on the same population as the capable-impressions
+	 * denominator and reconciling with the per-prompt table (which zeroes its row). The
+	 * excluded conversion still belongs to the count/revenue cards, which sum all.
+	 */
+	public function test_subscription_conversion_direct_excludes_non_capable_converting_popup() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn(
+			[
+				// Checkout-capable + converting.
+				[
+					'popup_id'             => 1,
+					'intent'               => 'undefined',
+					'impressions'          => 1000,
+					'checkout_impressions' => 300,
+				],
+				// Converting but NOT checkout-capable (no checkout block) → excluded from the rate.
+				[
+					'popup_id'             => 2,
+					'intent'               => 'registration',
+					'impressions'          => 800,
+					'checkout_impressions' => 0,
+				],
+			]
+		);
+		$subscribers = $this->createMock( Subscribers_Metric::class );
+		$subscribers->method( 'get_attributed_subscription_conversions' )->willReturn(
+			[
+				'by_gate'  => [],
+				'by_popup' => [
+					'1' => [
+						'conversions' => 30,
+						'revenue'     => 0.0,
+					],
+					'2' => [
+						'conversions' => 20,
+						'revenue'     => 0.0,
+					],
+				],
+			]
+		);
+
+		$metric = $this->make_direct_subscription_metric( $proxy, $subscribers, true );
+		$rate   = $metric->get_subscription_conversion_direct( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $rate['state'] );
+		$this->assertSame( 300, $rate['denominator'], 'only the capable popup contributes impressions' );
+		$this->assertSame( 0.1, $rate['value'], '30 capable conversions / 300 (popup 2\'s 20 conversions excluded)' );
+		$this->assertTrue( $rate['computable'] );
 	}
 
 	/**
@@ -1509,6 +1651,81 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * NPPD-1759 (capability path): a subscription-CAPABLE prompt (non-zero hub
+	 * `checkout_impressions`) surfaces its subscriptions + a rate over the checkout-
+	 * capable impressions, not total — symmetric with the donation capability column
+	 * and the gates paywall column. Here an Undefined-intent "50% off" promo carries a
+	 * checkout block: 3 / 500 capable impressions, not / 1000 total.
+	 */
+	public function test_performance_by_prompt_subscription_rate_prefers_checkout_impressions() {
+		$row = array_merge(
+			$this->performance_row( 77, '50% off promo', 'undefined', 1000 ),
+			[ 'checkout_impressions' => 500 ] // Checkout-capable despite non-registration intent.
+		);
+		$proxy = $this->make_performance_proxy( [ $row ], [], [] );
+
+		add_filter( 'newspack_insights_woocommerce_active', '__return_true' ); // Removed in tear_down.
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_prompt_attributed_donation_conversions' )->willReturn( [] );
+		$subscribers = $this->createMock( Subscribers_Metric::class );
+		$subscribers->method( 'get_attributed_subscription_conversions' )->willReturn(
+			[
+				'by_gate'  => [],
+				'by_popup' => [
+					'77' => [
+						'conversions' => 3,
+						'revenue'     => 150.0,
+					],
+				],
+			]
+		);
+
+		$metric = new Prompts_Metric( $proxy, null, null, $donors, $subscribers );
+		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
+
+		$this->assertSame( 3, $result['rows'][0]['subscription_conversions'] );
+		$this->assertEqualsWithDelta( 0.006, $result['rows'][0]['subscription_conversion_rate'], 0.0001, '3 / 500 checkout-capable impressions, not / 1000 total' );
+	}
+
+	/**
+	 * NPPD-1759 (capability gate): the subscription column is now CAPABILITY-gated, not
+	 * map-gated. A prompt that converted (is in the subscription map) but is NOT
+	 * checkout-capable (`checkout_impressions` = 0) gets null subscription columns —
+	 * the capability gate overrides map membership. This is the behavior change from
+	 * the interim map-membership gate; a checkout block is what makes the rate apply.
+	 */
+	public function test_performance_by_prompt_subscription_not_capable_when_checkout_impressions_zero() {
+		$row = array_merge(
+			$this->performance_row( 77, 'Registration only', 'registration', 1000 ),
+			[ 'checkout_impressions' => 0 ] // No checkout block → not subscription-capable.
+		);
+		$proxy = $this->make_performance_proxy( [ $row ], [], [] );
+
+		add_filter( 'newspack_insights_woocommerce_active', '__return_true' ); // Removed in tear_down.
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_prompt_attributed_donation_conversions' )->willReturn( [] );
+		$subscribers = $this->createMock( Subscribers_Metric::class );
+		$subscribers->method( 'get_attributed_subscription_conversions' )->willReturn(
+			[
+				'by_gate'  => [],
+				'by_popup' => [
+					// Popup converted, but the capability column (0) gates it out anyway.
+					'77' => [
+						'conversions' => 4,
+						'revenue'     => 0.0,
+					],
+				],
+			]
+		);
+
+		$metric = new Prompts_Metric( $proxy, null, null, $donors, $subscribers );
+		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
+
+		$this->assertSame( 0, $result['rows'][0]['subscription_conversions'], 'capability gate (checkout_impressions 0) overrides map membership' );
+		$this->assertNull( $result['rows'][0]['subscription_conversion_rate'], 'a non-checkout-capable prompt gets an em-dash, not a rate' );
+	}
+
+	/**
 	 * Performance by prompt: locks the canonical row-key contract the React
 	 * layer consumes (`PromptPerformanceRow`). A column rename on either side
 	 * silently blanks the table, so assert the exact set + order.
@@ -1529,6 +1746,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 				'popup_id',
 				'prompt_title',
 				'intent',
+				'intent_label',
 				'placement',
 				'impressions',
 				'unique_viewers',
@@ -1682,12 +1900,31 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 					'form_submission_rate' => 0.1,
 					'dismissal_rate'       => 0.04,
 				],
+				// NPPD-1758: checkout-button prompts emit action_type='checkout'.
+				[
+					'intent'               => 'checkout',
+					'impressions'          => 1500,
+					'unique_viewers'       => 400,
+					'ctr'                  => 0.12,
+					'form_submission_rate' => 0.0,
+					'dismissal_rate'       => 0.05,
+				],
+				// An intent with no friendly override → intent_label is null (the
+				// frontend humanizes the raw value).
+				[
+					'intent'               => 'undefined',
+					'impressions'          => 100,
+					'unique_viewers'       => 50,
+					'ctr'                  => 0.01,
+					'form_submission_rate' => 0.0,
+					'dismissal_rate'       => 0.0,
+				],
 			]
 		);
 		$result = $metric->get_performance_by_intent( $this->start(), $this->end() );
 
 		$this->assertSame( 'populated', $result['state'] );
-		$this->assertCount( 3, $result['rows'] );
+		$this->assertCount( 5, $result['rows'] );
 
 		$this->assertSame( 'donation', $result['rows'][0]['intent'] );
 		$this->assertSame( 'Donation', $result['rows'][0]['intent_label'] );
@@ -1698,6 +1935,14 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 
 		$this->assertSame( 'newsletters_subscription', $result['rows'][2]['intent'] );
 		$this->assertSame( 'Newsletter signup', $result['rows'][2]['intent_label'] );
+
+		// NPPD-1758: 'checkout' → reader-facing 'Subscription'.
+		$this->assertSame( 'checkout', $result['rows'][3]['intent'] );
+		$this->assertSame( 'Subscription', $result['rows'][3]['intent_label'] );
+
+		// Unmapped intent → null label, so the frontend falls back to humanizing.
+		$this->assertSame( 'undefined', $result['rows'][4]['intent'] );
+		$this->assertNull( $result['rows'][4]['intent_label'] );
 	}
 
 	/**

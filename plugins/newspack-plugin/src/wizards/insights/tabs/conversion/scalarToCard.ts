@@ -40,6 +40,9 @@ export const scalarToMetricCardProps = ( props: ScalarCardProps ) => {
 	if ( current.state === 'error' ) {
 		return { label, description, error: current.error_message ?? __( 'Data temporarily unavailable.', 'newspack-plugin' ) };
 	}
+	if ( current.state === 'populated' && current.data_missing ) {
+		return { label, description, dataMissing: true };
+	}
 	return {
 		label,
 		description,

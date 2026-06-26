@@ -32,8 +32,8 @@ export interface ScalarCardProps {
 	previous?: GatesScalarMetric | null;
 	/**
 	 * Count-fallback for a zero card (NPPD-1694). The section builds it because
-	 * it owns the attempt/conversion copy and (for currency cards) the
-	 * section-level attempts count. Forwarded as-is; ignored in the error branch.
+	 * it owns the impressions/conversion copy and (for currency cards) the
+	 * section-level impressions count. Forwarded as-is; ignored in the error branch.
 	 */
 	zeroFallback?: MetricCardZeroFallback;
 }

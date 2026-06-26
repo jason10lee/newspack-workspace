@@ -68,6 +68,8 @@ export interface ConversionErrorFields {
 /**
  * Standard scorecard metric payload (Sections 7 and 8.1–8.3).
  * `state` is 'error' | 'populated' | 'coming_soon' (scalars have no 'empty' state).
+ * `data_missing` flags a non-computable zero caused by a hub row missing required
+ * column(s) (schema drift) so the card can warn instead of showing a misleading zero.
  */
 export interface ConversionScalarMetric extends ConversionErrorFields {
 	state: 'error' | 'populated' | 'coming_soon';
@@ -75,6 +77,7 @@ export interface ConversionScalarMetric extends ConversionErrorFields {
 	computable: boolean;
 	denominator: number | null;
 	placeholder_type: ConversionPlaceholderType;
+	data_missing: boolean;
 }
 
 /* --- Section 1 / 2: funnels ----------------------------------------- */
@@ -210,7 +213,10 @@ export interface ConversionWindow {
 	// Section 1 — The reader lifecycle.
 	reader_lifecycle_funnel: ConversionFunnelData;
 	// Section 2 — Per-journey conversion funnels.
-	anonymous_to_registered_funnel: ConversionFunnelData;
+	// The registration leg is always visible (no config gate), but carries the
+	// same gated shape so it can use the shared empty-state cell (NPPD-1743):
+	// `visibility: 'visible'`, `visibility_reason: null`.
+	anonymous_to_registered_funnel: ConversionGatedFunnelData;
 	// Subscription / donation legs carry the config-matrix visibility gate
 	// (NPPD-1742): `visibility: 'hidden'` + reason `'not_configured'` when the
 	// publisher doesn't run that reader-revenue stream.

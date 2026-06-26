@@ -78,6 +78,11 @@ final class Prompts_Metric {
 		'donation'                 => 'Donation',
 		'registration'             => 'Registration',
 		'newsletters_subscription' => 'Newsletter signup',
+		// NPPD-1758: checkout-button prompts emit `action_type = 'checkout'` (NPPD-1755).
+		// Reader-facing framing 'Subscription' (Katie's call), consistent with the tab's
+		// Subscription Conversion Rate card. Unmapped intents fall back to a frontend
+		// humanizer, so this map only needs the friendly overrides.
+		'checkout'                 => 'Subscription',
 	];
 
 	/**
@@ -831,10 +836,26 @@ final class Prompts_Metric {
 			return $this->error_scalar( 'rate', $impressions );
 		}
 
+		// NPPD-1817: restrict the numerator to donation-CAPABLE popups (per-popup
+		// `donation_impressions` > 0) so it shares the capable-impressions denominator's
+		// population and reconciles with the per-prompt table, which credits a donation
+		// conversion only to a capable row. A converting-but-not-capable popup is excluded
+		// here; its conversion still counts in the count + revenue cards. When the hub
+		// hasn't shipped `donation_impressions`, the map is null and we keep counting all
+		// attributed conversions, pairing with the intent-sum fallback denominator.
+		$capability_impressions = $this->fetch_capability_impressions_by_popup( 'donation_impressions', $start, $end );
+		if ( is_wp_error( $capability_impressions ) ) {
+			return $this->error_scalar( 'rate', $capability_impressions );
+		}
+		// `null` (column absent) → count all attributed conversions (pre-column behavior,
+		// paired with the intent-sum fallback denominator); an array → restrict to donation-
+		// capable popups.
 		$by_popup    = $this->donors_metric()->get_prompt_attributed_donation_conversions( $start, $end );
 		$conversions = 0;
-		foreach ( $by_popup as $row ) {
-			$conversions += (int) $row['conversions'];
+		foreach ( $by_popup as $popup_id => $row ) {
+			if ( ! is_array( $capability_impressions ) || (int) ( $capability_impressions[ (string) $popup_id ] ?? 0 ) > 0 ) {
+				$conversions += (int) $row['conversions'];
+			}
 		}
 
 		// Shared coherence guard + em-dash semantics (also drives the per-prompt
@@ -935,6 +956,101 @@ final class Prompts_Metric {
 	}
 
 	/**
+	 * Total subscription-capable (checkout) prompt impressions in the window, summed
+	 * from the hub's `prompts_performance_by_prompt` per-popup `checkout_impressions`
+	 * column (NPPD-1759) — seen events on prompts carrying a checkout-button block.
+	 * The subscription analog of {@see self::fetch_donation_prompt_impressions()},
+	 * anonymous-inclusive, so reusing it as the conversion-rate denominator does not
+	 * reintroduce the anonymous-at-attempt bias the order-meta numerator escapes.
+	 *
+	 * Returns `null` (not 0) when the hub hasn't shipped the column yet, so the caller
+	 * falls back to today's per-popup-keyed denominator. (The donation sibling has no
+	 * such tri-state because its fallback is an inline intent sum; subscription's
+	 * fallback is a different per-popup-keyed computation, so it's signalled here.)
+	 *
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
+	 * @return int|null|\WP_Error Total checkout-capable impressions, null if the hub
+	 *                            column is absent, or the proxy error.
+	 */
+	private function fetch_subscription_prompt_impressions( DateTimeInterface $start, DateTimeInterface $end ) {
+		$rows = $this->fetch_performance_by_prompt_rows( $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $rows;
+		}
+		if ( ! is_array( $rows ) ) {
+			// Malformed hub response (not an array of rows): surface it so the rate
+			// errors instead of silently dividing by a fabricated 0 denominator
+			// (mirrors fetch_donation_prompt_impressions, NPPD-1745 #3).
+			return new \WP_Error( 'bigquery_proxy_malformed_rows', __( 'The query returned an unexpected shape.', 'newspack-plugin' ) );
+		}
+		$has_column  = false;
+		$impressions = 0;
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			if ( isset( $row['checkout_impressions'] ) ) {
+				// NPPD-1759: per-popup checkout-CAPABLE impressions — seen events where the
+				// prompt carried a checkout-button block (`prompt_has_checkout`) — summed
+				// across all popups. The population matched to the order-meta subscription
+				// numerator, and it catches a multi-block prompt whose primary intent
+				// collapsed to 'undefined'.
+				$has_column   = true;
+				$impressions += (int) $row['checkout_impressions'];
+			}
+		}
+		return $has_column ? $impressions : null;
+	}
+
+	/**
+	 * Per-popup capability-impressions map for a capability column
+	 * (`donation_impressions` / `checkout_impressions`) on the hub's
+	 * `prompts_performance_by_prompt` rows, keyed by popup id (string).
+	 *
+	 * Used to capability-RESTRICT the Direct conversion-rate numerators (NPPD-1817):
+	 * a popup is capability-capable when its column value is > 0, so the rate's
+	 * numerator (conversions) describes the same population as its capable-impressions
+	 * denominator — and reconciles with the per-prompt table, which already credits a
+	 * conversion only to a capable row. Without this, a converting-but-not-capable
+	 * popup inflates the scalar numerator over a denominator that excludes its
+	 * impressions (the NPPD-1746 scalar/table divergence class).
+	 *
+	 * Returns `null` when NO row carries the column (the hub hasn't shipped it yet), so
+	 * the caller keeps its pre-column numerator behavior. The map includes every row
+	 * that carries the column; the capable subset is the entries with value > 0.
+	 *
+	 * @param string            $column Capability column name.
+	 * @param DateTimeInterface $start  Window start.
+	 * @param DateTimeInterface $end    Window end.
+	 * @return array<string, int>|null|\WP_Error Map, null if the column is absent, or the proxy error.
+	 */
+	private function fetch_capability_impressions_by_popup( string $column, DateTimeInterface $start, DateTimeInterface $end ) {
+		$rows = $this->fetch_performance_by_prompt_rows( $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $rows;
+		}
+		if ( ! is_array( $rows ) ) {
+			return new \WP_Error( 'bigquery_proxy_malformed_rows', __( 'The query returned an unexpected shape.', 'newspack-plugin' ) );
+		}
+		$map = null;
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) || ! isset( $row[ $column ] ) ) {
+				continue;
+			}
+			if ( null === $map ) {
+				$map = [];
+			}
+			$popup_id = (string) ( $row['popup_id'] ?? '' );
+			if ( '' === $popup_id ) {
+				continue;
+			}
+			$map[ $popup_id ] = (int) $row[ $column ];
+		}
+		return $map;
+	}
+
+	/**
 	 * Per-popup impressions map from the hub's `prompts_performance_by_prompt` rows
 	 * (NPPD-1746), keyed by popup id (string). Used as the per-popup-keyed
 	 * denominator source for the direct subscription rate: subscription-intent
@@ -1023,14 +1139,18 @@ final class Prompts_Metric {
 	 * @return array
 	 */
 	public function get_subscription_conversion_direct( DateTimeInterface $start, DateTimeInterface $end ): array {
-		// NPPD-1746: rate = popup-attributed subscription conversions (Woo order meta,
-		// anonymous-inclusive) ÷ impressions of the SAME popups (hub,
-		// `prompts_performance_by_prompt`). PER-POPUP keyed, not tab-level:
-		// subscription-intent popups share `action_type=registration` with pure
-		// registration popups, so a tab-level denominator would mix in registration-
-		// only impressions and break numerator/denominator population matching (the
-		// spike's >100% incoherence class). Restricting the denominator to the popups
-		// that actually converted keeps both sides describing the same population.
+		// NPPD-1759: rate = popup-attributed subscription conversions (Woo order meta,
+		// anonymous-inclusive) ÷ checkout-CAPABLE prompt impressions (hub
+		// `checkout_impressions` = seen events on prompts carrying a checkout-button
+		// block). This is the subscription analog of the donation rate-direct and the
+		// gates paywall rate: a tab-level capability denominator, NOT per-popup keyed.
+		// The per-popup keying was the NPPD-1746 interim workaround — without a
+		// checkout-capability signal, subscription-intent popups shared
+		// `action_type=registration` with pure registration popups, so the denominator
+		// had to be restricted to the converting popups to keep both sides describing
+		// the same population. The capability column makes that unnecessary: it already
+		// isolates the checkout-capable impression subset. Forward-compatible — prefer
+		// the column, fall back to today's per-popup keying until the hub ships it.
 		// Numerator local, denominator hub → 'hybrid' (see METRIC_SOURCES): a hub
 		// impressions failure makes the rate genuinely uncomputable and counts toward
 		// the tab-error banner. Same coherence guard as the donation rate-direct.
@@ -1040,17 +1160,45 @@ final class Prompts_Metric {
 			return $this->populated_scalar( 0.0, false, 0, 'rate' );
 		}
 
-		$impressions_by_popup = $this->fetch_prompt_impressions_by_popup( $start, $end );
-		if ( is_wp_error( $impressions_by_popup ) ) {
-			return $this->error_scalar( 'rate', $impressions_by_popup );
+		$by_popup             = $this->subscribers_metric()->get_attributed_subscription_conversions( $start, $end )['by_popup'];
+		$checkout_impressions = $this->fetch_subscription_prompt_impressions( $start, $end );
+		if ( is_wp_error( $checkout_impressions ) ) {
+			return $this->error_scalar( 'rate', $checkout_impressions );
 		}
 
-		$by_popup    = $this->subscribers_metric()->get_attributed_subscription_conversions( $start, $end )['by_popup'];
-		$conversions = 0;
-		$impressions = 0;
-		foreach ( $by_popup as $popup_id => $row ) {
-			$conversions += (int) $row['conversions'];
-			$impressions += (int) ( $impressions_by_popup[ (string) $popup_id ] ?? 0 );
+		if ( null !== $checkout_impressions ) {
+			// Capability denominator (preferred): checkout-capable conversions ÷ total
+			// checkout-capable impressions. NPPD-1817: the numerator is restricted to
+			// checkout-CAPABLE popups (per-popup `checkout_impressions` > 0) so it shares
+			// the denominator's population and reconciles with the per-prompt table, which
+			// credits a subscription conversion only to a capable row. A converting-but-
+			// not-capable popup is excluded here; its conversion still counts in the
+			// count + revenue cards (those sum all attributed conversions).
+			$capability_impressions = $this->fetch_capability_impressions_by_popup( 'checkout_impressions', $start, $end );
+			if ( is_wp_error( $capability_impressions ) ) {
+				return $this->error_scalar( 'rate', $capability_impressions );
+			}
+			$conversions = 0;
+			foreach ( $by_popup as $popup_id => $row ) {
+				if ( ! is_array( $capability_impressions ) || (int) ( $capability_impressions[ (string) $popup_id ] ?? 0 ) > 0 ) {
+					$conversions += (int) $row['conversions'];
+				}
+			}
+			$impressions = $checkout_impressions;
+		} else {
+			// Forward-compat fallback (hub hasn't shipped `checkout_impressions` yet):
+			// today's per-popup-keyed denominator — restrict to the impressions of the
+			// popups that actually converted (NPPD-1746 interim).
+			$impressions_by_popup = $this->fetch_prompt_impressions_by_popup( $start, $end );
+			if ( is_wp_error( $impressions_by_popup ) ) {
+				return $this->error_scalar( 'rate', $impressions_by_popup );
+			}
+			$conversions = 0;
+			$impressions = 0;
+			foreach ( $by_popup as $popup_id => $row ) {
+				$conversions += (int) $row['conversions'];
+				$impressions += (int) ( $impressions_by_popup[ (string) $popup_id ] ?? 0 );
+			}
 		}
 
 		$rate = $this->rate_value( $conversions, $impressions );
@@ -1386,13 +1534,21 @@ final class Prompts_Metric {
 			$intent      = (string) ( $row['intent'] ?? '' );
 			$impressions = (int) ( $row['impressions'] ?? 0 );
 
-			// Subscription conversions are sourced per-popup from order meta (NPPD-1746),
-			// keyed by popup id, anonymous-inclusive — NOT gated on the popup's declared
-			// intent (the order carries the popup id regardless of `action_type`, so an
-			// "Undefined"-intent "50% off" promo can still drive a subscription). Until a
-			// checkout-capability signal exists (NPPD-1755/1756), the rate below is gated on
-			// map membership (a converting popup) as the interim.
-			$subscription_conversions = (int) ( $subscription_map[ $popup_id ]['conversions'] ?? 0 );
+			// Subscription is CAPABILITY-gated (NPPD-1759), symmetric with the donation
+			// column below and the gates paywall column: a prompt is subscription-capable
+			// when its per-popup `checkout_impressions` (seen events carrying a checkout-
+			// button block, NPPD-1755 emission / NPPD-1759 hub column) is non-zero. This
+			// catches an "Undefined"-intent
+			// "50% off" promo that drives subscriptions — the order carries the popup id
+			// regardless of `action_type`, which collapses to 'undefined' for a multi-block
+			// prompt. Until the hub exposes the column, fall back to today's behavior — map
+			// membership (a popup that actually converted). The rate denominator is those
+			// checkout-capable impressions, else total impressions.
+			$checkout_impressions     = (int) ( $row['checkout_impressions'] ?? $impressions );
+			$subscription_capable     = isset( $row['checkout_impressions'] )
+				? $checkout_impressions > 0
+				: isset( $subscription_map[ $popup_id ] );
+			$subscription_conversions = $subscription_capable ? (int) ( $subscription_map[ $popup_id ]['conversions'] ?? 0 ) : 0;
 
 			// Donation is CAPABILITY-gated: a prompt is donation-capable when its per-popup
 			// `donation_impressions` (seen events carrying a donate block) is non-zero — or,
@@ -1414,6 +1570,10 @@ final class Prompts_Metric {
 				'popup_id'                     => $popup_id,
 				'prompt_title'                 => (string) ( $row['prompt_title'] ?? '' ),
 				'intent'                       => $intent,
+				// Friendly display label (NPPD-1758), single source of truth shared with
+				// the per-intent table. Null when the intent has no friendly override, so
+				// the frontend falls back to its humanizer (preserving title-casing).
+				'intent_label'                 => self::INTENT_LABELS[ $intent ] ?? null,
 				'placement'                    => (string) ( $row['placement'] ?? '' ),
 				'impressions'                  => $impressions,
 				'unique_viewers'               => (int) ( $row['unique_viewers'] ?? 0 ),
@@ -1425,7 +1585,7 @@ final class Prompts_Metric {
 				'donation_conversions'         => $donation_conversions,
 				'donation_conversion_rate'     => ( $wc && $donation_capable ) ? $this->rate_value( $donation_conversions, $donation_impressions ) : null,
 				'subscription_conversions'     => $subscription_conversions,
-				'subscription_conversion_rate' => ( $wc && isset( $subscription_map[ $popup_id ] ) ) ? $this->rate_value( $subscription_conversions, $impressions ) : null,
+				'subscription_conversion_rate' => ( $wc && $subscription_capable ) ? $this->rate_value( $subscription_conversions, $checkout_impressions ) : null,
 			];
 		}
 
@@ -1438,9 +1598,10 @@ final class Prompts_Metric {
 	/**
 	 * Per-intent breakdown (donation / registration / newsletter signup).
 	 *
-	 * Pure BQ → row mapping; no Woo or WP enrichment. Intent labels come from
-	 * {@see self::INTENT_LABELS}; an unknown `intent` value falls back to its
-	 * raw form so a hub-side catalog change isn't silently swallowed.
+	 * Pure BQ → row mapping; no Woo or WP enrichment. Friendly labels come from
+	 * {@see self::INTENT_LABELS} as `intent_label`; an unknown `intent` yields a
+	 * null label (the raw `intent` is still returned alongside it, so a hub-side
+	 * catalog change isn't silently swallowed — the frontend humanizes it).
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
@@ -1470,7 +1631,9 @@ final class Prompts_Metric {
 			$intent   = (string) ( $row['intent'] ?? '' );
 			$mapped[] = [
 				'intent'               => $intent,
-				'intent_label'         => self::INTENT_LABELS[ $intent ] ?? $intent,
+				// Null when no friendly override exists, so the frontend humanizer fills
+				// in (preserving title-casing); mapped intents use the label (NPPD-1758).
+				'intent_label'         => self::INTENT_LABELS[ $intent ] ?? null,
 				'impressions'          => (int) ( $row['impressions'] ?? 0 ),
 				'unique_viewers'       => (int) ( $row['unique_viewers'] ?? 0 ),
 				'ctr'                  => isset( $row['ctr'] ) && null !== $row['ctr'] ? (float) $row['ctr'] : null,
