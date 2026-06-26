@@ -273,106 +273,114 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Wired paid-conversion RATE methods: dispatch the query, Woo-join, and
-	 * return `conversions / attempts` as a `placeholder_type: 'rate'` envelope.
+	 * Build a Prompts_Metric for the paid (donation/subscription) INFLUENCED rate cards:
+	 * injected proxy (hub influenced rows) + resolver (Woo match) + the converter-spine
+	 * collaborator(s), with a forced `woocommerce_active()` (filter removed in tear_down).
 	 *
-	 * @dataProvider provide_paid_conversion_rate_methods
-	 * @param string $method     Method on Prompts_Metric to call.
-	 * @param string $query_name Catalog name the orchestrator must dispatch.
+	 * @param BigQuery_Proxy_Client   $proxy       Hub influenced-rows proxy.
+	 * @param Woo_Order_Resolver      $resolver    Woo match resolver.
+	 * @param Donors_Metric|null      $donors      Donor converter spine (donation rate).
+	 * @param Subscribers_Metric|null $subscribers Subscriber converter spine (subscription rate).
+	 * @param bool                    $wc          What woocommerce_active() should return.
+	 * @return Prompts_Metric
 	 */
-	public function test_paid_conversion_rate_returns_populated_on_success( string $method, string $query_name ) {
-		$rows  = $this->paid_attempt_rows();
+	private function make_influenced_paid_metric( BigQuery_Proxy_Client $proxy, Woo_Order_Resolver $resolver, ?Donors_Metric $donors, ?Subscribers_Metric $subscribers, bool $wc ): Prompts_Metric {
+		add_filter( 'newspack_insights_woocommerce_active', $wc ? '__return_true' : '__return_false' );
+		return new Prompts_Metric( $proxy, $resolver, null, $donors, $subscribers );
+	}
+
+	/**
+	 * NPPD-1822: donation influenced rate = distinct prompt-influenced donors (hub rows,
+	 * Woo-matched) ÷ ALL new donors in the window — converter-denominated, not attempts.
+	 */
+	public function test_donation_conversion_influenced_converter_denominated() {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		$proxy->expects( $this->once() )
-			->method( 'query' )
-			->with( $query_name, $this->isInstanceOf( DateTimeImmutable::class ), $this->isInstanceOf( DateTimeImmutable::class ) )
-			->willReturn( $rows );
-
+		$proxy->method( 'query' )->willReturn( $this->paid_attempt_rows() );
 		$resolver = $this->createMock( Woo_Order_Resolver::class );
-		$resolver->method( 'count_completed_orders' )->willReturn( 1 ); // 1 of 2 attempts converted.
-		$resolver->method( 'sum_completed_revenue' )->willReturn( 25.0 );
+		$resolver->method( 'count_unique_completed_users' )->willReturn( 3 );
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_new_donors_in_window' )->willReturn( 12 );
 
-		$metric = new Prompts_Metric( $proxy, $resolver );
-		$result = $metric->$method( $this->start(), $this->end() );
+		$metric = $this->make_influenced_paid_metric( $proxy, $resolver, $donors, null, true );
+		$result = $metric->get_donation_conversion_influenced_14d( $this->start(), $this->end() );
 
 		$this->assertSame( 'populated', $result['state'] );
-		$this->assertSame( 0.5, $result['value'] );
 		$this->assertTrue( $result['computable'] );
-		$this->assertSame( 2, $result['denominator'] );
+		$this->assertSame( 12, $result['denominator'] );
+		$this->assertEqualsWithDelta( 0.25, $result['value'], 0.0001 );
 		$this->assertSame( 'rate', $result['placeholder_type'] );
 	}
 
 	/**
-	 * Wired paid-conversion RATE methods: proxy WP_Error → state 'error'.
-	 *
-	 * @dataProvider provide_paid_conversion_rate_methods
-	 * @param string $method     Method on Prompts_Metric to call.
-	 * @param string $query_name Catalog name the orchestrator must dispatch.
+	 * NPPD-1822: subscription influenced rate = distinct prompt-influenced subscribers ÷
+	 * ALL new subscribers in the window.
 	 */
-	public function test_paid_conversion_rate_returns_error_state_on_proxy_error( string $method, string $query_name ) {
+	public function test_subscription_conversion_influenced_converter_denominated() {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		$proxy->expects( $this->once() )
-			->method( 'query' )
-			->with( $query_name, $this->isInstanceOf( DateTimeImmutable::class ), $this->isInstanceOf( DateTimeImmutable::class ) )
-			->willReturn( new \WP_Error( 'bigquery_proxy_http_error', 'HTTP 500' ) );
-
-		$metric = new Prompts_Metric( $proxy, $this->createMock( Woo_Order_Resolver::class ) );
-		$result = $metric->$method( $this->start(), $this->end() );
-
-		$this->assertSame( 'error', $result['state'] );
-		$this->assertFalse( $result['computable'] );
-		$this->assertSame( 'rate', $result['placeholder_type'] );
-		$this->assertSame( 'bigquery_proxy_http_error', $result['error_code'] );
-		$this->assertSame( 'HTTP 500', $result['error_message'] );
-		$this->assertSame( 0, $result['value'] );
-	}
-
-	/**
-	 * Wired paid-conversion RATE methods: empty BQ response → non-computable
-	 * 0.0 with denominator 0 (a real "no attempts in window", not an error).
-	 *
-	 * @dataProvider provide_paid_conversion_rate_methods
-	 * @param string $method     Method on Prompts_Metric to call.
-	 * @param string $query_name Catalog name the orchestrator must dispatch.
-	 */
-	public function test_paid_conversion_rate_returns_noncomputable_zero_on_empty( string $method, string $query_name ) {
-		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		$proxy->expects( $this->once() )
-			->method( 'query' )
-			->with( $query_name, $this->isInstanceOf( DateTimeImmutable::class ), $this->isInstanceOf( DateTimeImmutable::class ) )
-			->willReturn( [] );
-
+		$proxy->method( 'query' )->willReturn( $this->paid_attempt_rows() );
 		$resolver = $this->createMock( Woo_Order_Resolver::class );
-		$resolver->method( 'count_completed_orders' )->willReturn( 0 );
-		$resolver->method( 'sum_completed_revenue' )->willReturn( 0.0 );
+		$resolver->method( 'count_unique_completed_users' )->willReturn( 4 );
+		$subscribers = $this->createMock( Subscribers_Metric::class );
+		$subscribers->method( 'get_new_subscribers_in_window' )->willReturn( 16 );
 
-		$metric = new Prompts_Metric( $proxy, $resolver );
-		$result = $metric->$method( $this->start(), $this->end() );
+		$metric = $this->make_influenced_paid_metric( $proxy, $resolver, null, $subscribers, true );
+		$result = $metric->get_subscription_conversion_influenced_14d( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertTrue( $result['computable'] );
+		$this->assertSame( 16, $result['denominator'] );
+		$this->assertEqualsWithDelta( 0.25, $result['value'], 0.0001 );
+		$this->assertSame( 'rate', $result['placeholder_type'] );
+	}
+
+	/**
+	 * NPPD-1822: a non-WC publisher gets the empty state (no local converter denominator),
+	 * and the hub influenced query is never dispatched.
+	 */
+	public function test_paid_influenced_rate_empty_state_when_not_woocommerce() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->never() )->method( 'query' );
+
+		$metric = $this->make_influenced_paid_metric( $proxy, $this->createMock( Woo_Order_Resolver::class ), null, null, false );
+		$result = $metric->get_subscription_conversion_influenced_14d( $this->start(), $this->end() );
 
 		$this->assertSame( 'populated', $result['state'] );
 		$this->assertFalse( $result['computable'] );
 		$this->assertSame( 0, $result['denominator'] );
-		$this->assertSame( 'rate', $result['placeholder_type'] );
-		$this->assertSame( 0.0, $result['value'] );
 	}
 
 	/**
-	 * Data provider for the proxy-backed paid-conversion rate methods.
-	 *
-	 * NPPD-1745/1746: `get_donation_conversion_direct` AND
-	 * `get_subscription_conversion_direct` are intentionally absent — neither
-	 * dispatches a paid-attempt proxy query any more. Both are hybrid order-meta
-	 * conversions ÷ hub impressions (see test_donation_conversion_direct_* and
-	 * test_subscription_conversion_direct_*). Only the influenced pair is still
-	 * proxy-backed.
-	 *
-	 * @return array
+	 * Proxy WP_Error → state 'error' (WC active, so it reaches the hub).
 	 */
-	public function provide_paid_conversion_rate_methods(): array {
-		return [
-			'donation_influenced'     => [ 'get_donation_conversion_influenced_14d', 'prompts_donation_conversion_influenced_14d' ],
-			'subscription_influenced' => [ 'get_subscription_conversion_influenced_14d', 'prompts_subscription_conversion_influenced_14d' ],
-		];
+	public function test_paid_influenced_rate_errors_on_proxy_error() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( new \WP_Error( 'bigquery_proxy_http_error', 'HTTP 500' ) );
+
+		$metric = $this->make_influenced_paid_metric( $proxy, $this->createMock( Woo_Order_Resolver::class ), $this->createMock( Donors_Metric::class ), null, true );
+		$result = $metric->get_donation_conversion_influenced_14d( $this->start(), $this->end() );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_http_error', $result['error_code'] );
+	}
+
+	/**
+	 * Coherence guard: a GA4-matched numerator exceeding the converter denominator
+	 * suppresses to a non-computable em-dash rather than rendering >100% (NPPD-1822).
+	 */
+	public function test_paid_influenced_rate_coherence_guard_suppresses_over_100() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( $this->paid_attempt_rows() );
+		$resolver = $this->createMock( Woo_Order_Resolver::class );
+		$resolver->method( 'count_unique_completed_users' )->willReturn( 5 );
+		$subscribers = $this->createMock( Subscribers_Metric::class );
+		$subscribers->method( 'get_new_subscribers_in_window' )->willReturn( 2 );
+
+		$metric = $this->make_influenced_paid_metric( $proxy, $resolver, null, $subscribers, true );
+		$result = $metric->get_subscription_conversion_influenced_14d( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertFalse( $result['computable'] );
+		$this->assertSame( 2, $result['denominator'] );
 	}
 
 	// --- Section 5: Revenue from prompts --------------------------------
@@ -1174,11 +1182,18 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 			->willReturn( $rows );
 
 		$resolver = $this->createMock( Woo_Order_Resolver::class );
-		$resolver->method( 'count_completed_orders' )->willReturn( 1 );
-		$resolver->method( 'sum_completed_revenue' )->willReturn( 25.0 );
+		$resolver->method( 'count_unique_completed_users' )->willReturn( 1 );
 
-		$metric = new Prompts_Metric( $proxy, $resolver );
-		// NPPD-1745/1746: the direct donation AND subscription rates no longer dispatch
+		// NPPD-1822: the influenced rates are now WC-gated + converter-denominated, so
+		// force WC active (filter removed in tear_down) and inject converter spines.
+		add_filter( 'newspack_insights_woocommerce_active', '__return_true' );
+		$donors = $this->createMock( Donors_Metric::class );
+		$donors->method( 'get_new_donors_in_window' )->willReturn( 10 );
+		$subscribers = $this->createMock( Subscribers_Metric::class );
+		$subscribers->method( 'get_new_subscribers_in_window' )->willReturn( 10 );
+
+		$metric = new Prompts_Metric( $proxy, $resolver, null, $donors, $subscribers );
+		// NPPD-1745/1746/1822: the direct donation AND subscription rates no longer dispatch
 		// a paid-attempt query (both are hybrid order-meta ÷ impressions). Use two
 		// still-proxy-backed influenced intents with distinct query_names to exercise
 		// per-query_name cache keying.

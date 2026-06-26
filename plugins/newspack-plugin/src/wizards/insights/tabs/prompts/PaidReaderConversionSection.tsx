@@ -55,7 +55,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Donation Conversion (Influenced, 14d)', 'newspack-plugin' ),
 					description: __(
-						'Readers who completed a donation in a later session within 14 days of seeing a donation-intent prompt ÷ readers who saw a donation-intent prompt',
+						'Donors whose conversion followed a donation-prompt exposure in a prior session within 14 days ÷ all new donors',
 						'newspack-plugin'
 					),
 					current: current.donation_conversion_influenced_14d,
@@ -84,7 +84,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Subscription Conversion (Influenced, 14d)', 'newspack-plugin' ),
 					description: __(
-						'Readers who completed a subscription in a later session within 14 days of seeing a subscription-intent prompt ÷ readers who saw a subscription-intent prompt',
+						'Subscribers whose conversion followed a subscription-prompt exposure in a prior session within 14 days ÷ all new subscribers',
 						'newspack-plugin'
 					),
 					current: current.subscription_conversion_influenced_14d,
