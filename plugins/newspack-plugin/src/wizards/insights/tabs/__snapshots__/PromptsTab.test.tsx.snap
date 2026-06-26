@@ -695,7 +695,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Readers who completed a donation in a later session within 14 days of seeing a donation-intent prompt ÷ readers who saw a donation-intent prompt
+                Donors whose conversion followed a donation-prompt exposure in a prior session within 14 days ÷ all new donors
               </div>
             </div>
           </div>
@@ -785,7 +785,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Readers who completed a subscription in a later session within 14 days of seeing a subscription-intent prompt ÷ readers who saw a subscription-intent prompt
+                Subscribers whose conversion followed a subscription-prompt exposure in a prior session within 14 days ÷ all new subscribers
               </div>
             </div>
           </div>
