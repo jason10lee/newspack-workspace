@@ -66,15 +66,27 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 	const POST_GAP = '24px';
 
 	/**
+	 * Top/bottom padding wrapped around each block of the flat ("image on top", or
+	 * no featured image) layout. There the inserted children are the individual
+	 * heading/paragraph/image blocks, which the package stacks flush; the editor
+	 * canvas gives every such block a 6px top/bottom padding, so match it here so
+	 * the email and the editor read the same.
+	 */
+	const FLAT_BLOCK_PAD = '6px';
+
+	/**
 	 * Restyle the rendered post items to match the MJML newsletter look.
 	 *
 	 * Two adjustments, since the posts-inserter has no post-editor equivalent and
 	 * matches MJML:
 	 * 1. Post title / "continue reading" links: the package renders them with no
 	 *    colour (→ the client's default blue) and `text-decoration: none`. Set
-	 *    them black + underlined. Anchors are bare at this stage; the CSS inliner
-	 *    adds its styles downstream but preserves existing inline styles, so this
-	 *    wins. Image-wrapping anchors are skipped via the lookahead.
+	 *    them underlined and inheriting their element's colour, so they read black
+	 *    by default but follow the block's own heading/text colour when one is set
+	 *    (forcing `#000000` clobbered the title's colour). Anchors are bare at this
+	 *    stage; the CSS inliner adds its styles downstream but preserves existing
+	 *    inline styles, so this wins. Image-wrapping anchors are skipped via the
+	 *    lookahead.
 	 * 2. Block spacing: collapse the package's uniform 16px gap to META_GAP.
 	 * 3. Root padding: each child renders as a top-level block and so gets the
 	 *    email's 24px root padding again — on top of the posts-inserter block's
@@ -87,7 +99,7 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 	private static function apply_email_styles( string $html ): string {
 		$html = (string) preg_replace(
 			'/<a\b([^>]*)>(?!\s*<img)/i',
-			'<a$1 style="text-decoration: underline; color: #000000;">',
+			'<a$1 style="text-decoration: underline; color: inherit;">',
 			$html
 		);
 		$html = (string) preg_replace( '/margin-top:\s*16px/i', 'margin-top: ' . self::META_GAP, $html );
@@ -124,17 +136,47 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 				++$index;
 				continue;
 			}
-			// Separate consecutive post items: give every item after the first a top
-			// margin (the package renders the concatenated children with no gap).
-			if ( $index > 0 ) {
-				$child['attrs']['style']['spacing']['margin']['top'] = self::POST_GAP;
+			if ( 'core/columns' === $child['blockName'] ) {
+				// Side-by-side layout (image left/right): each child is a whole post
+				// wrapped in a columns block. Separate consecutive posts with a top
+				// margin (the package concatenates them with no gap).
+				if ( $index > 0 ) {
+					$child['attrs']['style']['spacing']['margin']['top'] = self::POST_GAP;
+				}
+				// Wrap the child back into its delimiter so the outer block is
+				// email-rendered (its render_email_callback fires).
+				$html .= do_blocks( self::serialize_inserted_block( $child ) );
+			} else {
+				// Flat layout (image on top, or no featured image): each child is an
+				// individual heading/paragraph/image block. The package stacks these
+				// flush and ignores their margin/padding attrs, so wrap each rendered
+				// block in a padded cell — matching the editor canvas's per-block
+				// 6px top/bottom padding so the email and the editor read the same.
+				$html .= self::wrap_flat_block( do_blocks( self::serialize_inserted_block( $child ) ) );
 			}
-			// Wrap the child back into its delimiter so the outer block is
-			// email-rendered (its render_email_callback fires).
-			$html .= do_blocks( self::serialize_inserted_block( $child ) );
 			++$index;
 		}
 		return $html;
+	}
+
+	/**
+	 * Wrap a rendered flat-layout block in a table cell with top/bottom padding.
+	 *
+	 * The flat ("image on top" / no featured image) layout renders each post block
+	 * as a standalone top-level block; the package stacks them flush and ignores
+	 * their spacing attrs, so an email-safe padded `<td>` re-creates the editor
+	 * canvas's per-block 6px top/bottom padding (kept symmetric on every block so
+	 * the gap between any two is 12px, matching the canvas).
+	 *
+	 * @param string $block_html Rendered email HTML for a single block.
+	 * @return string The block wrapped in a padded cell.
+	 */
+	private static function wrap_flat_block( string $block_html ): string {
+		return sprintf(
+			'<table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%%" style="border-collapse: collapse;"><tbody><tr><td style="padding-top: %1$s; padding-bottom: %1$s;">%2$s</td></tr></tbody></table>',
+			self::FLAT_BLOCK_PAD,
+			$block_html
+		);
 	}
 
 	/**

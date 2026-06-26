@@ -81,6 +81,49 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The flat layout ("image on top" / no featured image) pads each block.
+	 *
+	 * There the inserted children are individual heading/paragraph/image blocks
+	 * the package stacks flush, so each must be wrapped in a 6px top/bottom padded
+	 * cell to match the editor canvas — while a side-by-side `core/columns` child
+	 * (a whole post) must NOT be wrapped (it uses the post-gap margin instead).
+	 */
+	public function test_posts_inserter_pads_flat_layout_blocks() {
+		$flat = [
+			[
+				'blockName' => 'core/heading',
+				'attrs'     => [ 'level' => 3 ],
+				'innerHTML' => '<h3 class="wp-block-heading">Title</h3>',
+			],
+			[
+				'blockName' => 'core/paragraph',
+				'attrs'     => [],
+				'innerHTML' => '<p>June 18, 2026</p>',
+			],
+		];
+		$flat_result = Posts_Inserter::render_inserted_blocks( $flat );
+		$this->assertSame(
+			2,
+			substr_count( $flat_result, 'padding-top: 6px; padding-bottom: 6px' ),
+			'Expected each flat-layout block to be wrapped in a 6px top/bottom padded cell.'
+		);
+
+		$columns = [
+			[
+				'blockName' => 'core/columns',
+				'attrs'     => [],
+				'innerHTML' => '<div class="wp-block-columns"></div>',
+			],
+		];
+		$columns_result = Posts_Inserter::render_inserted_blocks( $columns );
+		$this->assertStringNotContainsString(
+			'padding-top: 6px; padding-bottom: 6px',
+			$columns_result,
+			'Expected a side-by-side columns child not to get the flat-block padding.'
+		);
+	}
+
+	/**
 	 * Serialize a posts-inserter block whose innerBlocksToInsert holds the given
 	 * children, the way the block editor stores it.
 	 *
@@ -195,13 +238,16 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Post-item text links render black and underlined (matching MJML); image
-	 * links are left alone.
+	 * Post-item text links render underlined and inherit their element's colour
+	 * (black by default, or the block's heading/text colour); image links are left
+	 * alone.
 	 *
 	 * The package renders post title / "continue reading" links with no colour
 	 * (so they fall to the client's default blue) and no underline. Since the
 	 * posts-inserter has no post-editor equivalent, the override restyles its text
-	 * links to the MJML newsletter look. Image-wrapping anchors must be untouched.
+	 * links to the MJML newsletter look — but via `color: inherit` so a custom
+	 * heading/text colour is not clobbered. Image-wrapping anchors must be
+	 * untouched.
 	 */
 	public function test_posts_inserter_styles_text_links_for_email() {
 		Editor_Bootstrap::init();
@@ -223,11 +269,12 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 		);
 		$html = Renderer_Controller::render_wc( get_post( $this->create_newsletter_with_content( $content ) ) );
 
-		// The post title link is black + underlined (style order-independent).
+		// The post title link is underlined and inherits its colour (so a custom
+		// heading colour is respected; black by default). Style order-independent.
 		$this->assertMatchesRegularExpression(
-			'/<a\b[^>]*style="(?=[^"]*text-decoration:\s*underline)(?=[^"]*color:\s*#000000)[^"]*"[^>]*>\s*My Post Title/i',
+			'/<a\b[^>]*style="(?=[^"]*text-decoration:\s*underline)(?=[^"]*color:\s*inherit)[^"]*"[^>]*>\s*My Post Title/i',
 			$html,
-			'Expected the post title link to render black and underlined for email.'
+			'Expected the post title link to render underlined and inherit its colour for email.'
 		);
 		// Image-wrapping anchors are not given the text-link underline.
 		$this->assertDoesNotMatchRegularExpression(
@@ -255,6 +302,27 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 	 */
 	public function test_share_builder_empty_href_renders_nothing() {
 		$this->assertSame( '', Share::build_share_html( '', 'Share this' ), 'Expected an empty href to render nothing.' );
+	}
+
+	/**
+	 * The share builder applies the block's background/text colours inline.
+	 *
+	 * The override builds the markup itself, so the block's chosen colours must be
+	 * set as inline styles (resolved hex) to survive into the email — with the
+	 * editor's 6px/12px padding when a background is present. With no colours the
+	 * paragraph carries no background/padding.
+	 */
+	public function test_share_builder_applies_colors() {
+		$styled = Share::build_share_html( 'mailto:?body=x', 'Share this', '#003da5', '#ffffff', '44px' );
+		$this->assertStringContainsString( 'background-color: #003da5', $styled, 'Expected the resolved background colour inline.' );
+		$this->assertStringContainsString( 'color: #ffffff', $styled, 'Expected the resolved text colour inline.' );
+		$this->assertStringContainsString( 'padding: 6px 12px', $styled, 'Expected the background block to get the editor padding.' );
+		$this->assertStringContainsString( 'font-size: 44px', $styled, 'Expected the resolved font size inline.' );
+
+		$plain = Share::build_share_html( 'mailto:?body=x', 'Share this' );
+		$this->assertStringNotContainsString( 'background-color', $plain, 'Expected no background style when no colour is set.' );
+		$this->assertStringNotContainsString( 'padding:', $plain, 'Expected no padding when no background is set.' );
+		$this->assertStringNotContainsString( 'font-size', $plain, 'Expected no font-size style when no size is set.' );
 	}
 
 	/**

@@ -67,7 +67,90 @@ class Share extends Abstract_Block_Renderer {
 			$content = $matches[1];
 		}
 
-		return self::build_share_html( $href, $content );
+		// Resolve the block's chosen background/text colours. Named presets
+		// (`backgroundColor`/`textColor`) resolve through the palette; a custom
+		// value lives under `style.color`.
+		$background = self::resolve_color( (string) ( $attrs['backgroundColor'] ?? '' ) );
+		if ( '' === $background ) {
+			$background = (string) ( $attrs['style']['color']['background'] ?? '' );
+		}
+		$text = self::resolve_color( (string) ( $attrs['textColor'] ?? '' ) );
+		if ( '' === $text ) {
+			$text = (string) ( $attrs['style']['color']['text'] ?? '' );
+		}
+
+		// Resolve the chosen font size. A named preset (`fontSize`) resolves through
+		// the font-size scale; a custom value lives under `style.typography`.
+		$font_size = self::resolve_font_size( (string) ( $attrs['fontSize'] ?? '' ) );
+		if ( '' === $font_size ) {
+			$font_size = (string) ( $attrs['style']['typography']['fontSize'] ?? '' );
+		}
+
+		return self::build_share_html( $href, $content, $background, $text, $font_size );
+	}
+
+	/**
+	 * Resolve a colour preset slug (or `var:preset|color|slug`) to its hex value.
+	 *
+	 * The override builds the share markup itself, so it bypasses the package's
+	 * colour handling — and class-based preset colours would inline as unresolved
+	 * `var(--wp--preset--color--*)` (dead in email clients). Resolve the slug
+	 * against the active (email) theme.json palette so an inline hex can be set.
+	 * A value that is already a literal colour (hex / rgb) is returned as-is.
+	 *
+	 * @param string $value Preset slug, `var:preset|color|slug`, or literal colour.
+	 * @return string The hex/literal colour, or an empty string when unresolved.
+	 */
+	private static function resolve_color( string $value ): string {
+		if ( '' === $value ) {
+			return '';
+		}
+		if ( '#' === $value[0] || 0 === strpos( $value, 'rgb' ) ) {
+			return $value;
+		}
+		if ( 0 === strpos( $value, 'var:preset|color|' ) ) {
+			$value = substr( $value, strlen( 'var:preset|color|' ) );
+		}
+		$palette = wp_get_global_settings( [ 'color', 'palette' ] );
+		$colors  = isset( $palette['theme'] ) || isset( $palette['default'] ) || isset( $palette['custom'] )
+			? array_merge( $palette['theme'] ?? [], $palette['custom'] ?? [], $palette['default'] ?? [] )
+			: (array) $palette;
+		foreach ( $colors as $color ) {
+			if ( is_array( $color ) && ( $color['slug'] ?? '' ) === $value ) {
+				return (string) ( $color['color'] ?? '' );
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Resolve a font-size preset slug (e.g. `huge`) to its value.
+	 *
+	 * Like the colour resolution, the override builds the markup itself, so the
+	 * block's chosen size must be set inline. A named preset resolves against the
+	 * active (email) theme.json font-size scale; a literal size (carrying a digit
+	 * or `clamp(`) is returned as-is.
+	 *
+	 * @param string $value Preset slug or literal size (e.g. `huge`, `44px`).
+	 * @return string The resolved size, or an empty string when unresolved.
+	 */
+	private static function resolve_font_size( string $value ): string {
+		if ( '' === $value ) {
+			return '';
+		}
+		if ( preg_match( '/[\d(]/', $value ) ) {
+			return $value;
+		}
+		$sizes = wp_get_global_settings( [ 'typography', 'fontSizes' ] );
+		$list  = isset( $sizes['theme'] ) || isset( $sizes['default'] ) || isset( $sizes['custom'] )
+			? array_merge( $sizes['theme'] ?? [], $sizes['custom'] ?? [], $sizes['default'] ?? [] )
+			: (array) $sizes;
+		foreach ( $list as $size ) {
+			if ( is_array( $size ) && ( $size['slug'] ?? '' ) === $value ) {
+				return (string) ( $size['size'] ?? '' );
+			}
+		}
+		return '';
 	}
 
 	/**
@@ -78,22 +161,42 @@ class Share extends Abstract_Block_Renderer {
 	 * markup: a paragraph wrapping a single anchor. Returns an empty string when
 	 * there is no link to point at.
 	 *
-	 * @param string $href    The share link URL.
-	 * @param string $content The link text.
+	 * @param string $href       The share link URL.
+	 * @param string $content    The link text.
+	 * @param string $background Resolved background colour (hex/literal), or ''.
+	 * @param string $text       Resolved text colour (hex/literal), or ''.
+	 * @param string $font_size  Resolved font size (e.g. `44px`), or ''.
 	 * @return string The share anchor HTML, or an empty string when href is empty.
 	 */
-	public static function build_share_html( string $href, string $content ): string {
+	public static function build_share_html( string $href, string $content, string $background = '', string $text = '', string $font_size = '' ): string {
 		if ( '' === $href ) {
 			return '';
 		}
+		// Apply the block's background/text colours and font size inline on the
+		// paragraph so they survive into the email. A background-carrying block also
+		// gets the editor canvas's 6px/12px padding so the colour block reads the
+		// same.
+		$p_styles = [];
+		if ( '' !== $background ) {
+			$p_styles[] = 'background-color: ' . $background;
+			$p_styles[] = 'padding: 6px 12px';
+		}
+		if ( '' !== $text ) {
+			$p_styles[] = 'color: ' . $text;
+		}
+		if ( '' !== $font_size ) {
+			$p_styles[] = 'font-size: ' . $font_size;
+		}
+		$p_style = empty( $p_styles ) ? '' : ' style="' . esc_attr( implode( '; ', $p_styles ) . ';' ) . '"';
 		// Match the editor's default link rendering: underlined and inheriting the
-		// text colour. The package's CSS inliner otherwise gives the anchor the
-		// client-default blue with no underline; it preserves existing inline
-		// styles, so styling the anchor here wins.
+		// text colour (so it follows the block's text colour). The package's CSS
+		// inliner otherwise gives the anchor the client-default blue with no
+		// underline; it preserves existing inline styles, so styling here wins.
 		return sprintf(
-			'<p class="newspack-newsletters-share-block"><a href="%1$s" style="text-decoration: underline; color: inherit;">%2$s</a></p>',
+			'<p class="newspack-newsletters-share-block"%3$s><a href="%1$s" style="text-decoration: underline; color: inherit;">%2$s</a></p>',
 			esc_url( $href, [ 'http', 'https', 'mailto' ] ),
-			wp_kses_post( $content )
+			wp_kses_post( $content ),
+			$p_style
 		);
 	}
 }
