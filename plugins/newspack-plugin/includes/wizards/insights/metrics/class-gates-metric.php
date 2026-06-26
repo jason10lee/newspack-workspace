@@ -328,10 +328,11 @@ final class Gates_Metric {
 	 *
 	 * Unlike the paywall rate (computed locally from a Woo join), the regwall rate
 	 * is precomputed server-side by the hub. This method reads that rate exactly as
-	 * `compute_metric_from_proxy` would, then *additionally* reads two integer
-	 * columns the hub query will start returning once Derrick's Newspack Manager
-	 * change ships: `registration_impressions_total` (the denominator / {N}) and
-	 * `registrations_total` (the numerator).
+	 * `compute_metric_from_proxy` would, then *additionally* reads two integer count
+	 * columns whose names vary by rate (passed via `$denominator_col` / `$numerator_col`):
+	 * the Direct query exposes `registration_impressions_total` (denominator / {N}) and
+	 * `registrations_total` (numerator); the converter-denominated Influenced query
+	 * (NPPD-1821) exposes `new_registrations_total` and `influenced_registrations_total`.
 	 *
 	 * The production-safety crux: those columns do not exist in the hub response
 	 * yet. When they are absent, this returns numerator + denominator as `null` —
