@@ -199,6 +199,7 @@ interface Storage_Interface {
 	 *     'name'             => string,
 	 *     'is_parent'        => bool,    // true when this entry has variations
 	 *     'active_subs'      => int,     // parent: SUM of variation active_subs
+	 *     'new_subs'         => int,     // parent: SUM (windowed)
 	 *     'churned_subs'     => int,     // parent: SUM (windowed)
 	 *     'active_value'     => float,   // parent: SUM
 	 *     'lifetime_revenue' => float,   // parent: SUM (approximate; see Tab 6 doc)
@@ -207,6 +208,7 @@ interface Storage_Interface {
 	 *         'variation_id'     => int,
 	 *         'label'            => string,  // 'Monthly' / 'Annual' / etc
 	 *         'active_subs'      => int,
+	 *         'new_subs'         => int,     // windowed
 	 *         'churned_subs'     => int,     // windowed
 	 *         'active_value'     => float,
 	 *         'lifetime_revenue' => float,
@@ -215,8 +217,9 @@ interface Storage_Interface {
 	 *     ],
 	 *   ]
 	 *
-	 * `churned_subs` is windowed to `[$start, $end]`. The other three
-	 * aggregates are current-state / lifetime (see HPOS_Storage's
+	 * `new_subs` (by `_schedule_start`) and `churned_subs` (by
+	 * `_schedule_cancelled`) are windowed to `[$start, $end]`. The other
+	 * three aggregates are current-state / lifetime (see HPOS_Storage's
 	 * column-scope comment).
 	 *
 	 * @param DateTimeInterface $start Inclusive window start.

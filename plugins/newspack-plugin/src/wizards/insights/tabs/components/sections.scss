@@ -336,6 +336,19 @@
 			font-variant-numeric: tabular-nums;
 		}
 
+		// Top header band: group labels ("Current", "Selected timeframe",
+		// "All time") sitting above the per-column headers. Centered over
+		// the columns each spans, with a divider between adjacent groups so
+		// they read as distinct bands.
+		th#{&}-group {
+			text-align: center;
+			border-bottom: 1px solid wp-colors.$gray-200;
+		}
+
+		th#{&}-group + th#{&}-group {
+			border-left: 1px solid wp-colors.$gray-300;
+		}
+
 		// Em-dash for cells where the column doesn't apply to the row (e.g. a
 		// regwall has no paywall attempts). Muted (gray-600) so it reads as "not
 		// applicable" and is distinct from a real, default-colored zero — a zero

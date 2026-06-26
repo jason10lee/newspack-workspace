@@ -53,7 +53,7 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 				id="newspack-insights-performance-heading"
 				title={ __( 'Subscriptions by product', 'newspack-plugin' ) }
 				description={ __(
-					'Active subscriptions per product (subscriptions, not unique customers). Lifetime revenue is the all-time total per product.',
+					'Active subscriptions per product (subscriptions, not unique customers). New and churned subs reflect the selected timeframe; active counts and value are current, and lifetime revenue is the all-time total per product.',
 					'newspack-plugin'
 				) }
 			/>
@@ -61,15 +61,31 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 				<table className="newspack-insights__table">
 					<thead>
 						<tr>
-							<th scope="col">{ __( 'Product', 'newspack-plugin' ) }</th>
+							<th scope="col" rowSpan={ 2 }>
+								{ __( 'Product', 'newspack-plugin' ) }
+							</th>
+							<th scope="colgroup" colSpan={ 2 } className="newspack-insights__table-group">
+								{ __( 'Current', 'newspack-plugin' ) }
+							</th>
+							<th scope="colgroup" colSpan={ 2 } className="newspack-insights__table-group">
+								{ __( 'Selected timeframe', 'newspack-plugin' ) }
+							</th>
+							<th scope="colgroup" className="newspack-insights__table-group">
+								{ __( 'All time', 'newspack-plugin' ) }
+							</th>
+						</tr>
+						<tr>
 							<th scope="col" className="newspack-insights__table-num">
 								{ __( 'Active subs', 'newspack-plugin' ) }
 							</th>
 							<th scope="col" className="newspack-insights__table-num">
-								{ __( 'Churned subs', 'newspack-plugin' ) }
+								{ __( 'Active value', 'newspack-plugin' ) }
 							</th>
 							<th scope="col" className="newspack-insights__table-num">
-								{ __( 'Active value', 'newspack-plugin' ) }
+								{ __( 'New subs', 'newspack-plugin' ) }
+							</th>
+							<th scope="col" className="newspack-insights__table-num">
+								{ __( 'Churned subs', 'newspack-plugin' ) }
 							</th>
 							<th scope="col" className="newspack-insights__table-num">
 								{ __( 'Lifetime revenue', 'newspack-plugin' ) }
@@ -84,8 +100,9 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 										<a href={ getPostEditUrl( row.product_id ) }>{ row.name }</a>
 									</td>
 									<td className="newspack-insights__table-num">{ formatNumber( row.active_subs ) }</td>
-									<td className="newspack-insights__table-num">{ formatNumber( row.churned_subs ) }</td>
 									<td className="newspack-insights__table-num">{ formatCurrency( row.active_value ).display }</td>
+									<td className="newspack-insights__table-num">{ formatNumber( row.new_subs ) }</td>
+									<td className="newspack-insights__table-num">{ formatNumber( row.churned_subs ) }</td>
 									<td className="newspack-insights__table-num">{ formatCurrency( row.lifetime_revenue ).display }</td>
 								</tr>
 								{ row.is_parent &&
@@ -93,8 +110,9 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 										<tr key={ `${ row.product_id }-${ v.variation_id }` } className="newspack-insights__table-row--variation">
 											<td>{ v.label }</td>
 											<td className="newspack-insights__table-num">{ formatNumber( v.active_subs ) }</td>
-											<td className="newspack-insights__table-num">{ formatNumber( v.churned_subs ) }</td>
 											<td className="newspack-insights__table-num">{ formatCurrency( v.active_value ).display }</td>
+											<td className="newspack-insights__table-num">{ formatNumber( v.new_subs ) }</td>
+											<td className="newspack-insights__table-num">{ formatNumber( v.churned_subs ) }</td>
 											<td className="newspack-insights__table-num">{ formatCurrency( v.lifetime_revenue ).display }</td>
 										</tr>
 									) ) }

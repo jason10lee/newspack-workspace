@@ -65,6 +65,8 @@ export interface PerformanceVariationRow {
 	variation_id: number;
 	label: string;
 	active_subs: number;
+	/** Subscriptions that started within the selected timeframe. */
+	new_subs: number;
 	churned_subs: number;
 	active_value: number;
 	lifetime_revenue: number;
@@ -75,6 +77,8 @@ export interface PerformanceRow {
 	name: string;
 	is_parent: boolean;
 	active_subs: number;
+	/** Subscriptions that started within the selected timeframe. */
+	new_subs: number;
 	churned_subs: number;
 	active_value: number;
 	lifetime_revenue: number;
