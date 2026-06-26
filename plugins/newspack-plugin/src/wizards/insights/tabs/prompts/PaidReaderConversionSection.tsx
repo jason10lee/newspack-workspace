@@ -61,7 +61,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 					current: current.donation_conversion_influenced_14d,
 					previous: previous?.donation_conversion_influenced_14d,
 					notCapableMessage: NOT_CAPABLE_COPY.donation,
-					notComputableMessage: NOT_COMPUTABLE_COPY.donation,
+					notComputableMessage: NOT_COMPUTABLE_COPY.donationInfluenced,
 				} ) }
 			/>
 			{ /* Block-name vs intent-name asymmetry: NOT_CAPABLE keys off the block that
@@ -90,7 +90,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 					current: current.subscription_conversion_influenced_14d,
 					previous: previous?.subscription_conversion_influenced_14d,
 					notCapableMessage: NOT_CAPABLE_COPY.checkout,
-					notComputableMessage: NOT_COMPUTABLE_COPY.subscription,
+					notComputableMessage: NOT_COMPUTABLE_COPY.subscriptionInfluenced,
 				} ) }
 			/>
 		</div>
