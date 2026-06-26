@@ -86,6 +86,25 @@ export const groupOnHoldNotice = ( { plan, lastCharged } ) => ( {
 	actionLabel: __( 'View owner', 'newspack-plugin' ),
 } );
 
+// The group's own page: the owner has requested more seats. `awaiting` switches
+// the copy to the payment-pending state (admin has already sent a link).
+export const seatRequestNotice = ( { target, status } ) => ( {
+	id: 'group_seat_request',
+	status: 'warning',
+	body:
+		status === 'awaiting-payment'
+			? sprintf(
+					// translators: %d is the requested seat count (wrapped in bold tags).
+					__( "Awaiting the owner's payment to increase to <b>%d seats</b>.", 'newspack-plugin' ),
+					target
+			  )
+			: sprintf(
+					// translators: %d is the requested seat count (wrapped in bold tags).
+					__( 'The owner requested an increase to <b>%d seats</b>.', 'newspack-plugin' ),
+					target
+			  ),
+} );
+
 /**
  * Portal + render for the notices strip. `notices` are normalized notice
  * objects with an optional `action: { label, onClick }`; when `plan` is set it
@@ -109,14 +128,18 @@ export const NoticesPanel = ( { noticesNode, notices } ) => {
 											notice.plan,
 											notice.body
 										),
-										{ name: <strong /> }
+										{ name: <strong />, b: <strong /> }
 								  )
-								: notice.body }
+								: createInterpolateElement( notice.body, { b: <strong /> } ) }
 						</span>
-						{ notice.action && (
-							<Button variant="secondary" size="compact" onClick={ notice.action.onClick }>
-								{ notice.action.label }
-							</Button>
+						{ ( notice.actions || ( notice.action ? [ notice.action ] : [] ) ).length > 0 && (
+							<HStack spacing={ 2 } justify="flex-end" expanded={ false }>
+								{ ( notice.actions || [ notice.action ] ).map( ( action, index ) => (
+									<Button key={ index } variant={ action.variant || 'secondary' } size="compact" onClick={ action.onClick }>
+										{ action.label }
+									</Button>
+								) ) }
+							</HStack>
 						) }
 					</HStack>
 				</Notice>

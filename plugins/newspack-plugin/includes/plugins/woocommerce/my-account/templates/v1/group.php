@@ -27,6 +27,11 @@ $managed             = Group_Subscription::get_managed_subscriptions_for_user( $
 $multi_group         = count( $managed ) > 1;
 $subscription_status = $subscription->get_status();
 $is_active           = Group_Subscription_MyAccount::is_subscription_active( $subscription );
+$member_limit        = (int) $settings['limit'];
+$requested_limit     = Group_Subscription_Settings::get_requested_limit( $subscription );
+// A finite limit can be raised; an unlimited group (limit 0) has no ceiling to request beyond.
+$can_request_seats   = $is_active && $member_limit > 0;
+$has_pending_request = $requested_limit > $member_limit;
 $current_user_id     = $user_id;
 $invite_link         = \Newspack\Group_Subscription_Invite::get_link_invite( $subscription, $current_user_id );
 $members             = Group_Subscription::get_members( $subscription );
@@ -64,6 +69,25 @@ if ( in_array( $subscription_status, [ 'cancelled', 'expired' ], true ) ) {
 				<a href="<?php echo esc_url( wc_get_endpoint_url( 'view-subscription', $subscription->get_id(), wc_get_page_permalink( 'myaccount' ) ) ); ?>" class="newspack-ui__button newspack-ui__button--secondary">
 					<?php esc_html_e( 'View subscription', 'newspack-plugin' ); ?>
 				</a>
+				<?php if ( $can_request_seats ) : ?>
+					<?php if ( $has_pending_request ) : ?>
+						<span class="newspack-ui__badge newspack-ui__badge--outline newspack-my-account__group_subscription__seat-request-pending">
+							<?php
+							echo esc_html(
+								sprintf(
+									/* translators: %d: the requested member limit. */
+									__( 'Increase to %d requested', 'newspack-plugin' ),
+									$requested_limit
+								)
+							);
+							?>
+						</span>
+					<?php else : ?>
+						<button type="button" class="newspack-ui__button newspack-ui__button--secondary newspack-my-account__group_subscription__request-seats">
+							<?php esc_html_e( 'Request more seats', 'newspack-plugin' ); ?>
+						</button>
+					<?php endif; ?>
+				<?php endif; ?>
 				<?php if ( $is_active && ! $is_completely_empty ) : ?>
 					<div class="newspack-ui__dropdown newspack-my-account__subscription--actions-dropdown">
 						<button class="newspack-ui__button newspack-ui__button--secondary newspack-ui__dropdown__toggle">

@@ -322,7 +322,56 @@ class Group_Subscription_Settings {
 			if ( in_array( 'enabled', $changed_keys, true ) ) {
 				self::clear_group_subscription_ids_cache();
 			}
+
+			// Raising the limit (or making it unlimited) fulfils any pending owner seat request.
+			if ( in_array( 'limit', $changed_keys, true ) ) {
+				$requested = (int) $subscription->get_meta( self::GROUP_SUBSCRIPTION_META_PREFIX . 'requested_limit', true );
+				$new_limit = (int) $subscription->get_meta( self::GROUP_SUBSCRIPTION_META_PREFIX . 'limit', true );
+				if ( $requested > 0 && ( 0 === $new_limit || $new_limit >= $requested ) ) {
+					$subscription->update_meta_data( self::GROUP_SUBSCRIPTION_META_PREFIX . 'requested_limit', 0 );
+					$subscription->save();
+				}
+			}
 		}
+	}
+
+	/**
+	 * Get the member limit a group owner has requested, or 0 when none is pending.
+	 *
+	 * @param WC_Subscription|int $subscription The subscription object or ID.
+	 *
+	 * @return int The requested member limit, or 0.
+	 */
+	public static function get_requested_limit( $subscription ) {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription ) {
+			return 0;
+		}
+		return (int) $subscription->get_meta( self::GROUP_SUBSCRIPTION_META_PREFIX . 'requested_limit', true );
+	}
+
+	/**
+	 * Store an owner-requested member limit on the subscription.
+	 *
+	 * @param WC_Subscription|int $subscription The subscription object or ID.
+	 * @param int                 $limit        The requested member limit.
+	 */
+	public static function set_requested_limit( $subscription, $limit ) {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription ) {
+			return;
+		}
+		$subscription->update_meta_data( self::GROUP_SUBSCRIPTION_META_PREFIX . 'requested_limit', absint( $limit ) );
+		$subscription->save();
+	}
+
+	/**
+	 * Clear any pending owner-requested member limit.
+	 *
+	 * @param WC_Subscription|int $subscription The subscription object or ID.
+	 */
+	public static function clear_requested_limit( $subscription ) {
+		self::set_requested_limit( $subscription, 0 );
 	}
 
 	/**
