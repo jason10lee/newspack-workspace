@@ -11,6 +11,7 @@ import { __, sprintf } from '@wordpress/i18n';
 import { RadioControl, TextControl, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { Button, Modal } from '../../../../packages/components/src';
 import { reservedSeats, isGroupActive, applySeatIncrease, sendSeatUpgradeLink } from '../data/mock-groups';
+import { getSubscriberById } from '../data/mock-subscribers';
 import { buildSeatIncreaseOrder, buildPaymentLinkOrder } from './subscription-actions';
 import { fmtCurrency } from '../format';
 import { GROUP_LABEL_LOWER } from '../labels';
@@ -19,6 +20,7 @@ export default function AdjustSeatsFlow( { group, onClose, onComplete } ) {
 	// Floor for the new limit: members plus pending invites and active link uses,
 	// so a reduction can never strand obligations the group already made.
 	const reserved = reservedSeats( group );
+	const ownerEmail = getSubscriberById( group.ownerId )?.email;
 	const initial = group.seatRequest?.target && group.seatRequest.target > group.seatLimit ? group.seatRequest.target : group.seatLimit;
 	const [ value, setValue ] = useState( String( initial ) );
 	const [ confirming, setConfirming ] = useState( false );
@@ -70,8 +72,9 @@ export default function AdjustSeatsFlow( { group, onClose, onComplete } ) {
 						{ isIncrease && mode === 'link' && (
 							<span>
 								{ sprintf(
-									__( 'A payment link for %s will be emailed to the owner. Seats apply once paid.', 'newspack-plugin' ),
-									fmtCurrency( amount )
+									__( 'A payment link for %1$s will be emailed to %2$s. Seats apply once paid.', 'newspack-plugin' ),
+									fmtCurrency( amount ),
+									ownerEmail
 								) }
 							</span>
 						) }
@@ -139,7 +142,6 @@ export default function AdjustSeatsFlow( { group, onClose, onComplete } ) {
 						value={ amountValue }
 						min={ 0 }
 						onChange={ setAmountValue }
-						help={ __( 'The owner is emailed a payment link. Seats apply automatically once they pay.', 'newspack-plugin' ) }
 						__next40pxDefaultSize
 						__nextHasNoMarginBottom
 					/>
