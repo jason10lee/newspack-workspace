@@ -74,7 +74,7 @@ final class Gates_Metric {
 		'regwall_conversion_direct'          => 'hub',
 		'regwall_conversion_influenced_7d'   => 'hub',
 		'paywall_conversion_direct'          => 'hybrid', // NPPD-1746: local order-meta (gate) numerator + hub per-gate-impressions denominator.
-		'paywall_conversion_influenced_14d'  => 'hybrid', // NPPD-1764: hub influenced numerator + local Woo subscriber-spine denominator (converter-denominated).
+		'paywall_conversion_influenced_14d'  => 'hub',    // BQ-internal influenced rate + denominator (no local Woo); see regwall_conversion_influenced_7d.
 		'total_paywall_revenue_direct'       => 'local',  // NPPD-1746: pure Woo order meta (gate surface); survives a hub outage.
 		'avg_revenue_per_paywall_conversion' => 'local',  // NPPD-1746: derived from the same order-meta source as total revenue.
 		'conversion_funnel'                  => 'hub',
