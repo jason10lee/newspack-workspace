@@ -29,7 +29,30 @@ wt="$(wt_dir "$branch")"
 [ -d "$wt" ] || die "worktree missing: $wt"
 cd "$wt"
 
-# 2. disclosing-write gate (secure runs only). The artifact the operator approves
+# 2. PR-scope guard — a run branch must be based on, and only touch, the
+# affected repo. Real incident: an autofix run branched from this machine's
+# local fork-trunk `main` (a 153-commit local tooling aggregate) and this
+# script pushed the WHOLE delta upstream as PR #723 (closed within minutes).
+# Runs BEFORE the attempt cap below — a scope violation must not burn an
+# attempt. Fail closed throughout: never guess at the upstream base ref.
+fetch_upstream_main "$wt"
+
+affected_repo="$("$LEDGER" get "$run_id" '.decisions[] | select(.key=="affected_repo") | .value')"
+[ -n "$affected_repo" ] || die "no affected_repo decision in ledger for $run_id"
+
+offending="$(git diff --name-only origin/main...HEAD \
+  | grep -v -e "^plugins/${affected_repo}/" -e "^themes/${affected_repo}/" || true)"
+if [ -n "$offending" ]; then
+  die "branch carries changes beyond the affected repo — fork-trunk leak guard (see PR #723 incident); offending paths (first 10):
+$(printf '%s\n' "$offending" | head -10)"
+fi
+
+commit_count="$(git rev-list --count origin/main..HEAD)"
+if [ "$commit_count" -gt "$AUTOFIX_MAX_BRANCH_COMMITS" ]; then
+  die "branch carries $commit_count commits ahead of origin/main (max \$AUTOFIX_MAX_BRANCH_COMMITS=$AUTOFIX_MAX_BRANCH_COMMITS) — fork-trunk leak guard (see PR #723 incident)"
+fi
+
+# 3. disclosing-write gate (secure runs only). The artifact the operator approves
 # is the RESOLVED PR body PLUS the commit diff that would be pushed to a
 # public-capable surface — for a Security fix, that diff IS the disclosure. A
 # preview writes it to the run dir; without a matching --confirmed=<digest> this
@@ -45,7 +68,7 @@ if is_secure "$run_id"; then
   secure_gate "$run_id" pr "$art" "$confirmed"   # preview+exit7, or verify digest & return
 fi
 
-# 3. attempt cap — counted only for a REAL create attempt (a gated preview above
+# 4. attempt cap — counted only for a REAL create attempt (a gated preview above
 # exits before here, so it never consumes an attempt).
 attempts="$("$LEDGER" get "$run_id" '.attempts.pr')"
 if [ "$attempts" -ge "$AUTOFIX_MAX_ATTEMPTS" ]; then
@@ -54,10 +77,10 @@ if [ "$attempts" -ge "$AUTOFIX_MAX_ATTEMPTS" ]; then
 fi
 "$LEDGER" set "$run_id" '.attempts.pr += 1'
 
-# 4. push (idempotent — branch may carry new commits even when a PR exists)
+# 5. push (idempotent — branch may carry new commits even when a PR exists)
 git push -u origin "$branch"
 
-# 5. adopt an existing open PR for this branch, or create a draft PR
+# 6. adopt an existing open PR for this branch, or create a draft PR
 existing="$(gh pr list --head "$branch" --state open --json url,number,isDraft --jq '.[0]' 2>/dev/null || true)"
 if [ -n "$existing" ] && [ "$existing" != "null" ]; then
   url="$(printf '%s' "$existing" | jq -r '.url // empty')"
@@ -73,7 +96,7 @@ else
   history_note="$url"
 fi
 
-# 6. Copilot request (advisory; REST because gh pr view misses the bot).
+# 7. Copilot request (advisory; REST because gh pr view misses the bot).
 # --no-copilot (spec Override 2) declines it; the decision is logged either way.
 if [ -n "$no_copilot" ]; then
   "$LEDGER" history "$run_id" pr no-copilot "operator declined Copilot review request"
@@ -84,7 +107,7 @@ else
     || log "Copilot review request failed (advisory — continuing)"
 fi
 
-# 7. record
+# 8. record
 "$LEDGER" set "$run_id" '.pr = {url:$u, number:($n|tonumber)} | .terminal = "delivered"' \
   --arg u "$url" --arg n "$num"
 "$LEDGER" history "$run_id" pr delivered "$history_note"

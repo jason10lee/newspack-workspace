@@ -26,6 +26,17 @@ case "$cmd" in
     "$LEDGER" set "$run_id" '.attempts.provisioning += 1'
     name="autofix-$issue-$(hex4)"
     branch="$stem-$(hex4)"
+    # Base-ref discipline: cut the run branch from freshly fetched upstream
+    # origin/main, never this machine's local trunk `main` (a local
+    # fork-trunk aggregate — see the pr.sh PR-scope guard for the incident
+    # this closes, PR #723). `n worktree add` (invoked inside `n env create
+    # --worktree`) reuses an existing local branch as-is if one already
+    # exists (falls back to branching from local HEAD only when it doesn't),
+    # so pre-creating the branch here from origin/main is sufficient to steer
+    # it — no change needed to `n` tooling itself.
+    fetch_upstream_main "$WORKSPACE_ROOT"
+    git -C "$WORKSPACE_ROOT" rev-parse -q --verify "refs/heads/$branch" >/dev/null 2>&1 \
+      || git -C "$WORKSPACE_ROOT" branch "$branch" origin/main
     n env create "$name" --worktree "$repo:$branch" --up || die "n env create failed (attempt $((attempts+1)))"
     [ -d "$(wt_dir "$branch")" ] || log "warning: expected worktree dir not found: $(wt_dir "$branch")"
     n setup --env "$name" --yes "$@" || die "n setup failed (attempt $((attempts+1)))"

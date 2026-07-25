@@ -132,6 +132,20 @@ while staying collision-free). Provisioning attempts are capped
 (`AUTOFIX_MAX_ATTEMPTS`, default 3); exhaustion sets `terminal: escalated`
 and dies rather than proceeding on a half-built env.
 
+**Base-ref discipline**: before invoking `n env create`, `env.sh` fetches
+`origin/main` into the workspace repo and pre-creates the run branch from it
+(`git branch <branch> origin/main`) if it doesn't already exist. Run branches
+are always cut from freshly fetched upstream `origin/main` — **never** from
+this machine's local trunk `main`, which on this machine is a fork-trunk
+aggregate (local tooling/env enhancements merged onto upstream `main`, per
+`CLAUDE.local.md`) and must never leak into an upstream PR diff. This is what
+the Stage 6 PR-scope guard below verifies before every push.
+
+If `origin/main` can't be resolved at all (fetch fails and no cached ref
+exists), `env.sh create` dies rather than silently falling back to whatever
+the local trunk HEAD happens to be — you'll need to check connectivity to
+`origin` and retry.
+
 Reproduce the bug. Capture a **re-runnable failing signal**, in preference
 order:
 
@@ -293,14 +307,42 @@ tools/autofix/bin/pr.sh create <RUN_ID> --title "fix(<scope>): <subject> (<ISSUE
 ```
 
 This internally: (1) runs the redaction gate over the body file and dies on
-findings — fix and retry; (2) checks the PR-attempt cap
+findings — fix and retry; (2) runs the **PR-scope guard** (fork-trunk leak
+guard — see below), which runs BEFORE the attempt cap so a scope violation
+never burns an attempt; (3) checks the PR-attempt cap
 (`AUTOFIX_MAX_ATTEMPTS`, default 3), escalating on exhaustion so a run never
-ends looking `delivered` without its primary artifact; (3) pushes the
-branch; (4) **adopts an existing open PR for this branch** if `gh pr list`
+ends looking `delivered` without its primary artifact; (4) pushes the
+branch; (5) **adopts an existing open PR for this branch** if `gh pr list`
 finds one (idempotent re-run / resume-after-partial-push), otherwise opens a
-**draft** PR against `main`; (5) requests a Copilot review via the GitHub
-REST API (advisory — a failure here is logged and does not block); (6)
+**draft** PR against `main`; (6) requests a Copilot review via the GitHub
+REST API (advisory — a failure here is logged and does not block); (7)
 records `.pr` and sets `terminal: delivered`.
+
+**PR-scope guard (fork-trunk leak guard)**: real incident — an autofix run
+once branched from this machine's local fork-trunk `main` (a 153-commit
+local tooling aggregate, not upstream) and `pr.sh` pushed the *whole* delta
+to `origin` as PR #723, closed within minutes. `pr.sh create` now refuses to
+push when either check fails, fetching `origin/main` fresh each time (fail
+closed — it dies rather than guessing the base if `origin/main` can't be
+resolved at all):
+
+- **Path scope**: `git diff --name-only origin/main...HEAD` must contain
+  only paths under `plugins/<affected_repo>/` or `themes/<affected_repo>/`
+  (`affected_repo` is the Stage 1 decision). Any other path — most often
+  tooling files carried in from a mis-based branch — dies before any push,
+  printing the offending paths.
+- **Commit-count sanity**: `git rev-list --count origin/main..HEAD` must not
+  exceed `AUTOFIX_MAX_BRANCH_COMMITS` (default 10). A run branch legitimately
+  needs only a handful of commits; a much larger count is a strong signal the
+  branch was cut from the wrong base.
+
+**If this guard fires**: do not work around it or retry blindly — it means
+the branch itself is contaminated. Check `git log --oneline
+origin/main..HEAD` and `git diff --stat origin/main...HEAD` in the run
+worktree to confirm the scope of the problem, then either re-cut the branch
+from a freshly fetched `origin/main` (Stage 2's base-ref discipline should
+have prevented this, so also check why it didn't) or escalate to the
+operator with findings — do not force a push past this guard.
 
 Conventional-commit subject: `fix(<scope>): … (NPPM-XXXX)`, with a
 `Co-Authored-By` trailer. v1 always targets `main`; hotfix release routing
@@ -375,6 +417,8 @@ once it reaches a terminal state.
   no-go rubric or the hard safety rules.
 - Worktree isolation for all code changes; the root checkout stays on
   `main`.
+- Run branches are based on upstream `origin/main`; pushing fork-trunk
+  content upstream is a guarded failure, never a fallback.
 - Interruption at any point leaves a resumable ledger;
   `autofix resume <RUN_ID>` is the only supported re-entry point.
 

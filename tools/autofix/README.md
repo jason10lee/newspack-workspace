@@ -91,6 +91,7 @@ All config is environment variables with defaults in `bin/lib/common.sh`.
 | `AUTOFIX_FAILED_LABEL_ID` | `5de9635c-ac7a-4b00-ab5b-e7680f162cf8` | Linear label id for `np-agent-failed`. |
 | `AUTOFIX_ESCALATED_ENV_TTL_DAYS` | `14` | Days an `escalated` run's env/worktree survives before the cleanup sweep flags it for an operator decision (does not auto-destroy). |
 | `AUTOFIX_MAX_ATTEMPTS` | `3` | Shared retry/attempt cap: Linear GraphQL retries, env-provisioning attempts, PR-creation attempts. Exhaustion escalates rather than proceeding silently. |
+| `AUTOFIX_MAX_BRANCH_COMMITS` | `10` | PR-scope guard commit-count sanity cap: `pr.sh create` dies if the run branch carries more than this many commits ahead of `origin/main` (fork-trunk leak guard — see PR #723 incident). |
 | `AUTOFIX_LINEAR_MOCK_DIR` | (unset) | **Tests only.** When set, `lib/linear.sh` reads response fixtures from this directory (`<opname>.json`) and logs requests to `requests.log` instead of calling the live Linear API. See `tests/fixtures/` for the fixture set the test suite uses. |
 
 Two lower-level overrides exist for testing/tooling but are not part of the

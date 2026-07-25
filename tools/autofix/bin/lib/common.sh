@@ -19,6 +19,7 @@ WORKSPACE_ROOT="${AUTOFIX_WORKSPACE_ROOT:-$(cd "$AUTOFIX_ROOT/../.." && pwd)}"
 : "${AUTOFIX_FAILED_LABEL_ID:=5de9635c-ac7a-4b00-ab5b-e7680f162cf8}"
 : "${AUTOFIX_ESCALATED_ENV_TTL_DAYS:=14}"
 : "${AUTOFIX_MAX_ATTEMPTS:=3}"
+: "${AUTOFIX_MAX_BRANCH_COMMITS:=10}"
 
 log() { printf '[autofix] %s\n' "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
@@ -62,6 +63,25 @@ json_escape() { printf '%s' "$1" | jq -Rs .; }
 # branch for git-ref operations (push, --head, ls-remote, tag) — only the
 # on-disk path needs sanitizing.
 wt_dir() { printf '%s/worktrees/%s' "$WORKSPACE_ROOT" "$(printf '%s' "$1" | tr '/' '-')"; }
+
+# fetch_upstream_main <dir> — fetch origin/main into the git repo at <dir>,
+# fail closed. Real incident: an autofix run branched from this machine's
+# local fork-trunk `main` (a many-commit local tooling aggregate, not
+# upstream) and pr.sh pushed the whole delta upstream as PR #723 (closed
+# within minutes). The fix is base-ref discipline: run branches and PR-scope
+# checks are always anchored to a freshly fetched origin/main, never the
+# local trunk. A transient fetch failure is tolerated ONLY if origin/main
+# already resolves from a prior fetch (log and proceed on cached state); if
+# it can't be resolved at all, die rather than silently falling back to
+# whatever the local HEAD happens to be.
+fetch_upstream_main() { # dir
+  local dir="$1"
+  if ! git -C "$dir" fetch origin main; then
+    git -C "$dir" rev-parse -q --verify origin/main >/dev/null 2>&1 \
+      || die "cannot resolve origin/main in $dir (fetch failed and no cached ref exists) — refusing to guess the upstream base"
+    log "git fetch origin main failed in $dir; using existing cached origin/main"
+  fi
+}
 
 # ---- secure mode (autofix-secure) --------------------------------------------
 # See _tooling/specs/2026-07-22-autofix-secure-bin-tooling-spec.md.

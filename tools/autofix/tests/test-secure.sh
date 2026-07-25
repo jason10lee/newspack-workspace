@@ -125,7 +125,14 @@ mkdir -p "$AUTOFIX_WORKSPACE_ROOT/worktrees/br-sec"
 STUB="$(mktemp -d)"; export PATH="$STUB:$PATH"; export STUB_LOG="$STUB/log"; : > "$STUB_LOG"
 cat > "$STUB/git" <<'EOF'
 #!/bin/bash
-echo "git $*" >> "${STUB_LOG:?}"; exit 0
+echo "git $*" >> "${STUB_LOG:?}"
+case "$*" in
+  "diff --name-only origin/main...HEAD")
+    printf '%s\n' "plugins/newspack-plugin/includes/class-foo.php" ;;
+  "rev-list --count origin/main..HEAD")
+    printf '2\n' ;;
+esac
+exit 0
 EOF
 cat > "$STUB/gh" <<'EOF'
 #!/bin/bash
@@ -136,6 +143,7 @@ EOF
 chmod +x "$STUB/git" "$STUB/gh"
 bash "$L" init secpr NPPM-9 secure >/dev/null
 bash "$L" set secpr '.branch = "br-sec"'
+bash "$L" set secpr '.decisions += [{key:"affected_repo", value:"newspack-plugin"}]'
 BODY="$(mktemp)"; printf 'Validate audience.\n' > "$BODY"
 out="$(bash "$P" create secpr --title "fix(x): y (NPPM-9)" --body-file "$BODY" 2>&1)" && rc=0 || rc=$?
 assert_eq 7 "$rc" "secure pr create without confirmation exits 7"
@@ -155,6 +163,7 @@ assert_eq delivered "$(bash "$L" get secpr .terminal)" "confirmed secure pr crea
 unset AUTOFIX_SECURE
 bash "$L" init secre NPPM-10 secure >/dev/null
 bash "$L" set secre '.branch = "br-sec"'
+bash "$L" set secre '.decisions += [{key:"affected_repo", value:"newspack-plugin"}]'
 : > "$STUB_LOG"
 out="$(bash "$P" create secre --title t --body-file "$BODY" 2>&1)" && rc=0 || rc=$?
 assert_eq 7 "$rc" "secure gate engages from the ledger with no AUTOFIX_SECURE in the environment"
