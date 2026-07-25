@@ -8,7 +8,7 @@ usage() { die "usage: ledger.sh init|path|get|set|history|drift|evidence|reclaim
 cmd="$1"; run_id="$2"; shift 2
 dir="$RUNS_DIR/$run_id"; file="$dir/ledger.json"; lockdir="$dir/.lock"
 
-write_owner() { printf '%s %s %s\n' "$$" "$(hostname)" "$(now_utc)" > "$lockdir/owner"; }
+write_owner() { printf '%s %s %s\n' "$$" "$(hostname | cut -d' ' -f1)" "$(now_utc)" > "$lockdir/owner"; }
 
 take_lock() {
   mkdir -p "$dir"
@@ -70,7 +70,7 @@ case "$cmd" in
     [ -d "$lockdir" ] || { log "no lock on $run_id"; exit 0; }
     pid=""; host=""
     read -r pid host _ < "$lockdir/owner" 2>/dev/null || true
-    if [ "${1:-}" = "--force" ] || { [ "$host" = "$(hostname)" ] && [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; }; then
+    if [ "${1:-}" = "--force" ] || { [ "$host" = "$(hostname | cut -d' ' -f1)" ] && [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; }; then
       log "reclaiming lock on $run_id (was pid=$pid host=$host)"
       drop_lock
     else
