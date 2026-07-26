@@ -1,6 +1,6 @@
 #!/bin/bash
 set -uo pipefail
-cd "$(dirname "$0")"; . ./helpers.sh
+cd "$(dirname "$0")" || exit 1; . ./helpers.sh
 C=../bin/claim.sh; L=../bin/ledger.sh; A=../bin/autofix
 setup() { # $1 = postclaim fixture, $2 = run id
   export AUTOFIX_ROOT; AUTOFIX_ROOT="$(mktemp -d)"

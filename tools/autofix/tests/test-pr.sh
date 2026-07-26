@@ -1,9 +1,9 @@
 #!/bin/bash
 set -uo pipefail
-cd "$(dirname "$0")"; . ./helpers.sh
+cd "$(dirname "$0")" || exit 1; . ./helpers.sh
 P=../bin/pr.sh; L=../bin/ledger.sh
 export AUTOFIX_ROOT; AUTOFIX_ROOT="$(mktemp -d)"
-export AUTOFIX_WORKSPACE_ROOT="$(mktemp -d)"
+export AUTOFIX_WORKSPACE_ROOT; AUTOFIX_WORKSPACE_ROOT="$(mktemp -d)"
 mkdir -p "$AUTOFIX_WORKSPACE_ROOT/worktrees/br-2"
 STUB="$(mktemp -d)"; export PATH="$STUB:$PATH"
 cat > "$STUB/git" <<'EOF'

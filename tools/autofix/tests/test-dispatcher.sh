@@ -1,6 +1,6 @@
 #!/bin/bash
 set -uo pipefail
-cd "$(dirname "$0")"; . ./helpers.sh
+cd "$(dirname "$0")" || exit 1; . ./helpers.sh
 A=../bin/autofix; L=../bin/ledger.sh
 export AUTOFIX_ROOT; AUTOFIX_ROOT="$(mktemp -d)"
 . ../bin/lib/common.sh  # iso8601_days_ago (sourced after AUTOFIX_ROOT so paths resolve to the temp root)
@@ -27,7 +27,7 @@ out="$(bash "$A" run NPPM-2993 2>&1)" && rc=0 || rc=$?
 assert_eq 5 "$rc" "run propagates claim's lost-race exit code (corrupt ledger present)"
 assert_contains "$out" "skipping unparsable ledger" "run's pre-flight sweep skips corrupt ledger"
 
-rid="$(ls "$AUTOFIX_ROOT/runs" | grep '^autofix-nppm-2993-')"
+rid=""; for d in "$AUTOFIX_ROOT/runs"/autofix-nppm-2993-*; do [ -e "$d" ] && rid="$(basename "$d")"; done
 assert_contains "$rid" autofix-nppm-2993- "run id minted with expected prefix"
 
 assert_eq NPPM-2993 "$(bash "$L" get "$rid" .issue)" "ledger initialized"

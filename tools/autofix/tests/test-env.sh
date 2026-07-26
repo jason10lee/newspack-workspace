@@ -1,6 +1,6 @@
 #!/bin/bash
 set -uo pipefail
-cd "$(dirname "$0")"; . ./helpers.sh
+cd "$(dirname "$0")" || exit 1; . ./helpers.sh
 E=../bin/env.sh; L=../bin/ledger.sh
 export AUTOFIX_ROOT; AUTOFIX_ROOT="$(mktemp -d)"
 export AUTOFIX_WORKSPACE_ROOT; AUTOFIX_WORKSPACE_ROOT="$(mktemp -d)"
