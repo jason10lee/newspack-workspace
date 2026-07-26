@@ -1,6 +1,6 @@
 #!/bin/bash
 set -uo pipefail
-cd "$(dirname "$0")"; . ./helpers.sh
+cd "$(dirname "$0")" || exit 1; . ./helpers.sh
 R=../bin/redact.sh
 D="$(mktemp -d)"
 

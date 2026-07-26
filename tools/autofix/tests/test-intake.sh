@@ -1,6 +1,6 @@
 #!/bin/bash
 set -uo pipefail
-cd "$(dirname "$0")"; . ./helpers.sh
+cd "$(dirname "$0")" || exit 1; . ./helpers.sh
 I=../bin/intake.sh
 newmock() { M="$(mktemp -d)"; cp "fixtures/$1" "$M/issue.json" 2>/dev/null || true; cp fixtures/queue.json "$M/queue.json" 2>/dev/null || true; export AUTOFIX_LINEAR_MOCK_DIR="$M"; }
 

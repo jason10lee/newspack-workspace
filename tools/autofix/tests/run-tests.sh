@@ -1,6 +1,6 @@
 #!/bin/bash
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 pattern="${1:-test-*.sh}"
 rc=0
 for t in $pattern; do

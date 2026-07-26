@@ -32,7 +32,11 @@ mutate() { # jq-program [extra jq args...]
 case "$cmd" in
   init)
     issue="${1:?issue}"; mode="${2:?mode}"
-    mkdir -p "$dir"
+    # same lock as mutate: without it, two concurrent inits for one run id
+    # could both pass the exists-check and the loser would clobber the
+    # winner's ledger (take_lock also creates $dir)
+    take_lock
+    trap 'drop_lock' EXIT
     [ -f "$file" ] && die "ledger already exists: $file"
     jq -n --arg run_id "$run_id" --arg issue "$issue" --arg mode "$mode" '{
       run_id:$run_id, issue:$issue, mode:$mode, secure:($mode == "secure"),
@@ -42,6 +46,7 @@ case "$cmd" in
       loop_counts:{fix_iterations:0, repro_hypotheses:0}, loop_started_at:null,
       attempts:{provisioning:0, pr:0}, drift_log:[], terminal:null
     }' > "$file"
+    drop_lock; trap - EXIT
     echo "$file" ;;
   path) echo "$file" ;;
   get) jq -r "${1:?jq filter}" "$file" ;;

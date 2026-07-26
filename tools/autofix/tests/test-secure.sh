@@ -1,6 +1,6 @@
 #!/bin/bash
 set -uo pipefail
-cd "$(dirname "$0")"; . ./helpers.sh
+cd "$(dirname "$0")" || exit 1; . ./helpers.sh
 I=../bin/intake.sh; C=../bin/claim.sh; L=../bin/ledger.sh; P=../bin/pr.sh; A=../bin/autofix
 digest() { shasum -a 256 "$1" | awk '{print $1}'; }
 EMPTY_COMMENTS='{ "data": { "issue": { "id": "abc-123", "comments": { "nodes": [] } } } }'

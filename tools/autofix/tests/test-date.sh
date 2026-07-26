@@ -4,7 +4,7 @@
 # try-GNU-then-fall-back-to-BSD approach is not safe. Everything must go through
 # the helpers in common.sh.
 set -uo pipefail
-cd "$(dirname "$0")"; . ./helpers.sh
+cd "$(dirname "$0")" || exit 1; . ./helpers.sh
 export AUTOFIX_ROOT; AUTOFIX_ROOT="$(mktemp -d)"
 . ../bin/lib/common.sh
 

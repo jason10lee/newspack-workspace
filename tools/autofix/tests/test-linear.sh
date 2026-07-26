@@ -1,6 +1,6 @@
 #!/bin/bash
 set -uo pipefail
-cd "$(dirname "$0")"; . ./helpers.sh
+cd "$(dirname "$0")" || exit 1; . ./helpers.sh
 MOCK="$(mktemp -d)"; cp fixtures/viewer.json "$MOCK/"
 export AUTOFIX_LINEAR_MOCK_DIR="$MOCK"
 . ../bin/lib/common.sh
@@ -31,7 +31,8 @@ out="$(unset LINEAR_API_KEY AUTOFIX_LINEAR_MOCK_DIR; export AUTOFIX_WORKSPACE_RO
   bash -c '. ../bin/lib/common.sh; . ../bin/lib/linear.sh; linear_gql ping "query{}" 2>&1')" && rc=0 || rc=$?
 assert_eq 0 "$rc" ".env fallback: live call succeeds"
 assert_contains "$(cat "$CURL_HDRS")" "Authorization: lin_api_from_dotenv" ".env fallback: key from workspace .env used"
-out2="$(unset LINEAR_API_KEY AUTOFIX_LINEAR_MOCK_DIR; export AUTOFIX_WORKSPACE_ROOT="$(mktemp -d)"; export PATH="$STUB:$PATH"
-  bash -c '. ../bin/lib/common.sh; . ../bin/lib/linear.sh; linear_gql ping "query{}" 2>&1')" && rc2=0 || rc2=$?
+( unset LINEAR_API_KEY AUTOFIX_LINEAR_MOCK_DIR
+  AUTOFIX_WORKSPACE_ROOT="$(mktemp -d)"; export AUTOFIX_WORKSPACE_ROOT; export PATH="$STUB:$PATH"
+  bash -c '. ../bin/lib/common.sh; . ../bin/lib/linear.sh; linear_gql ping "query{}"' ) >/dev/null 2>&1 && rc2=0 || rc2=$?
 assert_eq 1 "$rc2" "no env var and no .env still dies"
 finish
