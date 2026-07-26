@@ -82,6 +82,16 @@ knowledge trees (`.agent-knowledge/`, `LEARNINGS.md`) + auto-memory. Use the
 `librarian` skill as the search front-end. Record approach-shaping findings as
 `decisions` entries (with `basis`).
 
+**The scan MUST read the review threads of the PR(s) that implemented the
+touched feature/surface** — not just their diffs. Decisions live in review
+threads: the NPPM-3048 run's touched surface carried a placement decision and
+a coupled sibling surface (sponsor labels) that were recorded only in the
+implementing PR's thread, and every review engine missed them because none
+reads threads. Two things come out of this reading: hidden requirements the
+fix must preserve (record as `decisions`), and **feature-coupled plugins**
+whose surfaces share the touched code path — name these in the triage brief's
+env provisioning needs so Stage 2 provisions them.
+
 Validate `affected_repo` **immediately** — it must exist under `plugins/` or
 `themes/` (or the `repos/` tier) and not be archived/out of scope, so a
 misclassification fails here rather than during env provisioning:
@@ -146,6 +156,15 @@ exists), `env.sh create` dies rather than silently falling back to whatever
 the local trunk HEAD happens to be — you'll need to check connectivity to
 `origin` and retry.
 
+**Provision feature-coupled plugins before capturing the failing signal.**
+If the Stage-1 review-thread reading named coupled plugins (surfaces sharing
+the touched code path — sponsors for label markup, WooCommerce for revenue
+surfaces, …), install/activate them in the env *now* and exercise their
+variant of the affected flow too. A repro captured on the bare surface alone
+can pass verification while the coupled surface stays broken — on NPPM-3048
+the sponsored-post variant was live-broken and the original single-surface
+verification never saw it.
+
 Reproduce the bug. Capture a **re-runnable failing signal**, in preference
 order:
 
@@ -199,6 +218,14 @@ write) on a finding — redact and retry.
 TDD against the failing signal, in the worktree. Follow repo standards (root
 `phpcs.xml`, wp-prettier, conventional commits referencing the issue).
 
+**Editing the run's worktree from a session pinned elsewhere**: the harness
+file tools (Write/Edit) are pinned to the *session's* worktree, while autofix
+edits belong in the *run's* worktree (`worktrees/<branch>`) — a different
+checkout. When the two differ, route run-worktree edits through bash
+(heredoc, `git apply`, `patch`) and say so in the run narrative. This is a
+deliberate, documented consequence of harness worktree isolation — not a
+workaround to conceal, and not a reason to relocate the session.
+
 **Tight scope guardrails — exceeding ANY = terminal `escalated` with
 findings and the WIP branch preserved. Never ship anyway:**
 
@@ -227,7 +254,24 @@ All required, in order:
    commits), so do it here rather than fighting a blocked commit later.
 4. Re-drive the original repro end-to-end in the env (browser for
    Playwright signals; test re-run plus a manual drive of the affected flow
-   for unit-test signals).
+   for unit-test signals). **For CSS/markup fixes, the re-drive standard is
+   a live A/B against the pre-fix commit, compared by full computed-style
+   diff:**
+   - **Full diff, not probes.** When the claim is "X renders identically to
+     Y" (or "only property P changed"), dump *all* `getComputedStyle`
+     properties for the affected element(s) on both sides and diff the
+     dumps, then triage the delta. Never verify parity by probing a
+     hand-picked property list — hand-enumerated checks share their author's
+     blind spots (the NPPM-3048 fix shipped a font-weight 400-vs-700 miss
+     past exactly such a probe list; LEARNINGS 2026-07-26). Enumeration is
+     for triaging the diff, not for making the claim.
+   - **Live A/B technique**: capture the *before* side by flipping the env's
+     worktree to the pre-fix commit (`git -C <worktree> checkout <pre-fix>`),
+     rebuilding the touched plugin/theme, and restarting the container (PHP
+     edits need the restart — opcache); probe the affected page(s). Then
+     restore the fix commit, rebuild, restart, and probe again identically.
+     Both probes run in the same env against the same content, so the diff
+     isolates the fix.
 5. Run the `newspack:impact-review` skill whenever the diff touches a shared
    contract (data-events, reader-activation, reader-revenue,
    configuration-managers, content-gate, rest-api, …) — the hotfix
