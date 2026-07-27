@@ -185,7 +185,11 @@ $marker"
     fail_label=""; note=""; confirmed=""
     while [ $# -gt 0 ]; do case "$1" in
       --fail-label) fail_label=1; shift ;;
-      --comment) note="$2"; shift 2 ;;
+      # FAIL CLOSED on an explicitly passed empty comment (run autofix-nppm-305
+      # incident: a vanished payload file became --comment "" and the release
+      # shipped with no explanation on the issue). Omitting --comment is the
+      # legitimate "no comment" path; passing it empty is always an upstream bug.
+      --comment) note="${2-}"; [ -n "$note" ] || die "--comment given but empty — refusing to release without the explanation (fail closed)"; shift 2 ;;
       --confirmed) confirmed="$2"; shift 2 ;;
       --confirmed=*) confirmed="${1#*=}"; shift ;;
       *) die "unknown flag: $1" ;;

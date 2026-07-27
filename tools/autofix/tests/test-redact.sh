@@ -55,4 +55,10 @@ assert_eq 1 "$rc" "secret beside allowlisted email still blocks"
 assert_contains "$out" credential-assign "credential-assign survives allowlisted email on same line"
 case "$out" in *nykera*) printf 'FAIL  allowlisted email token leaked\n'; FAILURES=$((FAILURES+1));;
 *) printf 'ok    allowlisted email suppressed at token level\n';; esac
+# FAIL CLOSED: a nonexistent input must die, not silently pass (run nppm-273)
+out="$(bash "$R" scan "$D/does-not-exist.txt" 2>&1)" && rc=0 || rc=$?
+assert_eq 1 "$rc" "nonexistent input dies"
+assert_contains "$out" "unreadable scan input" "unreadable input named in the error"
+out="$(bash "$R" scan "$D/clean.txt" "$D/does-not-exist.txt" 2>&1)" && rc=0 || rc=$?
+assert_eq 1 "$rc" "one unreadable input fails the whole scan even beside a clean file"
 finish
