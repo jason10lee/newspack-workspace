@@ -108,6 +108,8 @@ assert_contains "$(git -C "$SLASH_WT" tag -l)" "autofix-anchor-run-slash" \
   "slashed branch: anchor tag created in the sanitized worktree dir"
 assert_contains "$(cat "$N_LOG")" "env destroy autofix-env-slash --yes" \
   "slashed branch: n env destroy invoked (push-check passed via RAW branch ls-remote)"
+assert_eq "null" "$(bash "$L" get run-slash '.env')" \
+  "destroy clears .env so sweeps don't retry a completed destroy"
 
 # base-ref discipline: a branch that already exists locally (e.g. a resumed
 # run re-invoking create) is left alone — `n branch` is only run to CREATE

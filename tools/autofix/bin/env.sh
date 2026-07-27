@@ -68,6 +68,10 @@ case "$cmd" in
       fi
     fi
     n env destroy "$name" --yes
+    # Clear the env record so future sweeps don't retry a destroy that already
+    # happened (run autofix-nppm-305: a stale .env made every sweep re-attempt
+    # the destroy and error on the missing worktree).
+    "$LEDGER" set "$run_id" '.env = null'
     "$LEDGER" history "$run_id" cleanup env-destroyed "$name" ;;
   *) die "unknown subcommand: $cmd" ;;
 esac
