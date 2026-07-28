@@ -72,4 +72,12 @@ bash "$L" set runslash '.branch = "jason/nppm-1-fix"'
 bash "$L" evidence runslash failing-test t.php 'exit 1'
 bash "$V" signal runslash --expect fail
 assert_eq 0 $? "slashed branch: signal finds worktree at the sanitized (dash) path"
+# Wrong-reason visibility: the tail of every failing evidence cmd is surfaced,
+# even when fail is the EXPECTED status (run nppm-273 bootstrap-error lesson)
+bash "$L" init runtail NPPM-3 operator-named >/dev/null
+bash "$L" set runtail '.branch = "br-1"'
+bash "$L" evidence runtail failing-test t.php 'echo BOOTSTRAP-MARKER; exit 1'
+out="$(bash "$V" signal runtail --expect fail 2>&1)" && rc=0 || rc=$?
+assert_eq 0 "$rc" "expected fail still passes the check"
+assert_contains "$out" "BOOTSTRAP-MARKER" "failing cmd output tail surfaced on expected fail"
 finish

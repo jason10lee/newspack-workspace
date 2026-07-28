@@ -185,6 +185,24 @@ the signal is currently failing:
 tools/autofix/bin/verify.sh signal <RUN_ID> --expect fail
 ```
 
+**The failure must fail for the right reason.** Before the first
+`--expect fail` for a PHPUnit signal, install the plugin's dev dependencies
+in the worktree (`n composer install` from the plugin dir) — the env's
+auto-provisioned `vendor/` is runtime-only, and a missing-PHPUnit-Polyfills
+bootstrap error reads as "fail" too (run nppm-273 hit exactly this). Then
+read the failing-output tail that `verify.sh signal` prints for every
+failing command and confirm it's your assertion failing, not the harness. A
+signal that fails for the wrong reason will later "flip to pass" for the
+wrong reason and fake a verified fix.
+
+**A non-repro verdict requires a positive control.** Before concluding
+cannot-reproduce, drive the same surface with a configuration that MUST
+exhibit the working behavior (e.g. a valid product where the bug needs a
+missing one) and confirm it does. Run nppm-305 had two env artifacts (a
+name-your-price product with no price; a membership content gate) each
+producing the same "nothing renders" symptom as the expected non-repro —
+without the control, the verdict would have been vacuously wrong.
+
 **Budget: three materially distinct repro hypotheses**
 (`.loop_counts.repro_hypotheses`, increment yourself), then bail.
 
@@ -343,8 +361,16 @@ and do **not** gate `delivered`.
 
 ## Stage 6 — PR & Linear closeout
 
-Compose the PR body: problem, root cause, fix, evidence (repro-before /
-pass-after), verification checklist, Linear link. Write it to a file, then:
+Compose the PR body by **filling the repo's
+`.github/PULL_REQUEST_TEMPLATE.md` verbatim** — every section including the
+checklists, checked truthfully — not by borrowing its content headings (run
+nppm-273 shipped without the checklist sections; operator-corrected).
+Content: problem, root cause, fix, evidence (repro-before / pass-after),
+verification, Linear link. **Write the body — and every outward payload
+(closeout comment text included) — to the run dir
+(`tools/autofix/runs/<RUN_ID>/`), never to a session/job tmp dir**: a
+run-nppm-305 payload staged in job tmp vanished mid-run and the release
+shipped with an empty comment. Then:
 
 ```
 tools/autofix/bin/pr.sh create <RUN_ID> --title "fix(<scope>): <subject> (<ISSUE-ID>)" --body-file <path>
@@ -393,7 +419,13 @@ Conventional-commit subject: `fix(<scope>): … (NPPM-XXXX)`, with a
 (labels/milestones/backports) is a human decision at `pr-ready` time — you
 don't encode release mechanics here.
 
-**Linear closeout comment**: post the PR link + evidence summary via the
+**Linear closeout comment**: post the PR link + evidence summary, plus a
+**one-line urgency assessment** for release routing — the signals (Linear
+priority, Backlog vs fresh-triage provenance, attached publisher report,
+regression vs long-standing), and which flow they point to (Backlog
+provenance ≈ biweekly; hotfix only with a real urgency signal). Routing
+stays a human decision at pr-ready time; the assessment just stops the
+default from being decided by silence. Post via the
 Linear MCP tools directly — `claim.sh` has no bare "post a comment" path
 outside `claim`/`release`, and `release` would also conditionally restore
 assignee/status, which must **not** happen for a delivered run (status stays

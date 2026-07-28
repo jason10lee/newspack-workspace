@@ -83,4 +83,11 @@ bash "$C" release NPPM-2993 run8 --comment "see https://mc.a8c.com/secret-store/
 assert_eq 1 "$rc" "redacted release comment aborts"
 assert_eq "$log_before" "$(cat "$AUTOFIX_LINEAR_MOCK_DIR/requests.log")" \
   "requests.log unchanged after the failed release — redaction gate runs before any Linear read/write"
+# FAIL CLOSED: explicitly empty --comment dies at parse, before any Linear I/O
+log_before="$(cat "$AUTOFIX_LINEAR_MOCK_DIR/requests.log")"
+out="$(bash "$C" release NPPM-2993 run8 --fail-label --comment "" 2>&1)" && rc=0 || rc=$?
+assert_eq 1 "$rc" "empty --comment refuses the release"
+assert_contains "$out" "empty" "empty --comment named in the error"
+assert_eq "$log_before" "$(cat "$AUTOFIX_LINEAR_MOCK_DIR/requests.log")" \
+  "requests.log unchanged — empty-comment die precedes any Linear read/write"
 finish

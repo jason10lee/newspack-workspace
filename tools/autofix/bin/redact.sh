@@ -57,7 +57,11 @@ scan_email() { # file — token-level exemption + allowlist
 }
 
 for f in "$@"; do
-  [ -f "$f" ] || continue
+  # FAIL CLOSED on unreadable inputs (found live, run autofix-nppm-273): a
+  # vanished artifact must block the scan, not silently pass it — a caller
+  # treats exit 0 as "scanned clean", so skipping would greenlight unscanned
+  # (possibly regenerated-later) content.
+  [ -f "$f" ] && [ -r "$f" ] || die "unreadable scan input: $f — refusing to pass unscanned content"
   scan_class "$f" secret-store 'mc\.a8c\.com/secret-store'
   scan_class "$f" private-key '\-\-\-\-\-BEGIN [A-Z ]*PRIVATE KEY'
   scan_class "$f" aws-key 'AKIA[0-9A-Z]{16}'

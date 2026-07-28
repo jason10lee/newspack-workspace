@@ -21,8 +21,16 @@ case "$cmd" in
     while [ "$i" -lt "$count" ]; do
       ecmd="$("$LEDGER" get "$run_id" ".evidence[$i].cmd")"
       if [ -n "$ecmd" ] && [ "$ecmd" != "null" ]; then
-        if (cd "$wt" && bash -c "$ecmd") >/dev/null 2>&1; then st=pass; else st=fail; fi
+        if out="$( (cd "$wt" && bash -c "$ecmd") 2>&1 )"; then st=pass; else st=fail; fi
         log "evidence[$i] '$ecmd' → $st"
+        # Surface the tail of EVERY failing command — including an expected
+        # fail. A signal can fail for the wrong reason (run autofix-nppm-273:
+        # a missing-dev-deps PHPUnit bootstrap error read as the "failing
+        # test"), and a status that matches the expectation would otherwise
+        # hide it. The caller must confirm the failure is the assertion.
+        if [ "$st" = fail ]; then
+          printf '%s\n' "$out" | tail -n 5 | sed 's/^/[autofix]   | /' >&2
+        fi
         [ "$st" = "$expect" ] || bad=1
         ran=$((ran+1))
       fi
