@@ -9,6 +9,62 @@ cmd="${1:?usage: verify.sh signal|lint|suite <run_id> [flags]}"; run_id="${2:?}"
 branch="$("$LEDGER" get "$run_id" '.branch // empty')"
 wt="$(wt_dir "$branch")"
 
+# parse_evidence_argv <cmd-string> — turn a ledger `.evidence[].cmd` into the
+# argv it will be exec'd as, and enforce the executable + subcommand allowlist.
+# Result is placed in the global EV_ARGV[] array. Dies (fail-closed) on anything
+# outside the allowlist.
+#
+# Why this is safe against the command-injection finding:
+#   * NO shell ever evaluates the string. It is word-split on spaces with
+#     globbing disabled (`set -f`), so shell metacharacters that appear INSIDE
+#     an argument — `;` `|` `&` `$` backtick `(` `)` `<` `>` `*` `\` `,` — are
+#     literal argv bytes, never operators. The argv is later exec'd directly
+#     (`"${EV_ARGV[@]}"`), never via `bash -c`.
+#   * The executable (argv[0]) must be one of a *closed* set that contains NO
+#     general-purpose code runner:
+#       - `n test-php` / `n test-js` — the repo's own wrapper, restricted to its
+#         two test subcommands. `n`'s other subcommands are not reachable, so it
+#         can't be turned into an arbitrary-command runner here.
+#       - `npx playwright test …` — the EXACT fixed prefix only. Bare `npx`
+#         fetches-and-runs arbitrary npm packages, so `npx <anything-else>` is
+#         rejected; only Playwright (how the skill records browser repros) is
+#         permitted, and it can't install a different package.
+#     `node`, `npx <other>`, `n <other>`, and every other executable are
+#     rejected. Because backslash/comma survive as literal argv, a legitimate
+#     PHPUnit filter like `n test-php --filter Namespace\Class::method` or a
+#     comma-separated `--group a,b` is accepted unchanged — no charset filter is
+#     needed or applied beyond rejecting raw newlines (multi-line smuggling).
+parse_evidence_argv() { # cmd-string
+  local ecmd="$1"
+  case "$ecmd" in
+    *$'\n'*|*$'\r'*) die "evidence cmd contains a newline; refusing to run: $ecmd" ;;
+  esac
+  local IFS=' '
+  set -f
+  # Intentional unquoted split into argv; `set -f` disables globbing and
+  # IFS=' ' splits on spaces only. No other shell evaluation occurs, so a
+  # backslash/comma inside a filter argument is preserved literally.
+  # shellcheck disable=SC2206
+  EV_ARGV=( $ecmd )
+  set +f
+  [ "${#EV_ARGV[@]}" -gt 0 ] || die "empty evidence cmd after parsing"
+  case "${EV_ARGV[0]}" in
+    n)
+      case "${EV_ARGV[1]:-}" in
+        test-php|test-js) : ;;
+        *) die "evidence cmd not allowed: 'n ${EV_ARGV[1]:-}' (only 'n test-php' / 'n test-js')" ;;
+      esac
+      ;;
+    npx)
+      { [ "${EV_ARGV[1]:-}" = playwright ] && [ "${EV_ARGV[2]:-}" = test ]; } \
+        || die "evidence cmd not allowed: 'npx' is only permitted as 'npx playwright test …'"
+      ;;
+    *)
+      die "evidence cmd executable not in allowlist: '${EV_ARGV[0]}' (allowed: 'n test-php', 'n test-js', 'npx playwright test')"
+      ;;
+  esac
+}
+
 case "$cmd" in
   signal)
     [ -d "$wt" ] || die "worktree missing: $wt"
@@ -21,7 +77,10 @@ case "$cmd" in
     while [ "$i" -lt "$count" ]; do
       ecmd="$("$LEDGER" get "$run_id" ".evidence[$i].cmd")"
       if [ -n "$ecmd" ] && [ "$ecmd" != "null" ]; then
-        if out="$( (cd "$wt" && bash -c "$ecmd") 2>&1 )"; then st=pass; else st=fail; fi
+        # Validate + word-split BEFORE running so a rejection dies visibly.
+        # Never a shell — exec argv directly.
+        parse_evidence_argv "$ecmd"
+        if out="$( (cd "$wt" && "${EV_ARGV[@]}") 2>&1 )"; then st=pass; else st=fail; fi
         log "evidence[$i] '$ecmd' → $st"
         # Surface the tail of EVERY failing command — including an expected
         # fail. A signal can fail for the wrong reason (run autofix-nppm-273:
