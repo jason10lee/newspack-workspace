@@ -1,8 +1,18 @@
-#!/bin/bash
-# Unit tests for bin/newspack-manage-host host-add/host-remove against a temp
-# hosts file (no sudo, no ifconfig). Uses the NEWSPACK_MANAGE_HOST_HOSTS_FILE hook.
+#!/usr/bin/env bash
+#
+# test-newspack-manage-host.sh
+#
+# Specs for bin/newspack-manage-host host-add/host-remove against a temp hosts
+# file (no sudo, no ifconfig), via the NEWSPACK_MANAGE_HOST_HOSTS_FILE hook,
+# plus a proof that the pinned PATH is not overridable by the caller.
+#
+# Lives in bin/tests/ because that is the directory CI globs. The wrapper runs
+# as root under a NOPASSWD sudoers rule, so a spec that only runs when someone
+# remembers to run it is not protecting anything.
+#
+# Run: bash bin/tests/test-newspack-manage-host.sh
 set -u
-BIN="$(cd "$(dirname "$0")/../bin" && pwd)"
+BIN="$(cd "$(dirname "$0")/.." && pwd)"
 WRAP="$BIN/newspack-manage-host"
 FIX="$(mktemp -d)"; trap 'rm -rf "$FIX"' EXIT
 pass=0; fail=0
@@ -49,5 +59,26 @@ ok "dot-escaped dedup adds foo.test despite fooXtest present" "$(grep -c '^127.0
 H4="$FIX/hosts4"; : > "$H4"
 NEWSPACK_MANAGE_HOST_HOSTS_FILE="$H4" bash "$WRAP" host-add 127.0.0.5 dotted.test foo.bar
 ok "accepts dotted env name and writes its marker" "$(grep -c '^127.0.0.5 dotted.test # newspack-env:foo.bar$' "$H4")" "1"
+
+# The pinned PATH must not be overridable by the caller.
+#
+# The wrapper runs as root under a NOPASSWD sudoers rule and macOS sets no
+# secure_path, so sudo passes the caller's PATH straight through. Without the
+# pin, a `grep` planted earlier in that PATH executes as root. This plants one
+# and asserts it is never reached. No sudo is involved: the hijack works the
+# same way whoever runs the script, so the spec proves the mechanism without
+# needing privileges.
+#
+# Assert on the marker file rather than on exit status — a planted binary that
+# runs and then succeeds would leave the status clean and the spec green.
+EVIL="$FIX/evil"; mkdir -p "$EVIL"
+printf '#!/bin/bash\ntouch "%s/HIJACKED"\nexit 1\n' "$FIX" > "$EVIL/grep"
+chmod +x "$EVIL/grep"
+H5="$FIX/hosts5"; : > "$H5"
+rm -f "$FIX/HIJACKED"
+PATH="$EVIL:$PATH" NEWSPACK_MANAGE_HOST_HOSTS_FILE="$H5" bash "$WRAP" host-add 127.0.0.6 pinned.test
+ok "planted grep is not used (PATH pin holds)" "$([ -e "$FIX/HIJACKED" ] && echo hijacked || echo clean)" "clean"
+# And the real grep still did its job, so the pin did not simply break the call.
+ok "pinned PATH still resolves a working grep" "$(grep -c '^127.0.0.6 pinned.test$' "$H5")" "1"
 
 echo ""; echo "RESULT: $pass passed, $fail failed"; [ "$fail" -eq 0 ]
