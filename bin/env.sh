@@ -133,21 +133,37 @@ each_worktree_in_env() {
     done < <(grep -E '^[[:space:]]*-[[:space:]]+\./worktrees(-repos)?/[^[:space:]:]+:/newspack-(repos|plugins|themes)/[^[:space:]:]+' "$file" 2>/dev/null)
 }
 
+# True for an explicit help request in the name position. It matches -h and
+# --help and nothing else, so `up --all` — the one other dash-leading token read
+# from that position — still reaches its own branch below.
+is_help_arg() {
+    [[ "$1" == "-h" || "$1" == "--help" ]]
+}
+
+# Print a subcommand's usage and exit. Status 0 when the user asked for help,
+# 1 when the name was simply missing — one usage string serves both, and the
+# caller passes whatever it read positionally so this can tell them apart.
+env_usage() {
+    local name="$1"; shift
+    printf '%s\n' "$@"
+    is_help_arg "$name" && exit 0
+    exit 1
+}
+
 # Only dispatch subcommands when executed directly. When sourced (e.g. by the
 # host-side unit tests) just define the helpers above and return.
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 case $1 in
     create)
         env_name="$2"
-        if [[ -z "$env_name" ]]; then
-            echo "Usage: n env create <name> --worktree <repo>:<branch> [--worktree ...] [--domain <domain>] [--isolated-db] [--up]"
-            exit 1
+        if [[ -z "$env_name" ]] || is_help_arg "$env_name"; then
+            env_usage "$env_name" "Usage: n env create <name> --worktree <repo>:<branch> [--worktree ...] [--domain <domain>] [--isolated-db] [--up]"
         fi
-        validate_env_name "$env_name"
+        validate_new_env_name "$env_name"
         # Reject names that would collide after dash/dot/underscore normalization.
-        # validate_env_name permits dots; env_safe_name folds them to underscores
-        # alongside dashes, so foo-bar, foo.bar, and foo_bar all resolve to the
-        # same docker-safe identifier and must not coexist.
+        # validate_new_env_name permits interior dots; env_safe_name folds them to
+        # underscores alongside dashes, so foo-bar, foo.bar, and foo_bar all resolve
+        # to the same docker-safe identifier and must not coexist.
         normalized=$(env_safe_name "$env_name")
         for f in "$NABSPATH"/docker-compose.env-*.yml; do
             [[ -f "$f" ]] || continue
@@ -432,10 +448,8 @@ YAML
         ;;
     up)
         env_name="$2"
-        if [[ -z "$env_name" ]]; then
-            echo "Usage: n env up <name> [--build]"
-            echo "       n env up --all [--build]"
-            exit 1
+        if [[ -z "$env_name" ]] || is_help_arg "$env_name"; then
+            env_usage "$env_name" "Usage: n env up <name> [--build]" "       n env up --all [--build]"
         fi
         # --all: start all existing environments.
         if [[ "$env_name" == "--all" ]]; then
@@ -628,6 +642,22 @@ MIGRATE
             -e 's|SSLCertificateFile .*|SSLCertificateFile /etc/ssl/certs/${domain}.pem|' \
             -e 's|SSLCertificateKeyFile .*|SSLCertificateKeyFile /etc/ssl/certs/${domain}-key.pem|' \
             /etc/apache2/sites-available/000-default.conf"
+        # Provision Composer vendor/ for the migrated monorepo plugins and themes,
+        # so plugin activation doesn't fatal on a missing vendor/autoload.php (the
+        # foundation-smoke failure mode). Idempotent; skips projects whose vendor/
+        # is already present. On failure it warns (actionably) rather than tearing
+        # down an otherwise-usable env.
+        #
+        # Ahead of the WP-CLI calls below deliberately: every one of them boots
+        # WordPress and loads the active plugins, so on an env whose database
+        # already has a Newspack plugin active while its mounted vendor/ is missing,
+        # they fatal before provisioning would have run. That repairs itself on a
+        # second `n env up`, but only because the failures here are non-fatal --
+        # running first repairs such an env in one pass. This step needs no
+        # database, so nothing is lost by doing it earlier.
+        docker exec "$container_name" bash /var/scripts/ensure-vendor.sh || \
+            echo "Warning: vendor provisioning reported errors (see above); affected plugins may fatal on activation. Try 'n ci-build all'."
+
         # Auto-install WordPress if not already installed.
         echo "Waiting for WordPress setup..."
         for i in $(seq 1 20); do
@@ -735,9 +765,8 @@ MIGRATE
         ;;
     down)
         env_name="$2"
-        if [[ -z "$env_name" ]]; then
-            echo "Usage: n env down <name>"
-            exit 1
+        if [[ -z "$env_name" ]] || is_help_arg "$env_name"; then
+            env_usage "$env_name" "Usage: n env down <name>"
         fi
         validate_env_name "$env_name"
         container_name=$(echo "newspack_env_${env_name}" | tr '-' '_')
@@ -754,9 +783,8 @@ MIGRATE
         ;;
     destroy)
         env_name="$2"
-        if [[ -z "$env_name" ]]; then
-            echo "Usage: n env destroy <name>"
-            exit 1
+        if [[ -z "$env_name" ]] || is_help_arg "$env_name"; then
+            env_usage "$env_name" "Usage: n env destroy <name>"
         fi
         validate_env_name "$env_name"
         compose_file="$NABSPATH/docker-compose.env-${env_name}.yml"
@@ -888,6 +916,10 @@ MIGRATE
         echo "Destroyed environment '$env_name'"
         ;;
     list)
+        if is_help_arg "$2"; then
+            echo "Usage: n env list [--porcelain]"
+            exit 0
+        fi
         porcelain=false
         if [[ "$2" == "--porcelain" ]]; then
             porcelain=true
@@ -942,6 +974,7 @@ MIGRATE
             case $1 in
                 --all) cleanup_all=true; shift ;;
                 --yes) cleanup_yes=true; shift ;;
+                -h|--help) echo "Usage: n env cleanup [--all] [--yes]"; exit 0 ;;
                 *) echo "Usage: n env cleanup [--all] [--yes]"; exit 1 ;;
             esac
         done
