@@ -37,7 +37,7 @@ cd "$wt"
 # attempt. Fail closed throughout: never guess at the upstream base ref.
 fetch_upstream_main "$wt"
 
-affected_repo="$("$LEDGER" get "$run_id" '.decisions[] | select(.key=="affected_repo") | .value')"
+affected_repo="$(ledger_decision "$run_id" affected_repo)"
 [ -n "$affected_repo" ] || die "no affected_repo decision in ledger for $run_id"
 
 offending="$(git diff --name-only origin/main...HEAD \

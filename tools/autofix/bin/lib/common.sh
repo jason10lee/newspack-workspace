@@ -64,6 +64,13 @@ json_escape() { printf '%s' "$1" | jq -Rs .; }
 # on-disk path needs sanitizing.
 wt_dir() { printf '%s/worktrees/%s' "$WORKSPACE_ROOT" "$(printf '%s' "$1" | tr '/' '-')"; }
 
+# ledger_decision <run_id> <key> — the value of a recorded decision, or empty.
+# The latest one wins: a resumed run can record the same key again, and a plain
+# `.decisions[] | select(...)` then returns every value, one per line.
+ledger_decision() { # run_id key
+  bash "$AUTOFIX_BIN_DIR/ledger.sh" get "$1" "[.decisions[] | select(.key==\"$2\") | .value] | last // empty"
+}
+
 # project_dir <wt> <affected_repo> — the unit directory inside a worktree that
 # `n test-php` / `n test-js` must run from. Both resolve their project from the
 # cwd, and from the worktree root they refuse with "You must be inside one of

@@ -150,6 +150,27 @@ assert_contains "$out" "153 commits" "scope guard: die message names the commit 
 assert_eq "" "$(grep push "$STUB_LOG" || true)" "commit-count guard: nothing pushed"
 assert_eq 0 "$(bash "$L" get runscope2 '.attempts.pr')" "commit-count guard: attempts.pr NOT burned"
 
+# A resumed run can record affected_repo twice, and the latest must win.
+# Reading both handed grep a two-line pattern, which it treats as two patterns:
+# the stale repo's prefix stayed allowed and the current one lost its anchor,
+# so the scope guard widened instead of refusing.
+bash "$L" init rundup NPPM-10 operator-named >/dev/null
+bash "$L" set rundup '.branch = "br-2"'
+bash "$L" set rundup '.decisions += [{key:"affected_repo", value:"newspack-blocks"}]'
+bash "$L" set rundup '.decisions += [{key:"affected_repo", value:"newspack-plugin"}]'
+: > "$STUB_LOG"
+bash "$P" create rundup --title t --body-file "$BODY" >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq 0 "$rc" "duplicate affected_repo: an in-scope branch still passes"
+for leak in plugins/newspack-blocks/src/x.js tools/newspack-plugin/x.sh; do
+  : > "$STUB_LOG"
+  bash "$L" set rundup '.attempts.pr = 0'
+  export STUB_DIFF_FILES=$'plugins/newspack-plugin/includes/class-foo.php\n'"$leak"
+  bash "$P" create rundup --title t --body-file "$BODY" >/dev/null 2>&1 && rc=0 || rc=$?
+  export STUB_DIFF_FILES="plugins/newspack-plugin/includes/class-foo.php"
+  assert_eq 1 "$rc" "duplicate affected_repo: scope guard refuses $leak"
+  assert_eq "" "$(grep push "$STUB_LOG" || true)" "duplicate affected_repo: nothing pushed for $leak"
+done
+
 # PR-scope guard: missing affected_repo decision dies closed (never guesses
 # at an allowed prefix).
 bash "$L" init runscope3 NPPM-9 operator-named >/dev/null

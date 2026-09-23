@@ -31,7 +31,7 @@ case "$cmd" in
     repo="${1:?repo}"; shift
     [ "${1:-}" = "--" ] && shift
     issue="$("$LEDGER" get "$run_id" .issue | tr '[:upper:]' '[:lower:]')"
-    stem="$("$LEDGER" get "$run_id" '.decisions[] | select(.key=="branch_stem") | .value')"
+    stem="$(ledger_decision "$run_id" branch_stem)"
     [ -n "$stem" ] || die "no branch_stem decision in ledger (Stage 1 must set it from Linear branchName)"
     attempts="$("$LEDGER" get "$run_id" '.attempts.provisioning')"
     if [ "$attempts" -ge "$AUTOFIX_MAX_ATTEMPTS" ]; then

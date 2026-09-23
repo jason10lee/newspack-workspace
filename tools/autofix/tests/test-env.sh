@@ -63,6 +63,16 @@ branch_line="$(grep -n "branch nppm-2993-bug-jetpack-a origin/main" "$GIT_LOG" |
 assert_eq true "$([ "$fetch_line" -lt "$branch_line" ] && echo true || echo false)" \
   "fetch precedes branch pre-creation in the git log"
 
+# A branch_stem rewritten after Stage 1 (how a secure run used to neutralize
+# its branch name) leaves two decisions. The latest wins.
+bash "$L" init run-dup NPPM-2996 operator-named >/dev/null
+bash "$L" set run-dup '.decisions += [{key:"branch_stem", value:"nppm-2996-old-title-slug"}]'
+bash "$L" set run-dup '.decisions += [{key:"branch_stem", value:"nppm-2996"}]'
+: > "$N_LOG"
+bash "$E" create run-dup newspack-multibranded-site >/dev/null 2>&1
+assert_contains "$(cat "$N_LOG")" "--worktree newspack-multibranded-site:nppm-2996-dup " "duplicate branch_stem: the latest decision names the branch"
+assert_eq "" "$(grep old-title-slug "$N_LOG" || true)" "duplicate branch_stem: the superseded stem is not used"
+
 # failure path: N_EXIT=1 twice more → third create attempt dies at cap
 export N_EXIT=1
 bash "$E" create run-a newspack-multibranded-site >/dev/null 2>&1 || true

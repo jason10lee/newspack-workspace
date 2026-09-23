@@ -8,8 +8,7 @@ LEDGER="$BIN/ledger.sh"
 cmd="${1:?usage: verify.sh signal|lint|suite <run_id> [flags]}"; run_id="${2:?}"; shift 2
 branch="$("$LEDGER" get "$run_id" '.branch // empty')"
 wt="$(wt_dir "$branch")"
-# The latest decision wins: a resumed run can record affected_repo again.
-affected_repo() { "$LEDGER" get "$run_id" '[.decisions[] | select(.key=="affected_repo") | .value] | last // empty'; }
+affected_repo() { ledger_decision "$run_id" affected_repo; }
 
 # parse_evidence_argv <cmd-string> — turn a ledger `.evidence[].cmd` into the
 # argv it will be exec'd as, and enforce the executable + subcommand allowlist.
