@@ -101,9 +101,13 @@ fi
 
 # 7. Copilot request (advisory; REST because gh pr view misses the bot).
 # --no-copilot (spec Override 2) declines it; the decision is logged either way.
+# Only a newly created PR gets one: the repo asks for a single Copilot pass per
+# PR, and every push after the first comes back through the adopt path above.
 if [ -n "$no_copilot" ]; then
   "$LEDGER" history "$run_id" pr no-copilot "operator declined Copilot review request"
   log "Copilot review request skipped (--no-copilot)"
+elif [ -n "$existing" ] && [ "$existing" != "null" ]; then
+  log "Copilot review not re-requested on adopted PR #$num (one pass per PR)"
 else
   gh api "repos/{owner}/{repo}/pulls/$num/requested_reviewers" \
     -f 'reviewers[]=copilot-pull-request-reviewer[bot]' >/dev/null 2>&1 \

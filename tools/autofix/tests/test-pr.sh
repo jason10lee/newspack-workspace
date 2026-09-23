@@ -76,6 +76,9 @@ assert_eq "" "$(grep 'pr create' "$STUB_LOG" || true)" "existing PR not re-creat
 assert_eq 321 "$(bash "$L" get runr .pr.number)" "existing PR number adopted"
 assert_eq delivered "$(bash "$L" get runr .terminal)" "adoption reaches delivered"
 assert_contains "$(bash "$L" get runr '.stage_history[-1].notes')" "adopted existing PR" "adoption noted in history"
+# One Copilot pass per PR: every push after the first adopts the PR, and the
+# adopt path used to re-request Copilot each time.
+assert_eq "" "$(grep copilot "$STUB_LOG" || true)" "adoption does not re-request Copilot"
 
 # attempt cap: at 3 attempts, die before any push/create, terminal=escalated.
 # The scope guard runs BEFORE the attempt cap (see pr.sh comment 2), so its

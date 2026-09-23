@@ -50,6 +50,21 @@ out="$(unset AUTOFIX_SECURE; bash "$A" run-secure NPPM-2993 2>&1)" && rc=0 || rc
 assert_eq 1 "$rc" "run-secure without AUTOFIX_SECURE=1 dies"
 assert_contains "$out" "entry ack" "run-secure explains the entry-ack requirement"
 
+# run-secure records a neutral branch stem, not Linear's title-derived
+# branchName, which for a security issue tends to describe the flaw and ends up
+# as a branch on a public repo. The claim fails against this mock (as in
+# test-dispatcher.sh), but the stem is recorded before the claim runs.
+export AUTOFIX_ROOT; AUTOFIX_ROOT="$(mktemp -d)"
+M="$(mktemp -d)"; export AUTOFIX_LINEAR_MOCK_DIR="$M"
+cp fixtures/viewer.json fixtures/states.json fixtures/issueUpdate.json fixtures/commentCreate.json "$M/"
+cp fixtures/issue_security.json "$M/issue.json"
+cp fixtures/issue_postclaim_ok.json "$M/issue_postclaim.json"
+printf '%s' "$EMPTY_COMMENTS" > "$M/issue_comments.json"
+AUTOFIX_SECURE=1 bash "$A" run-secure NPPM-2993 >/dev/null 2>&1
+rid=""; for d in "$AUTOFIX_ROOT/runs"/autofix-nppm-2993-*; do [ -e "$d" ] && rid="$(basename "$d")"; done
+assert_eq nppm-2993 "$(bash "$L" get "$rid" '.decisions[] | select(.key=="branch_stem") | .value')" \
+  "run-secure records the issue ID alone as branch_stem"
+
 # ---------------------------------------------------------------------------
 # secure claim: comment DEFERRED (no commentCreate), assignee-only verify, drift
 # ---------------------------------------------------------------------------
@@ -151,6 +166,13 @@ assert_contains "$out" "GATED:" "secure pr create prints GATED marker"
 assert_eq "" "$(grep push "$STUB_LOG" || true)" "secure pr create pushes NOTHING when gated"
 assert_eq 0 "$(bash "$L" get secpr '.attempts.pr')" "gated preview does NOT consume a pr attempt"
 PVDG="$(printf '%s\n' "$out" | sed -n 's/^GATED: \([0-9a-f]*\) .*/\1/p')"
+# The previewed diff is against origin/main, the base the scope guard checks.
+# Local `main` is the fork-trunk here, and diffing it put 900+ files in front
+# of the operator for a 2-file push.
+PVFILE="$(printf '%s\n' "$out" | sed -n 's/^GATED: [0-9a-f]* \(.*\)$/\1/p')"
+assert_contains "$(cat "$STUB_LOG")" "git diff origin/main...HEAD" "secure preview diffs origin/main...HEAD"
+assert_eq "" "$(grep -E 'git diff (main|HEAD)' "$STUB_LOG" || true)" "secure preview never diffs local main"
+assert_contains "$(cat "$PVFILE")" "git diff origin/main...HEAD" "preview artifact names the origin/main base"
 : > "$STUB_LOG"
 bash "$P" create secpr --title "fix(x): y (NPPM-9)" --body-file "$BODY" --confirmed="$PVDG" --no-copilot >/dev/null 2>&1
 assert_contains "$(cat "$STUB_LOG")" "push -u origin br-sec" "confirmed secure pr create pushes"

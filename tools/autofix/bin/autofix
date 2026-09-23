@@ -98,7 +98,9 @@ case "$cmd" in
     summary="$(bash "$BIN/intake.sh" check-secure "$issue" "$@")" || exit $?
     rid="$(mint_run_id "$issue")"
     bash "$BIN/ledger.sh" init "$rid" "$issue" secure >/dev/null
-    stem="$(printf '%s' "$summary" | jq -r .branchName)"
+    # Not Linear's branchName: it is slugged from the title, which here tends
+    # to describe the flaw, and the branch is pushed to a public repo.
+    stem="$(neutral_branch_stem "$issue")"
     bash "$BIN/ledger.sh" set "$rid" '.decisions += [{key:"branch_stem", value:$v}]' --arg v "$stem"
     bash "$BIN/claim.sh" claim "$issue" "$rid"
     echo "RUN_ID=$rid"

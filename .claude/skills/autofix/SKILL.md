@@ -274,7 +274,8 @@ All required, in order:
    `tools/autofix/bin/verify.sh signal <RUN_ID> --expect pass`
 2. Full test suite for the touched plugin:
    `tools/autofix/bin/verify.sh suite <RUN_ID>` (runs `n test-php`, and
-   `n test-js` if the plugin's `package.json` has a `test:js` script).
+   `n test-js` if the plugin's `package.json` has a real `test` script rather
+   than the `echo` placeholder).
 3. Lint changed files:
    `tools/autofix/bin/verify.sh lint <RUN_ID>` — **this covers PHP only**
    (root `phpcs.xml` against changed `*.php` files vs. `origin/main`). If the
@@ -406,7 +407,8 @@ ends looking `delivered` without its primary artifact; (4) pushes the
 branch; (5) **adopts an existing open PR for this branch** if `gh pr list`
 finds one (idempotent re-run / resume-after-partial-push), otherwise opens a
 **draft** PR against `main`; (6) requests a Copilot review via the GitHub
-REST API (advisory — a failure here is logged and does not block); (7)
+REST API, on a newly created PR only (one pass per PR; an adopted PR is not
+re-requested; advisory — a failure here is logged and does not block); (7)
 records `.pr` and sets `terminal: delivered`.
 
 **PR-scope guard (fork-trunk leak guard)**: real incident — an autofix run
@@ -480,8 +482,9 @@ just PR state**:
 - `escalated` runs get a retention TTL (`AUTOFIX_ESCALATED_ENV_TTL_DAYS`,
   default 14) after which the sweep logs and expects an operator decision —
   it does not auto-destroy. The fail-closed anchor-tag + push-check
-  safeguard in `env.sh destroy` governs (a WIP branch may be unpushed); the
-  cleanup sweep waives the push check only for **branch-less bailed runs**
+  safeguard in `env.sh destroy` governs (a WIP branch may be unpushed; a
+  branch deleted by a squash merge still passes when its tip is in the run's
+  `refs/pull/<n>/head`); the cleanup sweep waives the push check only for **branch-less bailed runs**
   (nothing unpushed could exist). To act on an escalated run's env yourself:
   `tools/autofix/bin/env.sh destroy <RUN_ID> [--waive-push-check]`.
 

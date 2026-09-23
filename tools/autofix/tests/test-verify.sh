@@ -4,7 +4,7 @@ cd "$(dirname "$0")" || exit 1; . ./helpers.sh
 V=../bin/verify.sh; L=../bin/ledger.sh
 export AUTOFIX_ROOT; AUTOFIX_ROOT="$(mktemp -d)"
 export AUTOFIX_WORKSPACE_ROOT; AUTOFIX_WORKSPACE_ROOT="$(mktemp -d)"
-mkdir -p "$AUTOFIX_WORKSPACE_ROOT/worktrees/br-1"
+mkdir -p "$AUTOFIX_WORKSPACE_ROOT/worktrees/br-1/plugins/my-plugin"
 
 # Stub the allowlisted executables (`n`, `npx`) on PATH. `verify.sh signal`
 # exec's evidence commands directly (no shell) and only permits
@@ -16,9 +16,11 @@ mkdir -p "$AUTOFIX_WORKSPACE_ROOT/worktrees/br-1"
 # proving no shell mangled a backslash and no metacharacter ran a command.
 STUB="$(mktemp -d)"; export PATH="$STUB:$PATH"
 export ARGV_LOG="$STUB/argv.log"; : > "$ARGV_LOG"
+export CWD_LOG="$STUB/cwd.log"; : > "$CWD_LOG"
 cat > "$STUB/n" <<'EOF'
 #!/bin/bash
 printf 'n %s\n' "$*" >> "${ARGV_LOG:?}"
+printf '%s n %s\n' "$PWD" "$*" >> "${CWD_LOG:?}"
 printf 'n %s\n' "$*"
 for a in "$@"; do case "$a" in *PASS*) exit 0 ;; *FAIL*) exit 1 ;; esac; done
 exit 0
@@ -26,6 +28,7 @@ EOF
 cat > "$STUB/npx" <<'EOF'
 #!/bin/bash
 printf 'npx %s\n' "$*" >> "${ARGV_LOG:?}"
+printf '%s npx %s\n' "$PWD" "$*" >> "${CWD_LOG:?}"
 printf 'npx %s\n' "$*"
 for a in "$@"; do case "$a" in *PASS*) exit 0 ;; *FAIL*) exit 1 ;; esac; done
 exit 0
@@ -34,6 +37,7 @@ chmod +x "$STUB/n" "$STUB/npx"
 
 bash "$L" init runv NPPM-1 operator-named >/dev/null
 bash "$L" set runv '.branch = "br-1"'
+bash "$L" set runv '.decisions += [{key:"affected_repo", value:"my-plugin"}]'
 bash "$L" evidence runv failing-test t.php 'n test-php --filter FAIL'
 
 bash "$V" signal runv --expect fail
@@ -48,6 +52,7 @@ assert_eq 1 "$rc" "mixed signals: any failing cmd fails --expect pass"
 # missing worktree dir → signal dies fail-closed (never a false pass)
 bash "$L" init runw NPPM-2 operator-named >/dev/null
 bash "$L" set runw '.branch = "no-such-branch"'
+bash "$L" set runw '.decisions += [{key:"affected_repo", value:"my-plugin"}]'
 bash "$L" evidence runw failing-test t.php 'n test-php --filter FAIL'
 bash "$V" signal runw --expect fail >/dev/null 2>&1 && rc=0 || rc=$?
 assert_eq 1 "$rc" "missing worktree: signal dies (--expect fail)"
@@ -57,6 +62,7 @@ assert_eq 1 "$rc" "missing worktree: signal dies (--expect pass, no false pass)"
 # evidence entries all with empty cmd → signal dies (nothing effective ran)
 bash "$L" init rune NPPM-3 operator-named >/dev/null
 bash "$L" set rune '.branch = "br-1"'
+bash "$L" set rune '.decisions += [{key:"affected_repo", value:"my-plugin"}]'
 bash "$L" evidence rune note t.php ''
 bash "$L" evidence rune note t2.php ''
 bash "$V" signal rune --expect pass >/dev/null 2>&1 && rc=0 || rc=$?
@@ -71,6 +77,7 @@ reject_case() { # label cmd
   rid="rej-$(printf '%s' "$label" | tr -cd 'a-z0-9')"
   bash "$L" init "$rid" NPPM-R operator-named >/dev/null
   bash "$L" set "$rid" '.branch = "br-1"'
+bash "$L" set "$rid" '.decisions += [{key:"affected_repo", value:"my-plugin"}]'
   bash "$L" evidence "$rid" failing-test t.php "$cmd"
   : > "$ARGV_LOG"
   bash "$V" signal "$rid" --expect fail >/dev/null 2>&1 && rc=0 || rc=$?
@@ -93,6 +100,7 @@ marker="$STUB/pwned-$$"
 rm -f "$marker"
 bash "$L" init runinj NPPM-I operator-named >/dev/null
 bash "$L" set runinj '.branch = "br-1"'
+bash "$L" set runinj '.decisions += [{key:"affected_repo", value:"my-plugin"}]'
 bash "$L" evidence runinj failing-test t.php "n test-php --filter FAIL; touch $marker"
 bash "$V" signal runinj --expect fail
 assert_eq 0 $? "injection suffix: runs as literal argv, still a fail signal"
@@ -104,6 +112,7 @@ assert_eq no "$present" "injection suffix: no shell ran the 'touch' side effect"
 : > "$ARGV_LOG"
 bash "$L" init runbs NPPM-B operator-named >/dev/null
 bash "$L" set runbs '.branch = "br-1"'
+bash "$L" set runbs '.decisions += [{key:"affected_repo", value:"my-plugin"}]'
 bash "$L" evidence runbs fixed t.php 'n test-php --filter Newspack\Data_Events::test_PASS'
 bash "$V" signal runbs --expect pass
 assert_eq 0 $? "backslashed FQCN filter accepted and passes"
@@ -114,6 +123,7 @@ assert_contains "$(cat "$ARGV_LOG")" 'Newspack\Data_Events::test_PASS' \
 : > "$ARGV_LOG"
 bash "$L" init runcs NPPM-C operator-named >/dev/null
 bash "$L" set runcs '.branch = "br-1"'
+bash "$L" set runcs '.decisions += [{key:"affected_repo", value:"my-plugin"}]'
 bash "$L" evidence runcs fixed t.php 'n test-php --group byline-block,data-events-PASS'
 bash "$V" signal runcs --expect pass
 assert_eq 0 $? "comma-separated --group list accepted and passes"
@@ -124,6 +134,7 @@ assert_contains "$(cat "$ARGV_LOG")" 'byline-block,data-events-PASS' \
 : > "$ARGV_LOG"
 bash "$L" init runpw NPPM-P operator-named >/dev/null
 bash "$L" set runpw '.branch = "br-1"'
+bash "$L" set runpw '.decisions += [{key:"affected_repo", value:"my-plugin"}]'
 bash "$L" evidence runpw playwright-repro r.spec.js 'npx playwright test specs/repro_PASS.spec.js'
 bash "$V" signal runpw --expect pass
 assert_eq 0 $? "npx playwright test <spec> accepted and passes"
@@ -134,9 +145,10 @@ assert_contains "$(cat "$ARGV_LOG")" 'npx playwright test specs/repro_PASS.spec.
 # "jason/nppm-1-fix") lives at the SANITIZED path on disk — `n` runs
 # safe_branch=$(tr '/' '-') when it names the worktree dir — not at a naive
 # WORKSPACE_ROOT/worktrees/<raw-branch> join.
-mkdir -p "$AUTOFIX_WORKSPACE_ROOT/worktrees/jason-nppm-1-fix"
+mkdir -p "$AUTOFIX_WORKSPACE_ROOT/worktrees/jason-nppm-1-fix/plugins/my-plugin"
 bash "$L" init runslash NPPM-9 operator-named >/dev/null
 bash "$L" set runslash '.branch = "jason/nppm-1-fix"'
+bash "$L" set runslash '.decisions += [{key:"affected_repo", value:"my-plugin"}]'
 bash "$L" evidence runslash failing-test t.php 'n test-php --filter FAIL'
 bash "$V" signal runslash --expect fail
 assert_eq 0 $? "slashed branch: signal finds worktree at the sanitized (dash) path"
@@ -145,10 +157,49 @@ assert_eq 0 $? "slashed branch: signal finds worktree at the sanitized (dash) pa
 # even when fail is the EXPECTED status (run nppm-273 bootstrap-error lesson)
 bash "$L" init runtail NPPM-3 operator-named >/dev/null
 bash "$L" set runtail '.branch = "br-1"'
+bash "$L" set runtail '.decisions += [{key:"affected_repo", value:"my-plugin"}]'
 bash "$L" evidence runtail failing-test t.php 'n test-php --filter BOOTSTRAP-MARKER-FAIL'
 out="$(bash "$V" signal runtail --expect fail 2>&1)" && rc=0 || rc=$?
 assert_eq 0 "$rc" "expected fail still passes the check"
 assert_contains "$out" "BOOTSTRAP-MARKER" "failing cmd output tail surfaced on expected fail"
+
+# `n` resolves its project from the cwd and refuses from the worktree root, so
+# signal must run it from the affected unit's directory. Three secure runs read
+# that refusal as the expected red.
+BR1="$AUTOFIX_WORKSPACE_ROOT/worktrees/br-1"
+: > "$CWD_LOG"
+bash "$L" init runcwd NPPM-11 operator-named >/dev/null
+bash "$L" set runcwd '.branch = "br-1"'
+bash "$L" set runcwd '.decisions += [{key:"affected_repo", value:"my-plugin"}]'
+bash "$L" evidence runcwd fixed t.php 'n test-php --filter PASS'
+bash "$L" evidence runcwd playwright-repro r.spec.js 'npx playwright test specs/r_PASS.spec.js'
+bash "$V" signal runcwd --expect pass >/dev/null 2>&1
+assert_eq 0 $? "signal with n + npx evidence passes"
+assert_contains "$(cat "$CWD_LOG")" "$BR1/plugins/my-plugin n test-php" "signal runs n from plugins/<affected_repo>"
+assert_contains "$(cat "$CWD_LOG")" "$BR1 npx playwright" "signal still runs npx from the worktree root"
+
+mkdir -p "$BR1/themes/my-theme"
+: > "$CWD_LOG"
+bash "$L" init runtheme NPPM-12 operator-named >/dev/null
+bash "$L" set runtheme '.branch = "br-1"'
+bash "$L" set runtheme '.decisions += [{key:"affected_repo", value:"my-theme"}]'
+bash "$L" evidence runtheme fixed t.php 'n test-php --filter PASS'
+bash "$V" signal runtheme --expect pass >/dev/null 2>&1
+assert_eq 0 $? "signal resolves a theme unit"
+assert_contains "$(cat "$CWD_LOG")" "$BR1/themes/my-theme n test-php" "signal runs n from themes/<affected_repo>"
+
+# No affected_repo, or one that isn't in the worktree: die before running
+# anything. Falling back to the root is what produced the wrong-reason red.
+for case in none missing; do
+  : > "$ARGV_LOG"
+  bash "$L" init "runnorepo-$case" NPPM-13 operator-named >/dev/null
+  bash "$L" set "runnorepo-$case" '.branch = "br-1"'
+  [ "$case" = missing ] && bash "$L" set "runnorepo-$case" '.decisions += [{key:"affected_repo", value:"not-here"}]'
+  bash "$L" evidence "runnorepo-$case" failing-test t.php 'n test-php --filter FAIL'
+  bash "$V" signal "runnorepo-$case" --expect fail >/dev/null 2>&1 && rc=0 || rc=$?
+  assert_eq 1 "$rc" "affected_repo $case: signal --expect fail dies instead of reading red"
+  assert_eq "" "$(cat "$ARGV_LOG")" "affected_repo $case: n never ran"
+done
 
 # lint smoke: worktree repo with no changed PHP files vs merge-base → exit 0
 WT="$AUTOFIX_WORKSPACE_ROOT/worktrees/br-1"
@@ -158,6 +209,20 @@ git -C "$WT" init -q
   && git update-ref refs/remotes/origin/main HEAD )
 bash "$V" lint runv >/dev/null 2>&1
 assert_eq 0 $? "lint: no changed PHP files exits 0"
+
+# lint covers uncommitted and untracked PHP too; before the first commit a
+# HEAD-only diff was empty and lint passed without looking at anything.
+mkdir -p "$AUTOFIX_WORKSPACE_ROOT/vendor/bin"
+printf '#!/bin/bash\nprintf "%%s\\n" "$@" > "%s"\n' "$STUB/phpcs.args" > "$AUTOFIX_WORKSPACE_ROOT/vendor/bin/phpcs"
+chmod +x "$AUTOFIX_WORKSPACE_ROOT/vendor/bin/phpcs"
+( cd "$WT" && echo '<?php' > tracked.php && git add tracked.php \
+  && git -c user.email=t@example.com -c user.name=t commit -qm base \
+  && git update-ref refs/remotes/origin/main HEAD \
+  && echo '// edit' >> tracked.php && echo '<?php' > untracked.php )
+bash "$V" lint runv >/dev/null 2>&1
+assert_eq 0 $? "lint: uncommitted changes linted"
+assert_contains "$(cat "$STUB/phpcs.args")" tracked.php "lint: modified-but-uncommitted file passed to phpcs"
+assert_contains "$(cat "$STUB/phpcs.args")" untracked.php "lint: untracked file passed to phpcs"
 
 # suite smoke: n test-php from plugins/<affected_repo>; no test-js without script
 # Uses its own stub dir (prepended to PATH) so it shadows the signal stubs above;
@@ -172,9 +237,24 @@ chmod +x "$SUITE_STUB/n"
 export N_LOG="$SUITE_STUB/n.log"; : > "$N_LOG"
 bash "$L" set runv '.decisions += [{key:"affected_repo", value:"my-plugin"}]'
 mkdir -p "$WT/plugins/my-plugin"
-printf '{"scripts":{"test":"noop"}}\n' > "$WT/plugins/my-plugin/package.json"
+printf '{"scripts":{"test":"newspack-scripts test"}}\n' > "$WT/plugins/my-plugin/package.json"
 bash "$V" suite runv >/dev/null 2>&1
 assert_eq 0 $? "suite exits 0"
 assert_contains "$(cat "$N_LOG")" "plugins/my-plugin n test-php" "n test-php runs from plugin dir"
-assert_eq 0 "$(grep -c 'test-js' "$N_LOG")" "n test-js not invoked without test:js script"
+# `n test-js` runs `test`. No package here defines `test:js`, which the old
+# check keyed on, so Jest never ran in the gate.
+assert_contains "$(cat "$N_LOG")" "plugins/my-plugin n test-js" "n test-js runs when the package has a test script"
+: > "$N_LOG"
+printf '{"scripts":{"test":"echo No JS unit tests in this repository."}}\n' > "$WT/plugins/my-plugin/package.json"
+bash "$V" suite runv >/dev/null 2>&1
+assert_eq 0 "$(grep -c 'test-js' "$N_LOG")" "n test-js skipped for the echo placeholder"
+: > "$N_LOG"
+rm "$WT/plugins/my-plugin/package.json"
+bash "$V" suite runv >/dev/null 2>&1
+assert_eq 0 "$(grep -c 'test-js' "$N_LOG")" "n test-js skipped without a package.json"
+: > "$N_LOG"
+bash "$L" set runv '.decisions = []'
+bash "$V" suite runv >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq 1 "$rc" "suite dies without an affected_repo decision"
+assert_eq "" "$(cat "$N_LOG")" "suite runs nothing without an affected_repo decision"
 finish

@@ -11,6 +11,21 @@ run_id="${2:?run id}"; shift 2
 
 hex4() { printf '%s' "$run_id" | awk -F- '{print $NF}'; }
 
+# branch_on_remote <wt> <branch> — is the branch tip safe on GitHub? The branch
+# ref is the usual answer, but a squash merge deletes it, which made every merged
+# run read as "never pushed" and blocked its cleanup. GitHub keeps
+# refs/pull/<n>/head after the branch goes, so a tip contained in the run's PR
+# head is preserved too. A tip with commits the PR never saw still fails.
+branch_on_remote() { # wt branch
+  local wt="$1" branch="$2" num tip
+  [ -n "$(git -C "$wt" ls-remote origin "refs/heads/$branch" 2>/dev/null)" ] && return 0
+  num="$("$LEDGER" get "$run_id" '.pr.number // empty')"
+  [ -n "$num" ] || return 1
+  tip="$(git -C "$wt" rev-parse -q --verify HEAD)" || return 1
+  git -C "$wt" fetch -q origin "refs/pull/$num/head" 2>/dev/null || return 1
+  git -C "$wt" merge-base --is-ancestor "$tip" FETCH_HEAD
+}
+
 case "$cmd" in
   create)
     repo="${1:?repo}"; shift
@@ -57,9 +72,8 @@ case "$cmd" in
           git -C "$wt" rev-parse -q --verify "refs/tags/autofix-anchor-$run_id" >/dev/null 2>&1 \
             || die "failed to create anchor tag autofix-anchor-$run_id in $wt"
         fi
-        if [ "$waive" != "--waive-push-check" ] && \
-           [ -z "$(git -C "$wt" ls-remote origin "refs/heads/$branch" 2>/dev/null)" ]; then
-          die "branch $branch not pushed; push it or pass --waive-push-check (n env destroy deletes the branch)"
+        if [ "$waive" != "--waive-push-check" ] && ! branch_on_remote "$wt" "$branch"; then
+          die "branch $branch not pushed (no remote branch, and its tip is not in the run's PR head); push it or pass --waive-push-check (n env destroy deletes the branch)"
         fi
       elif [ "$waive" != "--waive-push-check" ]; then
         die "worktree $wt missing for recorded branch $branch; verify the branch is pushed to origin, then re-run with --waive-push-check (n env destroy deletes the bound branch)"

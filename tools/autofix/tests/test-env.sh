@@ -111,6 +111,34 @@ assert_contains "$(cat "$N_LOG")" "env destroy autofix-env-slash --yes" \
 assert_eq "null" "$(bash "$L" get run-slash '.env')" \
   "destroy clears .env so sweeps don't retry a completed destroy"
 
+# Squash merge deletes the remote branch. GitHub keeps refs/pull/<n>/head, so
+# a tip contained there is preserved and destroy may proceed; before this every
+# merged run read as "never pushed" and the sweep could not clean it up.
+ORIGIN2="$(mktemp -d)"; git init --bare -q "$ORIGIN2"
+MERGED_WT="$AUTOFIX_WORKSPACE_ROOT/worktrees/nppm-7-merged"
+mkdir -p "$MERGED_WT"
+( cd "$MERGED_WT" && git init -q \
+    && git -c user.email=t@example.com -c user.name=t commit --allow-empty -qm fix \
+    && git remote add origin "$ORIGIN2" \
+    && git push -q origin HEAD:refs/pull/77/head )
+bash "$L" init run-merged NPPM-7 operator-named >/dev/null
+bash "$L" set run-merged '.env = {name:"autofix-env-merged"} | .branch = "nppm-7-merged" | .pr = {number:77}'
+bash "$E" destroy run-merged >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq 0 "$rc" "merged PR (remote branch deleted): destroy accepts a tip preserved in refs/pull/<n>/head"
+assert_contains "$(cat "$N_LOG")" "env destroy autofix-env-merged --yes" "merged PR: n env destroy invoked"
+
+# ...but a commit made after the PR head was last pushed is still unpushed.
+( cd "$MERGED_WT" && git -c user.email=t@example.com -c user.name=t commit --allow-empty -qm later )
+bash "$L" set run-merged '.env = {name:"autofix-env-merged2"}'
+bash "$E" destroy run-merged >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq 1 "$rc" "tip ahead of the PR head: destroy still refuses"
+assert_eq "" "$(grep 'autofix-env-merged2' "$N_LOG" || true)" "tip ahead of the PR head: no n env destroy"
+
+# No branch and no PR number recorded: refuse, as before.
+bash "$L" set run-merged '.pr = null'
+bash "$E" destroy run-merged >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq 1 "$rc" "no remote branch and no PR number: destroy refuses"
+
 # base-ref discipline: a branch that already exists locally (e.g. a resumed
 # run re-invoking create) is left alone — `n branch` is only run to CREATE
 # it, never to reset an existing one.

@@ -8,6 +8,8 @@ LEDGER="$BIN/ledger.sh"
 cmd="${1:?usage: verify.sh signal|lint|suite <run_id> [flags]}"; run_id="${2:?}"; shift 2
 branch="$("$LEDGER" get "$run_id" '.branch // empty')"
 wt="$(wt_dir "$branch")"
+# The latest decision wins: a resumed run can record affected_repo again.
+affected_repo() { "$LEDGER" get "$run_id" '[.decisions[] | select(.key=="affected_repo") | .value] | last // empty'; }
 
 # parse_evidence_argv <cmd-string> — turn a ledger `.evidence[].cmd` into the
 # argv it will be exec'd as, and enforce the executable + subcommand allowlist.
@@ -80,7 +82,11 @@ case "$cmd" in
         # Validate + word-split BEFORE running so a rejection dies visibly.
         # Never a shell — exec argv directly.
         parse_evidence_argv "$ecmd"
-        if out="$( (cd "$wt" && "${EV_ARGV[@]}") 2>&1 )"; then st=pass; else st=fail; fi
+        # `n` resolves its project from the cwd; Playwright specs keep running
+        # from the worktree root, as they always have.
+        run_dir="$wt"
+        if [ "${EV_ARGV[0]}" = n ]; then run_dir="$(project_dir "$wt" "$(affected_repo)")" || exit 1; fi
+        if out="$( (cd "$run_dir" && "${EV_ARGV[@]}") 2>&1 )"; then st=pass; else st=fail; fi
         log "evidence[$i] '$ecmd' → $st"
         # Surface the tail of EVERY failing command — including an expected
         # fail. A signal can fail for the wrong reason (run autofix-nppm-273:
@@ -101,16 +107,20 @@ case "$cmd" in
   lint)
     [ -d "$wt" ] || die "worktree missing: $wt"
     base="$(git -C "$wt" merge-base origin/main HEAD)"
-    changed="$(git -C "$wt" diff --name-only "$base"...HEAD -- '*.php')"
+    # Diff the working tree, not HEAD, and add untracked files: lint runs
+    # before the first commit too, and then a HEAD-only diff is empty.
+    changed="$( { git -C "$wt" diff --name-only --diff-filter=d "$base" -- '*.php'
+                  git -C "$wt" ls-files --others --exclude-standard -- '*.php'; } | sort -u)"
     [ -n "$changed" ] || { log "no changed PHP files"; exit 0; }
     (cd "$wt" && "$WORKSPACE_ROOT/vendor/bin/phpcs" --standard="$WORKSPACE_ROOT/phpcs.xml" $changed) ;;
   suite)
     [ -d "$wt" ] || die "worktree missing: $wt"
-    plugin_dir="$wt/$("$LEDGER" get "$run_id" '.decisions[] | select(.key=="affected_repo") | .value' \
-      | sed 's|^|plugins/|')"
-    [ -d "$plugin_dir" ] || plugin_dir="$wt"
+    plugin_dir="$(project_dir "$wt" "$(affected_repo)")" || exit 1
     (cd "$plugin_dir" && n test-php)
-    if jq -e '.scripts["test:js"]' "$plugin_dir/package.json" >/dev/null 2>&1; then
+    # `n test-js` runs the package's `test` script. Packages without JS tests
+    # carry an `echo` placeholder there, which isn't worth a pnpm install.
+    if jq -e '(.scripts.test // "") | length > 0 and (startswith("echo ") | not)' \
+         "$plugin_dir/package.json" >/dev/null 2>&1; then
       (cd "$plugin_dir" && n test-js)
     fi ;;
   *) die "unknown subcommand: $cmd" ;;

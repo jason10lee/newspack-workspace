@@ -135,8 +135,12 @@ discipline — **don't telegraph the vulnerability** — on top:
 ### Disclosure-hygiene checklist
 
 Applies to every **public-facing** artifact: code comments, commit
-subjects/bodies, PR title/description, changelog entries, test/fixture names,
-and any Linear comment text. (`newspack-plugin` and most product plugins are
+subjects/bodies, branch names, PR title/description, changelog entries,
+test/fixture names, and any Linear comment text. `run-secure` names the branch
+from the issue ID alone (`nppm-1234-<4hex>`), because Linear's `branchName` is
+slugged from the title; to use a descriptive stem instead, rewrite the
+`branch_stem` decision before `env.sh create`, since the worktree path is
+derived from it. (`newspack-plugin` and most product plugins are
 **public** repos — their artifacts are the most sensitive; treat the private
 `newspack-manager-admin` the same.)
 

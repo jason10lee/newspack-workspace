@@ -64,6 +64,27 @@ json_escape() { printf '%s' "$1" | jq -Rs .; }
 # on-disk path needs sanitizing.
 wt_dir() { printf '%s/worktrees/%s' "$WORKSPACE_ROOT" "$(printf '%s' "$1" | tr '/' '-')"; }
 
+# project_dir <wt> <affected_repo> — the unit directory inside a worktree that
+# `n test-php` / `n test-js` must run from. Both resolve their project from the
+# cwd, and from the worktree root they refuse with "You must be inside one of
+# the repos" — which a red signal (`--expect fail`) happily read as the failing
+# test. Dies rather than falling back to the root, so that never recurs.
+project_dir() { # wt affected_repo
+  local wt="$1" repo="$2" d
+  [ -n "$repo" ] || die "no affected_repo decision in ledger — cannot tell which unit to run tests from"
+  for d in "$wt/plugins/$repo" "$wt/themes/$repo"; do
+    [ -d "$d" ] && { printf '%s' "$d"; return 0; }
+  done
+  die "affected_repo '$repo' not found under $wt/plugins/ or $wt/themes/"
+}
+
+# neutral_branch_stem <issue> — the branch stem for a secure run: the issue ID
+# alone, lowercased. Linear's branchName is built from the issue title, which
+# for a security issue usually names the flaw, and the branch is pushed to a
+# public repo. Renaming later is awkward because wt_dir() derives the worktree
+# path from the branch, so the name has to be neutral before env.sh create.
+neutral_branch_stem() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
 # fetch_upstream_main <dir> — fetch origin/main into the git repo at <dir>,
 # fail closed. Real incident: an autofix run branched from this machine's
 # local fork-trunk `main` (a many-commit local tooling aggregate, not
