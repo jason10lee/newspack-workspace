@@ -62,8 +62,11 @@ if is_secure "$run_id"; then
   {
     printf '### PR title\n%s\n\n### PR body\n' "$title"
     cat "$body_file"
-    printf '\n\n### Commit diff (git diff main...HEAD) — pushed to github.com\n'
-    git diff main...HEAD
+    # Diff against origin/main, the base the scope guard above checks. Local
+    # `main` is the fork-trunk on this machine, so main...HEAD shows the whole
+    # trunk delta instead of what the push adds.
+    printf '\n\n### Commit diff (git diff origin/main...HEAD) — pushed to github.com\n'
+    git diff origin/main...HEAD
   } > "$art"
   secure_gate "$run_id" pr "$art" "$confirmed"   # preview+exit7, or verify digest & return
 fi
