@@ -369,8 +369,16 @@ above) or `terminal: escalated` with findings attached.
 The **≥2-AI-reviewer floor is satisfied here** by the code-review engine's
 reviewer set plus codex — these are the *gating* reviewers with a
 remediation loop. Copilot's review at PR time (Stage 6) is
-additive/advisory only: its findings land on the eventual human review pass
-and do **not** gate `delivered`.
+additive/advisory only and does **not** gate `delivered`.
+
+**Amended 2026-09-04.** This used to say Copilot's findings land on "the
+eventual human review pass". There is no such pass by default any more: the team
+handbook makes a devkit self-review round plus one summary comment the thing that
+precedes a merge, and a human review an opt-in for large or risky work. The
+handoff a run produces is unchanged — a draft PR — but what happens to it next is
+a self-review the operator runs, not a queue it waits in. Copilot is also no
+longer a team requirement (NPPD-2198), so a Stage 6 Copilot failure is now
+doubly non-blocking.
 
 ## Stage 6 — PR & Linear closeout
 
