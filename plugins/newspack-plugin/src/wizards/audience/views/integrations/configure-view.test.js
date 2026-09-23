@@ -6,7 +6,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 /**
  * Internal dependencies
  */
-import { ConfigureView, operatorOptionsForField, reconcileOperators, toggleField } from './configure-view';
+import { ConfigureView, fallbackOperator, operatorOptionsForField, reconcileOperators, toggleField } from './configure-view';
 import { useUnsavedChangesDialog } from '../../../../../packages/components/src';
 
 const mockSetHeaderData = jest.fn();
@@ -19,6 +19,7 @@ jest.mock( '@wordpress/data', () => ( {
 // layout props back: `direction` and `gap` are the only things carrying the
 // column rhythm now that the controls supply no margins of their own.
 jest.mock( '@wordpress/ui', () => ( {
+	Badge: ( { children } ) => <span data-testid="badge">{ children }</span>,
 	Stack: ( { children, direction, gap } ) => (
 		<div data-testid="stack" data-direction={ direction } data-gap={ gap }>
 			{ children }
@@ -29,14 +30,18 @@ jest.mock( '@wordpress/ui', () => ( {
 // Cover everything SettingsField imports so a future select/oauth/textarea fixture renders a stub, not `undefined`.
 jest.mock( '@wordpress/components', () => ( {
 	// Real inputs (not null stubs) so the per-direction section tests can assert
-	// on picker visibility and drive the enable toggles.
-	CheckboxControl: ( { label, checked, onChange } ) => (
-		<input
-			type="checkbox"
-			aria-label={ typeof label === 'string' ? label : undefined }
-			checked={ !! checked }
-			onChange={ e => onChange( e.target.checked ) }
-		/>
+	// on picker visibility and drive the enable toggles. `help` renders as a
+	// sibling node (as the real control does) so tests can assert on it.
+	CheckboxControl: ( { label, help, checked, onChange } ) => (
+		<>
+			<input
+				type="checkbox"
+				aria-label={ typeof label === 'string' ? label : undefined }
+				checked={ !! checked }
+				onChange={ e => onChange( e.target.checked ) }
+			/>
+			{ help && <span>{ help }</span> }
+		</>
 	),
 	ToggleControl: ( { label, checked, onChange } ) => (
 		<input
@@ -434,13 +439,46 @@ describe( 'incoming-field operators', () => {
 
 	it( 'constrains operator options by value_type', () => {
 		expect( operatorOptionsForField( { value_type: 'number' } ).map( o => o.value ) ).toEqual( [ 'range' ] );
-		expect( operatorOptionsForField( { value_type: 'date' } ).map( o => o.value ) ).toEqual( [ 'default' ] );
-		expect( operatorOptionsForField( { value_type: 'datetime' } ).map( o => o.value ) ).toEqual( [ 'default' ] );
+		// Date fields carry the full shape once so the publisher-facing labels are
+		// pinned alongside the values.
+		expect( operatorOptionsForField( { value_type: 'date' } ) ).toEqual( [
+			{ label: 'Date range', value: 'date_range' },
+			{ label: 'Text', value: 'default' },
+		] );
+		expect( operatorOptionsForField( { value_type: 'datetime' } ).map( o => o.value ) ).toEqual( [ 'date_range', 'default' ] );
 		expect( operatorOptionsForField( { value_type: 'boolean' } ).map( o => o.value ) ).toEqual( [ 'default' ] );
 		expect( operatorOptionsForField( { value_type: 'multiselect' } ).map( o => o.value ) ).toEqual( [ 'list__in' ] );
 		expect( operatorOptionsForField( { value_type: 'select' } ).map( o => o.value ) ).toEqual( [ 'default', 'list__in' ] );
 		expect( operatorOptionsForField( { value_type: 'string', has_options: false } ).map( o => o.value ) ).toEqual( [ 'default', 'range' ] );
 		expect( operatorOptionsForField( { value_type: 'string', has_options: true } ).map( o => o.value ) ).toEqual( [ 'default', 'list__in' ] );
+	} );
+
+	it( 'falls back to the operator the save-time repair will store', () => {
+		// The rendered select and reconcileOperators share this helper, so a
+		// stored out-of-set operator (a leftover 'list__in' on a now-date field)
+		// can never display Date range while the next save writes Text — which
+		// would both contradict the publisher and make the displayed option
+		// unselectable, since choosing what is already shown fires no onChange.
+		expect( fallbackOperator( operatorOptionsForField( { value_type: 'date' } ) ) ).toBe( 'default' );
+		expect( fallbackOperator( operatorOptionsForField( { value_type: 'number' } ) ) ).toBe( 'range' );
+	} );
+
+	it( 'leaves an already-stored Text operator on a date field alone', () => {
+		// Text stays valid for date fields, so reconcileOperators must not rewrite a
+		// field the publisher enabled before the date range operator existed.
+		const map = { last_gift_date: 'default' };
+		const options = [ { value: 'last_gift_date', value_type: 'date' } ];
+		expect( reconcileOperators( map, options ) ).toBe( map );
+	} );
+
+	it( 'repairs an out-of-set operator on a date field to Text, not Date range', () => {
+		// 'range' was choosable for these fields before value types existed.
+		// Falling back to the first offered option would silently opt the field
+		// into date-range matching — and pull-time value rewriting — on an
+		// unrelated save; exact matching is the repair that changes nothing.
+		const map = { last_gift_date: 'range' };
+		const options = [ { value: 'last_gift_date', value_type: 'date' } ];
+		expect( reconcileOperators( map, options ) ).toEqual( { last_gift_date: 'default' } );
 	} );
 
 	it( 'toggles a field in/out of the operator map using the field default', () => {
@@ -922,5 +960,83 @@ describe( 'ConfigureView per-direction sections', () => {
 			[ 'column', 'xl' ],
 			[ 'column', 'sm' ],
 		] );
+	} );
+} );
+
+describe( 'ConfigureView outbound field details', () => {
+	beforeEach( () => {
+		mockSetHeaderData.mockClear();
+		useUnsavedChangesDialog.mockClear();
+		useUnsavedChangesDialog.mockReturnValue( { confirmDialog: null, requestConfirm: jest.fn() } );
+	} );
+
+	// No toggle fields, matching a payload predating outgoing_sync_enabled: the
+	// picker still renders unconditionally (see the "payload lacking the toggle
+	// fields" case above), which keeps this fixture minimal.
+	const withFieldDetails = () => ( {
+		esp: {
+			...INTEGRATION,
+			settings: [
+				{
+					key: 'outgoing_metadata_fields',
+					type: 'metadata',
+					label: 'Outgoing metadata fields',
+					value: [],
+					grouped_options: [
+						{
+							section: 'Identity',
+							fields: [ 'User Role', 'First name', 'Membership Tier', 'Undetailed Field' ],
+							field_details: {
+								'User Role': { status: 'new', description: 'WordPress role of the reader.' },
+								'First name': { status: 'existing', description: "Reader's first name." },
+								'Membership Tier': { status: 'updated', description: 'Current membership tier of the reader.' },
+							},
+						},
+						{
+							section: 'Legacy',
+							fields: [ 'Account' ],
+							field_details: {
+								Account: { status: 'legacy', description: 'WordPress user account ID.' },
+							},
+						},
+					],
+				},
+			],
+		},
+	} );
+
+	it( "renders a field's description as CheckboxControl help text", () => {
+		renderConfigureView( { integrations: withFieldDetails() } );
+		expect( screen.getByText( 'WordPress role of the reader.' ) ).toBeInTheDocument();
+		expect( screen.getByText( "Reader's first name." ) ).toBeInTheDocument();
+	} );
+
+	it( 'renders a New badge for new and updated fields', () => {
+		renderConfigureView( { integrations: withFieldDetails() } );
+		const badges = screen.getAllByTestId( 'badge' );
+		expect( badges ).toHaveLength( 2 );
+		badges.forEach( badge => expect( badge ).toHaveTextContent( 'New' ) );
+		// The badges sit on User Role's and Membership Tier's rows, not First name's.
+		expect( screen.getByLabelText( 'User Role' ).parentElement ).toContainElement( badges[ 0 ] );
+		expect( screen.getByLabelText( 'Membership Tier' ).parentElement ).toContainElement( badges[ 1 ] );
+	} );
+
+	it( 'renders no badge for existing or legacy fields', () => {
+		renderConfigureView( { integrations: withFieldDetails() } );
+		// Only User Role ('new') and Membership Tier ('updated') get badges;
+		// existing/legacy rows get none.
+		expect( screen.getAllByTestId( 'badge' ) ).toHaveLength( 2 );
+		for ( const label of [ 'First name', 'Account' ] ) {
+			const checkbox = screen.getByLabelText( label );
+			expect( checkbox ).toBeInTheDocument();
+			expect( checkbox.parentElement.querySelector( '[data-testid="badge"]' ) ).toBeNull();
+		}
+	} );
+
+	it( 'renders a field with no field_details entry with no help text and no badge', () => {
+		renderConfigureView( { integrations: withFieldDetails() } );
+		const checkbox = screen.getByLabelText( 'Undetailed Field' );
+		expect( checkbox ).toBeInTheDocument();
+		expect( checkbox.parentElement.querySelector( '[data-testid="badge"]' ) ).toBeNull();
 	} );
 } );
