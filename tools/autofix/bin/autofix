@@ -4,8 +4,21 @@ BIN="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$BIN/lib/common.sh"
 require jq
 
+# True when the file opens with a frontmatter block declaring internal: true.
+report_stamped() {
+  awk 'NR == 1 { if ($0 != "---") exit 1; next }
+       $0 == "---" { exit 1 }
+       $0 == "internal: true" { found = 1; exit 0 }
+       END { exit !found }' "$1"
+}
+
 sweep() {
   local lf rid term envname branch num state age_days
+  # Runs from before run state moved out of the checkout are invisible here,
+  # so their envs would never be torn down. Say so rather than skip silently.
+  if [ "$AUTOFIX_ROOT/runs" != "$RUNS_DIR" ] && compgen -G "$AUTOFIX_ROOT/runs/*/ledger.json" >/dev/null; then
+    log "sweep: runs under $AUTOFIX_ROOT/runs are not swept; move them into $RUNS_DIR"
+  fi
   for lf in "$RUNS_DIR"/*/ledger.json; do
     [ -f "$lf" ] || continue
     # a single malformed ledger must not abort the sweep (which would also
@@ -73,7 +86,7 @@ mint_run_id() { # issue-id
   done
 }
 
-cmd="${1:?usage: autofix intake|run|run-secure|resume|cleanup ...}"; shift
+cmd="${1:?usage: autofix intake|run|run-secure|resume|report|runs|cleanup ...}"; shift
 case "$cmd" in
   intake) exec bash "$BIN/intake.sh" queue "$@" ;;
   run)
@@ -117,6 +130,49 @@ case "$cmd" in
     else
       echo "NEXT: reconcile against Linear/GitHub/env state, then continue from the recorded stage (autofix skill)"
     fi ;;
+  report)
+    # A run's report sits beside its ledger, outside every repository. --init
+    # creates it; a secure run's copy starts with `internal: true`, marking it
+    # as never to be published, for readers and for any pre-push check that
+    # looks for that frontmatter. is_secure fails closed, so a run whose ledger
+    # cannot be read is stamped too. noclobber keeps a concurrent --init from
+    # truncating a report the other call has started writing. Writing the
+    # report usually replaces the whole file, so every call on a secure run
+    # puts the stamp back if the write dropped it.
+    [ $# -le 2 ] || die "usage: autofix report <run-id> [--init]"
+    rid="${1:?usage: autofix report <run-id> [--init]}"
+    case "$rid" in */*|.|..) die "not a run id: $rid" ;; esac
+    [ -f "$RUNS_DIR/$rid/ledger.json" ] || die "no run $rid under $RUNS_DIR"
+    rpt="$RUNS_DIR/$rid/report.md"
+    case "${2:-}" in
+      "") ;;
+      --init)
+        if [ ! -e "$rpt" ]; then
+          if is_secure "$rid"; then
+            ( set -C; printf -- '---\ninternal: true\n---\n\n' > "$rpt" ) 2>/dev/null || true
+          else
+            ( set -C; : > "$rpt" ) 2>/dev/null || true
+          fi
+        fi ;;
+      *) die "usage: autofix report <run-id> [--init]" ;;
+    esac
+    if [ -s "$rpt" ] && is_secure "$rid" && ! report_stamped "$rpt"; then
+      tmp="$(umask 077; mktemp "$rpt.XXXXXX")"
+      if [ "$(head -1 "$rpt")" = "---" ]; then
+        { echo "---"; echo "internal: true"; tail -n +2 "$rpt"; } > "$tmp"
+      else
+        { printf -- '---\ninternal: true\n---\n\n'; cat "$rpt"; } > "$tmp"
+      fi
+      mv "$tmp" "$rpt"; log "report: restored internal: true on $rid"
+    fi
+    echo "$rpt" ;;
+  runs)
+    # One line per run: id, issue, secure or not, terminal state or stage.
+    for lf in "$RUNS_DIR"/*/ledger.json; do
+      [ -f "$lf" ] || continue
+      jq -r '[.run_id, .issue, (if .secure then "secure" else "-" end), (.terminal // .stage // "?")] | @tsv' "$lf" 2>/dev/null \
+        || log "runs: skipping unparsable ledger $lf"
+    done ;;
   cleanup) sweep ;;
   *) die "unknown command: $cmd" ;;
 esac

@@ -13,7 +13,8 @@ This skill is the **judgment layer**. The scripts under `tools/autofix/bin/`
 are deterministic and do the mechanical work (Linear queries/writes, env
 lifecycle, tests, lint, redaction scanning, PR creation). You supply the
 triage, the fix, and the go/no-go calls; the scripts supply consistency and
-the audit trail (the per-run JSON ledger at `tools/autofix/runs/<RUN_ID>/ledger.json`).
+the audit trail (the per-run JSON ledger, which `tools/autofix/bin/ledger.sh path <RUN_ID>`
+locates; run state lives outside every repository).
 
 **The deliverable of a run is a draft PR + evidence trail.** You never mark a
 PR ready for review, never merge, never open a non-draft PR. Marking ready
@@ -390,7 +391,8 @@ nppm-273 shipped without the checklist sections; operator-corrected).
 Content: problem, root cause, fix, evidence (repro-before / pass-after),
 verification, Linear link. **Write the body — and every outward payload
 (closeout comment text included) — to the run dir
-(`tools/autofix/runs/<RUN_ID>/`), never to a session/job tmp dir**: a
+(the directory holding `tools/autofix/bin/ledger.sh path <RUN_ID>`), never to a
+session/job tmp dir**: a
 run-nppm-305 payload staged in job tmp vanished mid-run and the release
 shipped with an empty comment. Then:
 
@@ -462,14 +464,20 @@ before posting it, since it's a new outward artifact created after Stage 5.
 
 ## Stage 7 — Report & cleanup
 
-Write the run report (markdown, including the `drift_log`) to:
+Write the run report (markdown, including the `drift_log`) to the path this
+prints, which it also creates:
 
 ```
-~/Repositories/A8C/newspack-agent-knowledge.git/_tooling/autofix-runs/<RUN_ID>.md
+tools/autofix/bin/autofix report <RUN_ID> --init
 ```
 
-Commit it **locally to that knowledge repo only** — this is deliberately
-outside the standing grants' push surface. **Never push it.**
+The report sits beside the run's ledger in operator-local state, outside every
+repository. **Never copy it into a repository, and never commit it.** A
+follow-up that cites an earlier run cites its run id: `autofix report <RUN_ID>`
+prints where that report is, and `autofix runs` lists them.
+
+After writing, run `tools/autofix/bin/autofix report <RUN_ID>` once more. For a
+secure run it puts back the `internal: true` frontmatter if your write dropped it.
 
 Notify the operator (session summary; `PushNotification` where available).
 
@@ -507,7 +515,7 @@ once it reaches a terminal state.
 
 - No `pr-ready`, no merge, no non-draft PR, ever.
 - No upstream pushes of the tooling itself.
-- No pushes of the run report or the knowledge repo it lives in.
+- No run report in any repository: never copy one in, commit it or push it.
 - No Linear writes outside the enumerated moments above.
 - Security-labeled issues are ineligible in every mode — `intake.sh check`
   enforces this mechanically at Stage 0 (exit 2), and it is never

@@ -11,7 +11,9 @@ dir="$RUNS_DIR/$run_id"; file="$dir/ledger.json"; lockdir="$dir/.lock"
 write_owner() { printf '%s %s %s\n' "$$" "$(hostname | cut -d' ' -f1)" "$(now_utc)" > "$lockdir/owner"; }
 
 take_lock() {
-  mkdir -p "$dir"
+  (umask 077; mkdir -p "$dir")
+  # umask only covers directories this call creates; tighten ones that predate it.
+  chmod 700 "$RUNS_DIR" "$dir"
   if mkdir "$lockdir" 2>/dev/null; then write_owner; return 0; fi
   local pid host
   read -r pid host _ < "$lockdir/owner" 2>/dev/null || { pid="?"; host="?"; }
