@@ -3,8 +3,20 @@
 # shellcheck disable=SC2034
 set -o pipefail
 
+# Tests point AUTOFIX_ROOT at a bare temp dir and expect runs/ under it, so
+# note whether it was given before defaulting it.
+_autofix_root_given="${AUTOFIX_ROOT:+1}"
 AUTOFIX_ROOT="${AUTOFIX_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
-RUNS_DIR="$AUTOFIX_ROOT/runs"
+# Run state lives outside every repository. A run report, and a secure run's
+# previews of held-back writes, carry detail that must never be committed, and
+# a gitignored path inside a checkout is one forced add away from a push.
+if [ -n "${AUTOFIX_RUNS_DIR:-}" ]; then
+  RUNS_DIR="$AUTOFIX_RUNS_DIR"
+elif [ -n "$_autofix_root_given" ]; then
+  RUNS_DIR="$AUTOFIX_ROOT/runs"
+else
+  RUNS_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/newspack/autofix/runs"
+fi
 # Directory of the autofix scripts themselves (bin/), resolved from THIS file's
 # location — not from AUTOFIX_ROOT, which is overridable (tests point it at a
 # bare temp dir). Helpers that shell out to a sibling script use this.
@@ -159,7 +171,7 @@ secure_gate() { # run_id stage artifact_file confirmed
     bash "$ledger" history "$rid" "$stage" confirmed "digest=$digest" >/dev/null
     return 0
   fi
-  local pvdir="$RUNS_DIR/$rid/previews"; mkdir -p "$pvdir"
+  local pvdir="$RUNS_DIR/$rid/previews"; (umask 077; mkdir -p "$pvdir")
   local pv="$pvdir/$stage-$digest.txt"
   cp "$art" "$pv"
   local bytes; bytes="$(wc -c < "$art" | tr -d ' ')"

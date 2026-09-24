@@ -129,8 +129,10 @@ discipline — **don't telegraph the vulnerability** — on top:
   and any fuzzing harness stay under the run dir, **never committed**. The
   regression test that lands is the minimal behavioral assertion under a
   **neutral name**.
-- **Exploit detail lives in the Stage 7 run report** (local knowledge repo,
-  never pushed) — the honest technical record goes there, not on GitHub/Linear.
+- **Exploit detail lives in the Stage 7 run report**, which `autofix report
+  <RUN_ID> --init` creates in operator-local state, outside every repository,
+  stamped `internal: true` — the honest technical record goes there, not on
+  GitHub/Linear.
 
 ### Disclosure-hygiene checklist
 
@@ -149,7 +151,8 @@ derived from it. (`newspack-plugin` and most product plugins are
   Google client"), never the **threat**.
 - Avoid the words *exploit, attacker, victim, takeover, vulnerability, proof of
   identity* on any public surface.
-- Internal/gitignored artifacts (`.agent-knowledge/` plan docs, the run report)
+- Internal/gitignored artifacts (`.agent-knowledge/` plan docs, and the run
+  report, which lives outside every repository)
   may stay fully detailed.
 - Issue refs (`NPPM-XXXX`) are fine — the autolink is not a disclosure; keep the
   surrounding human-readable text neutral.
@@ -161,7 +164,7 @@ derived from it. (`newspack-plugin` and most product plugins are
 
 All base-skill hard rules bind here in full: no `pr-ready`, no merge, no
 non-draft PR; worktree isolation with the root checkout on `main`; no upstream
-pushes of the tooling; no pushes of the run report or its knowledge repo; the
+pushes of the tooling; no run report in any repository; the
 resumable ledger is the only supported re-entry point (`autofix resume`). This
 skill **adds** pauses and hygiene; it never adds authority.
 

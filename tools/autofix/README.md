@@ -42,6 +42,13 @@ tools/autofix/bin/autofix run NPPM-2993 --allow-existing-pr
 # Linear/GitHub/env reality before continuing.
 tools/autofix/bin/autofix resume autofix-nppm-2993-20260710-a3f1
 
+# Print where a run's report lives (beside its ledger, outside every
+# repository); --init creates it, stamped `internal: true` for a secure run.
+tools/autofix/bin/autofix report autofix-nppm-2993-20260710-a3f1 --init
+
+# List runs: id, issue, secure or not, terminal state or stage.
+tools/autofix/bin/autofix runs
+
 # Run the terminal-state-keyed cleanup sweep on demand. (Every `run` and
 # `resume` invocation also sweeps first — this is for an idle check.)
 tools/autofix/bin/autofix cleanup
@@ -57,21 +64,29 @@ README only covers the operator-facing dispatcher.
 ```
 tools/autofix/
 ├── bin/
-│   ├── autofix          # dispatcher: intake | run | resume | cleanup
+│   ├── autofix          # dispatcher: intake | run | run-secure | resume | report | runs | cleanup
 │   ├── intake.sh         # eligibility check + queue dry-run listing
 │   ├── claim.sh          # claim protocol (race verification, same-issue guard, conditional release)
-│   ├── ledger.sh         # locked init/get/set/history/drift/evidence/reclaim
+│   ├── ledger.sh         # locked init/path/get/set/history/drift/evidence/reclaim
 │   ├── env.sh            # n env create/up/destroy + setup flags + anchor-tag/push-check safeguard
 │   ├── verify.sh         # signal re-run, plugin test suite, root-phpcs lint
 │   ├── redact.sh         # outward-artifact redaction scanner (scan-only, never edits)
 │   ├── pr.sh             # push, adopt-or-create draft PR, Copilot review request
 │   └── lib/               # common.sh (config + helpers), linear.sh (GraphQL client)
-├── runs/                 # gitignored — one directory per run
-│   └── <run-id>/
-│       ├── ledger.json   # resumable run state (schema documented in the spec)
-│       └── .lock/         # mkdir-based lock; owner PID+host+timestamp in .lock/owner
 └── tests/                 # shell test suite (tests/run-tests.sh) + fixtures/ for AUTOFIX_LINEAR_MOCK_DIR
 ```
+
+Run state lives outside the repository, in
+`${XDG_STATE_HOME:-~/.local/state}/newspack/autofix/runs/`, one private
+directory per run: `ledger.json` (resumable run state; schema in the spec),
+`report.md` (the Stage 7 run report), `previews/` (a secure run's held-back
+writes) and `.lock/` (mkdir-based lock; owner PID, host and timestamp in
+`.lock/owner`). Nothing there is ever committed.
+
+Runs started before this location existed sit under `tools/autofix/runs/` in
+the checkout that ran them, where `resume`, `runs` and the cleanup sweep no
+longer see them. Move each run directory into the location above to bring it
+back into view.
 
 A run's env and worktree live in the workspace's usual locations (`n env
 create autofix-<issue>-<4hex> --worktree <repo>:<branch>`), tracked in the
@@ -92,10 +107,13 @@ All config is environment variables with defaults in `bin/lib/common.sh`.
 | `AUTOFIX_ESCALATED_ENV_TTL_DAYS` | `14` | Days an `escalated` run's env/worktree survives before the cleanup sweep flags it for an operator decision (does not auto-destroy). |
 | `AUTOFIX_MAX_ATTEMPTS` | `3` | Shared retry/attempt cap: Linear GraphQL retries, env-provisioning attempts, PR-creation attempts. Exhaustion escalates rather than proceeding silently. |
 | `AUTOFIX_MAX_BRANCH_COMMITS` | `10` | PR-scope guard commit-count sanity cap: `pr.sh create` dies if the run branch carries more than this many commits ahead of `origin/main` (fork-trunk leak guard — see PR #723 incident). |
+| `AUTOFIX_RUNS_DIR` | `${XDG_STATE_HOME:-~/.local/state}/newspack/autofix/runs` | Where run directories live. Keep it outside every repository. |
 | `AUTOFIX_LINEAR_MOCK_DIR` | (unset) | **Tests only.** When set, `lib/linear.sh` reads response fixtures from this directory (`<opname>.json`) and logs requests to `requests.log` instead of calling the live Linear API. See `tests/fixtures/` for the fixture set the test suite uses. |
 
 Two lower-level overrides exist for testing/tooling but are not part of the
-normal operator surface: `AUTOFIX_ROOT` (defaults to `tools/autofix`) and
+normal operator surface: `AUTOFIX_ROOT` (defaults to `tools/autofix`; when
+it is set and `AUTOFIX_RUNS_DIR` is not, run state goes under
+`$AUTOFIX_ROOT/runs`, which the tests rely on) and
 `AUTOFIX_WORKSPACE_ROOT` (defaults to the workspace root, two directories up
 from `tools/autofix`). `AUTOFIX_REDACT_ALLOWLIST`, if set, points
 `redact.sh` at a file of known-safe fragments to exempt from findings.

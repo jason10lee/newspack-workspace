@@ -1,5 +1,10 @@
 #!/bin/bash
 set -o pipefail
+# An operator's own run-state settings outrank the AUTOFIX_ROOT the tests set,
+# so left in place they would send fixture ledgers into real run state. The
+# temp XDG_STATE_HOME catches a test that forgets AUTOFIX_ROOT the same way.
+unset AUTOFIX_RUNS_DIR
+export XDG_STATE_HOME; XDG_STATE_HOME="$(mktemp -d)"
 FAILURES=0
 assert_eq() { # expected actual label
   if [ "$1" = "$2" ]; then printf 'ok    %s\n' "$3"; else

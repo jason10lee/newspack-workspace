@@ -86,7 +86,7 @@ case "$cmd" in
       cbody="🤖 autofix run $run_id started"
       cf="$(mktemp)"; printf '%s\n' "$cbody" > "$cf"
       cdg="$(secure_digest "$cf")"
-      pvdir="$RUNS_DIR/$run_id/previews"; mkdir -p "$pvdir"
+      pvdir="$RUNS_DIR/$run_id/previews"; (umask 077; mkdir -p "$pvdir")
       cp "$cf" "$pvdir/claim-$cdg.txt"; rm -f "$cf"
       "$LEDGER" set "$run_id" '.decisions += [{key:"claim_comment", value:"deferred"}]'
       "$LEDGER" history "$run_id" intake claim-comment-deferred "digest=$cdg file=$pvdir/claim-$cdg.txt"
