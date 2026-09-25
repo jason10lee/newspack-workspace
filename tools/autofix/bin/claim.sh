@@ -213,13 +213,25 @@ $marker"
     cur_assignee="$(printf '%s' "$cur" | jq -r '.assignee.id // ""')"
     cur_state="$(printf '%s' "$cur" | jq -r '.state.id // ""')"
     restored=""; drifted=""
+    # A secure release runs more than once: the gated pass restores state and logs
+    # it, then a confirmed pass (or a fresh preview after an edited brief) follows.
+    # Evaluating the restore again reads the run's own restore as drift, since the
+    # issue is now unassigned and back in its prior state, so skip it.
+    already_restored=""
+    if is_secure "$run_id" \
+      && [ "$("$LEDGER" get "$run_id" '[.stage_history[] | select(.stage == "release" and .outcome == "restored")] | length')" -gt 0 ]; then
+      already_restored=1
+      restored="(done at preview)"
+    fi
     # Conditional restore of assignee/status is a working-state transition, NOT
     # a disclosing write — it proceeds UNGATED even in secure mode, because
     # leaving a Security issue stuck In-Progress/assigned-to-bot is worse than
     # the minimal signal of restoring it. "Conditional" = restore only where the
     # field still holds the value this run set (spec magi #9).
     input='{}'
-    if [ "$cur_assignee" = "$me" ]; then
+    if [ -n "$already_restored" ]; then
+      :
+    elif [ "$cur_assignee" = "$me" ]; then
       input="$(printf '%s' "$input" | jq --arg a "$prior_assignee" \
         '.assigneeId = (if $a == "null" or $a == "" then null else $a end)')"
       restored="$restored assigneeId"
@@ -227,7 +239,9 @@ $marker"
       "$LEDGER" drift "$run_id" assigneeId "$me" "$cur_assignee"
       drifted="$drifted assigneeId"
     fi
-    if [ "$cur_state" = "$claimed_state" ]; then
+    if [ -n "$already_restored" ]; then
+      :
+    elif [ "$cur_state" = "$claimed_state" ]; then
       input="$(printf '%s' "$input" | jq --arg s "$prior_state" '.stateId = $s')"
       restored="$restored stateId"
     else

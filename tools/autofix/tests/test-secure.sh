@@ -132,6 +132,34 @@ assert_contains "$(grep issueUpdate "$AUTOFIX_LINEAR_MOCK_DIR/requests.log" | ta
   "secure release still performs the conditional state restore (ungated)"
 
 # ---------------------------------------------------------------------------
+# secure release, confirmed pass: the gated pass already restored state, so the
+# confirmed pass finds the issue unassigned and back in its prior state. It must
+# post the approved label + brief without re-running the restore; before the
+# fix it read "unassigned" as drift and died in ledger.sh drift on the empty
+# value, so an approved bail brief could never be posted.
+# ---------------------------------------------------------------------------
+csetup secl4
+bash "$C" claim NPPM-2993 secl4 >/dev/null 2>&1
+sed "s/RUNID/secl4/" fixtures/issue_postclaim_ok.json > "$AUTOFIX_LINEAR_MOCK_DIR/issue_release.json"
+out="$(bash "$C" release NPPM-2993 secl4 --fail-label --comment "needs a product decision" 2>&1)" && rc=0 || rc=$?
+assert_eq 7 "$rc" "gated secure release exits 7 before the confirmed pass"
+RLDG="$(printf '%s\n' "$out" | sed -n 's/^GATED: \([0-9a-f]*\) .*/\1/p')"
+PRIOR_STATE="$(bash "$L" get secl4 '.linear_prior.stateId')"
+printf '{ "data": { "issue": { "id": "abc-123", "identifier": "NPPM-2993", "assignee": null, "state": { "id": "%s", "name": "Backlog" }, "labels": { "nodes": [] }, "comments": { "nodes": [] } } } }' \
+  "$PRIOR_STATE" > "$AUTOFIX_LINEAR_MOCK_DIR/issue_release.json"
+: > "$AUTOFIX_LINEAR_MOCK_DIR/requests.log"
+bash "$C" release NPPM-2993 secl4 --fail-label --comment "needs a product decision" --confirmed="$RLDG" >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq 0 "$rc" "confirmed secure release succeeds after its own restore"
+assert_eq 1 "$(grep -c commentCreate "$AUTOFIX_LINEAR_MOCK_DIR/requests.log" || true)" \
+  "confirmed secure release posts the approved brief once"
+assert_contains "$(grep issueUpdate "$AUTOFIX_LINEAR_MOCK_DIR/requests.log" | tail -1)" "${AUTOFIX_FAILED_LABEL_ID:-5de9635c-ac7a-4b00-ab5b-e7680f162cf8}" \
+  "confirmed secure release applies the failed label"
+assert_eq "" "$(grep issueUpdate "$AUTOFIX_LINEAR_MOCK_DIR/requests.log" | grep -E 'assigneeId|stateId' || true)" \
+  "confirmed secure release does not re-run the state restore"
+assert_eq 0 "$(bash "$L" get secl4 '.drift_log | map(select(.field == "assigneeId" or .field == "stateId")) | length')" \
+  "its own restore is not recorded as drift"
+
+# ---------------------------------------------------------------------------
 # secure pr.sh: gated preview (real diff+body), no push without confirmation
 # ---------------------------------------------------------------------------
 export AUTOFIX_ROOT; AUTOFIX_ROOT="$(mktemp -d)"

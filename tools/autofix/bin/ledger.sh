@@ -58,7 +58,8 @@ case "$cmd" in
     mutate '.stage_history += [{stage:$s, outcome:$o, at:$t, notes:$n}]' \
       --arg s "$stage" --arg o "$outcome" --arg t "$(now_utc)" --arg n "$notes" ;;
   drift)
-    field="${1:?}"; expected="${2:?}"; actual="${3:?}"
+    # expected/actual may be empty ("unassigned" is a value), but must be passed.
+    field="${1:?}"; expected="${2?}"; actual="${3?}"
     mutate '.drift_log += [{field:$f, expected:$e, actual:$a, at:$t}]' \
       --arg f "$field" --arg e "$expected" --arg a "$actual" --arg t "$(now_utc)" ;;
   evidence)
