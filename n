@@ -1,9 +1,6 @@
 #!/bin/bash
 
 NABSPATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
-# Where n was called from. The script cds to its own directory before dispatching
-# a command, so anything that needs the caller's directory later must read this.
-N_CALLER_PWD="$PWD"
 source "$(dirname "${BASH_SOURCE[0]}")/bin/_common.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/bin/repos.sh"
 
@@ -148,77 +145,6 @@ require_target_folder() {
     if [[ -z "$target_folder" ]]; then
         echo "Error: You must be inside one of the repos to run this command." >&2
         exit 1
-    fi
-}
-
-# Prints the project a command-line argument names, or fails if it names none.
-# Lets test-php, composer and npm take a project name the way build and test-js
-# do, instead of forwarding it to the tool as a path or subcommand. Only exact
-# project names match (with or without the newspack- prefix), so PHPUnit paths
-# and composer subcommands still pass through untouched.
-project_name_arg() {
-    local arg="$1" candidate p
-    [[ -n "$arg" && "$arg" != -* && "$arg" != */* ]] || return 1
-    for candidate in "$arg" "newspack-$arg"; do
-        for p in "${projects[@]}"; do
-            if [[ "$p" == "$candidate" ]]; then
-                echo "$candidate"
-                return 0
-            fi
-        done
-        if [[ -d "$NABSPATH/repos/plugins/$candidate" || -d "$NABSPATH/repos/themes/$candidate" ]]; then
-            echo "$candidate"
-            return 0
-        fi
-    done
-    return 1
-}
-
-# Shared setup for test-php and test-js. Sets test_output (compact for coding
-# agents; NEWSPACK_TEST_OUTPUT=full or =compact overrides) and test_code, the
-# branch@commit of the code the container will actually run, which the compact
-# summaries print.
-#
-# Refuses to run from a worktree that no isolated env mounts: the main container
-# only sees the root checkout, so the run would test the root's code and report
-# its result as the worktree's. NEWSPACK_TEST_ROOT_OK=1 runs it anyway.
-prepare_test_run() {
-    test_output=${NEWSPACK_TEST_OUTPUT:-}
-    if [[ -z "$test_output" && ( -n "${CLAUDECODE:-}" || -n "${AI_AGENT:-}" || -n "${CODEX_SANDBOX:-}" ) ]]; then
-        test_output=compact
-    fi
-
-    local base="$NABSPATH"
-    if [[ "$N_CALLER_PWD" == "$NABSPATH/worktrees/"* || "$N_CALLER_PWD" == "$NABSPATH/worktrees-repos/"* ]]; then
-        if [[ "$TARGET_CONTAINER" == "newspack_dev" ]]; then
-            if [[ "${NEWSPACK_TEST_ROOT_OK:-}" != "1" ]]; then
-                echo "Error: no isolated env mounts this worktree, so the tests would run" >&2
-                echo "against the root checkout's code, not this branch's." >&2
-                echo "  Mount it:  n env create <name> --worktree <repo>:<branch> --up" >&2
-                echo "  Or test the root anyway:  NEWSPACK_TEST_ROOT_OK=1 n $1 ..." >&2
-                exit 1
-            fi
-        else
-            base=$(git -C "$N_CALLER_PWD" rev-parse --show-toplevel 2>/dev/null) || base="$N_CALLER_PWD"
-        fi
-    fi
-
-    local code_dir="$base" candidate
-    for candidate in "$base/plugins/$target_folder" "$base/themes/$target_folder" \
-        "$base/repos/plugins/$target_folder" "$base/repos/themes/$target_folder"; do
-        if [[ -d "$candidate" ]]; then
-            code_dir="$candidate"
-            break
-        fi
-    done
-    test_code="unknown"
-    local ref sha
-    if ref=$(git -C "$code_dir" rev-parse --abbrev-ref HEAD 2>/dev/null) && sha=$(git -C "$code_dir" rev-parse --short HEAD 2>/dev/null); then
-        test_code="$ref@$sha"
-        if [[ -n "$(git -C "$code_dir" status --porcelain --untracked-files=no -- . 2>/dev/null)" ]]; then
-            test_code="$test_code +uncommitted changes"
-        fi
-        test_code="$test_code (${code_dir#"$NABSPATH"/})"
     fi
 }
 
@@ -503,14 +429,15 @@ case $1 in
         fi
         ;;
     test-php)
-        if named=$(project_name_arg "${2:-}"); then
-            target_folder=$named
-            set -- "$1" "${@:3}"
-        fi
         require_target_folder
-        prepare_test_run test-php
         command="/var/scripts/test-php.sh $target_folder ${@:2}"
-        docker exec $DOCKER_IT $USER_COMMAND -e NEWSPACK_TEST_OUTPUT="$test_output" -e NEWSPACK_TEST_CODE="$test_code" $TARGET_CONTAINER sh -c "$command"
+        # Coding agents get a compact summary instead of full PHPUnit output (see
+        # bin/test-php.sh). NEWSPACK_TEST_OUTPUT=full or =compact overrides this.
+        test_output=${NEWSPACK_TEST_OUTPUT:-}
+        if [[ -z "$test_output" && ( -n "${CLAUDECODE:-}" || -n "${AI_AGENT:-}" || -n "${CODEX_SANDBOX:-}" ) ]]; then
+            test_output=compact
+        fi
+        docker exec $DOCKER_IT $USER_COMMAND -e NEWSPACK_TEST_OUTPUT="$test_output" $TARGET_CONTAINER sh -c "$command"
         ;;
     test-js)
         if [[ -n "$2" ]]; then
@@ -520,23 +447,14 @@ case $1 in
         # Run the script directly (no `sh -c`) and quote the folder: it can now
         # come from the command line, where an unquoted value would word-split
         # or be read as shell syntax by the container.
-        prepare_test_run test-js
-        docker exec $DOCKER_IT $USER_COMMAND -e NEWSPACK_TEST_OUTPUT="$test_output" -e NEWSPACK_TEST_CODE="$test_code" $TARGET_CONTAINER /var/scripts/test-js.sh "$target_folder"
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER /var/scripts/test-js.sh "$target_folder"
         ;;
     composer)
-        if named=$(project_name_arg "${2:-}"); then
-            target_folder=$named
-            set -- "$1" "${@:3}"
-        fi
         require_target_folder
         command="/var/scripts/composer.sh $target_folder ${@:2}"
         docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "$command"
         ;;
     npm)
-        if named=$(project_name_arg "${2:-}"); then
-            target_folder=$named
-            set -- "$1" "${@:3}"
-        fi
         require_target_folder
         command="/var/scripts/npm.sh $target_folder ${@:2}"
         docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "$command"
@@ -617,10 +535,10 @@ case $1 in
         echo "  build [folder]               Build the specified folder (plugin/theme) or all for every repo."
         echo "  ci-build [folder]            Build for CI environment with specific optimizations."
         echo "  watch [folder]               Watch & rebuild the given/current repo; no arg watches every unit from the root."
-        echo "  test-php [project] [args]    Run PHP tests for the current (or named) repo with optional arguments."
+        echo "  test-php [args]              Run PHP tests for the current repo with optional arguments."
         echo "  test-js                      Run JavaScript tests for the current repo."
-        echo "  composer [project] [args]    Run a composer command for the current (or named) repo."
-        echo "  npm [project] [args]         Run an npm command for the current (or named) repo."
+        echo "  composer [args]              Run a composer command for the current repo."
+        echo "  npm [args]                   Run an npm command for the current repo."
         echo ""
         echo "Multi-site:"
         echo "  sites-add [name]             Add a new additional site with the given name."
