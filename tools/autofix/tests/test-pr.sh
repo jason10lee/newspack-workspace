@@ -184,7 +184,7 @@ assert_eq "" "$(grep push "$STUB_LOG" || true)" "missing affected_repo: nothing 
 # PR #999 from the create test at the top.
 MARKER='<!-- newspack-self-review passed=0123456789abcdef0123456789abcdef01234567 rounds=2 -->'
 # Carries the neutral line Stage 6 leaves where it cut sections, which must post.
-CBODY="$(mktemp)"; printf '**Self-review summary** - 2 rounds on this branch before handoff.\n1 finding declined, 2 suggestions deferred; tracked in the Linear issue.\n%s\n' "$MARKER" > "$CBODY"
+CBODY="$(mktemp)"; printf '**Self-review summary** - 2 rounds on this branch before handoff.\n`--auto` accepts blockers only, so 2 suggestions were deferred without a decision and 1 finding was declined; all are listed in the Linear closeout comment.\n%s\n' "$MARKER" > "$CBODY"
 : > "$STUB_LOG"
 out="$(bash "$P" comment runp --body-file "$CBODY")"
 assert_contains "$(cat "$STUB_LOG")" "gh pr comment https://github.com/Automattic/newspack-workspace/pull/999 --body-file $CBODY" \

@@ -463,11 +463,15 @@ Before posting, cut the copy's **Declined** section and its **Suggestions
 deferred** block, and carry both into the Linear closeout comment instead. Under
 `--auto` nobody reads those lines before they post, and a deferred finding can
 describe a weakness the run left unfixed; on a public PR that is a disclosure.
-Where they were, leave one neutral line that counts both, such as "1 finding
-declined, 2 suggestions deferred; tracked in the Linear issue", so the comment
-still accounts for feedback the run did not act on. Don't start it with
-`Declined:`, which `pr.sh` reads as the uncut section. The Accepted list and the
-closing marker stay.
+Where they were, leave one neutral line that counts both and says what
+`--auto` did with them, such as "`--auto` accepts blockers only, so 12
+suggestions and nits were deferred without a decision and 1 finding was
+declined; all are listed in the Linear closeout comment". A bare "deferred"
+reads as considered and set aside, and under `--auto` nobody considered them.
+Say "listed", not "tracked": the issue closes when the PR merges, and nothing
+follows the list up. Omit a count that is zero. Don't start the line with
+`Declined:`, which `pr.sh` reads as the uncut section. The Accepted list and
+the closing marker stay.
 
 `pr.sh comment` runs the redaction gate over the body, refuses a body without
 the self-review marker or, outside a secure run, one that still has either cut
