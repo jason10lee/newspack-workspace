@@ -242,12 +242,6 @@ assert_eq 1 "$rc" "replayed approval is refused once the comment exists"
 assert_eq "" "$(grep -E 'pr comment|api' "$STUB_LOG" || true)" "replayed approval posts nothing"
 out="$(bash "$P" comment secpr --body-file "$SBODY" 2>&1)" && rc=0 || rc=$?
 assert_eq 7 "$rc" "secure edit is gated too"
-# The operator previews a secure comment, so a section they chose to keep
-# reaches the gate instead of being refused.
-KBODY="$(mktemp)"; printf 'Declined:\n- kept by the operator\n%s\n' "$MARKER" > "$KBODY"
-bash "$P" comment secpr --body-file "$KBODY" >/dev/null 2>&1 && rc=0 || rc=$?
-assert_eq 7 "$rc" "secure comment with a kept section reaches the gate"
-rm -f "$KBODY"
 EDDG="$(printf '%s\n' "$out" | sed -n 's/^GATED: \([0-9a-f]*\) .*/\1/p')"
 EDFILE="$(printf '%s\n' "$out" | sed -n 's/^GATED: [0-9a-f]* \(.*\)$/\1/p')"
 assert_contains "$(cat "$EDFILE")" "edit comment 77 on https://github.com/x/y/pull/42" "edit preview names the comment it replaces"
@@ -255,6 +249,12 @@ assert_contains "$(cat "$EDFILE")" "edit comment 77 on https://github.com/x/y/pu
 bash "$P" comment secpr --body-file "$SBODY" --confirmed="$EDDG" >/dev/null 2>&1 && rc=0 || rc=$?
 assert_eq 0 "$rc" "confirmed secure edit succeeds"
 assert_contains "$(cat "$STUB_LOG")" "gh api -X PATCH repos/x/y/issues/comments/77" "confirmed secure edit patches the recorded comment"
+# The operator previews a secure comment, so a section they chose to keep
+# reaches the gate instead of being refused.
+KBODY="$(mktemp)"; printf 'Declined:\n- kept by the operator\n%s\n' "$MARKER" > "$KBODY"
+bash "$P" comment secpr --body-file "$KBODY" >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq 7 "$rc" "secure comment with a kept section reaches the gate"
+rm -f "$KBODY"
 # A later push re-runs create on the same PR. The first post's approval must
 # stay spent: create keeps the recorded comment, so the target is still an edit.
 out="$(bash "$P" create secpr --title "fix(x): y (NPPM-9)" --body-file "$BODY" 2>&1)" || true
