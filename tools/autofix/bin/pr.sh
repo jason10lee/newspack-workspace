@@ -174,8 +174,10 @@ else
     || log "Copilot review request failed (advisory — continuing)"
 fi
 
-# 8. record
-"$LEDGER" set "$run_id" '.pr = {url:$u, number:($n|tonumber)} | .terminal = "delivered"' \
+# 8. record. A re-run that adopts the same PR keeps .pr.summary_comment, so the
+# next `comment` edits that summary instead of posting a second one. A different
+# PR (the first was closed) starts clean: its comment belongs to the old PR.
+"$LEDGER" set "$run_id" '.pr = (if (.pr.url // "") == $u then .pr else {} end) + {url:$u, number:($n|tonumber)} | .terminal = "delivered"' \
   --arg u "$url" --arg n "$num"
 "$LEDGER" history "$run_id" pr delivered "$history_note"
 echo "$url"

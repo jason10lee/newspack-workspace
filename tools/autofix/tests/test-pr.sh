@@ -197,6 +197,22 @@ bash "$P" comment runp --body-file "$CBODY" >/dev/null
 assert_contains "$(cat "$STUB_LOG")" "gh api -X PATCH repos/Automattic/newspack-workspace/issues/comments/555 -F body=@$CBODY" \
   "comment: second call edits the recorded comment"
 assert_eq "" "$(grep 'pr comment' "$STUB_LOG" || true)" "comment: second call posts no new comment"
+# A later round's commits reach the PR through create's adopt path, which
+# must not forget the comment already posted.
+export GH_PR_LIST_OUT='{"url":"https://github.com/Automattic/newspack-workspace/pull/999","number":999,"isDraft":true}'
+bash "$P" create runp --title t --body-file "$BODY" >/dev/null
+unset GH_PR_LIST_OUT
+assert_eq 555 "$(bash "$L" get runp .pr.summary_comment.id)" "comment: re-running create keeps the recorded comment"
+: > "$STUB_LOG"
+bash "$P" comment runp --body-file "$CBODY" >/dev/null
+assert_contains "$(cat "$STUB_LOG")" "gh api -X PATCH repos/Automattic/newspack-workspace/issues/comments/555" \
+  "comment: after a re-create, edits the recorded comment"
+assert_eq "" "$(grep 'pr comment' "$STUB_LOG" || true)" "comment: after a re-create, posts no new comment"
+# A re-run that lands on a different PR must not edit the old PR's comment.
+export GH_PR_LIST_OUT='{"url":"https://github.com/Automattic/newspack-workspace/pull/1000","number":1000,"isDraft":true}'
+bash "$P" create runp --title t --body-file "$BODY" >/dev/null
+unset GH_PR_LIST_OUT
+assert_eq "" "$(bash "$L" get runp '.pr.summary_comment // empty')" "comment: a different PR drops the old PR's comment"
 
 bash "$L" init runnopr NPPM-11 operator-named >/dev/null
 : > "$STUB_LOG"

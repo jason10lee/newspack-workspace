@@ -248,6 +248,15 @@ assert_contains "$(cat "$EDFILE")" "edit comment 77 on https://github.com/x/y/pu
 bash "$P" comment secpr --body-file "$SBODY" --confirmed="$EDDG" >/dev/null 2>&1 && rc=0 || rc=$?
 assert_eq 0 "$rc" "confirmed secure edit succeeds"
 assert_contains "$(cat "$STUB_LOG")" "gh api -X PATCH repos/x/y/issues/comments/77" "confirmed secure edit patches the recorded comment"
+# A later push re-runs create on the same PR. The first post's approval must
+# stay spent: create keeps the recorded comment, so the target is still an edit.
+out="$(bash "$P" create secpr --title "fix(x): y (NPPM-9)" --body-file "$BODY" 2>&1)" || true
+RCDG="$(printf '%s\n' "$out" | sed -n 's/^GATED: \([0-9a-f]*\) .*/\1/p')"
+bash "$P" create secpr --title "fix(x): y (NPPM-9)" --body-file "$BODY" --confirmed="$RCDG" --no-copilot >/dev/null 2>&1
+: > "$STUB_LOG"
+bash "$P" comment secpr --body-file "$SBODY" --confirmed="$CMDG" >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq 1 "$rc" "replayed first-post approval is refused after a re-create"
+assert_eq "" "$(grep -E 'pr comment|api' "$STUB_LOG" || true)" "replay after a re-create posts nothing"
 rm -f "$SBODY"
 
 # ---------------------------------------------------------------------------
