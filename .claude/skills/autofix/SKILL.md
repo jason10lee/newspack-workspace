@@ -356,15 +356,22 @@ must re-run Stage 4** (failing-signal + touched-plugin suite) before
 proceeding — redaction must never silently break the regression test it
 just sanitized.
 
-Then run the devkit self-review over the run worktree, unattended:
+Then run the devkit self-review over the run worktree, unattended. The team
+handbook requires a self-review pass before handoff, and running it here means a
+delivered PR carries that pass and the summary comment Stage 6 posts:
 
 ```
 /newspack:self-review <worktree> --base origin/main --auto
 ```
 
-Always pass the worktree: self-review reviews the current directory by default,
-and a round that reviews the wrong checkout records a pass for the run's branch
-anyway. `--auto` is self-review's mode for a calling skill. It never pauses,
+Its state helper is `lib/self-review-state.sh` in the devkit, two directories
+above the base directory self-review announces when it loads
+(`<base>/../../lib/self-review-state.sh`). It is not on PATH. Below,
+`$SR_STATE` means that path.
+
+Always pass the worktree: self-review reviews, and records its state for, the
+current directory's branch, which here is not the run's worktree. `--auto` is
+self-review's mode for a calling skill. It never pauses,
 accepts blockers only (suggestions and nits go into the summary as deferred),
 stops after two rounds, never posts and never creates an env. It stops on
 uncommitted changes, so commit the Stage 3/4 work first.
@@ -372,14 +379,19 @@ uncommitted changes, so commit the Stage 3/4 work first.
 Self-review runs the `newspack:code-review` engine each round. Its default
 lineup (deep, WP expert and Codex, plus standards when installed) is what
 satisfies the **≥2-AI-reviewer floor**. A round whose `lineup:` line shows Codex
-skipped does not meet it, so re-run that round or escalate. Add `--design` for
-UI-touching diffs.
+skipped does not meet it; self-review cannot repeat a round, so run
+`$SR_STATE escalate <worktree>` and set `terminal: escalated`. Add `--design`
+for UI-touching diffs.
 
-**Each blocker fix self-review commits is a Stage 3 re-entry.** Before the next
-round starts, re-run the redaction scan over the new diff, re-run Stage 4
-(failing signal + touched-plugin suite), and count it against the shared loop
-bound above. Self-review's own "re-run the tests the changes touch" does not
-replace Stage 4's red/green evidence.
+**Each blocker fix self-review commits is a Stage 3 re-entry.** `--auto` does not
+pause between rounds, so do this yourself at the seam: after self-review's
+Record step for a round that committed a fix, and before its next round starts.
+Re-run the redaction scan over the new diff, re-run Stage 4 (failing signal +
+touched-plugin suite), and count it against the shared loop bound above.
+Self-review's own "re-run the tests the changes touch" does not replace Stage
+4's red/green evidence. If the bound is exhausted there, run
+`$SR_STATE escalate <worktree>` before setting `terminal: escalated`, so
+self-review's state and the run ledger agree.
 
 **Data boundary**: local reviewers (the code-review engine, codex) see the
 redacted worktree and diff only — never Linear attachments, secret-store
@@ -397,16 +409,10 @@ Read the outcome from self-review's result block:
   list and the round reports attached.
 
 Copilot's review at PR time (Stage 6) is additive/advisory only and does
-**not** gate `delivered`.
-
-**Amended 2026-09-28.** Stage 5 used to run the code-review engine directly, and
-the self-review the team handbook requires before handoff was left for the
-operator to run afterwards. It now runs inside the workflow, so a delivered PR
-carries a real self-review pass and the summary comment Stage 6 posts. `--auto`
-is the unattended mode self-review provides for this. Its interactive triage is
-what `autofix-secure` uses, because there the operator is present at every gate.
-Copilot is not a team requirement (NPPD-2198), so a Stage 6 Copilot failure is
-non-blocking.
+**not** gate `delivered`. Copilot is not a team requirement (NPPD-2198), so a
+Stage 6 Copilot failure is non-blocking. `autofix-secure` runs self-review
+interactively instead of `--auto`, because there the operator is present at
+every gate.
 
 ## Stage 6 — PR & Linear closeout
 
@@ -417,9 +423,9 @@ nppm-273 shipped without the checklist sections; operator-corrected).
 Content: problem, root cause, fix, evidence (repro-before / pass-after),
 verification, Linear link. End the Technical details block with the review
 summary line the template asks for, printed by self-review's own state helper
-(`self-review-state.sh summary-line <worktree>`, in the installed devkit's
-`lib/`), as written. It is the line `/newspack:pr-create` uses. What the rounds
-changed and declined goes in the summary comment below, not the body.
+(`$SR_STATE summary-line <worktree>`, see Stage 5), as written. It is the line
+`/newspack:pr-create` uses. What the rounds changed goes in the summary comment
+below, not the body.
 **Write the body — and every outward payload (closeout comment text
 included) — to the run dir
 (the directory holding `tools/autofix/bin/ledger.sh path <RUN_ID>`), never to a
@@ -450,11 +456,17 @@ wrote. Copy it into the run dir first, like every outward payload:
 ```
 cp <self_review_summary> <run-dir>/review-summary.md
 tools/autofix/bin/pr.sh comment <RUN_ID> --body-file <run-dir>/review-summary.md
-self-review-state.sh set-comment <worktree> <comment-id>
+$SR_STATE set-comment <worktree> <comment-id>
 ```
 
-`pr.sh comment` runs the redaction gate over the body and posts it on the run's
-PR. If the run already posted one, it edits that comment instead, since the team
+Before posting, cut the copy's **Declined** section and its **Suggestions
+deferred** block, and carry both into the Linear closeout comment instead. Under
+`--auto` nobody reads those lines before they post, and a deferred finding can
+describe a weakness the run left unfixed; on a public PR that is a disclosure.
+The Accepted list and the closing marker stay.
+
+`pr.sh comment` runs the redaction gate over the body, refuses a body without
+the self-review marker, and posts it on the run's PR. If the run already posted one, it edits that comment instead, since the team
 keeps one summary comment per PR. It records `.pr.summary_comment` and prints
 `<comment-id> <comment-url>`. Handing the id to self-review's `set-comment` is
 what lets a later self-review round edit this comment rather than add a second.

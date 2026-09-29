@@ -192,7 +192,7 @@ let the operator triage each round:
   run: the preview names the PR and whether this is a new comment or an edit of
   the one already posted, so an approval covers where the text goes as well as
   what it says. After the confirmed post, hand the printed id to
-  `self-review-state.sh set-comment` as base Stage 6 describes.
+  `$SR_STATE set-comment` as base Stage 5 and 6 describe.
 
 ## Hard rules (unchanged from base — never override)
 
