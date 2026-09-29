@@ -7,8 +7,68 @@ require git
 require gh
 LEDGER="$BIN/ledger.sh"
 
-[ "${1:-}" = "create" ] || die "usage: pr.sh create <run_id> --title <t> --body-file <f> [--confirmed=<digest>] [--no-copilot]"
+cmd="${1:-}"
+case "$cmd" in
+  create|comment) ;;
+  *) die "usage: pr.sh create <run_id> --title <t> --body-file <f> [--confirmed=<digest>] [--no-copilot]
+       pr.sh comment <run_id> --body-file <f> [--confirmed=<digest>]" ;;
+esac
 run_id="${2:?}"; shift 2
+
+# comment — post the self-review summary on the run's PR, or edit it when this
+# run already posted one: the team keeps one summary comment per PR, updated by
+# later rounds. Prints "<comment-id> <comment-url>" so the caller can hand the id
+# to self-review's own state (set-comment).
+if [ "$cmd" = comment ]; then
+  body_file=""; confirmed=""
+  while [ $# -gt 0 ]; do case "$1" in
+    --body-file) body_file="$2"; shift 2 ;;
+    --confirmed) confirmed="$2"; shift 2 ;;
+    --confirmed=*) confirmed="${1#*=}"; shift ;;
+    *) die "unknown flag: $1" ;;
+  esac; done
+  [ -n "$body_file" ] || die "--body-file required"
+  [ -s "$body_file" ] || die "comment body is empty: $body_file"
+  bash "$BIN/redact.sh" scan "$body_file" || die "redaction findings in comment body — fix and retry"
+
+  url="$("$LEDGER" get "$run_id" '.pr.url // empty')"
+  [ -n "$url" ] || die "no PR recorded in ledger for $run_id — run pr.sh create first"
+  # Taken from the PR URL rather than the worktree's remote, so a comment can
+  # still be posted or edited after the run's env has been swept.
+  repo="$(printf '%s' "$url" | sed -nE 's#^https://github\.com/([^/]+/[^/]+)/pull/[0-9]+$#\1#p')"
+  [ -n "$repo" ] || die "cannot read owner/repo from PR url: $url"
+  cid="$("$LEDGER" get "$run_id" '.pr.summary_comment.id // empty')"
+
+  # The artifact names the action as well as the bytes, so approving a new
+  # comment never covers an edit, and replaying an approval after the post
+  # lands is refused instead of posting twice.
+  if is_secure "$run_id"; then
+    art="$(mktemp)"
+    {
+      if [ -n "$cid" ]; then printf '### Target\nedit comment %s on %s\n\n' "$cid" "$url"
+      else printf '### Target\nnew comment on %s\n\n' "$url"; fi
+      printf '### Comment body\n'
+      cat "$body_file"
+    } > "$art"
+    secure_gate "$run_id" pr-comment "$art" "$confirmed"
+  fi
+
+  if [ -n "$cid" ]; then
+    gh api -X PATCH "repos/$repo/issues/comments/$cid" -F "body=@$body_file" >/dev/null
+    curl="$("$LEDGER" get "$run_id" '.pr.summary_comment.url // empty')"
+    "$LEDGER" history "$run_id" pr-comment updated "$curl"
+  else
+    out="$(gh pr comment "$url" --body-file "$body_file")"
+    curl="$(printf '%s\n' "$out" | grep -Eo 'https://[^[:space:]]+#issuecomment-[0-9]+' | tail -1)"
+    [ -n "$curl" ] || die "could not read a comment URL from gh pr comment output: $out — it may have posted; check $url before retrying"
+    cid="${curl##*#issuecomment-}"
+    "$LEDGER" set "$run_id" '.pr.summary_comment = {id:($i|tonumber), url:$u}' --arg i "$cid" --arg u "$curl"
+    "$LEDGER" history "$run_id" pr-comment posted "$curl"
+  fi
+  printf '%s %s\n' "$cid" "$curl"
+  exit 0
+fi
+
 title=""; body_file=""; confirmed=""; no_copilot=""
 while [ $# -gt 0 ]; do case "$1" in
   --title) title="$2"; shift 2 ;;

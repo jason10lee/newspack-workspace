@@ -16,7 +16,7 @@ lives in, and is governed by, the base `autofix` skill and its spec:
 
 **Run the base `autofix` skill's Stages 0–7 exactly as written**, using the same
 `tools/autofix/bin/` scripts and the same run ledger, with **only** the outward
-layer replaced by the overrides below. Where a stage's mechanical behavior is
+layer and Stage 5's triage mode replaced by the overrides below. Where a stage's mechanical behavior is
 unchanged, follow the base skill verbatim; do not fork it here. If anything in
 this file appears to conflict with a *safety* rule in the base skill, the
 stricter rule wins.
@@ -30,7 +30,8 @@ Base `autofix` bars Security-labeled issues at Stage 0 (`intake.sh check` exit
 2, non-bypassable by any flag). `autofix-secure` is the single deliberately-
 invoked entry point where such an issue is eligible — and in exchange it (1)
 inverts that one eligibility rule, (2) confirm-gates every *disclosing* write,
-and (3) applies disclosure hygiene to every public artifact. Everything else —
+(3) applies disclosure hygiene to every public artifact, and (4) runs Stage 5's
+self-review interactively, with the operator triaging. Everything else —
 worktree isolation, the red/green signal, root-phpcs, impact-review, the
 ≥2-AI-reviewer floor, the resumable ledger — is inherited unchanged.
 
@@ -69,8 +70,9 @@ are agent-settable):**
 ## Override 2 — Confirm-gate the disclosing writes (not local commits, not assign/status)
 
 The gate covers **disclosing writes only**: the branch **push**, the **draft PR**
-open + body, **every Linear comment** (claim, bail, closeout — Overrides 3 & 4),
-and the **Copilot** request. It does **not** cover local `git commit`s (they
+open + body, the **self-review summary comment** on the PR (Override 5),
+**every Linear comment** (claim, bail, closeout — Overrides 3 & 4), and the
+**Copilot** request. It does **not** cover local `git commit`s (they
 disclose nothing until a push — keep the TDD loop fast) or claim-time
 assign-self / move-to-In-Progress (working-state transitions the operator
 authorized by invoking `run-secure`; their activity-feed notification is an
@@ -129,6 +131,10 @@ discipline — **don't telegraph the vulnerability** — on top:
   and any fuzzing harness stay under the run dir, **never committed**. The
   regression test that lands is the minimal behavioral assertion under a
   **neutral name**.
+- **The self-review summary comment** gets the checklist below before its
+  preview. Its Declined reasons and its "what changed and why" lines are where
+  a review's account of the flaw leaks into a public comment. Edit the run-dir
+  copy, never self-review's own `summary.md`, and keep its closing marker line.
 - **Exploit detail lives in the Stage 7 run report**, which `autofix report
   <RUN_ID> --init` creates in operator-local state, outside every repository,
   stamped `internal: true` — the honest technical record goes there, not on
@@ -159,6 +165,34 @@ derived from it. (`newspack-plugin` and most product plugins are
 - Coordinated-disclosure rationale: telegraphing the flaw before it is patched
   everywhere (and the publisher-plugin update long tail has caught up) hands
   attackers a roadmap.
+
+## Override 5 — Stage 5 self-review is interactive; its comment goes through the gate
+
+Base Stage 5 runs `/newspack:self-review --auto`, because nobody is watching.
+Here the operator is present at every gate, so run self-review interactively and
+let the operator triage each round:
+
+```
+/newspack:self-review <worktree> --base origin/main
+```
+
+- Everything else in base Stage 5 holds: redaction before the first round,
+  and after each fix commit a redaction re-scan, a Stage 4 re-run and a count
+  against the shared loop bound before the next round. Self-review commits
+  locally and never pushes, which Override 2 leaves ungated.
+- Self-review asks "Keep going?" after round 3. Answering is the operator's
+  call, and the shared loop bound still applies.
+- **Never let self-review or `/newspack:pr-create` post the summary.** Both
+  offer `gh pr comment` (or a `gh api` edit) on a yes, and neither passes the
+  gate, the redaction scan or this checklist. Stage 5 runs before the PR exists,
+  so self-review takes its "no PR yet" branch and posts nothing. A later round,
+  after a resume or after Copilot feedback, finds the PR and makes the offer.
+  Decline it every time.
+- Stage 6 posts the summary with `pr.sh comment`, which gates it in a secure
+  run: the preview names the PR and whether this is a new comment or an edit of
+  the one already posted, so an approval covers where the text goes as well as
+  what it says. After the confirmed post, hand the printed id to
+  `self-review-state.sh set-comment` as base Stage 6 describes.
 
 ## Hard rules (unchanged from base — never override)
 
@@ -191,6 +225,7 @@ gate real:
 Secure behavior lives in `tools/autofix/bin/` (design + review record:
 `~/Repositories/A8C/newspack-agent-knowledge.git/_tooling/specs/2026-07-22-autofix-secure-bin-tooling-spec.md`).
 Key commands: `autofix run-secure <ISSUE>` (entry), `claim.sh comment … [--confirmed=<d>]`,
-`claim.sh release … [--confirmed=<d>]`, `pr.sh create … [--confirmed=<d>] [--no-copilot]`.
+`claim.sh release … [--confirmed=<d>]`, `pr.sh create … [--confirmed=<d>] [--no-copilot]`,
+`pr.sh comment <RUN> --body-file <f> [--confirmed=<d>]`.
 Enforcement is ledger-driven (`.secure`), fail-closed; gated writes emit
 `GATED: <digest> <preview-file>` and exit 7 until confirmed.

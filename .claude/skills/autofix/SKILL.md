@@ -320,8 +320,8 @@ All required, in order:
 
 ### Loop bound (shared with Stage 5)
 
-Failure at Stage 4 or major findings at Stage 5 loop back to Stage 3, bounded
-by **both**:
+Failure at Stage 4, or a blocker fix committed during a Stage 5 self-review
+round, loops back to Stage 3, bounded by **both**:
 
 - **3 fix iterations total** — track and check yourself:
   `ledger.sh get <RUN_ID> '.loop_counts.fix_iterations'`; increment with
@@ -356,31 +356,57 @@ must re-run Stage 4** (failing-signal + touched-plugin suite) before
 proceeding — redaction must never silently break the regression test it
 just sanitized.
 
-Then run the `newspack:code-review` skill (gating) over the worktree: deep +
-standards + WP-expert reviewers + `codex exec` as the second model (Gemini
-CLI is dead — don't reach for it). Design-system reviewer opt-in for
+Then run the devkit self-review over the run worktree, unattended:
+
+```
+/newspack:self-review <worktree> --base origin/main --auto
+```
+
+Always pass the worktree: self-review reviews the current directory by default,
+and a round that reviews the wrong checkout records a pass for the run's branch
+anyway. `--auto` is self-review's mode for a calling skill. It never pauses,
+accepts blockers only (suggestions and nits go into the summary as deferred),
+stops after two rounds, never posts and never creates an env. It stops on
+uncommitted changes, so commit the Stage 3/4 work first.
+
+Self-review runs the `newspack:code-review` engine each round. Its default
+lineup (deep, WP expert and Codex, plus standards when installed) is what
+satisfies the **≥2-AI-reviewer floor**. A round whose `lineup:` line shows Codex
+skipped does not meet it, so re-run that round or escalate. Add `--design` for
 UI-touching diffs.
+
+**Each blocker fix self-review commits is a Stage 3 re-entry.** Before the next
+round starts, re-run the redaction scan over the new diff, re-run Stage 4
+(failing signal + touched-plugin suite), and count it against the shared loop
+bound above. Self-review's own "re-run the tests the changes touch" does not
+replace Stage 4's red/green evidence.
 
 **Data boundary**: local reviewers (the code-review engine, codex) see the
 redacted worktree and diff only — never Linear attachments, secret-store
 links, or customer identifiers from the issue thread.
 
-All major findings addressed (loop to Stage 3/4 within the shared bound
-above) or `terminal: escalated` with findings attached.
+Read the outcome from self-review's result block:
 
-The **≥2-AI-reviewer floor is satisfied here** by the code-review engine's
-reviewer set plus codex — these are the *gating* reviewers with a
-remediation loop. Copilot's review at PR time (Stage 6) is
-additive/advisory only and does **not** gate `delivered`.
+- `status: passed` → record `ledger.sh set <RUN_ID> '.decisions += [{key:"self_review_summary", value:$p}]' --arg p <summary path>`
+  and go to Stage 6.
+- `status: escalated` with an empty `open:` list → round 2 fixed a blocker and
+  nothing has confirmed the fix yet. Invoke self-review `--auto` once more,
+  within the shared loop bound; its first round is the confirmation. If that
+  run does not pass, `terminal: escalated`.
+- `status: escalated` with open blockers → `terminal: escalated`, with the open
+  list and the round reports attached.
 
-**Amended 2026-09-04.** This used to say Copilot's findings land on "the
-eventual human review pass". There is no such pass by default any more: the team
-handbook makes a devkit self-review round plus one summary comment the thing that
-precedes a merge, and a human review an opt-in for large or risky work. The
-handoff a run produces is unchanged — a draft PR — but what happens to it next is
-a self-review the operator runs, not a queue it waits in. Copilot is also no
-longer a team requirement (NPPD-2198), so a Stage 6 Copilot failure is now
-doubly non-blocking.
+Copilot's review at PR time (Stage 6) is additive/advisory only and does
+**not** gate `delivered`.
+
+**Amended 2026-09-28.** Stage 5 used to run the code-review engine directly, and
+the self-review the team handbook requires before handoff was left for the
+operator to run afterwards. It now runs inside the workflow, so a delivered PR
+carries a real self-review pass and the summary comment Stage 6 posts. `--auto`
+is the unattended mode self-review provides for this. Its interactive triage is
+what `autofix-secure` uses, because there the operator is present at every gate.
+Copilot is not a team requirement (NPPD-2198), so a Stage 6 Copilot failure is
+non-blocking.
 
 ## Stage 6 — PR & Linear closeout
 
@@ -389,8 +415,13 @@ Compose the PR body by **filling the repo's
 checklists, checked truthfully — not by borrowing its content headings (run
 nppm-273 shipped without the checklist sections; operator-corrected).
 Content: problem, root cause, fix, evidence (repro-before / pass-after),
-verification, Linear link. **Write the body — and every outward payload
-(closeout comment text included) — to the run dir
+verification, Linear link. End the Technical details block with the review
+summary line the template asks for, printed by self-review's own state helper
+(`self-review-state.sh summary-line <worktree>`, in the installed devkit's
+`lib/`), as written. It is the line `/newspack:pr-create` uses. What the rounds
+changed and declined goes in the summary comment below, not the body.
+**Write the body — and every outward payload (closeout comment text
+included) — to the run dir
 (the directory holding `tools/autofix/bin/ledger.sh path <RUN_ID>`), never to a
 session/job tmp dir**: a
 run-nppm-305 payload staged in job tmp vanished mid-run and the release
@@ -412,6 +443,28 @@ finds one (idempotent re-run / resume-after-partial-push), otherwise opens a
 REST API, on a newly created PR only (one pass per PR; an adopted PR is not
 re-requested; advisory — a failure here is logged and does not block); (7)
 records `.pr` and sets `terminal: delivered`.
+
+**Self-review summary comment.** Once the PR exists, post the summary Stage 5
+wrote. Copy it into the run dir first, like every outward payload:
+
+```
+cp <self_review_summary> <run-dir>/review-summary.md
+tools/autofix/bin/pr.sh comment <RUN_ID> --body-file <run-dir>/review-summary.md
+self-review-state.sh set-comment <worktree> <comment-id>
+```
+
+`pr.sh comment` runs the redaction gate over the body and posts it on the run's
+PR. If the run already posted one, it edits that comment instead, since the team
+keeps one summary comment per PR. It records `.pr.summary_comment` and prints
+`<comment-id> <comment-url>`. Handing the id to self-review's `set-comment` is
+what lets a later self-review round edit this comment rather than add a second.
+Post only through `pr.sh comment`. Self-review and `/newspack:pr-create` each
+offer to post the summary themselves, and neither path runs the redaction gate
+or records the comment in the ledger. Leave the summary's closing
+`newspack-self-review` marker as written: `pr-ready` and self-review's remote
+status read the pass from it. A failure here does not undo `delivered`. The PR
+is still a draft, so note the failure in the run report and the comment can be
+posted later from the run dir.
 
 **PR-scope guard (fork-trunk leak guard)**: real incident — an autofix run
 once branched from this machine's local fork-trunk `main` (a 153-commit
@@ -479,6 +532,9 @@ prints where that report is, and `autofix runs` lists them.
 After writing, run `tools/autofix/bin/autofix report <RUN_ID>` once more. For a
 secure run it puts back the `internal: true` frontmatter if your write dropped it.
 
+The report includes self-review's result block and the paths of its round
+reports, which live in self-review's own state directory, outside every repository.
+
 Notify the operator (session summary; `PushNotification` where available).
 
 **Cleanup is sweep-based, not a daemon.** Every `autofix` invocation (`run`,
@@ -509,7 +565,8 @@ once it reaches a terminal state.
    the value *this run* set — if a human changed assignee/status/labels
    mid-run, don't overwrite; comment and escalate instead.
 2. **Git/GitHub**: push the run's feature branch; open a **draft** PR;
-   request Copilot review.
+   request Copilot review; post the self-review summary comment on that PR,
+   and edit it when a later round changes it (`pr.sh comment`).
 
 ## Hard rules (bind in ALL modes, including operator-named — never override)
 
@@ -539,7 +596,7 @@ once it reaches a terminal state.
 | `bailed-lost-claim-race` | Stage 0 (inside `claim.sh claim`) | conditional back-off + comment, done automatically by `claim.sh` | no env yet |
 | `bailed-superseded` | Stage 0 (inside `claim.sh claim`, same-issue guard, exit 4) | none — this run never touched Linear | no env yet |
 | `escalated` | Stage 2/3/4/5/6, on attempts/loop/scope exhaustion or unresolved drift | none automatic — findings/state left for the operator; a fresh Linear comment noting the escalation is good practice but not scripted for you | env/worktree retained until the TTL sweep (`AUTOFIX_ESCALATED_ENV_TTL_DAYS`) |
-| `delivered` | Stage 6 (`pr.sh create`) | closeout comment via Linear MCP (PR link + evidence) | env retained until the PR merges/closes, then swept |
+| `delivered` | Stage 6 (`pr.sh create`) | closeout comment via Linear MCP (PR link + evidence); self-review summary comment on the PR via `pr.sh comment` | env retained until the PR merges/closes, then swept |
 
 A bailed or escalated run is a **successful** run of the workflow — the team
 gets triage/repro knowledge either way. Never fabricate a `delivered` state

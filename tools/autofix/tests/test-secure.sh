@@ -180,7 +180,10 @@ EOF
 cat > "$STUB/gh" <<'EOF'
 #!/bin/bash
 echo "gh $*" >> "${STUB_LOG:?}"
-case "$1 $2" in "pr create") echo "https://github.com/x/y/pull/42";; esac
+case "$1 $2" in
+  "pr create") echo "https://github.com/x/y/pull/42";;
+  "pr comment") echo "https://github.com/x/y/pull/42#issuecomment-77";;
+esac
 exit 0
 EOF
 chmod +x "$STUB/git" "$STUB/gh"
@@ -206,6 +209,46 @@ bash "$P" create secpr --title "fix(x): y (NPPM-9)" --body-file "$BODY" --confir
 assert_contains "$(cat "$STUB_LOG")" "push -u origin br-sec" "confirmed secure pr create pushes"
 assert_eq "" "$(grep copilot "$STUB_LOG" || true)" "--no-copilot skips the Copilot request"
 assert_eq delivered "$(bash "$L" get secpr .terminal)" "confirmed secure pr create reaches delivered"
+
+# ---------------------------------------------------------------------------
+# secure pr.sh comment: the self-review summary is a disclosing write. The
+# preview names the target and whether it is a new comment or an edit, so an
+# approval covers where the bytes go as well as what they say.
+# ---------------------------------------------------------------------------
+SBODY="$(mktemp)"; printf '**Self-review summary** - 2 rounds on this branch before handoff.\n' > "$SBODY"
+: > "$STUB_LOG"
+out="$(bash "$P" comment secpr --body-file "$SBODY" 2>&1)" && rc=0 || rc=$?
+assert_eq 7 "$rc" "secure comment without confirmation exits 7"
+assert_eq "" "$(grep -E 'pr comment|api' "$STUB_LOG" || true)" "secure comment posts nothing when gated"
+CMDG="$(printf '%s\n' "$out" | sed -n 's/^GATED: \([0-9a-f]*\) .*/\1/p')"
+CMFILE="$(printf '%s\n' "$out" | sed -n 's/^GATED: [0-9a-f]* \(.*\)$/\1/p')"
+assert_contains "$(cat "$CMFILE")" "new comment on https://github.com/x/y/pull/42" "comment preview names a new comment and its PR"
+assert_contains "$(cat "$CMFILE")" "Self-review summary" "comment preview carries the body"
+printf 'Something else.\n' > "$SBODY"
+bash "$P" comment secpr --body-file "$SBODY" --confirmed="$CMDG" >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq 1 "$rc" "secure comment with a stale digest is refused"
+assert_eq "" "$(grep -E 'pr comment|api' "$STUB_LOG" || true)" "stale digest posts nothing"
+printf '**Self-review summary** - 2 rounds on this branch before handoff.\n' > "$SBODY"
+bash "$P" comment secpr --body-file "$SBODY" --confirmed="$CMDG" >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq 0 "$rc" "confirmed secure comment succeeds"
+assert_eq 1 "$(grep -c 'gh pr comment' "$STUB_LOG" || true)" "confirmed secure comment posts once"
+assert_eq 77 "$(bash "$L" get secpr .pr.summary_comment.id)" "confirmed secure comment records its id"
+# Replaying the same approval must not post again: the comment now exists, so
+# the same body would be an edit, which is a different artifact.
+: > "$STUB_LOG"
+bash "$P" comment secpr --body-file "$SBODY" --confirmed="$CMDG" >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq 1 "$rc" "replayed approval is refused once the comment exists"
+assert_eq "" "$(grep -E 'pr comment|api' "$STUB_LOG" || true)" "replayed approval posts nothing"
+out="$(bash "$P" comment secpr --body-file "$SBODY" 2>&1)" && rc=0 || rc=$?
+assert_eq 7 "$rc" "secure edit is gated too"
+EDDG="$(printf '%s\n' "$out" | sed -n 's/^GATED: \([0-9a-f]*\) .*/\1/p')"
+EDFILE="$(printf '%s\n' "$out" | sed -n 's/^GATED: [0-9a-f]* \(.*\)$/\1/p')"
+assert_contains "$(cat "$EDFILE")" "edit comment 77 on https://github.com/x/y/pull/42" "edit preview names the comment it replaces"
+: > "$STUB_LOG"
+bash "$P" comment secpr --body-file "$SBODY" --confirmed="$EDDG" >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq 0 "$rc" "confirmed secure edit succeeds"
+assert_contains "$(cat "$STUB_LOG")" "gh api -X PATCH repos/x/y/issues/comments/77" "confirmed secure edit patches the recorded comment"
+rm -f "$SBODY"
 
 # ---------------------------------------------------------------------------
 # resumed secure run (fresh shell, no env var) still gates a subsequent write

@@ -29,6 +29,7 @@ echo "gh $*" >> "${STUB_LOG:?}"
 case "$1 $2" in
   "pr list") printf '%s\n' "${GH_PR_LIST_OUT:-}" ;;
   "pr create") echo "https://github.com/Automattic/newspack-workspace/pull/999" ;;
+  "pr comment") echo "https://github.com/Automattic/newspack-workspace/pull/999#issuecomment-555" ;;
 esac
 exit 0
 EOF
@@ -179,4 +180,38 @@ bash "$L" set runscope3 '.branch = "br-2"'
 bash "$P" create runscope3 --title t --body-file "$BODY" >/dev/null 2>&1 && rc=0 || rc=$?
 assert_eq 1 "$rc" "scope guard: missing affected_repo decision dies"
 assert_eq "" "$(grep push "$STUB_LOG" || true)" "missing affected_repo: nothing pushed"
+# pr.sh comment: the self-review summary comment on the run's PR. runp holds
+# PR #999 from the create test at the top.
+CBODY="$(mktemp)"; printf '**Self-review summary** - 2 rounds on this branch before handoff.\n' > "$CBODY"
+: > "$STUB_LOG"
+out="$(bash "$P" comment runp --body-file "$CBODY")"
+assert_contains "$(cat "$STUB_LOG")" "gh pr comment https://github.com/Automattic/newspack-workspace/pull/999 --body-file $CBODY" \
+  "comment: posts on the ledger's PR"
+assert_eq 555 "$(bash "$L" get runp .pr.summary_comment.id)" "comment: id recorded"
+assert_contains "$(bash "$L" get runp .pr.summary_comment.url)" "#issuecomment-555" "comment: url recorded"
+assert_eq "555 https://github.com/Automattic/newspack-workspace/pull/999#issuecomment-555" "$out" \
+  "comment: prints the id and url"
+# One summary comment per PR: a later round edits the one already posted.
+: > "$STUB_LOG"
+bash "$P" comment runp --body-file "$CBODY" >/dev/null
+assert_contains "$(cat "$STUB_LOG")" "gh api -X PATCH repos/Automattic/newspack-workspace/issues/comments/555 -F body=@$CBODY" \
+  "comment: second call edits the recorded comment"
+assert_eq "" "$(grep 'pr comment' "$STUB_LOG" || true)" "comment: second call posts no new comment"
+
+bash "$L" init runnopr NPPM-11 operator-named >/dev/null
+: > "$STUB_LOG"
+bash "$P" comment runnopr --body-file "$CBODY" >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq 1 "$rc" "comment: a run with no PR dies"
+assert_eq "" "$(grep '^gh ' "$STUB_LOG" || true)" "comment: no PR, no gh call"
+
+: > "$STUB_LOG"
+echo "creds: https://mc.a8c.com/secret-store/?secret_id=1" > "$CBODY"
+bash "$P" comment runp --body-file "$CBODY" >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq 1 "$rc" "comment: redaction finding aborts"
+assert_eq "" "$(grep '^gh ' "$STUB_LOG" || true)" "comment: redaction finding, no gh call"
+
+: > "$CBODY"
+bash "$P" comment runp --body-file "$CBODY" >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq 1 "$rc" "comment: an empty body dies"
+rm -f "$CBODY"
 finish
