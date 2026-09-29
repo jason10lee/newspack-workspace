@@ -182,7 +182,8 @@ assert_eq 1 "$rc" "scope guard: missing affected_repo decision dies"
 assert_eq "" "$(grep push "$STUB_LOG" || true)" "missing affected_repo: nothing pushed"
 # pr.sh comment: the self-review summary comment on the run's PR. runp holds
 # PR #999 from the create test at the top.
-CBODY="$(mktemp)"; printf '**Self-review summary** - 2 rounds on this branch before handoff.\n' > "$CBODY"
+MARKER='<!-- newspack-self-review passed=0123456789abcdef0123456789abcdef01234567 rounds=2 -->'
+CBODY="$(mktemp)"; printf '**Self-review summary** - 2 rounds on this branch before handoff.\n%s\n' "$MARKER" > "$CBODY"
 : > "$STUB_LOG"
 out="$(bash "$P" comment runp --body-file "$CBODY")"
 assert_contains "$(cat "$STUB_LOG")" "gh pr comment https://github.com/Automattic/newspack-workspace/pull/999 --body-file $CBODY" \
@@ -218,16 +219,26 @@ bash "$L" init runnopr NPPM-11 operator-named >/dev/null
 : > "$STUB_LOG"
 bash "$P" comment runnopr --body-file "$CBODY" >/dev/null 2>&1 && rc=0 || rc=$?
 assert_eq 1 "$rc" "comment: a run with no PR dies"
+assert_contains "$(bash "$P" comment runnopr --body-file "$CBODY" 2>&1)" "no PR recorded in ledger" "comment: no-PR refusal names the missing PR"
 assert_eq "" "$(grep '^gh ' "$STUB_LOG" || true)" "comment: no PR, no gh call"
 
 : > "$STUB_LOG"
-echo "creds: https://mc.a8c.com/secret-store/?secret_id=1" > "$CBODY"
+printf 'creds: https://mc.a8c.com/secret-store/?secret_id=1\n%s\n' "$MARKER" > "$CBODY"
 bash "$P" comment runp --body-file "$CBODY" >/dev/null 2>&1 && rc=0 || rc=$?
 assert_eq 1 "$rc" "comment: redaction finding aborts"
 assert_eq "" "$(grep '^gh ' "$STUB_LOG" || true)" "comment: redaction finding, no gh call"
 
 : > "$CBODY"
-bash "$P" comment runp --body-file "$CBODY" >/dev/null 2>&1 && rc=0 || rc=$?
+out="$(bash "$P" comment runp --body-file "$CBODY" 2>&1)" && rc=0 || rc=$?
 assert_eq 1 "$rc" "comment: an empty body dies"
+assert_contains "$out" "comment body is empty" "comment: empty-body refusal names the empty body"
+
+# A body edited for disclosure hygiene can drop the marker pr-ready reads.
+printf '**Self-review summary** - edited.\n' > "$CBODY"
+: > "$STUB_LOG"
+out="$(bash "$P" comment runp --body-file "$CBODY" 2>&1)" && rc=0 || rc=$?
+assert_eq 1 "$rc" "comment: a body without the self-review marker dies"
+assert_contains "$out" "no newspack-self-review marker" "comment: marker refusal names the marker"
+assert_eq "" "$(grep '^gh ' "$STUB_LOG" || true)" "comment: missing marker, no gh call"
 rm -f "$CBODY"
 finish

@@ -215,7 +215,8 @@ assert_eq delivered "$(bash "$L" get secpr .terminal)" "confirmed secure pr crea
 # preview names the target and whether it is a new comment or an edit, so an
 # approval covers where the bytes go as well as what they say.
 # ---------------------------------------------------------------------------
-SBODY="$(mktemp)"; printf '**Self-review summary** - 2 rounds on this branch before handoff.\n' > "$SBODY"
+MARKER='<!-- newspack-self-review passed=0123456789abcdef0123456789abcdef01234567 rounds=2 -->'
+SBODY="$(mktemp)"; printf '**Self-review summary** - 2 rounds on this branch before handoff.\n%s\n' "$MARKER" > "$SBODY"
 : > "$STUB_LOG"
 out="$(bash "$P" comment secpr --body-file "$SBODY" 2>&1)" && rc=0 || rc=$?
 assert_eq 7 "$rc" "secure comment without confirmation exits 7"
@@ -224,11 +225,11 @@ CMDG="$(printf '%s\n' "$out" | sed -n 's/^GATED: \([0-9a-f]*\) .*/\1/p')"
 CMFILE="$(printf '%s\n' "$out" | sed -n 's/^GATED: [0-9a-f]* \(.*\)$/\1/p')"
 assert_contains "$(cat "$CMFILE")" "new comment on https://github.com/x/y/pull/42" "comment preview names a new comment and its PR"
 assert_contains "$(cat "$CMFILE")" "Self-review summary" "comment preview carries the body"
-printf 'Something else.\n' > "$SBODY"
+printf 'Something else.\n%s\n' "$MARKER" > "$SBODY"
 bash "$P" comment secpr --body-file "$SBODY" --confirmed="$CMDG" >/dev/null 2>&1 && rc=0 || rc=$?
 assert_eq 1 "$rc" "secure comment with a stale digest is refused"
 assert_eq "" "$(grep -E 'pr comment|api' "$STUB_LOG" || true)" "stale digest posts nothing"
-printf '**Self-review summary** - 2 rounds on this branch before handoff.\n' > "$SBODY"
+printf '**Self-review summary** - 2 rounds on this branch before handoff.\n%s\n' "$MARKER" > "$SBODY"
 bash "$P" comment secpr --body-file "$SBODY" --confirmed="$CMDG" >/dev/null 2>&1 && rc=0 || rc=$?
 assert_eq 0 "$rc" "confirmed secure comment succeeds"
 assert_eq 1 "$(grep -c 'gh pr comment' "$STUB_LOG" || true)" "confirmed secure comment posts once"

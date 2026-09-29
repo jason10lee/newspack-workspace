@@ -30,6 +30,10 @@ if [ "$cmd" = comment ]; then
   [ -n "$body_file" ] || die "--body-file required"
   [ -s "$body_file" ] || die "comment body is empty: $body_file"
   bash "$BIN/redact.sh" scan "$body_file" || die "redaction findings in comment body — fix and retry"
+  # pr-ready and self-review read the pass from this marker on the PR. A body
+  # edited for disclosure hygiene can lose it and still post cleanly.
+  grep -Eq '<!-- newspack-self-review passed=[0-9a-f]{40} rounds=[0-9]+ -->' "$body_file" \
+    || die "comment body has no newspack-self-review marker line — keep the one self-review wrote"
 
   url="$("$LEDGER" get "$run_id" '.pr.url // empty')"
   [ -n "$url" ] || die "no PR recorded in ledger for $run_id — run pr.sh create first"
@@ -40,8 +44,9 @@ if [ "$cmd" = comment ]; then
   cid="$("$LEDGER" get "$run_id" '.pr.summary_comment.id // empty')"
 
   # The artifact names the action as well as the bytes, so approving a new
-  # comment never covers an edit, and replaying an approval after the post
-  # lands is refused instead of posting twice.
+  # comment never covers an edit, and once the posted comment is recorded below,
+  # replaying that approval is refused instead of posting twice. A post whose id
+  # never reaches the ledger is not covered; the die after the post says so.
   if is_secure "$run_id"; then
     art="$(mktemp)"
     {
