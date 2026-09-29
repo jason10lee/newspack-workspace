@@ -132,9 +132,12 @@ discipline — **don't telegraph the vulnerability** — on top:
   regression test that lands is the minimal behavioral assertion under a
   **neutral name**.
 - **The self-review summary comment** gets the checklist below before its
-  preview. Its Declined reasons and its "what changed and why" lines are where
-  a review's account of the flaw leaks into a public comment. Edit the run-dir
-  copy, never self-review's own `summary.md`, and keep its closing marker line.
+  preview. Its Accepted lines ("what changed and why") are where a review's
+  account of the flaw leaks into a public comment. Edit the run-dir copy, never
+  self-review's own `summary.md`, and keep its closing marker line.
+- **The Declined and deferred findings** base Stage 6 cuts from that comment go
+  to the Stage 7 run report, not the Linear closeout: on a Security issue they
+  are the same kind of content as a sibling flaw, and the closeout is public.
 - **Exploit detail lives in the Stage 7 run report**, which `autofix report
   <RUN_ID> --init` creates in operator-local state, outside every repository,
   stamped `internal: true` — the honest technical record goes there, not on
@@ -177,9 +180,10 @@ let the operator triage each round:
 ```
 
 - Everything else in base Stage 5 holds: redaction before the first round,
-  and after each fix commit a redaction re-scan, a Stage 4 re-run and a count
-  against the shared loop bound before the next round. Self-review commits
-  locally and never pushes, which Override 2 leaves ungated.
+  and after each fix commit a redaction re-scan and a Stage 4 re-run before the
+  next round. Only blocker fixes count against the shared loop bound, as in
+  base; accepting suggestions or nits here cannot escalate a clean branch.
+  Self-review commits locally and never pushes, which Override 2 leaves ungated.
 - Self-review asks "Keep going?" after round 3. Answering is the operator's
   call, and the shared loop bound still applies.
 - **Never let self-review or `/newspack:pr-create` post the summary.** Both

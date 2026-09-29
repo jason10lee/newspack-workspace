@@ -463,13 +463,18 @@ Before posting, cut the copy's **Declined** section and its **Suggestions
 deferred** block, and carry both into the Linear closeout comment instead. Under
 `--auto` nobody reads those lines before they post, and a deferred finding can
 describe a weakness the run left unfixed; on a public PR that is a disclosure.
-The Accepted list and the closing marker stay.
+Where they were, leave one neutral line, such as "2 suggestions deferred;
+tracked separately", so the comment still accounts for feedback the run did not
+act on. The Accepted list and the closing marker stay.
 
 `pr.sh comment` runs the redaction gate over the body, refuses a body without
-the self-review marker, and posts it on the run's PR. If the run already posted one, it edits that comment instead, since the team
-keeps one summary comment per PR. It records `.pr.summary_comment` and prints
-`<comment-id> <comment-url>`. Handing the id to self-review's `set-comment` is
+the self-review marker or, outside a secure run, one that still has either cut
+section, and posts it on the run's PR. If the run already posted one, it edits
+that comment instead, since the team keeps one summary comment per PR. It
+records `.pr.summary_comment` and prints `<comment-id> <comment-url>`. Handing the id to self-review's `set-comment` is
 what lets a later self-review round edit this comment rather than add a second.
+That round edits with self-review's own `summary.md`, which still has both cut
+sections: trim its draft the same way before approving the edit.
 Post only through `pr.sh comment`. Self-review and `/newspack:pr-create` each
 offer to post the summary themselves, and neither path runs the redaction gate
 or records the comment in the ledger. Leave the summary's closing
@@ -509,7 +514,8 @@ Conventional-commit subject: `fix(<scope>): … (NPPM-XXXX)`, with a
 (labels/milestones/backports) is a human decision at `pr-ready` time — you
 don't encode release mechanics here.
 
-**Linear closeout comment**: post the PR link + evidence summary, plus a
+**Linear closeout comment**: post the PR link + evidence summary, the
+Declined and deferred findings cut from the summary comment, plus a
 **one-line urgency assessment** for release routing — the signals (Linear
 priority, Backlog vs fresh-triage provenance, attached publisher report,
 regression vs long-standing), and which flow they point to (Backlog
@@ -608,7 +614,7 @@ once it reaches a terminal state.
 | `bailed-lost-claim-race` | Stage 0 (inside `claim.sh claim`) | conditional back-off + comment, done automatically by `claim.sh` | no env yet |
 | `bailed-superseded` | Stage 0 (inside `claim.sh claim`, same-issue guard, exit 4) | none — this run never touched Linear | no env yet |
 | `escalated` | Stage 2/3/4/5/6, on attempts/loop/scope exhaustion or unresolved drift | none automatic — findings/state left for the operator; a fresh Linear comment noting the escalation is good practice but not scripted for you | env/worktree retained until the TTL sweep (`AUTOFIX_ESCALATED_ENV_TTL_DAYS`) |
-| `delivered` | Stage 6 (`pr.sh create`) | closeout comment via Linear MCP (PR link + evidence); self-review summary comment on the PR via `pr.sh comment` | env retained until the PR merges/closes, then swept |
+| `delivered` | Stage 6 (`pr.sh create`) | closeout comment via Linear MCP (PR link + evidence + findings cut from the summary); self-review summary comment on the PR via `pr.sh comment` | env retained until the PR merges/closes, then swept |
 
 A bailed or escalated run is a **successful** run of the workflow — the team
 gets triage/repro knowledge either way. Never fabricate a `delivered` state
