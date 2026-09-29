@@ -463,21 +463,26 @@ Before posting, cut the copy's **Declined** section and its **Suggestions
 deferred** block, and carry both into the Linear closeout comment instead. Under
 `--auto` nobody reads those lines before they post, and a deferred finding can
 describe a weakness the run left unfixed; on a public PR that is a disclosure.
-Where they were, leave one neutral line, such as "2 suggestions deferred;
-tracked separately", so the comment still accounts for feedback the run did not
-act on. The Accepted list and the closing marker stay.
+Where they were, leave one neutral line that counts both, such as "1 finding
+declined, 2 suggestions deferred; tracked in the Linear issue", so the comment
+still accounts for feedback the run did not act on. Don't start it with
+`Declined:`, which `pr.sh` reads as the uncut section. The Accepted list and the
+closing marker stay.
 
 `pr.sh comment` runs the redaction gate over the body, refuses a body without
 the self-review marker or, outside a secure run, one that still has either cut
 section, and posts it on the run's PR. If the run already posted one, it edits
 that comment instead, since the team keeps one summary comment per PR. It
-records `.pr.summary_comment` and prints `<comment-id> <comment-url>`. Handing the id to self-review's `set-comment` is
-what lets a later self-review round edit this comment rather than add a second.
-That round edits with self-review's own `summary.md`, which still has both cut
-sections: trim its draft the same way before approving the edit.
-Post only through `pr.sh comment`. Self-review and `/newspack:pr-create` each
-offer to post the summary themselves, and neither path runs the redaction gate
-or records the comment in the ledger. Leave the summary's closing
+records `.pr.summary_comment` and prints `<comment-id> <comment-url>`. Handing
+the id to self-review's `set-comment` tells a later self-review round that the
+comment exists, so it offers an edit rather than a second comment.
+
+Post only through `pr.sh comment`, and that includes a later round's edit.
+Self-review and `/newspack:pr-create` each offer to post or edit the summary
+themselves, and neither path runs the redaction gate, the cut-section refusal or
+the ledger record. Decline that offer; copy self-review's new `summary.md` into
+the run dir, cut it the same way, and run `pr.sh comment` again, which edits the
+recorded comment. Leave the summary's closing
 `newspack-self-review` marker as written: `pr-ready` and self-review's remote
 status read the pass from it. A failure here does not undo `delivered`. The PR
 is still a draft, so note the failure in the run report and the comment can be

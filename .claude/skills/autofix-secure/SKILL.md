@@ -138,6 +138,8 @@ discipline — **don't telegraph the vulnerability** — on top:
 - **The Declined and deferred findings** base Stage 6 cuts from that comment go
   to the Stage 7 run report, not the Linear closeout: on a Security issue they
   are the same kind of content as a sibling flaw, and the closeout is public.
+  The neutral line left in their place is a bare count, with no location: no
+  reviewer can open the run report.
 - **Exploit detail lives in the Stage 7 run report**, which `autofix report
   <RUN_ID> --init` creates in operator-local state, outside every repository,
   stamped `internal: true` — the honest technical record goes there, not on
