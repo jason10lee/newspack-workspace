@@ -240,5 +240,21 @@ out="$(bash "$P" comment runp --body-file "$CBODY" 2>&1)" && rc=0 || rc=$?
 assert_eq 1 "$rc" "comment: a body without the self-review marker dies"
 assert_contains "$out" "no newspack-self-review marker" "comment: marker refusal names the marker"
 assert_eq "" "$(grep '^gh ' "$STUB_LOG" || true)" "comment: missing marker, no gh call"
+# A marker status-remote cannot parse reads as no pass on the PR.
+printf '**Self-review summary**\n<!-- newspack-self-review passed=abc rounds=2 -->\n' > "$CBODY"
+: > "$STUB_LOG"
+bash "$P" comment runp --body-file "$CBODY" >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq 1 "$rc" "comment: a malformed self-review marker dies"
+assert_eq "" "$(grep '^gh ' "$STUB_LOG" || true)" "comment: malformed marker, no gh call"
+
+# Unattended runs post unread, so the sections Stage 6 cuts must be gone.
+for section in 'Declined:\n- a finding — a reason' '<details><summary>Suggestions deferred (not blocking)</summary>\n\n- a finding\n</details>'; do
+  printf "**Self-review summary**\n$section\n%s\n" "$MARKER" > "$CBODY"
+  : > "$STUB_LOG"
+  out="$(bash "$P" comment runp --body-file "$CBODY" 2>&1)" && rc=0 || rc=$?
+  assert_eq 1 "$rc" "comment: an uncut section dies (${section%%\\n*})"
+  assert_contains "$out" "Stage 6 cuts" "comment: uncut-section refusal names the cut"
+  assert_eq "" "$(grep '^gh ' "$STUB_LOG" || true)" "comment: uncut section, no gh call"
+done
 rm -f "$CBODY"
 finish

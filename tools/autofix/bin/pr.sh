@@ -34,6 +34,12 @@ if [ "$cmd" = comment ]; then
   # edited for disclosure hygiene can lose it and still post cleanly.
   grep -Eq '<!-- newspack-self-review passed=[0-9a-f]{40} rounds=[0-9]+ -->' "$body_file" \
     || die "comment body has no newspack-self-review marker line — keep the one self-review wrote"
+  # Unattended, nobody reads the body before it posts, and a declined or deferred
+  # finding can describe a weakness the run left unfixed. A secure run's operator
+  # previews the body, so a section they chose to keep is theirs to keep.
+  if ! is_secure "$run_id" && grep -Eq '^Declined:|<summary>Suggestions deferred' "$body_file"; then
+    die "comment body still has a section Stage 6 cuts (Declined or Suggestions deferred) — move it to the Linear closeout"
+  fi
 
   url="$("$LEDGER" get "$run_id" '.pr.url // empty')"
   [ -n "$url" ] || die "no PR recorded in ledger for $run_id — run pr.sh create first"
