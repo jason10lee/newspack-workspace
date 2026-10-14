@@ -73,7 +73,8 @@ The gate covers **disclosing writes only**: the branch **push**, the **draft PR*
 open + body, the **self-review summary comment** on the PR (Override 5),
 **every Linear comment** (claim, bail, closeout — Overrides 3 & 4), and the
 **Copilot** request. It does **not** cover local `git commit`s (they
-disclose nothing until a push — keep the TDD loop fast) or claim-time
+disclose nothing until a push — keep the TDD loop fast; their messages are
+approved in the PR preview, which lists every message and trailer) or claim-time
 assign-self / move-to-In-Progress (working-state transitions the operator
 authorized by invoking `run-secure`; their activity-feed notification is an
 accepted, documented signal).
