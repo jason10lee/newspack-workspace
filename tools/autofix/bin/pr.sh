@@ -124,7 +124,7 @@ if [ "$commit_count" -gt "$AUTOFIX_MAX_BRANCH_COMMITS" ]; then
 fi
 
 # 3. disclosing-write gate (secure runs only). The artifact the operator approves
-# is the RESOLVED PR body PLUS the commit diff that would be pushed to a
+# is the RESOLVED PR body PLUS the commit messages and the commit diff that would be pushed to a
 # public-capable surface — for a Security fix, that diff IS the disclosure. A
 # preview writes it to the run dir; without a matching --confirmed=<digest> this
 # exits 7 with no push, no PR, no Copilot. Non-secure runs skip straight past.
@@ -136,6 +136,11 @@ if is_secure "$run_id"; then
     # Diff against origin/main, the base the scope guard above checks. Local
     # `main` is the fork-trunk on this machine, so main...HEAD shows the whole
     # trunk delta instead of what the push adds.
+    # The push also publishes every commit message and trailer, and a squash
+    # merge carries them to main. The digest binds them, so an approval covers
+    # the words that go out as well as the diff.
+    printf '\n\n### Commit messages (git log origin/main..HEAD) — pushed to github.com\n'
+    git log --reverse --format='%h%n%B--' origin/main..HEAD
     printf '\n\n### Commit diff (git diff origin/main...HEAD) — pushed to github.com\n'
     git diff origin/main...HEAD
   } > "$art"

@@ -174,6 +174,8 @@ case "$*" in
     printf '%s\n' "plugins/newspack-plugin/includes/class-foo.php" ;;
   "rev-list --count origin/main..HEAD")
     printf '2\n' ;;
+  "log --reverse --format=%h%n%B-- origin/main..HEAD")
+    printf 'abc1234\nfix(x): y\n\nCo-Authored-By: Example <noreply@example.test>\n--\n' ;;
 esac
 exit 0
 EOF
@@ -204,6 +206,9 @@ PVFILE="$(printf '%s\n' "$out" | sed -n 's/^GATED: [0-9a-f]* \(.*\)$/\1/p')"
 assert_contains "$(cat "$STUB_LOG")" "git diff origin/main...HEAD" "secure preview diffs origin/main...HEAD"
 assert_eq "" "$(grep -E 'git diff (main|HEAD)' "$STUB_LOG" || true)" "secure preview never diffs local main"
 assert_contains "$(cat "$PVFILE")" "git diff origin/main...HEAD" "preview artifact names the origin/main base"
+# The push publishes commit messages too, so the digest has to cover them.
+assert_contains "$(cat "$PVFILE")" "### Commit messages (git log origin/main..HEAD)" "preview artifact has a commit-messages section"
+assert_contains "$(cat "$PVFILE")" "Co-Authored-By: Example" "preview artifact carries the commit message and trailer"
 : > "$STUB_LOG"
 bash "$P" create secpr --title "fix(x): y (NPPM-9)" --body-file "$BODY" --confirmed="$PVDG" --no-copilot >/dev/null 2>&1
 assert_contains "$(cat "$STUB_LOG")" "push -u origin br-sec" "confirmed secure pr create pushes"
