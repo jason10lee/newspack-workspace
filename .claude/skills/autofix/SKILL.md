@@ -544,6 +544,7 @@ out of the reading. For each remaining scenario:
 | fixed | guard: any (a guard may cover a regression the fix's own earlier commits introduced) | **ok** |
 | fixed | change: fixed, neither, or blocked at another step | **steps wrong** (the steps lost the condition that triggers the bug, or don't show it) |
 | before or neither, steps all done | any | **code defect** |
+| blocked | done with that step (the fix broke something the pre-fix commit can do) | **code defect** |
 | blocked | blocked at the same step, for a reason the site causes | **not checkable locally** |
 | blocked | anything else | **steps wrong** |
 
