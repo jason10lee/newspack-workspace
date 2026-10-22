@@ -261,9 +261,11 @@ Save the replies as `<run-dir>/probe/<dir>-<n>.md`. Compare each with
   contain the input that triggers the bug. Reword a code comment or test name
   the reader quoted only if the rewording leaves the test's meaning intact.
   The finding is for the operator, who decides when the push should happen.
-- **The fresh test rewrites "How to test"** (its *steps wrong* reading) → run
-  the with-prose reader again on the new body before `pr.sh create`. If that
-  reading sends you to rewrite steps, the fresh test runs again on them.
+- **The body or the branch changes after the probe** (a *steps wrong*
+  rewrite, a "Not checked on a local site" line, a Stage 3 re-entry) → probe
+  again before `pr.sh create`: both readers if the diff changed, otherwise the
+  with-prose reader alone. If that reading sends you to rewrite steps, the
+  fresh test runs again on them.
 - Record each reading with
   `ledger.sh set <RUN_ID> '.decisions += [{key:"disclosure_probe", value:$v, basis:$b}]' --arg v <reading> --arg b <reply path>`.
 
