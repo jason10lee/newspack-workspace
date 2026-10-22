@@ -5,9 +5,19 @@
 # old behavior exactly.
 : "${AUTOFIX_PROFILES:=$AUTOFIX_BIN_DIR/../profiles.json}"
 
+# profile_name <run_id> — the run's profile key. Any profile other than the
+# default is forge-only: the tooling profile pushes to the public fork and
+# widens the path scope, and an autofix or secure run that recorded it would
+# reach both with no prompt. Fails closed on an unreadable ledger.
 profile_name() { # run_id
-  local p; p="$(ledger_decision "$1" profile)"
-  printf '%s' "${p:-newspack-workspace}"
+  local p mode
+  p="$(ledger_decision "$1" profile)" || { log "profile: cannot read the ledger for $1"; return 1; }
+  [ -n "$p" ] || { printf 'newspack-workspace'; return 0; }
+  if [ "$p" != newspack-workspace ]; then
+    mode="$(bash "$AUTOFIX_BIN_DIR/ledger.sh" get "$1" '.mode' 2>/dev/null)" || mode=""
+    [ "$mode" = forge ] || { log "profile '$p' is forge-only; run $1 has mode '${mode:-unreadable}'"; return 1; }
+  fi
+  printf '%s' "$p"
 }
 
 # profile_get <run_id> <jq-filter> — dies when the run's profile is not in
@@ -15,7 +25,8 @@ profile_name() { # run_id
 # scripts never read a drafted one: it would let the run write the allowlist
 # and path scope it is then checked against. The run stops and asks instead.
 profile_get() { # run_id filter
-  local name; name="$(profile_name "$1")"
+  local name
+  name="$(profile_name "$1")" || die "no usable profile for $1 (non-default profiles are forge-only, and the ledger must be readable)"
   jq -e --arg n "$name" 'has($n)' "$AUTOFIX_PROFILES" >/dev/null 2>&1 \
     || die "profile '$name' is not in $AUTOFIX_PROFILES — a drafted profile is not used until the operator keeps it; stop and ask"
   jq -r --arg n "$name" ".[\$n] | $2" "$AUTOFIX_PROFILES"
@@ -42,10 +53,17 @@ profile_base() { # run_id dir
 # those outside path_scope. An entry ending in "/" is a directory prefix; any
 # other entry matches that exact path only, so "n" never admits "node_modules".
 profile_offending_paths() { # run_id affected_repo
-  local scope; scope="$(profile_get "$1" '.path_scope[]' | sed "s#{affected_repo}#$2#g")" || return 1
+  local scope; scope="$(profile_get "$1" '.path_scope[]')" || return 1
   # Through the environment, not -v: BSD awk rejects a newline in a -v value.
-  PROFILE_SCOPE="$scope" awk '
-    BEGIN { n = split(ENVIRON["PROFILE_SCOPE"], s, "\n") }
+  # {affected_repo} is replaced literally (index/substr), never through sed or a
+  # regex, so a crafted unit name cannot rewrite the scope.
+  PROFILE_SCOPE="$scope" PROFILE_UNIT="$2" awk '
+    function lit(e, u,   out, i) {
+      out = ""
+      while ((i = index(e, "{affected_repo}")) > 0) { out = out substr(e, 1, i - 1) u; e = substr(e, i + 15) }
+      return out e
+    }
+    BEGIN { n = split(ENVIRON["PROFILE_SCOPE"], s, "\n"); for (i = 1; i <= n; i++) s[i] = lit(s[i], ENVIRON["PROFILE_UNIT"]) }
     { ok = 0
       for (i = 1; i <= n; i++) {
         e = s[i]; if (e == "") continue

@@ -54,6 +54,13 @@ scope_guard() { # wt
   local base affected offending commit_count
   base="$(profile_base "$run_id" "$1")" || exit 1
   affected="$(ledger_decision "$run_id" affected_repo)"
+  # A unit name only: it becomes part of the path scope below. Checked with an
+  # explicit ASCII class under LC_ALL=C, since bash 3.2 case ranges admit
+  # other letters under a UTF-8 locale.
+  if [ -n "$affected" ] && { [ "$affected" = . ] || [ "$affected" = .. ] \
+      || ! printf '%s' "$affected" | LC_ALL=C grep -Eq '^[A-Za-z0-9._-]+$'; }; then
+    die "affected_repo '$affected' is not a plain unit name — refusing (fork-trunk leak guard)"
+  fi
   if profile_get "$run_id" '.path_scope[]' | grep -q '{affected_repo}'; then
     [ -n "$affected" ] || die "no affected_repo decision in ledger for $run_id"
   fi
@@ -62,7 +69,10 @@ scope_guard() { # wt
     die "branch carries changes beyond the profile's path scope — fork-trunk leak guard (see PR #723 incident); offending paths (first 10):
 $(printf '%s\n' "$offending" | head -10)"
   fi
-  commit_count="$(cd "$1" && git rev-list --count "$base..HEAD")"
+  commit_count="$(cd "$1" && git rev-list --count "$base..HEAD")" \
+    || die "could not read the commit count against $base — refusing (fork-trunk leak guard)"
+  printf '%s' "$commit_count" | LC_ALL=C grep -Eq '^[0-9]+$' \
+    || die "unreadable commit count '$commit_count' against $base — refusing (fork-trunk leak guard)"
   if [ "$commit_count" -gt "$AUTOFIX_MAX_BRANCH_COMMITS" ]; then
     die "branch carries $commit_count commits ahead of $base (max \$AUTOFIX_MAX_BRANCH_COMMITS=$AUTOFIX_MAX_BRANCH_COMMITS) — fork-trunk leak guard (see PR #723 incident)"
   fi

@@ -303,4 +303,16 @@ bash "$L" init basep NPPM-12 operator-named >/dev/null
 out="$(bash "$P" prepare basep --body-file "$BODY" 2>&1)" && rc=0 || rc=$?
 assert_eq 1 "$rc" "prepare is forge-only"
 assert_contains "$out" "not a forge run" "prepare refusal says why"
+# I3: affected_repo must be a plain unit name before it reaches the scope guard
+bash "$L" init frp2 NPPM-13 forge >/dev/null
+bash "$L" set frp2 '.branch = "br-2"'
+bash "$L" set frp2 '.decisions += [{key:"affected_repo", value:"x\\|^tools"}]'
+out="$(STUB_DIFF_FILES='tools/a' bash "$P" prepare frp2 --body-file "$BODY" 2>&1)" && rc=0 || rc=$?
+assert_eq 1 "$rc" "scope guard refuses an affected_repo that is not a plain name"
+assert_contains "$out" "not a plain unit name" "refusal names the bad affected_repo"
+
+# M1: a failed or empty commit count must fail the guard, not pass it
+out="$(STUB_REVCOUNT='fatal: bad revision' bash "$P" prepare frp1 --body-file "$BODY" 2>&1)" && rc=0 || rc=$?
+assert_eq 1 "$rc" "non-numeric commit count fails the scope guard"
+assert_contains "$out" "commit count" "refusal names the commit count"
 finish

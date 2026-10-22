@@ -128,7 +128,9 @@ case "$cmd" in
       while IFS= read -r scmd; do
         [ -n "$scmd" ] || continue
         parse_evidence_argv "$scmd"
-        (cd "$wt" && "${EV_ARGV[@]}") || exit 1
+        # </dev/null: the loop reads its list on stdin, and a command that
+        # reads stdin would otherwise swallow the entries after it.
+        (cd "$wt" && "${EV_ARGV[@]}" </dev/null) || exit 1
       done <<EOF
 $suite_cmds
 EOF

@@ -296,4 +296,21 @@ assert_contains "$out" "not used until the operator keeps it" "signal stops on t
 assert_eq "" "$(cat "$ARGV_LOG")" "nothing ran under an unkept profile"
 unset AUTOFIX_PROFILES
 
+# I2: a suite command that reads stdin must not swallow the commands after it
+cat > "$STUB/reads-stdin" <<'EOF'
+#!/bin/bash
+cat >/dev/null; printf 'reads-stdin %s\n' "$*" >> "${ARGV_LOG:?}"; exit 0
+EOF
+chmod +x "$STUB/reads-stdin"
+PROF2="$(mktemp)"; cat > "$PROF2" <<'EOF'
+{ "tooling": { "base": {"ref":"main","fetch":null}, "env": false, "path_scope": ["tools/"],
+    "commands": ["bash-ok run", "reads-stdin run"], "suite": ["reads-stdin run first", "bash-ok run second"],
+    "lint": "none", "push_remote": "fork" } }
+EOF
+export AUTOFIX_PROFILES="$PROF2"
+: > "$ARGV_LOG"
+bash "$V" suite runt >/dev/null 2>&1
+assert_contains "$(cat "$ARGV_LOG")" "bash-ok run second" "suite runs every entry even when one reads stdin"
+unset AUTOFIX_PROFILES
+
 finish

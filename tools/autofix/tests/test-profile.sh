@@ -38,4 +38,20 @@ out="$( ( . ../bin/lib/common.sh; . ../bin/lib/profile.sh; profile_get p3 .base.
 assert_eq 1 "$rc" "unkept profile → profile_get dies"
 assert_contains "$out" "not used until the operator keeps it" "die message says why"
 
+# I1: a non-default profile is forge-only — an autofix or secure run that
+# records one must not get the tooling profile's fork remote and wide scope
+bash "$L" init p4 NPPM-4 operator-named >/dev/null
+bash "$L" set p4 '.decisions += [{key:"profile", value:"newspack-workspace-tooling"}]'
+out="$( ( . ../bin/lib/common.sh; . ../bin/lib/profile.sh; profile_get p4 .push_remote ) 2>&1 )" && rc=0 || rc=$?
+assert_eq 1 "$rc" "autofix run cannot select a non-default profile"
+assert_contains "$out" "forge-only" "refusal says non-default profiles are forge-only"
+bash "$L" init p5 NPPM-5 secure >/dev/null
+bash "$L" set p5 '.decisions += [{key:"profile", value:"newspack-workspace-tooling"}]'
+( . ../bin/lib/common.sh; . ../bin/lib/profile.sh; profile_get p5 .push_remote ) >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq 1 "$rc" "secure run cannot select a non-default profile"
+
+# I3: affected_repo is substituted literally, never as sed or regex syntax
+paths=$'tools/autofix/bin/pr.sh\nplugins/x#;s#.*#tools/#;s#y#z/a.php'
+assert_eq "tools/autofix/bin/pr.sh" "$(printf '%s\n' "$paths" | pf profile_offending_paths p1 'x#;s#.*#tools/#;s#y#z')" "crafted affected_repo cannot rewrite the scope"
+
 finish
