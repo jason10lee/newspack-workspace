@@ -257,4 +257,43 @@ bash "$L" set runv '.decisions = []'
 bash "$V" suite runv >/dev/null 2>&1 && rc=0 || rc=$?
 assert_eq 1 "$rc" "suite dies without an affected_repo decision"
 assert_eq "" "$(cat "$N_LOG")" "suite runs nothing without an affected_repo decision"
+# --- profiles -----------------------------------------------------------------
+cat > "$STUB/bash-ok" <<'EOF'
+#!/bin/bash
+printf 'bash-ok %s\n' "$*" >> "${ARGV_LOG:?}"; printf '%s bash-ok\n' "$PWD" >> "${CWD_LOG:?}"; exit 0
+EOF
+chmod +x "$STUB/bash-ok"
+PROF="$(mktemp)"; cat > "$PROF" <<'EOF'
+{ "newspack-workspace": { "base": {"ref":"origin/main","fetch":"origin main"}, "env": true,
+    "path_scope": ["plugins/{affected_repo}/"], "commands": [], "suite": null, "lint": "phpcs", "push_remote": "origin" },
+  "tooling": { "base": {"ref":"main","fetch":null}, "env": false, "path_scope": ["tools/"],
+    "commands": ["bash-ok run"], "suite": ["bash-ok run suite"], "lint": "none", "push_remote": "fork" } }
+EOF
+export AUTOFIX_PROFILES="$PROF"
+WT="$(mktemp -d)"
+bash "$L" init runt NPPM-9 forge >/dev/null
+bash "$L" set runt '.worktree = $w' --arg w "$WT"
+bash "$L" set runt '.decisions += [{key:"profile", value:"tooling"}]'
+bash "$L" evidence runt failing-test x 'bash-ok run one'
+: > "$CWD_LOG"
+bash "$V" signal runt --expect pass >/dev/null 2>&1
+assert_eq 0 $? "profile command accepted as evidence"
+assert_contains "$(cat "$CWD_LOG")" "$WT bash-ok" "profile command runs from the recorded worktree"
+: > "$CWD_LOG"
+bash "$V" suite runt >/dev/null 2>&1
+assert_eq 0 $? "profile suite runs"
+assert_contains "$(cat "$ARGV_LOG")" "bash-ok run suite" "profile suite command ran"
+out="$(bash "$V" lint runt 2>&1)"; assert_contains "$out" "lint: none" "lint skipped for lint=none"
+
+bash "$L" init runu NPPM-10 forge >/dev/null
+bash "$L" set runu '.worktree = $w' --arg w "$WT"
+bash "$L" set runu '.decisions += [{key:"profile", value:"drafted-x"}]'
+bash "$L" evidence runu failing-test x 'bash-ok run one'
+: > "$ARGV_LOG"
+out="$(bash "$V" signal runu --expect pass 2>&1)" && rc=0 || rc=$?
+assert_eq 1 "$rc" "unkept profile stops signal"
+assert_contains "$out" "not used until the operator keeps it" "signal stops on the profile, not the allowlist"
+assert_eq "" "$(cat "$ARGV_LOG")" "nothing ran under an unkept profile"
+unset AUTOFIX_PROFILES
+
 finish
