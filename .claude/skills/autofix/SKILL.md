@@ -524,7 +524,8 @@ technique does, run step 6, and only then start the pair from step 1.
    which drops any constant the repro or an earlier tester added
    (`docker exec -i <container> sh -c "cat > /var/www/html/wp-config.php" < <run-dir>/pristine-wp-config.php`),
    then create an admin user for the tester, since the site's own admin
-   password lives in the workspace `.env`. Finish with `wp cache flush`:
+   password lives in the workspace `.env`. Finish with
+   `docker exec <container> sh -c "cd /var/www/html && wp cache flush --allow-root"`:
    Batcache otherwise serves logged-out views from before the reset.
 4. **Test.** Dispatch a subagent with the "How to test" section, the site URL,
    the tester's login, the Mailpit inbox at `http://localhost:8025` for any
@@ -545,9 +546,9 @@ technique does, run step 6, and only then start the pair from step 1.
 6. **Restore** the Stage 2 state: import `<run-dir>/stage2.sql`
    (`docker exec -i <container> sh -c "cd /var/www/html && wp db import - --allow-root" < <run-dir>/stage2.sql`)
    and copy `stage2-wp-config.php` back the way step 3 copies the pristine
-   one, then `wp cache flush`: step 5's probe can leave the reset site's
-   pages in the object cache. Do this whatever the outcome, then clear the
-   mark:
+   one, then flush the cache as step 3 does: step 5's probe can leave the
+   reset site's pages in the object cache. Do this whatever the outcome,
+   then clear the mark:
    `ledger.sh set <RUN_ID> '.fresh_test_in_progress = false'`.
 
 Increment `.loop_counts.fresh_tests` for each pair, then read the two reports
@@ -560,13 +561,16 @@ out of the reading. For each remaining scenario:
 | fixed | guard: any (a guard may cover a regression the fix's own earlier commits introduced) | **ok** |
 | fixed | change: fixed, neither, or blocked at another step | **steps wrong** (the steps lost the condition that triggers the bug, or don't show it) |
 | before or neither, steps all done | any | **code defect** |
-| blocked: the step's page or control is there and fails, and the site is not the cause | done with that step | **code defect** (the fix broke something the pre-fix commit can do) |
+| blocked, by something outside the site that failed on this side only | done with that step | **retest** |
+| blocked, at a step that uses something the fix removes on purpose | done with that step | **steps wrong** (the rewrite checks that it is gone) |
+| blocked, for any other reason | done with that step | **code defect** (the fix broke something the pre-fix commit can do) |
 | blocked | blocked at the same step, for a reason the site causes | **not checkable locally** |
 | blocked | anything else | **steps wrong** |
 
-A fix-side block where the fix removed what the step uses on purpose, or
-where the site caused it on that side only (an email that never arrived), is
-not a code defect: it falls to the last row, and the steps get rewritten.
+A block the fix causes is a code defect however it shows: an error, a
+control that is gone, or a page the tester can no longer open at all. The
+outside failure in the retest row is one like a call to an outside service
+that timed out.
 
 Then act on the worst reading, in this order:
 
@@ -581,7 +585,9 @@ Then act on the worst reading, in this order:
 3. **Steps wrong** → rewrite "How to test" and test again. When
    `.loop_counts.fresh_tests` reaches 3 without a pass, set
    `terminal: escalated`.
-4. **Every scenario ok** → record
+4. **Retest** → run the pair again with the steps as they are. It counts
+   toward `.loop_counts.fresh_tests` and escalates at 3, as above.
+5. **Every scenario ok** → record
    `ledger.sh set <RUN_ID> '.decisions += [{key:"fresh_test", value:"passed", basis:$p}]' --arg p <fix-side report path>`
    and continue to `pr.sh create`.
 
