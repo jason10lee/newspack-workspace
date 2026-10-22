@@ -30,8 +30,9 @@ Base `autofix` bars Security-labeled issues at Stage 0 (`intake.sh check` exit
 2, non-bypassable by any flag). `autofix-secure` is the single deliberately-
 invoked entry point where such an issue is eligible — and in exchange it (1)
 inverts that one eligibility rule, (2) confirm-gates every *disclosing* write,
-(3) applies disclosure hygiene to every public artifact, and (4) runs Stage 5's
-self-review interactively, with the operator triaging. Everything else —
+(3) applies disclosure hygiene to every public artifact, (4) runs Stage 5's
+self-review interactively, with the operator triaging, and (5) has a blind
+reader check each public artifact for what it gives away. Everything else —
 worktree isolation, the red/green signal, root-phpcs, impact-review, the
 ≥2-AI-reviewer floor, the resumable ledger — is inherited unchanged.
 
@@ -201,6 +202,75 @@ let the operator triage each round:
   what it says. After the confirmed post, hand the printed id to
   `$SR_STATE set-comment` as base Stage 5 and 6 describe.
 
+## Override 6 — Probe each public artifact for disclosure before its gate
+
+The checklist above catches the words, not the information: a neutral sentence
+such as "editors can change the URL as well as administrators" names who could
+abuse a flaw without any word on the list. So before each gated write that
+carries prose, a reader that knows nothing about the run says what weakness it
+can see, once from what is already public and once with the new prose added.
+What the second reader finds and the first does not came from the prose.
+
+Write the run's own account of the weakness first, if the run report does not
+already hold it: `<run-dir>/weakness.md`, with who could abuse it, with what
+input, and to what effect. The probes never see it; you compare against it.
+
+**Before the PR gate** (Stage 6, after the body is written and the base fresh
+test has passed, before the first `pr.sh create`), build two probe directories
+under the run dir:
+
+- `<run-dir>/probe/diff/change.diff`: `git -C <worktree> diff origin/main...HEAD`.
+- `<run-dir>/probe/prose/`: the same `change.diff`, plus `public-text.md` with
+  the branch name, the PR title, every commit message (`git -C <worktree> log
+  --format='%s%n%n%b' origin/main..HEAD`) and the PR body.
+
+Dispatch one subagent per directory, each with only this prompt and its
+directory's path:
+
+> You are looking at a change to a public open-source WordPress plugin
+> repository. Read only the files in `<dir>`. Do not read any other file or
+> directory, do not run git or any other command against a repository, and do
+> not search the web. Question: does this change close a security weakness? If
+> you think it does, say what someone with less access than a site
+> administrator could have done before the change, and how: who, what input,
+> what effect. Give your best guess even if you are unsure. Reply with: a
+> verdict (security fix / probably security / probably not / not security);
+> the weakness in two or three sentences, or "none"; your confidence, 0–100;
+> and up to five short quotes that led you to it, each tagged code, code
+> comment, test name, or prose.
+
+Save the replies as `<run-dir>/probe/<dir>-<n>.md`. Compare each with
+`weakness.md` on three points: who, what input, what effect. Then:
+
+| Diff-only reader | With-prose reader | Reading |
+|---|---|---|
+| any | names a point the diff-only reader missed, quoting prose for it | **prose discloses** |
+| names a point | adds nothing | **diff discloses** |
+| names nothing | adds nothing | **clean** |
+
+- **Prose discloses** → rewrite the quoted sentences, rebuild `public-text.md`,
+  and run the with-prose reader again. After two rewrites, go to the gate
+  anyway and say which point still shows.
+- **Diff discloses** is not a wording problem: a regression test has to
+  contain the input that triggers the bug. Reword a code comment or test name
+  the reader quoted only if the rewording leaves the test's meaning intact.
+  The finding is for the operator, who decides when the push should happen.
+- Record each reading with
+  `ledger.sh set <RUN_ID> '.decisions += [{key:"disclosure_probe", value:$v, basis:$b}]' --arg v <reading> --arg b <reply path>`.
+
+At the `GATED:` halt, give the operator the reading and the points each reader
+named, next to the preview file. Neither goes into the preview or any public
+artifact.
+
+**Before each later gated write that carries prose** (the self-review summary
+comment and the Linear closeout), run one with-prose reader on the PR's
+`public-text.md` plus the new text, and compare it with the PR's with-prose
+reply. A point it names that the PR's reader missed is **prose discloses**, as
+above.
+
+Every probe reply is internal detail: it stays in the run dir, and the Stage 7
+run report lists each reading.
+
 ## Hard rules (unchanged from base — never override)
 
 All base-skill hard rules bind here in full: no `pr-ready`, no merge, no
@@ -225,7 +295,8 @@ gate real:
    redaction + gate + audit apply uniformly. (Unenforced by tooling — an
    obligation, not a guarantee.)
 3. **Never weaken the preview.** Surface the actual preview-file bytes to the
-   operator; do not paraphrase or summarize the artifact in its place.
+   operator; do not paraphrase or summarize the artifact in its place. The
+   disclosure probe's reading (Override 6) goes beside them, never instead.
 
 ## Tooling reference (built — see the bin spec)
 
