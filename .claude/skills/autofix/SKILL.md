@@ -151,6 +151,14 @@ knowledge either way.
 tools/autofix/bin/env.sh create <RUN_ID> <repo> -- <setup flags from triage>
 ```
 
+Record the flags, since Stage 6's fresh test resets the site with them and a
+resumed run has no other record:
+`ledger.sh set <RUN_ID> '.decisions += [{key:"setup_flags", value:$f}]' --arg f "<flags>"`.
+Before reproducing anything, also keep the env's untouched `wp-config.php`
+for that reset:
+`docker exec <container> cat /var/www/html/wp-config.php > <run-dir>/pristine-wp-config.php`
+(`<container>` is `newspack_env_<env name>` with dashes turned to underscores).
+
 Wraps `n env create <name> --worktree <repo>:<branch> --up` +
 `n setup --env <name> --yes <setup flags>`, where `<branch>` is
 `<branch_stem>-<4hex>` (the `branch_stem` decision you recorded in Stage 1,
@@ -323,7 +331,10 @@ All required, in order:
      worktree to the pre-fix commit (`git -C <worktree> checkout <pre-fix>`),
      rebuilding the touched plugin/theme, and restarting the container (PHP
      edits need the restart — opcache); probe the affected page(s). Then
-     restore the fix commit, rebuild, restart, and probe again identically.
+     check the run branch back out by name (`git -C <worktree> checkout
+     <branch>`, never the fix SHA, which leaves HEAD detached and strands
+     later commits off the branch `pr.sh` pushes), rebuild, restart, and
+     probe again identically.
      Both probes run in the same env against the same content, so the diff
      isolates the fix.
 5. Run the `newspack:impact-review` skill whenever the diff touches a shared
@@ -457,10 +468,11 @@ shipped with an empty comment.
 **Write "How to test" for a person on a fresh site.** CI runs the test suites,
 so the body carries no commands for running them, in this section or any
 other; "Added a regression test for X" is all it says about automated tests.
-Write one scenario per user-visible flow the fix touches. Label each one
-**change** (it looks different before the fix) or **guard** (it looks the
-same on both commits, and is there to show the fix broke nothing), and give
-each three parts:
+Write one scenario per user-visible flow the fix touches, in the template's
+numbered-step form: one action per step, each with its expected result. Label
+each scenario **change** (it looks different before the fix) or **guard** (it
+looks the same on both commits, and is there to show the fix broke nothing).
+Its steps cover, in order:
 
 1. **Setup**: what a fresh site, built by `n setup` with the Stage 2 flags,
    needs before the bug can show: plugins, settings, content, readers or
@@ -468,7 +480,9 @@ each three parts:
    the job.
 2. **Where**: the path to open (`/wp-admin/admin.php?page=…`, a front-end URL).
 3. **What to see**: the specific UI, state, notice or markup that shows the
-   fix, and, for a change scenario, what showed there before it.
+   fix, and, for a change scenario, what showed there before it. In a secure
+   run, describe both sides as plain behavior, under `autofix-secure`'s
+   disclosure checklist.
 
 Leave out anything a later commit can change, such as test counts, line
 numbers and SHAs. A scenario that no local site can reach, such as one that
@@ -480,47 +494,75 @@ follows "How to test" on both commits. Stage 4's re-drive cannot do this job:
 its author knows the state they set up by hand and the path they drove, so a
 step that depends on either reads as complete to them.
 
+Below, `<env>` is `ledger.sh get <RUN_ID> '.env.name'`, `<container>` is
+`newspack_env_<env>` with dashes turned to underscores, and `<flags>` is the
+`setup_flags` decision Stage 2 recorded.
+
 1. Run `redact.sh scan` over the body file, as for any reviewer input.
-2. Reset the env to a fresh site with
-   `n setup --env "$(tools/autofix/bin/ledger.sh get <RUN_ID> '.env.name')" --yes <Stage 2 setup flags>`.
-   This wipes the state Stage 2 built, which is the point: the steps have to
-   rebuild it. `n setup` resets the database only, so also undo any
-   `wp-config.php` change a step or an earlier tester made
-   (`wp config delete <NAME>`), then create an admin user for the tester,
-   since the site's own admin password lives in the workspace `.env`.
-3. Dispatch a subagent with the "How to test" section, the site URL, the
-   tester's login and the `docker exec` route to WP-CLI and `wp-config.php`
-   (a reviewer with a local site has both), and nothing else: not the issue,
-   the diff, the triage brief or the rest of the body. Tell it not to read
-   source code or git. It does each step and reports, per scenario, done or
-   blocked (with why), what it saw, and whether that matches the fixed
-   description, the before description, or neither. Save the report as
-   `<run-dir>/fresh-test-<n>.md`.
-4. Flip the env to the pre-fix commit with Stage 4's live A/B technique and
-   repeat steps 2 and 3 with a new subagent, then restore the fix commit.
-   Neither tester is told which commit it has.
+2. **Save the Stage 2 state.** Export the database and copy `wp-config.php`
+   aside, both into the run dir:
+   `docker exec <container> sh -c "cd /var/www/html && wp db export - --allow-root" > <run-dir>/stage2.sql`
+   and `docker exec <container> cat /var/www/html/wp-config.php > <run-dir>/stage2-wp-config.php`.
+   Step 6 puts both back. Without that, Stage 4 would later re-run the
+   signal on a site the reset wiped, and a Playwright repro whose trigger
+   state is gone passes for the wrong reason.
+3. **Reset** with `n setup --env <env> --yes <flags>`. `n setup` resets the
+   database only, so also put back the pristine `wp-config.php` Stage 2 kept,
+   which drops any constant the repro or an earlier tester added
+   (`docker exec -i <container> sh -c "cat > /var/www/html/wp-config.php" < <run-dir>/pristine-wp-config.php`),
+   then create an admin user for the tester, since the site's own admin
+   password lives in the workspace `.env`. Finish with `wp cache flush`:
+   Batcache otherwise serves logged-out views from before the reset.
+4. **Test.** Dispatch a subagent with the "How to test" section, the site URL,
+   the tester's login, the Mailpit inbox at `http://localhost:8025` for any
+   email a step sends, and the route a reviewer with a local site has for
+   WP-CLI and `wp-config.php`:
+   `docker exec <container> sh -c "cd /var/www/html && <command>"`. Nothing
+   else: not the issue, the diff, the triage brief or the rest of the body.
+   That route can also reach the repository and the workspace `.env`; the only
+   thing keeping the tester from source, git and secrets is the instruction
+   not to read them, so give it in so many words. It reports, per scenario,
+   done or blocked (with why, and at which step), what it saw, and whether
+   that matches the fixed description, the before description, or neither.
+   Save the report as `<run-dir>/fresh-test-<n>-<side>.md`.
+5. **Other side.** Flip the env to the pre-fix commit with Stage 4's live A/B
+   technique, repeat steps 3 and 4 with a new subagent, then check the run
+   branch back out by name as that technique says. Neither tester is told
+   which commit it has.
+6. **Restore** the Stage 2 state: import `<run-dir>/stage2.sql`
+   (`docker exec -i <container> sh -c "cd /var/www/html && wp db import - --allow-root" < <run-dir>/stage2.sql`)
+   and copy `stage2-wp-config.php` back the way step 3 copies the pristine
+   one. Do this whatever the outcome.
 
-Read the two reports together, scenario by scenario, and increment
-`.loop_counts.fresh_tests` for each pair:
+Increment `.loop_counts.fresh_tests` for each pair, then read the two reports
+scenario by scenario. A scenario marked "Not checked on a local site" is left
+out of the reading. For each remaining scenario:
 
-- **Every scenario done; each change scenario matches fixed on the fix side
-  and before on the other; each guard matches fixed on both** → record
-  `ledger.sh set <RUN_ID> '.decisions += [{key:"fresh_test", value:"passed", basis:$p}]' --arg p <fix-side report path>`
-  and continue to `pr.sh create`.
-- **A step blocked, or a change scenario matches fixed on both commits** → the
-  steps are wrong: a change scenario that cannot tell the commits apart has
-  lost the condition that triggers the bug. Rewrite "How to test" and test
-  again. A third pair that fails this way is `terminal: escalated`.
-- **The steps were followed and the fix side shows the bug, or a guard fails
-  on the fix side only** → a code defect. It is a Stage 3 re-entry, counted
-  against the shared loop bound, and Stage 4 and Stage 5 run again before the
-  next fresh test.
-- **Testers on both sides block on the same scenario for a reason the site
-  causes** (a feature that does not run locally, a script error before any
-  step of yours) → mark that scenario "Not checked on a local site: <why>"
-  and record it as friction. If it is the scenario that shows the issue's own
-  bug, Stage 1's rubric (b, c or f) should have caught it: set
-  `terminal: escalated` and say so in the run report.
+| Fix side | Pre-fix side | Reading |
+|---|---|---|
+| fixed | change: before, or blocked at the step where the bug shows | **ok** |
+| fixed | guard: any (a guard may cover a regression the fix's own earlier commits introduced) | **ok** |
+| fixed | change: fixed, neither, or blocked at another step | **steps wrong** (the steps lost the condition that triggers the bug, or don't show it) |
+| before or neither, steps all done | any | **code defect** |
+| blocked | blocked at the same step, for a reason the site causes | **not checkable locally** |
+| blocked | anything else | **steps wrong** |
+
+Then act on the worst reading, in this order:
+
+1. **Code defect** → a Stage 3 re-entry, counted against the shared loop bound.
+   Stage 4 and Stage 5 run again, on the restored state, before the next
+   fresh test.
+2. **Not checkable locally** → if it is the scenario that shows the issue's own
+   bug, Stage 1's rubric (b, c or f) should have caught it: set
+   `terminal: escalated` and say so in the run report. Otherwise mark the
+   scenario "Not checked on a local site: <why>", record it as friction, and
+   read on.
+3. **Steps wrong** → rewrite "How to test" and test again. When
+   `.loop_counts.fresh_tests` reaches 3 without a pass, set
+   `terminal: escalated`.
+4. **Every scenario ok** → record
+   `ledger.sh set <RUN_ID> '.decisions += [{key:"fresh_test", value:"passed", basis:$p}]' --arg p <fix-side report path>`
+   and continue to `pr.sh create`.
 
 Then:
 
@@ -656,9 +698,10 @@ reports, which live in self-review's own state directory, outside every reposito
 It ends with a `## Friction` section built from `.friction`: one line per
 entry, giving the stage, what happened, the cost and the fix. Write `None
 recorded.` when the list is empty, so a reader can tell an empty list from a
-missing section. A run that stops before this stage, on a bail or an
-escalation, still runs `autofix report <RUN_ID> --init` and writes at least
-this section, since friction is most often what stopped it.
+missing section. A run that has a ledger and stops before this stage, on a
+bail or an escalation, still runs `autofix report <RUN_ID> --init` and writes
+at least this section, since friction is most often what stopped it. (A run
+refused before its ledger exists has nothing to report into.)
 
 Notify the operator (session summary; `PushNotification` where available).
 
