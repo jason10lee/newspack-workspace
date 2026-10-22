@@ -83,6 +83,11 @@ discrepancy with `ledger.sh drift <RUN_ID> <field> <expected> <actual>` and
 surface it in the eventual run report. A drift conflict you can't safely
 resolve is itself an `escalated` exit.
 
+If `ledger.sh get <RUN_ID> '.fresh_test_in_progress'` prints `true`, the
+run stopped inside Stage 6's fresh test, with the env reset and the worktree
+possibly detached at the pre-fix commit. Put both back before anything else,
+as "Fresh test before the push" says for an interrupted pair.
+
 ## Stage 1 — Triage & understanding (judgment)
 
 Read the issue, its comments, and attachments via the Linear MCP tools.
@@ -498,6 +503,13 @@ Below, `<env>` is `ledger.sh get <RUN_ID> '.env.name'`, `<container>` is
 `newspack_env_<env>` with dashes turned to underscores, and `<flags>` is the
 `setup_flags` decision Stage 2 recorded.
 
+A pair that was interrupted leaves `.fresh_test_in_progress` set to `true`.
+The saved state in the run dir is then the only good copy, and exporting again
+would overwrite it with the reset site. So, before step 1, if
+`ledger.sh get <RUN_ID> '.fresh_test_in_progress'` prints `true`: check the
+run branch back out by name, rebuild and restart as Stage 4's live A/B
+technique does, run step 6, and only then start the pair from step 1.
+
 1. Run `redact.sh scan` over the body file, as for any reviewer input.
 2. **Save the Stage 2 state.** Export the database and copy `wp-config.php`
    aside, both into the run dir:
@@ -505,7 +517,8 @@ Below, `<env>` is `ledger.sh get <RUN_ID> '.env.name'`, `<container>` is
    and `docker exec <container> cat /var/www/html/wp-config.php > <run-dir>/stage2-wp-config.php`.
    Step 6 puts both back. Without that, Stage 4 would later re-run the
    signal on a site the reset wiped, and a Playwright repro whose trigger
-   state is gone passes for the wrong reason.
+   state is gone passes for the wrong reason. Then mark the pair as started:
+   `ledger.sh set <RUN_ID> '.fresh_test_in_progress = true'`.
 3. **Reset** with `n setup --env <env> --yes <flags>`. `n setup` resets the
    database only, so also put back the pristine `wp-config.php` Stage 2 kept,
    which drops any constant the repro or an earlier tester added
@@ -532,7 +545,8 @@ Below, `<env>` is `ledger.sh get <RUN_ID> '.env.name'`, `<container>` is
 6. **Restore** the Stage 2 state: import `<run-dir>/stage2.sql`
    (`docker exec -i <container> sh -c "cd /var/www/html && wp db import - --allow-root" < <run-dir>/stage2.sql`)
    and copy `stage2-wp-config.php` back the way step 3 copies the pristine
-   one. Do this whatever the outcome.
+   one. Do this whatever the outcome, then clear the mark:
+   `ledger.sh set <RUN_ID> '.fresh_test_in_progress = false'`.
 
 Increment `.loop_counts.fresh_tests` for each pair, then read the two reports
 scenario by scenario. A scenario marked "Not checked on a local site" is left
