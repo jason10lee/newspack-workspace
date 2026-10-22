@@ -545,7 +545,9 @@ technique does, run step 6, and only then start the pair from step 1.
 6. **Restore** the Stage 2 state: import `<run-dir>/stage2.sql`
    (`docker exec -i <container> sh -c "cd /var/www/html && wp db import - --allow-root" < <run-dir>/stage2.sql`)
    and copy `stage2-wp-config.php` back the way step 3 copies the pristine
-   one. Do this whatever the outcome, then clear the mark:
+   one, then `wp cache flush`: step 5's probe can leave the reset site's
+   pages in the object cache. Do this whatever the outcome, then clear the
+   mark:
    `ledger.sh set <RUN_ID> '.fresh_test_in_progress = false'`.
 
 Increment `.loop_counts.fresh_tests` for each pair, then read the two reports
@@ -558,9 +560,13 @@ out of the reading. For each remaining scenario:
 | fixed | guard: any (a guard may cover a regression the fix's own earlier commits introduced) | **ok** |
 | fixed | change: fixed, neither, or blocked at another step | **steps wrong** (the steps lost the condition that triggers the bug, or don't show it) |
 | before or neither, steps all done | any | **code defect** |
-| blocked | done with that step (the fix broke something the pre-fix commit can do) | **code defect** |
+| blocked: the step's page or control is there and fails, and the site is not the cause | done with that step | **code defect** (the fix broke something the pre-fix commit can do) |
 | blocked | blocked at the same step, for a reason the site causes | **not checkable locally** |
 | blocked | anything else | **steps wrong** |
+
+A fix-side block where the fix removed what the step uses on purpose, or
+where the site caused it on that side only (an email that never arrived), is
+not a code defect: it falls to the last row, and the steps get rewritten.
 
 Then act on the worst reading, in this order:
 
