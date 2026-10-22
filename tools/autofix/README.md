@@ -118,6 +118,27 @@ it is set and `AUTOFIX_RUNS_DIR` is not, run state goes under
 from `tools/autofix`). `AUTOFIX_REDACT_ALLOWLIST`, if set, points
 `redact.sh` at a file of known-safe fragments to exempt from findings.
 
+## Forge mode and repo profiles
+
+A ledger initialized with mode `forge` (`ledger.sh init <rid> <issue> forge`)
+belongs to a forge run (design: `_tooling/specs/2026-10-22-forge-design.md` in
+the agent-knowledge repo). In that mode:
+
+- `claim.sh claim` exits **8** until the dispatcher has written
+  `.launch = "confirmed"`, then claims with no comment and verifies by assignee.
+- `claim.sh comment` and a release with `--comment` or `--fail-label` are
+  refused: the forge's grant covers assignee and state only.
+- `pr.sh create` and `pr.sh comment` are refused. `pr.sh prepare` checks scope
+  and redaction and records what the delivery batch will publish.
+
+Every mode: `claim.sh` refuses any issue other than the ledger's own.
+
+`profiles.json` names, per repo, the base ref, whether runs get an `n env`, the
+path scope, extra allowed test commands, the suite, lint and the push remote.
+A run without a `profile` decision uses `newspack-workspace`, which reproduces
+autofix's behavior from before profiles. A profile that is not in the file is
+never read: scripts that need it stop, and the run asks the operator.
+
 ## Docs
 
 - **Spec** (source of truth for every rule this tooling encodes — stage
