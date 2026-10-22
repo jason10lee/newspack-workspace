@@ -34,6 +34,22 @@ Stage names: `intake|triage|reproduce|fix|verify|review|pr|report`. Do this
 as you enter each stage below — `autofix resume` reports `.stage` verbatim,
 so a stale value misleads a future resume.
 
+**Record friction when it happens.** A snag is anything in the tooling,
+the env or the issue that cost the run a failed attempt or more than about
+five minutes: a command that hung on a prompt, a port or env that came up
+wrong, a doc that sent you the wrong way, an issue that left out the screen or
+the setup. Record it then, not at Stage 7, since a resume or a compaction
+loses it otherwise:
+
+```
+tools/autofix/bin/ledger.sh set <RUN_ID> '.friction += [{stage:$s, what:$w, cost:$c, fix:$f}]' \
+  --arg s <stage> --arg w "<what happened>" --arg c "<time or attempts lost>" --arg f "<what would remove it>"
+```
+
+`fix` names the change that would have prevented it (a tool flag, a doc line,
+a field the issue should carry), or `unknown`. A bug in the code the run is
+fixing is not friction; that's the run's work.
+
 ## Stage 0 — Intake & claim (mechanical)
 
 ```
@@ -264,7 +280,12 @@ findings and the WIP branch preserved. Never ship anyway:**
 - Single plugin/repo per fix. A cross-plugin fix is an escalation in every
   mode; the operator decides whether to continue by hand or re-invoke with
   explicitly widened scope.
-- No dependency bumps, DB-schema changes, or build-tooling changes.
+- No dependency bumps, DB-schema changes, or build-tooling changes. A new
+  test harness counts as build tooling: if the touched package has no runner
+  for the kind of test the signal needs (no JS test setup, say), the signal is
+  a Playwright repro under the run dir (Stage 2, preference 2), and the PR
+  carries the fix alone. Setting up a harness is a separate change for a human
+  to choose, and it buries a small fix under files a reviewer has to read.
 - Soft diff cap ~150 changed lines excluding tests.
 
 ## Stage 4 — Verification
@@ -431,7 +452,77 @@ included) — to the run dir
 (the directory holding `tools/autofix/bin/ledger.sh path <RUN_ID>`), never to a
 session/job tmp dir**: a
 run-nppm-305 payload staged in job tmp vanished mid-run and the release
-shipped with an empty comment. Then:
+shipped with an empty comment.
+
+**Write "How to test" for a person on a fresh site.** CI runs the test suites,
+so the body carries no commands for running them, in this section or any
+other; "Added a regression test for X" is all it says about automated tests.
+Write one scenario per user-visible flow the fix touches. Label each one
+**change** (it looks different before the fix) or **guard** (it looks the
+same on both commits, and is there to show the fix broke nothing), and give
+each three parts:
+
+1. **Setup**: what a fresh site, built by `n setup` with the Stage 2 flags,
+   needs before the bug can show: plugins, settings, content, readers or
+   orders. Use wp-admin steps, and a `wp` command only where no screen does
+   the job.
+2. **Where**: the path to open (`/wp-admin/admin.php?page=…`, a front-end URL).
+3. **What to see**: the specific UI, state, notice or markup that shows the
+   fix, and, for a change scenario, what showed there before it.
+
+Leave out anything a later commit can change, such as test counts, line
+numbers and SHAs. A scenario that no local site can reach, such as one that
+needs a live payment or a production-only service, says so in place of its
+steps: "Not checked on a local site: <why>".
+
+**Fresh test before the push.** A tester that knows nothing about the run
+follows "How to test" on both commits. Stage 4's re-drive cannot do this job:
+its author knows the state they set up by hand and the path they drove, so a
+step that depends on either reads as complete to them.
+
+1. Run `redact.sh scan` over the body file, as for any reviewer input.
+2. Reset the env to a fresh site with
+   `n setup --env "$(tools/autofix/bin/ledger.sh get <RUN_ID> '.env.name')" --yes <Stage 2 setup flags>`.
+   This wipes the state Stage 2 built, which is the point: the steps have to
+   rebuild it. `n setup` resets the database only, so also undo any
+   `wp-config.php` change a step or an earlier tester made
+   (`wp config delete <NAME>`), then create an admin user for the tester,
+   since the site's own admin password lives in the workspace `.env`.
+3. Dispatch a subagent with the "How to test" section, the site URL, the
+   tester's login and the `docker exec` route to WP-CLI and `wp-config.php`
+   (a reviewer with a local site has both), and nothing else: not the issue,
+   the diff, the triage brief or the rest of the body. Tell it not to read
+   source code or git. It does each step and reports, per scenario, done or
+   blocked (with why), what it saw, and whether that matches the fixed
+   description, the before description, or neither. Save the report as
+   `<run-dir>/fresh-test-<n>.md`.
+4. Flip the env to the pre-fix commit with Stage 4's live A/B technique and
+   repeat steps 2 and 3 with a new subagent, then restore the fix commit.
+   Neither tester is told which commit it has.
+
+Read the two reports together, scenario by scenario, and increment
+`.loop_counts.fresh_tests` for each pair:
+
+- **Every scenario done; each change scenario matches fixed on the fix side
+  and before on the other; each guard matches fixed on both** → record
+  `ledger.sh set <RUN_ID> '.decisions += [{key:"fresh_test", value:"passed", basis:$p}]' --arg p <fix-side report path>`
+  and continue to `pr.sh create`.
+- **A step blocked, or a change scenario matches fixed on both commits** → the
+  steps are wrong: a change scenario that cannot tell the commits apart has
+  lost the condition that triggers the bug. Rewrite "How to test" and test
+  again. A third pair that fails this way is `terminal: escalated`.
+- **The steps were followed and the fix side shows the bug, or a guard fails
+  on the fix side only** → a code defect. It is a Stage 3 re-entry, counted
+  against the shared loop bound, and Stage 4 and Stage 5 run again before the
+  next fresh test.
+- **Testers on both sides block on the same scenario for a reason the site
+  causes** (a feature that does not run locally, a script error before any
+  step of yours) → mark that scenario "Not checked on a local site: <why>"
+  and record it as friction. If it is the scenario that shows the issue's own
+  bug, Stage 1's rubric (b, c or f) should have caught it: set
+  `terminal: escalated` and say so in the run report.
+
+Then:
 
 ```
 tools/autofix/bin/pr.sh create <RUN_ID> --title "fix(<scope>): <subject> (<ISSUE-ID>)" --body-file <path>
@@ -561,6 +652,13 @@ secure run it puts back the `internal: true` frontmatter if your write dropped i
 
 The report includes self-review's result block and the paths of its round
 reports, which live in self-review's own state directory, outside every repository.
+
+It ends with a `## Friction` section built from `.friction`: one line per
+entry, giving the stage, what happened, the cost and the fix. Write `None
+recorded.` when the list is empty, so a reader can tell an empty list from a
+missing section. A run that stops before this stage, on a bail or an
+escalation, still runs `autofix report <RUN_ID> --init` and writes at least
+this section, since friction is most often what stopped it.
 
 Notify the operator (session summary; `PushNotification` where available).
 
