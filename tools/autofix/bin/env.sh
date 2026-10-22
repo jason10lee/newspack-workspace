@@ -2,6 +2,7 @@
 set -euo pipefail
 BIN="$(dirname "${BASH_SOURCE[0]}")"
 . "$BIN/lib/common.sh"
+. "$BIN/lib/profile.sh"
 require jq
 require git
 LEDGER="$BIN/ledger.sh"
@@ -33,6 +34,8 @@ case "$cmd" in
     issue="$("$LEDGER" get "$run_id" .issue | tr '[:upper:]' '[:lower:]')"
     stem="$(ledger_decision "$run_id" branch_stem)"
     [ -n "$stem" ] || die "no branch_stem decision in ledger (Stage 1 must set it from Linear branchName)"
+    [ "$(profile_get "$run_id" '.env')" = true ] \
+      || die "profile $(profile_name "$run_id") has no env — env.sh create does not apply"
     attempts="$("$LEDGER" get "$run_id" '.attempts.provisioning')"
     if [ "$attempts" -ge "$AUTOFIX_MAX_ATTEMPTS" ]; then
       "$LEDGER" set "$run_id" '.terminal = "escalated"'
@@ -49,14 +52,16 @@ case "$cmd" in
     # exists (falls back to branching from local HEAD only when it doesn't),
     # so pre-creating the branch here from origin/main is sufficient to steer
     # it — no change needed to `n` tooling itself.
-    fetch_upstream_main "$WORKSPACE_ROOT"
+    # The base now comes from the run's profile; the default profile is
+    # origin/main, fetched as before.
+    base="$(profile_base "$run_id" "$WORKSPACE_ROOT")"
     git -C "$WORKSPACE_ROOT" rev-parse -q --verify "refs/heads/$branch" >/dev/null 2>&1 \
-      || git -C "$WORKSPACE_ROOT" branch "$branch" origin/main
+      || git -C "$WORKSPACE_ROOT" branch "$branch" "$base"
     n env create "$name" --worktree "$repo:$branch" --up || die "n env create failed (attempt $((attempts+1)))"
     [ -d "$(wt_dir "$branch")" ] || log "warning: expected worktree dir not found: $(wt_dir "$branch")"
     n setup --env "$name" --yes "$@" || die "n setup failed (attempt $((attempts+1)))"
-    "$LEDGER" set "$run_id" '.env = {name:$n, worktrees:[$w]} | .branch = $b' \
-      --arg n "$name" --arg w "$repo:$branch" --arg b "$branch"
+    "$LEDGER" set "$run_id" '.env = {name:$n, worktrees:[$w]} | .branch = $b | .worktree = $p' \
+      --arg n "$name" --arg w "$repo:$branch" --arg b "$branch" --arg p "$(wt_dir "$branch")"
     "$LEDGER" history "$run_id" reproduce env-created "$name"
     echo "$name" ;;
   destroy)
@@ -64,7 +69,7 @@ case "$cmd" in
     name="$("$LEDGER" get "$run_id" '.env.name // empty')"
     [ -n "$name" ] || { log "no env recorded for $run_id"; exit 0; }
     branch="$("$LEDGER" get "$run_id" '.branch // empty')"
-    wt="$(wt_dir "$branch")"
+    wt="$(run_wt "$run_id")"
     if [ -n "$branch" ]; then
       if [ -d "$wt" ]; then
         if ! git -C "$wt" tag -a "autofix-anchor-$run_id" -m "pre-destroy anchor for $run_id" 2>/dev/null; then
