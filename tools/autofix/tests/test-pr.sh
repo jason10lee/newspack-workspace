@@ -20,6 +20,9 @@ case "$*" in
   "rev-list --count origin/main..HEAD")
     printf '%s\n' "${STUB_REVCOUNT:-2}"
     exit 0 ;;
+  "rev-parse HEAD")
+    echo "${STUB_HEAD:-0123456789abcdef0123456789abcdef01234567}"
+    exit 0 ;;
 esac
 exit 0
 EOF
@@ -258,4 +261,46 @@ for section in 'Declined:\n- a finding — a reason' '<details><summary>Suggesti
   assert_eq "" "$(grep '^gh ' "$STUB_LOG" || true)" "comment: uncut section, no gh call"
 done
 rm -f "$CBODY"
+# --- forge ----------------------------------------------------------------------
+bash "$L" init frp1 NPPM-11 forge >/dev/null
+bash "$L" set frp1 '.branch = "br-2"'
+bash "$L" set frp1 '.decisions += [{key:"affected_repo", value:"newspack-plugin"}]'
+echo "Fixes it." > "$BODY"
+: > "$STUB_LOG"
+out="$(bash "$P" create frp1 --title t --body-file "$BODY" 2>&1)" && rc=0 || rc=$?
+assert_eq 1 "$rc" "pr.sh create refuses a forge run"
+assert_contains "$out" "refuses forge runs" "create refusal names the forge"
+assert_eq "" "$(grep -e push -e 'pr create' "$STUB_LOG" || true)" "forge create pushed nothing"
+out="$(bash "$P" comment frp1 --body-file "$BODY" 2>&1)" && rc=0 || rc=$?
+assert_eq 1 "$rc" "pr.sh comment refuses a forge run"
+assert_contains "$out" "refuses forge runs" "comment refusal names the forge"
+out="$(bash "$P" create no-such-run --title t --body-file "$BODY" 2>&1)" && rc=0 || rc=$?
+assert_eq 1 "$rc" "pr.sh create refuses an unreadable ledger (fail-closed)"
+assert_contains "$out" "refuses forge runs" "unreadable ledger refused by the forge check"
+
+# prepare: scope guard + redaction, records and prints, never pushes
+: > "$STUB_LOG"
+out="$(bash "$P" prepare frp1 --body-file "$BODY" 2>/dev/null)"; rc=$?
+assert_eq 0 "$rc" "prepare succeeds on an in-scope branch"
+assert_contains "$out" "BRANCH=br-2" "prepare prints the branch"
+assert_contains "$out" "HEAD=0123456789abcdef0123456789abcdef01234567" "prepare prints the head"
+assert_contains "$out" "REMOTE=origin" "prepare prints the profile's push remote"
+assert_contains "$out" "FILE=$BODY" "prepare lists the body it checked"
+assert_eq "" "$(grep -e push -e 'pr create' "$STUB_LOG" || true)" "prepare pushes nothing"
+assert_eq 1 "$(bash "$L" get frp1 '.prepared.files | length')" "prepare records the body's digest"
+
+echo "creds: https://mc.a8c.com/secret-store/?secret_id=1" > "$BODY"
+out="$(bash "$P" prepare frp1 --body-file "$BODY" 2>&1)" && rc=0 || rc=$?
+assert_eq 1 "$rc" "prepare stops on a redaction finding"
+assert_contains "$out" "redaction findings" "prepare names the redaction finding"
+
+echo "Fixes it." > "$BODY"
+out="$(STUB_DIFF_FILES=$'plugins/newspack-plugin/a.php\nbin/env.sh' bash "$P" prepare frp1 --body-file "$BODY" 2>&1)" && rc=0 || rc=$?
+assert_eq 1 "$rc" "prepare stops on an out-of-scope path"
+assert_contains "$out" "fork-trunk leak guard" "prepare runs the same scope guard"
+
+bash "$L" init basep NPPM-12 operator-named >/dev/null
+out="$(bash "$P" prepare basep --body-file "$BODY" 2>&1)" && rc=0 || rc=$?
+assert_eq 1 "$rc" "prepare is forge-only"
+assert_contains "$out" "not a forge run" "prepare refusal says why"
 finish
