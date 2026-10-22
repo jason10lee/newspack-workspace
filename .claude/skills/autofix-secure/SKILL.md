@@ -221,9 +221,9 @@ Write the run's own account of the weakness first, if the run report does not
 already hold it: `<run-dir>/weakness.md`, with who could abuse it, with what
 input, and to what effect. The probes never see it; you compare against it.
 
-**Before the PR gate** (Stage 6, after the body is written and the base fresh
-test has passed, before the first `pr.sh create`), build two probe directories
-under the run dir:
+**Before the PR gate** (Stage 6, once the body is written and before the fresh
+test, so that the fresh tester follows "How to test" as the probe left it),
+build two probe directories under the run dir:
 
 - `<run-dir>/probe/diff/change.diff`: `git -C <worktree> diff origin/main...HEAD`.
 - `<run-dir>/probe/prose/`: the same `change.diff`, plus `public-text.md` with
@@ -261,6 +261,9 @@ Save the replies as `<run-dir>/probe/<dir>-<n>.md`. Compare each with
   contain the input that triggers the bug. Reword a code comment or test name
   the reader quoted only if the rewording leaves the test's meaning intact.
   The finding is for the operator, who decides when the push should happen.
+- **The fresh test rewrites "How to test"** (its *steps wrong* reading) → run
+  the with-prose reader again on the new body before `pr.sh create`. If that
+  reading sends you to rewrite steps, the fresh test runs again on them.
 - Record each reading with
   `ledger.sh set <RUN_ID> '.decisions += [{key:"disclosure_probe", value:$v, basis:$b}]' --arg v <reading> --arg b <reply path>`.
 
