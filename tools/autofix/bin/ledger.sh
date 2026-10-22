@@ -45,6 +45,7 @@ case "$cmd" in
       stage:"intake",
       stage_history:[], decisions:[], linear_prior:null, evidence:[],
       env:null, branch:null, pr:null,
+      launch:null, worktree:null,
       loop_counts:{fix_iterations:0, repro_hypotheses:0}, loop_started_at:null,
       attempts:{provisioning:0, pr:0}, drift_log:[], terminal:null
     }' > "$file"
