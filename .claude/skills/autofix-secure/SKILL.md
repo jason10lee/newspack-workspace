@@ -32,9 +32,10 @@ invoked entry point where such an issue is eligible — and in exchange it (1)
 inverts that one eligibility rule, (2) confirm-gates every *disclosing* write,
 (3) applies disclosure hygiene to every public artifact, (4) runs Stage 5's
 self-review interactively, with the operator triaging, and (5) has a blind
-reader check each public artifact for what it gives away. Everything else —
-worktree isolation, the red/green signal, root-phpcs, impact-review, the
-≥2-AI-reviewer floor, the resumable ledger — is inherited unchanged.
+reader check the PR and each prose write after it for what it gives away.
+Everything else — worktree isolation, the red/green signal, root-phpcs,
+impact-review, the ≥2-AI-reviewer floor, the resumable ledger — is inherited
+unchanged.
 
 Start the run with the dedicated secure entry point, which requires the
 `AUTOFIX_SECURE=1` **entry ack** and initializes a ledger with `.mode="secure"`
@@ -202,14 +203,19 @@ let the operator triage each round:
   what it says. After the confirmed post, hand the printed id to
   `$SR_STATE set-comment` as base Stage 5 and 6 describe.
 
-## Override 6 — Probe each public artifact for disclosure before its gate
+## Override 6 — Probe the PR and later comments for disclosure before their gates
 
 The checklist above catches the words, not the information: a neutral sentence
 such as "editors can change the URL as well as administrators" names who could
-abuse a flaw without any word on the list. So before each gated write that
-carries prose, a reader that knows nothing about the run says what weakness it
-can see, once from what is already public and once with the new prose added.
-What the second reader finds and the first does not came from the prose.
+abuse a flaw without any word on the list. So before the PR gate, and before
+each gated write after it that carries prose, a reader that knows nothing about
+the run says what weakness it can see, once from what is already public and
+once with the new prose added. What the second reader finds and the first does
+not came from the prose.
+
+Writes before the PR exists, such as a Stage 1/2 bail brief or a claim
+comment, get no probe: there is no diff yet to measure the prose against. The
+checklist and the operator's gate are what cover them.
 
 Write the run's own account of the weakness first, if the run report does not
 already hold it: `<run-dir>/weakness.md`, with who could abuse it, with what
