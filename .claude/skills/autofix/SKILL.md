@@ -567,9 +567,10 @@ out of the reading. For each remaining scenario:
 | blocked | blocked at the same step, for a reason the site causes | **not checkable locally** |
 | blocked | anything else | **steps wrong** |
 
-A block the fix causes is a code defect however it shows: an error, a
-control that is gone, or a page the tester can no longer open at all. The
-outside failure in the retest row is one like a call to an outside service
+A block the fix causes by accident is a code defect however it shows: an
+error, a control that is gone, or a page the tester can no longer open at
+all. A removal the fix makes on purpose takes the steps-wrong row instead.
+The outside failure in the retest row is one like a call to an outside service
 that timed out.
 
 Then act on the worst reading, in this order:
