@@ -312,9 +312,12 @@ artifact.
 
 **Before each later gated write that carries prose** (the self-review summary
 comment, the Linear closeout, and an escalation note after the push), copy
-the PR's last `<run-dir>/probe/prose/` to `<run-dir>/probe/later-<n>/`,
-rebuilding its `change.diff` and `public-text.md` from the branch and PR as
-they now stand, and add the new text as `new-text.md`. If no PR was opened,
+the PR's last `<run-dir>/probe/prose/` to `<run-dir>/probe/later-<n>/`.
+Rebuild its `change.diff` from the branch as the remote holds it
+(`git -C <worktree> fetch origin <branch>`, then `git -C <worktree> diff
+origin/main...FETCH_HEAD`), since a local commit not yet pushed is not public,
+and its `public-text.md` from the PR as it now stands. Add the new text as
+`new-text.md`. If no PR was opened,
 check the remote first, as for an escalation note. Unless the check shows the
 branch there, measure the text as an escalation note before the push instead.
 If it does, take the title and body out of `public-text.md` before any reader
@@ -323,7 +326,7 @@ diff-only reply. Otherwise the baseline is the PR's last with-prose reply. Run o
 reader on the directory with the prompt above and compare it with the
 baseline. A point it names that the baseline missed, quoting `new-text.md`
 for it, is **prose discloses**, handled as above within the same two-rewrite
-limit. Anything else is clean.
+limit. Anything else is clean. Record the reading in the ledger as for the PR.
 
 Every probe reply is internal detail: it stays in the run dir, and the Stage 7
 run report lists each reading.
