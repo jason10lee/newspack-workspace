@@ -207,19 +207,25 @@ let the operator triage each round:
 
 The checklist above catches the words, not the information: a neutral sentence
 such as "editors can change the URL as well as administrators" names who could
-abuse a flaw without any word on the list. So before the PR gate, and before
-each gated write after it that carries prose, a reader that knows nothing about
-the run says what weakness it can see, once from what is already public and
-once with the new prose added. What the second reader finds and the first does
+abuse a flaw without any word on the list. So before the PR gate, before each
+gated write after it that carries prose, and before any escalation note, a
+reader that knows nothing about the run says what weakness it can see, once
+from what is already public and once with the new prose added. What the second reader finds and the first does
 not came from the prose.
 
-The PR probe reads the local diff, before `pr.sh create` pushes anything.
-Writes that go out before the PR gate get no probe: a claim comment, a Stage
-1/2 bail brief, and an escalation note while the branch is still unpushed. The
-checklist and the operator's gate cover them. Once the branch is on the
-remote, an escalation note is a later write and gets the later probe below.
-Check with `git ls-remote --heads origin <branch>`, because a `pr.sh create`
-that failed may still have pushed it.
+The PR probe reads the local diff, before `pr.sh create` pushes anything. A
+claim comment and a Stage 1/2 bail brief get no probe; the checklist and the
+operator's gate cover them.
+
+An escalation note always gets a probe, at whatever stage the run escalates.
+Check whether the branch is on the remote with `git ls-remote --heads origin
+<branch>`, because a `pr.sh create` that failed may still have pushed it. If
+it is, the note gets the later probe below. If not, nothing about the change
+is public yet, so the note is measured on its own: write `weakness.md` (below)
+if it is not there yet, put the note alone in
+`<run-dir>/probe/note-<n>/note.md`, and run one reader on that directory with the prompt below. Any point it
+names, quoting the note, is **prose discloses**, handled as for the PR within
+the same two-rewrite limit. Anything else is clean.
 
 Write the run's own account of the weakness first, if the run report does not
 already hold it: `<run-dir>/weakness.md`, with who could abuse it, with what
