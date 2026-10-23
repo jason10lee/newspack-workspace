@@ -312,21 +312,30 @@ artifact.
 
 **Before each later gated write that carries prose** (the self-review summary
 comment, the Linear closeout, and an escalation note after the push), copy
-the PR's last `<run-dir>/probe/prose/` to `<run-dir>/probe/later-<n>/`.
-Rebuild its `change.diff` from the branch as the remote holds it
-(`git -C <worktree> fetch origin <branch>`, then `git -C <worktree> diff
-origin/main...FETCH_HEAD`), since a local commit not yet pushed is not public,
-and its `public-text.md` from the PR as it now stands. Add the new text as
-`new-text.md`. If no PR was opened,
-check the remote first, as for an escalation note. Unless the check shows the
-branch there, measure the text as an escalation note before the push instead.
-If it does, take the title and body out of `public-text.md` before any reader
-sees it, since they were never published; the baseline is then the last
-diff-only reply. Otherwise the baseline is the PR's last with-prose reply. Run one
-reader on the directory with the prompt above and compare it with the
-baseline. A point it names that the baseline missed, quoting `new-text.md`
-for it, is **prose discloses**, handled as above within the same two-rewrite
-limit. Anything else is clean. Record the reading in the ledger as for the PR.
+the PR's last `<run-dir>/probe/prose/` to `<run-dir>/probe/later-<n>/` and
+add the new text as `new-text.md`. Then rebuild the rest from what is public:
+
+- If no PR was opened, check the remote first, as for an escalation note.
+  Unless the check shows the branch there, probe the text as an escalation
+  note before the push (above) instead, and stop here.
+- Fetch the branch into a ref of its own: `git -C <worktree> fetch origin
+  +refs/heads/<branch>:refs/probe/<branch>`. If the fetch fails, the run cannot
+  tell what is public, so probe the text as an escalation note before the
+  push instead.
+- `change.diff`: `git -C <worktree> diff origin/main...refs/probe/<branch>`,
+  since a local commit not yet pushed is not public.
+- `public-text.md`: the branch name, the PR title and body as they now stand
+  (none if no PR was opened), the commit messages of the pushed range only
+  (`git -C <worktree> log --format='%s%n%n%b' origin/main..refs/probe/<branch>`),
+  and every comment or note the run has already posted, such as the
+  self-review summary before the Linear closeout.
+
+The baseline is the PR's last with-prose reply, or the last diff-only reply if
+no PR was opened. Run one reader on the directory with the prompt above and
+compare it with the baseline. A point it names that the baseline missed,
+quoting `new-text.md` for it, is **prose discloses**, handled as above within
+the same two-rewrite limit. Anything else is clean. Record the reading in the
+ledger as for the PR.
 
 Every probe reply is internal detail: it stays in the run dir, and the Stage 7
 run report lists each reading.
