@@ -214,13 +214,18 @@ from what is already public and once with the new prose added. What the second r
 not came from the prose.
 
 The PR probe reads the local diff, before `pr.sh create` pushes anything. A
-claim comment and a Stage 1/2 bail brief get no probe; the checklist and the
-operator's gate cover them.
+claim comment gets no probe, since it says only that the run started. A Stage
+1/2 bail brief gets none either: it ends the run before any fix exists, so it
+reports on the issue rather than on a change. The checklist and the operator's
+gate cover both. An escalation note is different, since the run can resume
+after it and push a fix.
 
 An escalation note always gets a probe, at whatever stage the run escalates.
-Check whether the branch is on the remote with `git ls-remote --heads origin
-<branch>`, because a `pr.sh create` that failed may still have pushed it. If
-it is, the note gets the later probe below. If not, the diff and branch are
+Check whether the branch is on the remote with `git ls-remote --exit-code
+--heads origin <branch>`, because a `pr.sh create` that failed may still have
+pushed it. Exit 2 means it is not there; any other failure means the check did
+not run, so treat the branch as pushed. If it is, the note gets the later
+probe below. If not, the diff and branch are
 not public yet, but a claim comment or an earlier note may be, so the note is
 read beside those: write `weakness.md` (below) if it is not there yet, and
 build `<run-dir>/probe/note-<n>/` with `public-text.md` holding the claim
@@ -228,7 +233,7 @@ comment and every escalation note already posted, and `new-text.md` holding
 this note. Run one reader on that directory with the prompt below and compare
 its reply with `weakness.md`. A point it names, quoting `new-text.md` for it,
 is **prose discloses**, handled as for the PR within the same two-rewrite
-limit. Anything else is clean.
+limit. Anything else is clean. Record the reading in the ledger as for the PR.
 
 Write the run's own account of the weakness first, if the run report does not
 already hold it: `<run-dir>/weakness.md`, with who could abuse it, with what
@@ -307,15 +312,16 @@ artifact.
 comment, the Linear closeout, and an escalation note after the push), copy
 the PR's last `<run-dir>/probe/prose/` to `<run-dir>/probe/later-<n>/`,
 rebuilding its `change.diff` and `public-text.md` from the branch and PR as
-they now stand, and add the new text as `new-text.md`. Run one reader on it
-with the prompt above, and compare it with the PR's last with-prose reply. If
-no PR was opened, check the remote as for an escalation note. If the branch
-is not there, measure the text as an escalation note before the push. If it
-is, take the title and body out of `public-text.md`, since they were never
-published, and compare with the last diff-only reply instead. A point it names
-that the earlier reply missed, quoting `new-text.md` for it, is **prose
-discloses**, handled as above within the same two-rewrite limit. Anything else
-is clean.
+they now stand, and add the new text as `new-text.md`. If no PR was opened,
+check the remote first, as for an escalation note. If the branch is not
+there, measure the text as an escalation note before the push instead. If it
+is, take the title and body out of `public-text.md` before any reader sees
+it, since they were never published; the baseline is then the last diff-only
+reply. Otherwise the baseline is the PR's last with-prose reply. Run one
+reader on the directory with the prompt above and compare it with the
+baseline. A point it names that the baseline missed, quoting `new-text.md`
+for it, is **prose discloses**, handled as above within the same two-rewrite
+limit. Anything else is clean.
 
 Every probe reply is internal detail: it stays in the run dir, and the Stage 7
 run report lists each reading.
