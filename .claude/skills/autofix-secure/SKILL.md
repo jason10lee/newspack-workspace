@@ -272,13 +272,15 @@ Save the replies as `<run-dir>/probe/<dir>-<n>.md`. Compare each with
 | names a point | adds nothing | **diff discloses** |
 | names nothing | adds nothing | **clean** |
 
-- **Prose discloses** → rewrite the quoted sentences in the PR title or body,
-  rebuild `public-text.md`, and run the with-prose reader again. Two rewrites
-  is the limit for the whole run, not for each probe; after the second, go to
-  the gate anyway and say which point still shows. A quoted commit message is
-  not yours to reword, because that moves HEAD past the commit self-review
-  passed: name it to the operator at the gate, who decides whether to reword
-  it and run self-review again. A quoted escalation note is already posted, so
+- **Prose discloses** → rewrite the quoted sentences where they have not been
+  published yet: the PR title or body, or the note or comment in `new-text.md`
+  when a note or later probe found them. Then rebuild that probe's directory
+  and run its with-prose reader again. Two rewrites is the limit for the whole
+  run, not for each probe; after the second, go to the gate anyway and say
+  which point still shows. A quoted commit message is not yours to reword,
+  because that moves HEAD past the commit self-review passed: name it to the
+  operator at the gate, who decides whether to reword it and run self-review
+  again. An escalation note quoted from `public-text.md` is already posted, so
   name it to the operator too. When commit messages and posted notes are the
   only quotes, go to the gate without a rewrite.
 - **Diff discloses** is not a wording problem: a regression test has to
