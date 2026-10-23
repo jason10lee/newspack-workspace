@@ -213,16 +213,18 @@ the run says what weakness it can see, once from what is already public and
 once with the new prose added. What the second reader finds and the first does
 not came from the prose.
 
-Writes before the branch is pushed get no probe: a claim comment, a Stage 1/2
-bail brief, and an escalation note written before the push. Until `pr.sh
-create` pushes the branch, nothing public carries the change for the prose to
-be measured against, so the checklist and the operator's gate are what cover
-them. Once it has pushed, even on an attempt that then failed, an escalation
-note is a later write and gets the later probe below.
+The PR probe reads the local diff, before `pr.sh create` pushes anything.
+Writes that go out before the PR gate get no probe: a claim comment, a Stage
+1/2 bail brief, and an escalation note while the branch is still unpushed. The
+checklist and the operator's gate cover them. Once the branch is on the
+remote, an escalation note is a later write and gets the later probe below.
+Check with `git ls-remote --heads origin <branch>`, because a `pr.sh create`
+that failed may still have pushed it.
 
 Write the run's own account of the weakness first, if the run report does not
 already hold it: `<run-dir>/weakness.md`, with who could abuse it, with what
-input, and to what effect. The probes never see it; you compare against it.
+input, and to what effect. You compare the replies against it. It sits beside
+the readers' directories, so only their prompt keeps them from it.
 
 **Before the PR gate** (Stage 6, once the body is written and before the fresh
 test, so that the fresh tester follows "How to test" as the probe left it),
@@ -260,18 +262,22 @@ Save the replies as `<run-dir>/probe/<dir>-<n>.md`. Compare each with
 | names a point | adds nothing | **diff discloses** |
 | names nothing | adds nothing | **clean** |
 
-- **Prose discloses** → rewrite the quoted sentences, rebuild `public-text.md`,
-  and run the with-prose reader again. Don't reword a quoted commit message
-  yourself: that moves HEAD past the commit self-review passed. Name it to the
-  operator at the gate, who decides whether to reword it and run self-review
-  again. Two rewrites is the limit for the whole run, not for each probe;
-  after the second, go to the gate anyway and say which point still shows.
+- **Prose discloses** → rewrite the quoted sentences in the PR title or body,
+  rebuild `public-text.md`, and run the with-prose reader again. Two rewrites
+  is the limit for the whole run, not for each probe; after the second, go to
+  the gate anyway and say which point still shows. A quoted commit message is
+  not yours to reword, because that moves HEAD past the commit self-review
+  passed: name it to the operator at the gate, who decides whether to reword
+  it and run self-review again. When commit messages are the only quotes, go
+  to the gate without a rewrite.
 - **Diff discloses** is not a wording problem: a regression test has to
-  contain the input that triggers the bug. Reword a code comment or test name
-  the reader quoted only if the rewording leaves the test's meaning intact.
-  The finding is for the operator, who decides when the push should happen.
-- **The body or the branch changes after the probe** (a *steps wrong*
-  rewrite, a "Not checked on a local site" line, a Stage 3 re-entry) → probe
+  contain the input that triggers the bug. A quoted code comment or test name
+  goes to the operator at the gate, like a commit message, since rewording it
+  also moves HEAD past the pass. The finding is for the operator, who decides
+  when the push should happen.
+- **Any with-prose input changes after the probe** (the PR title or body, the
+  branch, or the diff: a *steps wrong* rewrite, a "Not checked on a local
+  site" line, a Stage 3 re-entry) → probe
   again before `pr.sh create`: both readers if the diff changed, otherwise the
   with-prose reader alone. If that reading sends you to rewrite steps, the
   fresh test runs again on them. A fresh test that reruns only because of a
@@ -289,8 +295,12 @@ comment, the Linear closeout, and an escalation note after the push), copy
 the PR's last `<run-dir>/probe/prose/` to `<run-dir>/probe/later-<n>/`,
 rebuilding its `change.diff` and `public-text.md` from the branch and PR as
 they now stand, and add the new text as `new-text.md`. Run one reader on it
-with the prompt above, and compare it with the PR's last with-prose reply. A point it names that the PR's reader
-missed, quoting `new-text.md` for it, is **prose discloses**, as above.
+with the prompt above, and compare it with the PR's last with-prose reply. If
+no PR was opened, take the title and body out of `public-text.md`, since they
+were never published, and compare with the last diff-only reply instead. A
+point it names that the earlier reply missed, quoting `new-text.md` for it, is
+**prose discloses**, handled as above within the same two-rewrite limit.
+Anything else is clean.
 
 Every probe reply is internal detail: it stays in the run dir, and the Stage 7
 run report lists each reading.
