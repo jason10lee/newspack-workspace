@@ -223,10 +223,12 @@ after it and push a fix.
 An escalation note always gets a probe, at whatever stage the run escalates.
 Check whether the branch is on the remote with `git ls-remote --exit-code
 --heads origin <branch>`, because a `pr.sh create` that failed may still have
-pushed it. Exit 2 means it is not there; any other failure means the check did
-not run, so treat the branch as pushed. If it is, the note gets the later
-probe below. If not, the diff and branch are
-not public yet, but a claim comment or an earlier note may be, so the note is
+pushed it. Only exit 0 shows the branch there, and then the note gets the
+later probe below. Exit 2 means it is not there. Any other failure means the
+check did not run, so treat the branch as not pushed: the later probe
+discounts what the diff shows, which is safe only once the diff is public,
+while the note probe below at worst over-reports. Either way the diff may not
+be public yet, but a claim comment or an earlier note may be, so the note is
 read beside those: write `weakness.md` (below) if it is not there yet, and
 build `<run-dir>/probe/note-<n>/` with `public-text.md` holding the claim
 comment and every escalation note already posted, and `new-text.md` holding
@@ -313,11 +315,11 @@ comment, the Linear closeout, and an escalation note after the push), copy
 the PR's last `<run-dir>/probe/prose/` to `<run-dir>/probe/later-<n>/`,
 rebuilding its `change.diff` and `public-text.md` from the branch and PR as
 they now stand, and add the new text as `new-text.md`. If no PR was opened,
-check the remote first, as for an escalation note. If the branch is not
-there, measure the text as an escalation note before the push instead. If it
-is, take the title and body out of `public-text.md` before any reader sees
-it, since they were never published; the baseline is then the last diff-only
-reply. Otherwise the baseline is the PR's last with-prose reply. Run one
+check the remote first, as for an escalation note. Unless the check shows the
+branch there, measure the text as an escalation note before the push instead.
+If it does, take the title and body out of `public-text.md` before any reader
+sees it, since they were never published; the baseline is then the last
+diff-only reply. Otherwise the baseline is the PR's last with-prose reply. Run one
 reader on the directory with the prompt above and compare it with the
 baseline. A point it names that the baseline missed, quoting `new-text.md`
 for it, is **prose discloses**, handled as above within the same two-rewrite
