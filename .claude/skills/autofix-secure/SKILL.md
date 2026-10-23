@@ -213,11 +213,12 @@ the run says what weakness it can see, once from what is already public and
 once with the new prose added. What the second reader finds and the first does
 not came from the prose.
 
-Writes before the PR exists get no probe: a claim comment, a Stage 1/2 bail
-brief, and an escalation note at any stage. The branch is pushed only by
-`pr.sh create`, so until then nothing public carries the change for the prose
-to be measured against. The checklist and the operator's gate are what cover
-them.
+Writes before the branch is pushed get no probe: a claim comment, a Stage 1/2
+bail brief, and an escalation note written before the push. Until `pr.sh
+create` pushes the branch, nothing public carries the change for the prose to
+be measured against, so the checklist and the operator's gate are what cover
+them. Once it has pushed, even on an attempt that then failed, an escalation
+note is a later write and gets the later probe below.
 
 Write the run's own account of the weakness first, if the run report does not
 already hold it: `<run-dir>/weakness.md`, with who could abuse it, with what
@@ -260,10 +261,11 @@ Save the replies as `<run-dir>/probe/<dir>-<n>.md`. Compare each with
 | names nothing | adds nothing | **clean** |
 
 - **Prose discloses** → rewrite the quoted sentences, rebuild `public-text.md`,
-  and run the with-prose reader again. A quoted commit message is still local,
-  so reword it in the worktree before the push. Two rewrites is the limit for
-  the whole run, not for each probe; after the second, go to the gate anyway
-  and say which point still shows.
+  and run the with-prose reader again. Don't reword a quoted commit message
+  yourself: that moves HEAD past the commit self-review passed. Name it to the
+  operator at the gate, who decides whether to reword it and run self-review
+  again. Two rewrites is the limit for the whole run, not for each probe;
+  after the second, go to the gate anyway and say which point still shows.
 - **Diff discloses** is not a wording problem: a regression test has to
   contain the input that triggers the bug. Reword a code comment or test name
   the reader quoted only if the rewording leaves the test's meaning intact.
@@ -283,11 +285,11 @@ named, next to the preview file. Neither goes into the preview or any public
 artifact.
 
 **Before each later gated write that carries prose** (the self-review summary
-comment and the Linear closeout), copy the PR's last `<run-dir>/probe/prose/`
-to `<run-dir>/probe/later-<n>/`, rebuilding its `change.diff` and
-`public-text.md` from the branch and PR as they now stand, and add the new
-text as `new-text.md`. Run one reader on it with the prompt above, and compare
-it with the PR's last with-prose reply. A point it names that the PR's reader
+comment, the Linear closeout, and an escalation note after the push), copy
+the PR's last `<run-dir>/probe/prose/` to `<run-dir>/probe/later-<n>/`,
+rebuilding its `change.diff` and `public-text.md` from the branch and PR as
+they now stand, and add the new text as `new-text.md`. Run one reader on it
+with the prompt above, and compare it with the PR's last with-prose reply. A point it names that the PR's reader
 missed, quoting `new-text.md` for it, is **prose discloses**, as above.
 
 Every probe reply is internal detail: it stays in the run dir, and the Stage 7
