@@ -220,12 +220,15 @@ operator's gate cover them.
 An escalation note always gets a probe, at whatever stage the run escalates.
 Check whether the branch is on the remote with `git ls-remote --heads origin
 <branch>`, because a `pr.sh create` that failed may still have pushed it. If
-it is, the note gets the later probe below. If not, nothing about the change
-is public yet, so the note is measured on its own: write `weakness.md` (below)
-if it is not there yet, put the note alone in
-`<run-dir>/probe/note-<n>/note.md`, and run one reader on that directory with the prompt below. Any point it
-names, quoting the note, is **prose discloses**, handled as for the PR within
-the same two-rewrite limit. Anything else is clean.
+it is, the note gets the later probe below. If not, the diff and branch are
+not public yet, but a claim comment or an earlier note may be, so the note is
+read beside those: write `weakness.md` (below) if it is not there yet, and
+build `<run-dir>/probe/note-<n>/` with `public-text.md` holding the claim
+comment and every escalation note already posted, and `new-text.md` holding
+this note. Run one reader on that directory with the prompt below and compare
+its reply with `weakness.md`. A point it names, quoting `new-text.md` for it,
+is **prose discloses**, handled as for the PR within the same two-rewrite
+limit. Anything else is clean.
 
 Write the run's own account of the weakness first, if the run report does not
 already hold it: `<run-dir>/weakness.md`, with who could abuse it, with what
@@ -239,7 +242,8 @@ build two probe directories under the run dir:
 - `<run-dir>/probe/diff/change.diff`: `git -C <worktree> diff origin/main...HEAD`.
 - `<run-dir>/probe/prose/`: the same `change.diff`, plus `public-text.md` with
   the branch name, the PR title, every commit message (`git -C <worktree> log
-  --format='%s%n%n%b' origin/main..HEAD`) and the PR body.
+  --format='%s%n%n%b' origin/main..HEAD`), the PR body, and any escalation
+  note already posted.
 
 Dispatch one subagent per directory, each with only this prompt and its
 directory's path. Only the prompt keeps a reader inside its directory, as with
@@ -274,8 +278,9 @@ Save the replies as `<run-dir>/probe/<dir>-<n>.md`. Compare each with
   the gate anyway and say which point still shows. A quoted commit message is
   not yours to reword, because that moves HEAD past the commit self-review
   passed: name it to the operator at the gate, who decides whether to reword
-  it and run self-review again. When commit messages are the only quotes, go
-  to the gate without a rewrite.
+  it and run self-review again. A quoted escalation note is already posted, so
+  name it to the operator too. When commit messages and posted notes are the
+  only quotes, go to the gate without a rewrite.
 - **Diff discloses** is not a wording problem: a regression test has to
   contain the input that triggers the bug. A quoted code comment or test name
   goes to the operator at the gate, like a commit message, since rewording it
@@ -302,11 +307,13 @@ the PR's last `<run-dir>/probe/prose/` to `<run-dir>/probe/later-<n>/`,
 rebuilding its `change.diff` and `public-text.md` from the branch and PR as
 they now stand, and add the new text as `new-text.md`. Run one reader on it
 with the prompt above, and compare it with the PR's last with-prose reply. If
-no PR was opened, take the title and body out of `public-text.md`, since they
-were never published, and compare with the last diff-only reply instead. A
-point it names that the earlier reply missed, quoting `new-text.md` for it, is
-**prose discloses**, handled as above within the same two-rewrite limit.
-Anything else is clean.
+no PR was opened, check the remote as for an escalation note. If the branch
+is not there, measure the text as an escalation note before the push. If it
+is, take the title and body out of `public-text.md`, since they were never
+published, and compare with the last diff-only reply instead. A point it names
+that the earlier reply missed, quoting `new-text.md` for it, is **prose
+discloses**, handled as above within the same two-rewrite limit. Anything else
+is clean.
 
 Every probe reply is internal detail: it stays in the run dir, and the Stage 7
 run report lists each reading.
