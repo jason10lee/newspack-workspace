@@ -144,11 +144,13 @@ discipline — **don't telegraph the vulnerability** — on top:
   The neutral line left in their place is a bare count, with no location: no
   reviewer can open the run report.
 - **The closeout's urgency assessment** keeps the flow it points to and the base
-  signals that say nothing about security: the issue's Linear priority, Backlog
-  or fresh-triage provenance, and regression or long-standing. Where the report
-  came from, the account the weakness starts from and any severity go to the run
-  report instead: each marks the change as a security fix, which Override 6
-  reads as standing.
+  signals that say nothing about security: Backlog or fresh-triage provenance,
+  and regression or long-standing. Where the report came from (an attached
+  publisher report included), the account the weakness starts from, any
+  severity, and the issue's Linear priority, which security intake sets from
+  severity, go to the run report instead: each marks the change as a security
+  fix, which Override 6 reads as standing. The issue page already shows its
+  priority.
 - **Exploit detail lives in the Stage 7 run report**, which `autofix report
   <RUN_ID> --init` creates in operator-local state, outside every repository,
   stamped `internal: true` — the honest technical record goes there, not on
