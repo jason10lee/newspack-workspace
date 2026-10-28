@@ -128,8 +128,9 @@ discipline — **don't telegraph the vulnerability** — on top:
   `claim.sh comment` so redaction + gate + audit apply — never raw MCP.
 - **Stage 4 adjacent-input follow-ups are drafted, not auto-filed.** A
   cross-repo sibling found by the adjacent-input probe becomes a *draft*
-  follow-up for the operator (a public Linear issue could telegraph the sibling
-  flaw), not an auto-created issue.
+  follow-up for the operator (an issue's title and text can leave Linear, by a
+  sync to GitHub or by being quoted elsewhere, and telegraph the sibling flaw),
+  not an auto-created issue.
 - **Stage 6 PR + closeout** wording is neutral (below); PoC/exploit payloads
   and any fuzzing harness stay under the run dir, **never committed**. The
   regression test that lands is the minimal behavioral assertion under a
@@ -140,7 +141,8 @@ discipline — **don't telegraph the vulnerability** — on top:
   self-review's own `summary.md`, and keep its closing marker line.
 - **The Declined and deferred findings** base Stage 6 cuts from that comment go
   to the Stage 7 run report, not the Linear closeout: on a Security issue they
-  are the same kind of content as a sibling flaw, and the closeout is public.
+  are the same kind of content as a sibling flaw, and the closeout can leave
+  Linear the same way.
   The neutral line left in their place is a bare count, with no location: no
   reviewer can open the run report.
 - **The closeout's urgency assessment** is one fixed line, "Points to the
@@ -152,10 +154,10 @@ discipline — **don't telegraph the vulnerability** — on top:
   fixed so that no closeout hints by what it leaves out. The issue page shows
   its own labels and priority.
 - **Write those signals to `<run-dir>/signals.md` before the closeout posts**,
-  one line each, with the flow they point to. The run report does not exist
-  until Stage 7, so this file is what carries them there: the report gets a
-  `## Urgency signals` section copied from it, and the operator routing at
-  pr-ready reads it there.
+  one line each, with the flow they point to. The run report is written at
+  Stage 7, so this file is what carries them there (see *Stage 7 — what the
+  run report gathers*), and whoever routes at pr-ready reads them in the
+  report.
 - **Exploit detail lives in the Stage 7 run report**, which `autofix report
   <RUN_ID> --init` creates in operator-local state, outside every repository,
   stamped `internal: true` — the honest technical record goes there, not on
@@ -163,9 +165,11 @@ discipline — **don't telegraph the vulnerability** — on top:
 
 ### Disclosure-hygiene checklist
 
-Applies to every **public-facing** artifact: code comments, commit
-subjects/bodies, branch names, PR title/description, changelog entries,
-test/fixture names, and any Linear comment text. `run-secure` names the branch
+Applies to every artifact that is public or can become public: code comments,
+commit subjects/bodies, branch names, PR title/description, changelog entries,
+test/fixture names, and any Linear comment text. Linear itself is internal, but
+its text can leave it, by a sync to GitHub or by being quoted elsewhere, and
+once out it cannot be pulled back. `run-secure` names the branch
 from the issue ID alone (`nppm-1234-<4hex>`), because Linear's `branchName` is
 slugged from the title; to use a descriptive stem instead, rewrite the
 `branch_stem` decision before `env.sh create`, since the worktree path is
@@ -365,6 +369,23 @@ Save the note and later readers' replies verbatim too, as
 so a rerun never overwrites the reply an earlier reading rests on. Every probe
 reply is internal detail: it stays in
 the run dir, and the Stage 7 run report lists each reading.
+
+## Stage 7 — what the run report gathers
+
+The base Stage 7 list does not name what the overrides above hold back for the
+report, so a secure run's report adds each of these:
+
+- A `## Urgency signals` section, copied from `<run-dir>/signals.md`
+  (Override 4).
+- The declined and deferred findings cut from the self-review summary comment
+  (Override 4).
+- The exploit detail, and the run's account of the weakness from
+  `<run-dir>/weakness.md` (Overrides 4 and 6).
+- Each probe reading, with the path of the saved reply it rests on
+  (Override 6).
+
+A run that reaches Stage 7 with the report already written, such as one that
+resumes after an escalation, adds whatever is missing instead of rewriting it.
 
 ## Hard rules (unchanged from base — never override)
 
