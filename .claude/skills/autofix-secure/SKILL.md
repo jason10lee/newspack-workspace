@@ -143,10 +143,12 @@ discipline — **don't telegraph the vulnerability** — on top:
   are the same kind of content as a sibling flaw, and the closeout is public.
   The neutral line left in their place is a bare count, with no location: no
   reviewer can open the run report.
-- **The closeout's urgency assessment** names only the flow it points to and the
-  issue's Linear priority. The signals behind it (where the report came from,
-  the account it starts from, a severity) go to the run report: each marks the
-  change as a security fix, which Override 6 reads as the fourth point.
+- **The closeout's urgency assessment** keeps the flow it points to and the base
+  signals that say nothing about security: the issue's Linear priority, Backlog
+  or fresh-triage provenance, and regression or long-standing. Where the report
+  came from, the account the weakness starts from and any severity go to the run
+  report instead: each marks the change as a security fix, which Override 6
+  reads as standing.
 - **Exploit detail lives in the Stage 7 run report**, which `autofix report
   <RUN_ID> --init` creates in operator-local state, outside every repository,
   stamped `internal: true` — the honest technical record goes there, not on
@@ -237,7 +239,8 @@ read beside those: write `weakness.md` (below) if it is not there yet, and
 build `<run-dir>/probe/note-<n>/` with `public-text.md` holding the claim
 comment and every escalation note already posted, and `new-text.md` holding
 this note. Run one reader on that directory with the prompt below and compare
-its reply with `weakness.md`. A point it names, quoting `new-text.md` for it,
+its reply with `weakness.md`. Any of the four points below that it names,
+quoting `new-text.md` for it,
 is **prose discloses**, handled as for the PR within the same two-rewrite
 limit. Anything else is clean. Record the reading in the ledger as for the PR.
 
@@ -269,10 +272,10 @@ dispatch that reader again.
 > administrator could have done before the change, and how: who, what input,
 > what effect. Give your best guess even if you are unsure. Also say whether
 > any text calls this a security change: that it fixes a vulnerability, where a
-> report came from, how severe it is, or how urgently it should ship. Reply
-> with: a verdict (security fix / probably security / probably not / not
-> security); the weakness in two or three sentences, or "none"; what the text
-> says about it being a security change, or "nothing"; your confidence, 0–100;
+> report came from, or how severe it is. Reply with: a verdict (security fix /
+> probably security / probably not / not security); the weakness in two or
+> three sentences, or "none"; what the text says about it being a security
+> change, quoting the words you rely on, or "nothing"; your confidence, 0–100;
 > and up to five short quotes that led you to it, each tagged code, code
 > comment, test name, or prose.
 
@@ -345,13 +348,15 @@ add the new text as `new-text.md`. Then rebuild the rest from what is public:
 
 The baseline is the PR's last with-prose reply, or the last diff-only reply if
 no PR was opened. Run one reader on the directory with the prompt above and
-compare it with the baseline. A point it names that the baseline missed,
-quoting `new-text.md` for it, is **prose discloses**, handled as above within
-the same two-rewrite limit. Anything else is clean. Record the reading in the
+compare it with the baseline. Any of the four points that it names and the
+baseline missed, quoting `new-text.md` for it, is **prose discloses**, handled
+as above within the same two-rewrite limit. Anything else is clean. Record the reading in the
 ledger as for the PR.
 
 Save the note and later readers' replies verbatim too, as
-`<run-dir>/probe/<dir>.md`. Every probe reply is internal detail: it stays in
+`<run-dir>/probe/<dir>-<n>.md`, where `<n>` counts that directory's readers,
+so a rerun never overwrites the reply an earlier reading rests on. Every probe
+reply is internal detail: it stays in
 the run dir, and the Stage 7 run report lists each reading.
 
 ## Hard rules (unchanged from base — never override)
