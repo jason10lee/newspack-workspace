@@ -143,6 +143,10 @@ discipline — **don't telegraph the vulnerability** — on top:
   are the same kind of content as a sibling flaw, and the closeout is public.
   The neutral line left in their place is a bare count, with no location: no
   reviewer can open the run report.
+- **The closeout's urgency assessment** names only the flow it points to and the
+  issue's Linear priority. The signals behind it (where the report came from,
+  the account it starts from, a severity) go to the run report: each marks the
+  change as a security fix, which Override 6 reads as the fourth point.
 - **Exploit detail lives in the Stage 7 run report**, which `autofix report
   <RUN_ID> --init` creates in operator-local state, outside every repository,
   stamped `internal: true` — the honest technical record goes there, not on
@@ -263,14 +267,23 @@ dispatch that reader again.
 > not search the web. Question: does this change close a security weakness? If
 > you think it does, say what someone with less access than a site
 > administrator could have done before the change, and how: who, what input,
-> what effect. Give your best guess even if you are unsure. Reply with: a
-> verdict (security fix / probably security / probably not / not security);
-> the weakness in two or three sentences, or "none"; your confidence, 0–100;
+> what effect. Give your best guess even if you are unsure. Also say whether
+> any text calls this a security change: that it fixes a vulnerability, where a
+> report came from, how severe it is, or how urgently it should ship. Reply
+> with: a verdict (security fix / probably security / probably not / not
+> security); the weakness in two or three sentences, or "none"; what the text
+> says about it being a security change, or "nothing"; your confidence, 0–100;
 > and up to five short quotes that led you to it, each tagged code, code
 > comment, test name, or prose.
 
-Save the replies as `<run-dir>/probe/<dir>-<n>.md`. Compare each with
-`weakness.md` on three points: who, what input, what effect. Then:
+Save each reply verbatim, before you compare or summarize it, as
+`<run-dir>/probe/<dir>-<n>.md`. A later probe uses it as its baseline, and a
+condensed copy drops what the next comparison needs. Compare each with
+`weakness.md` on three points: who, what input, what effect. A fourth point,
+**standing**, is what the reply quotes the text for in saying this is a security
+change. `weakness.md` does not hold it, and a reader names it only by quoting
+prose, a code comment or a test name; a verdict reached from code alone does
+not. Then:
 
 | Diff-only reader | With-prose reader | Reading |
 |---|---|---|
@@ -337,8 +350,9 @@ quoting `new-text.md` for it, is **prose discloses**, handled as above within
 the same two-rewrite limit. Anything else is clean. Record the reading in the
 ledger as for the PR.
 
-Every probe reply is internal detail: it stays in the run dir, and the Stage 7
-run report lists each reading.
+Save the note and later readers' replies verbatim too, as
+`<run-dir>/probe/<dir>.md`. Every probe reply is internal detail: it stays in
+the run dir, and the Stage 7 run report lists each reading.
 
 ## Hard rules (unchanged from base — never override)
 
