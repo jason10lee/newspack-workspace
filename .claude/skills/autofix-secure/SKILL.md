@@ -144,12 +144,18 @@ discipline — **don't telegraph the vulnerability** — on top:
   The neutral line left in their place is a bare count, with no location: no
   reviewer can open the run report.
 - **The closeout's urgency assessment** is one fixed line, "Points to the
-  <flow> flow; the signals are in the run report.", and every signal the base
-  skill lists goes to the run report. On a Security issue each signal can mark
-  the change as a security fix, which Override 6 reads as standing: the priority
-  follows severity, and the provenance follows the priority or the report's
-  source. The wording stays fixed so that no closeout hints by what it leaves
-  out. The issue page shows its own labels and priority.
+  <flow> flow.", with no location, for the reason given in the bullet above.
+  Every signal the base skill lists goes to the run report instead. On a
+  Security issue each signal can mark the change as a security fix, which
+  Override 6 reads as standing: the priority follows severity, and the
+  provenance follows the priority or the report's source. The wording stays
+  fixed so that no closeout hints by what it leaves out. The issue page shows
+  its own labels and priority.
+- **Write those signals to `<run-dir>/signals.md` before the closeout posts**,
+  one line each, with the flow they point to. The run report does not exist
+  until Stage 7, so this file is what carries them there: the report gets a
+  `## Urgency signals` section copied from it, and the operator routing at
+  pr-ready reads it there.
 - **Exploit detail lives in the Stage 7 run report**, which `autofix report
   <RUN_ID> --init` creates in operator-local state, outside every repository,
   stamped `internal: true` — the honest technical record goes there, not on
