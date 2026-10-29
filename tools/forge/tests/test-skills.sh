@@ -44,4 +44,17 @@ for h in "## Contested decisions" "## Friction" "## Choices"; do
 done
 assert_contains "$(cat "$RUN")" "600000" "the run skill sets long Bash timeouts"
 
+# the dispatcher skill
+assert_eq yes "$([ -f "$DIS" ] && echo yes || echo no)" "the dispatcher skill exists"
+assert_eq "name: forge-dispatch" "$(sed -n 2p "$DIS")" "its frontmatter names it forge-dispatch"
+check_cmds "$DIS" "bin/forge" "$ROOT/tools/forge/bin/forge" "every forge command the dispatcher skill names exists"
+check_paths "$DIS" "every path the dispatcher skill names exists"
+assert_contains "$(cat "$DIS")" "600000" "the dispatcher skill sets long Bash timeouts"
+assert_contains "$(cat "$DIS")" "batch-approval preview" "publishing goes through a batch preview"
+README="$ROOT/tools/forge/README.md"
+for c in $(labels "$ROOT/tools/forge/bin/forge-run") $(labels "$ROOT/tools/forge/bin/forge"); do
+  [ "$c" = '*' ] && continue
+  assert_contains "$(cat "$README")" "$c" "the README describes '$c'"
+done
+
 finish
