@@ -220,3 +220,7 @@ confirm_launch() { # rid id -> 0 confirmed, 1 abandoned
   bash "$FORGE_LEDGER" history "$rid" launch abandoned "session $id not seen within ${FORGE_LAUNCH_TIMEOUT}s"
   return 1
 }
+
+# --- liveness ----------------------------------------------------------------
+: "${FORGE_STAGE_BOUND:=7200}"    # autofix's two-hour wall-clock bound
+: "${FORGE_STOP_TIMEOUT:=180}"

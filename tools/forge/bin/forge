@@ -177,9 +177,61 @@ cmd_next() {
   esac
 }
 
-cmd="${1:?usage: forge launch|next ...}"; shift
+# check_run <rid> — the spec's liveness rule for one run holding the slot. A
+# session is gone when its row has no pid. A stop that does not take changes
+# nothing; a run that delivered or stopped meanwhile keeps its state.
+check_run() {
+  local rid="$1" launch id last epoch age why issue rel deadline st
+  launch="$(bash "$FORGE_LEDGER" get "$rid" '.launch // ""')"
+  [ "$launch" = confirmed ] || { echo "PENDING $rid (launch: ${launch:-unset})"; return 0; }
+  id="$(bash "$FORGE_LEDGER" get "$rid" '.session.id // empty')"
+  [ -n "$id" ] || { echo "NO-SESSION $rid: confirmed but no session id recorded; leaving it"; return 0; }
+  last="$(bash "$FORGE_LEDGER" get "$rid" '([.stage_history[].at] | max) // .session.launched_at // empty')"
+  if ! epoch="$(iso8601_to_epoch "$last")"; then
+    echo "UNKNOWN-PROGRESS $rid: no usable progress time ('$last'), so it is not judged stalled"
+    epoch="$(date +%s)"
+  fi
+  age=$(( $(date +%s) - epoch ))
+  if session_alive "$id"; then
+    if [ "$age" -le "$FORGE_STAGE_BOUND" ]; then echo "ALIVE $rid ($id, last progress ${age}s ago)"; return 0; fi
+    why="stalled: no progress for ${age}s"
+    claude stop "$id" >/dev/null 2>&1 || true
+    deadline=$(( $(date +%s) + FORGE_STOP_TIMEOUT ))
+    while session_alive "$id" && [ "$(date +%s)" -lt "$deadline" ]; do sleep "$FORGE_POLL_INTERVAL"; done
+    if session_alive "$id"; then
+      echo "STOP-UNCONFIRMED $rid: asked $id to stop ($why) and it is still running; changed nothing"
+      return 0
+    fi
+  else
+    why="session $id is gone"
+  fi
+  st="$(bash "$FORGE_LEDGER" get "$rid" '.terminal // .delivery.kind // empty')"
+  [ -z "$st" ] || { echo "SETTLED $rid ($st)"; return 0; }
+  bash "$FORGE_LEDGER" set "$rid" '.terminal = "bailed-dead"'
+  bash "$FORGE_LEDGER" history "$rid" liveness bailed-dead "$why"
+  issue="$(bash "$FORGE_LEDGER" get "$rid" .issue)"
+  if [ "$(bash "$FORGE_LEDGER" get "$rid" '[.stage_history[] | select(.stage == "intake" and .outcome == "claimed")] | length')" -gt 0 ]; then
+    if bash "$AUTOFIX_BIN_DIR/claim.sh" release "$issue" "$rid" >/dev/null 2>&1; then rel="restored"
+    else rel="the restore failed; check $issue by hand"; fi
+  else
+    rel="nothing claimed"
+  fi
+  echo "BAILED-DEAD $rid: $why; Linear: $rel"
+}
+
+cmd_check() {
+  local holders rid
+  holders="$(slot_holders)" || die "cannot read the forge's run state"
+  [ -n "$holders" ] || { echo "NO-RUNS"; return 0; }
+  while IFS= read -r rid; do check_run "$rid"; done <<EOH
+$holders
+EOH
+}
+
+cmd="${1:?usage: forge launch|next|check ...}"; shift
 case "$cmd" in
   launch) cmd_launch "$@" ;;
   next) cmd_next ;;
+  check) cmd_check ;;
   *) die "unknown command: $cmd" ;;
 esac
