@@ -43,6 +43,23 @@ comment() { # uuid body
 
 cmd="${1:?usage: claim.sh claim|comment|release <ISSUE-ID> <RUN_ID> [flags]}"; issue_id="${2:?}"; run_id="${3:?}"; shift 3
 
+# A run acts only on the issue its ledger names. For the forge this is the
+# grant's boundary ("no write to an issue the operator did not name"); for
+# every other mode it costs nothing, because they always pass their own issue.
+ledger_issue="$("$LEDGER" get "$run_id" '.issue')" || die "cannot read ledger for $run_id"
+[ "$(printf '%s' "$ledger_issue" | tr '[:lower:]' '[:upper:]')" = "$(printf '%s' "$issue_id" | tr '[:lower:]' '[:upper:]')" ] \
+  || die "issue $issue_id is not this run's issue ($ledger_issue) — refusing"
+
+# The forge grant covers assignee and state only. A comment or a label is
+# outside it, so refuse them here rather than trust the caller.
+if is_forge "$run_id"; then
+  case "$cmd" in
+    comment) die "forge runs post no Linear comments (outside the forge grant)" ;;
+    release) for a in "$@"; do case "$a" in --comment|--fail-label)
+      die "forge runs release without a comment or label (outside the forge grant)" ;; esac; done ;;
+  esac
+fi
+
 case "$cmd" in
   claim)
     # same-issue guard (spec magi #4): another non-terminal run on this issue?
@@ -62,6 +79,13 @@ case "$cmd" in
         exit 4
       fi
     done
+    # Forge: the dispatcher writes launch=confirmed once it has seen this
+    # session start. A session that starts after the dispatcher gave up finds
+    # "abandoned" (or nothing) and must claim nothing.
+    if is_forge "$run_id" && [ "$("$LEDGER" get "$run_id" '.launch // ""')" != confirmed ]; then
+      log "forge: launch not confirmed for $run_id — not claiming"
+      exit 8
+    fi
     me="$(linear_viewer_id)"
     issue="$(fetch_issue issue "$issue_id")"
     uuid="$(printf '%s' "$issue" | jq -r .id)"
@@ -79,18 +103,22 @@ case "$cmd" in
     # disclosing writes — ungated in every mode (spec judgment call #2).
     update_issue "$uuid" "$(jq -nc --arg a "$me" --arg s "$in_progress" '{assigneeId:$a, stateId:$s}')"
 
-    if is_secure "$run_id"; then
+    if is_secure "$run_id" || is_forge "$run_id"; then
       # SECURE: the claim comment is a disclosing write — DEFERRED, not posted.
       # Preview it for the operator; ownership is verified by assignee alone,
       # and the missing run-comment marker is recorded as drift.
-      cbody="🤖 autofix run $run_id started"
-      cf="$(mktemp)"; printf '%s\n' "$cbody" > "$cf"
-      cdg="$(secure_digest "$cf")"
-      pvdir="$RUNS_DIR/$run_id/previews"; (umask 077; mkdir -p "$pvdir")
-      cp "$cf" "$pvdir/claim-$cdg.txt"; rm -f "$cf"
-      "$LEDGER" set "$run_id" '.decisions += [{key:"claim_comment", value:"deferred"}]'
-      "$LEDGER" history "$run_id" intake claim-comment-deferred "digest=$cdg file=$pvdir/claim-$cdg.txt"
-      log "secure: claim comment deferred (preview $pvdir/claim-$cdg.txt) — verifying by assignee only"
+      # FORGE: no claim comment at all — the team does not post them, and the
+      # forge grant covers assignee and state only. Same assignee-only check.
+      if is_secure "$run_id"; then
+        cbody="🤖 autofix run $run_id started"
+        cf="$(mktemp)"; printf '%s\n' "$cbody" > "$cf"
+        cdg="$(secure_digest "$cf")"
+        pvdir="$RUNS_DIR/$run_id/previews"; (umask 077; mkdir -p "$pvdir")
+        cp "$cf" "$pvdir/claim-$cdg.txt"; rm -f "$cf"
+        "$LEDGER" set "$run_id" '.decisions += [{key:"claim_comment", value:"deferred"}]'
+        "$LEDGER" history "$run_id" intake claim-comment-deferred "digest=$cdg file=$pvdir/claim-$cdg.txt"
+        log "secure: claim comment deferred (preview $pvdir/claim-$cdg.txt) — verifying by assignee only"
+      fi
       post="$(fetch_issue issue_postclaim "$issue_id")"
       got_assignee="$(printf '%s' "$post" | jq -r '.assignee.id // ""')"
       if [ "$got_assignee" != "$me" ]; then
@@ -112,7 +140,11 @@ case "$cmd" in
         exit 5
       fi
       "$LEDGER" drift "$run_id" claim_marker "run-comment" "assignee-only"
-      "$LEDGER" history "$run_id" intake claimed "assignee=$me state=In Progress (secure; comment deferred)"
+      if is_secure "$run_id"; then
+        "$LEDGER" history "$run_id" intake claimed "assignee=$me state=In Progress (secure; comment deferred)"
+      else
+        "$LEDGER" history "$run_id" intake claimed "assignee=$me state=In Progress (forge; no comment)"
+      fi
       log "claimed $issue_id as secure run $run_id"
     else
       comment "$uuid" "🤖 autofix run $run_id started"

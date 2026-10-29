@@ -1,0 +1,24 @@
+{
+  "newspack-workspace": {
+    "description": "Monorepo product code. Reproduces autofix's behavior before profiles existed.",
+    "base": { "ref": "origin/main", "fetch": "origin main" },
+    "env": true,
+    "path_scope": ["plugins/{affected_repo}/", "themes/{affected_repo}/"],
+    "commands": [],
+    "suite": null,
+    "lint": "phpcs",
+    "push_remote": "origin",
+    "team_repo": true
+  },
+  "newspack-workspace-tooling": {
+    "description": "This machine's fork-trunk tooling layer. Bases on local main and pushes to the fork, never to origin (the PR #723 incident).",
+    "base": { "ref": "main", "fetch": null },
+    "env": false,
+    "path_scope": ["n", "bin/", "config/", "tools/", ".claude/skills/"],
+    "commands": ["bash tools/autofix/tests/run-tests.sh"],
+    "suite": ["bash tools/autofix/tests/run-tests.sh"],
+    "lint": "none",
+    "push_remote": "fork",
+    "team_repo": false
+  }
+}

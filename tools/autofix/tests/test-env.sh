@@ -52,6 +52,8 @@ assert_contains "$(cat "$N_LOG")" "--worktree newspack-multibranded-site:nppm-29
 assert_contains "$(cat "$N_LOG")" "setup --env autofix-nppm-2993-" "n setup called"
 assert_contains "$(bash "$L" get run-a '.env.name')" autofix-nppm-2993 "ledger records env"
 assert_eq 1 "$(bash "$L" get run-a '.attempts.provisioning')" "attempt counted"
+assert_eq "$AUTOFIX_WORKSPACE_ROOT/worktrees/$(bash "$L" get run-a .branch | tr '/' '-')" \
+  "$(bash "$L" get run-a .worktree)" "create records .worktree"
 # base-ref discipline (fork-trunk leak guard, PR #723 incident): the run
 # branch is fetched-then-cut from upstream origin/main, BEFORE `n env
 # create` runs — never from this machine's local trunk `main`.
@@ -171,4 +173,20 @@ STUB_FETCH_EXIT=1 STUB_REVPARSE_EXIT=1 \
 assert_eq 1 "$rc" "unresolvable origin/main (fetch fails, no cached ref) dies rather than guessing the base"
 assert_eq "" "$(grep 'branch nppm-2995' "$GIT_LOG" || true)" \
   "unresolvable origin/main: branch never pre-created"
+# --- profiles -----------------------------------------------------------------
+PROF="$(mktemp)"; cat > "$PROF" <<'EOF'
+{ "newspack-workspace": { "base": {"ref":"origin/main","fetch":"origin main"}, "env": true,
+    "path_scope": ["plugins/{affected_repo}/"], "commands": [], "suite": null, "lint": "phpcs", "push_remote": "origin" },
+  "noenv": { "base": {"ref":"main","fetch":null}, "env": false, "path_scope": ["tools/"],
+    "commands": [], "suite": null, "lint": "none", "push_remote": "fork" } }
+EOF
+export AUTOFIX_PROFILES="$PROF"
+bash "$L" init rune NPPM-7 forge >/dev/null
+bash "$L" set rune '.decisions += [{key:"branch_stem", value:"nppm-7-x"}, {key:"profile", value:"noenv"}]'
+: > "$N_LOG"
+out="$(bash "$E" create rune newspack-plugin 2>&1)" && rc=0 || rc=$?
+assert_eq 1 "$rc" "env.sh create refuses a profile without an env"
+assert_contains "$out" "has no env" "refusal says the profile has no env"
+assert_eq "" "$(cat "$N_LOG")" "no n env call for an env-less profile"
+unset AUTOFIX_PROFILES
 finish

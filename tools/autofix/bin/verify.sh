@@ -2,12 +2,12 @@
 set -euo pipefail
 BIN="$(dirname "${BASH_SOURCE[0]}")"
 . "$BIN/lib/common.sh"
+. "$BIN/lib/profile.sh"
 require jq
 LEDGER="$BIN/ledger.sh"
 
 cmd="${1:?usage: verify.sh signal|lint|suite <run_id> [flags]}"; run_id="${2:?}"; shift 2
-branch="$("$LEDGER" get "$run_id" '.branch // empty')"
-wt="$(wt_dir "$branch")"
+wt="$(run_wt "$run_id")"
 affected_repo() { ledger_decision "$run_id" affected_repo; }
 
 # parse_evidence_argv <cmd-string> — turn a ledger `.evidence[].cmd` into the
@@ -61,10 +61,18 @@ parse_evidence_argv() { # cmd-string
         || die "evidence cmd not allowed: 'npx' is only permitted as 'npx playwright test …'"
       ;;
     *)
-      die "evidence cmd executable not in allowlist: '${EV_ARGV[0]}' (allowed: 'n test-php', 'n test-js', 'npx playwright test')"
+      # A kept profile may name further commands (a tooling repo's own test
+      # runner). The ledger's .evidence[].cmd must match one exactly, or
+      # extend it with arguments; nothing else runs.
+      profile_allows_cmd "$run_id" "$ecmd" \
+        || die "evidence cmd executable not in allowlist: '${EV_ARGV[0]}' (allowed: 'n test-php', 'n test-js', 'npx playwright test', or a command the run's profile names)"
       ;;
   esac
 }
+
+# Resolve the profile once, up front, so an unkept profile stops the run
+# before any command runs.
+profile_get "$run_id" '.base.ref' >/dev/null
 
 case "$cmd" in
   signal)
@@ -105,7 +113,8 @@ case "$cmd" in
     log "all signals $expect as expected" ;;
   lint)
     [ -d "$wt" ] || die "worktree missing: $wt"
-    base="$(git -C "$wt" merge-base origin/main HEAD)"
+    if [ "$(profile_get "$run_id" '.lint')" = none ]; then log "lint: none for profile $(profile_name "$run_id")"; exit 0; fi
+    base="$(git -C "$wt" merge-base "$(profile_get "$run_id" '.base.ref')" HEAD)"
     # Diff the working tree, not HEAD, and add untracked files: lint runs
     # before the first commit too, and then a HEAD-only diff is empty.
     changed="$( { git -C "$wt" diff --name-only --diff-filter=d "$base" -- '*.php'
@@ -114,6 +123,19 @@ case "$cmd" in
     (cd "$wt" && "$WORKSPACE_ROOT/vendor/bin/phpcs" --standard="$WORKSPACE_ROOT/phpcs.xml" $changed) ;;
   suite)
     [ -d "$wt" ] || die "worktree missing: $wt"
+    if [ "$(profile_get "$run_id" '.suite')" != null ]; then
+      suite_cmds="$(profile_get "$run_id" '.suite[]')"
+      while IFS= read -r scmd; do
+        [ -n "$scmd" ] || continue
+        parse_evidence_argv "$scmd"
+        # </dev/null: the loop reads its list on stdin, and a command that
+        # reads stdin would otherwise swallow the entries after it.
+        (cd "$wt" && "${EV_ARGV[@]}" </dev/null) || exit 1
+      done <<EOF
+$suite_cmds
+EOF
+      exit 0
+    fi
     plugin_dir="$(project_dir "$wt" "$(affected_repo)")" || exit 1
     (cd "$plugin_dir" && n test-php)
     # `n test-js` runs the package's `test` script. Packages without JS tests

@@ -2,6 +2,7 @@
 set -euo pipefail
 BIN="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$BIN/lib/common.sh"
+. "$BIN/lib/profile.sh"
 require jq
 require git
 require gh
@@ -9,11 +10,74 @@ LEDGER="$BIN/ledger.sh"
 
 cmd="${1:-}"
 case "$cmd" in
-  create|comment) ;;
+  create|comment|prepare) ;;
   *) die "usage: pr.sh create <run_id> --title <t> --body-file <f> [--confirmed=<digest>] [--no-copilot]
-       pr.sh comment <run_id> --body-file <f> [--confirmed=<digest>]" ;;
+       pr.sh comment <run_id> --body-file <f> [--confirmed=<digest>]
+       pr.sh prepare <run_id> --body-file <f> [--summary-file <f>] [--closeout-file <f>]" ;;
 esac
 run_id="${2:?}"; shift 2
+
+# A forge run publishes only through the delivery batch the operator approves:
+# `prepare` checks it, then raw git/gh commands that publish-guard sees carry it
+# out. publish-guard does not match a bare pr.sh call, so without this refusal
+# a forge run could push and open a PR with no prompt. is_forge fails closed.
+case "$cmd" in create|comment)
+  if is_forge "$run_id"; then
+    die "pr.sh $cmd refuses forge runs (and unreadable ledgers) — forge runs publish through pr.sh prepare and the delivery batch"
+  fi
+esac
+
+# check_summary_body <file> — the self-review summary as the team posts it.
+check_summary_body() { # file
+  [ -s "$1" ] || die "comment body is empty: $1"
+  bash "$BIN/redact.sh" scan "$1" || die "redaction findings in comment body — fix and retry"
+  # pr-ready and self-review read the pass from this marker on the PR. A body
+  # edited for disclosure hygiene can lose it and still post cleanly.
+  grep -Eq '<!-- newspack-self-review passed=[0-9a-f]{40} rounds=[0-9]+ -->' "$1" \
+    || die "comment body has no newspack-self-review marker line — keep the one self-review wrote"
+  # Unattended, nobody reads the body before it posts, and a declined or deferred
+  # finding can describe a weakness the run left unfixed. A secure run's operator
+  # previews the body, so a section they chose to keep is theirs to keep.
+  if ! is_secure "$run_id" && grep -Eq '^Declined:|<summary>Suggestions deferred' "$1"; then
+    die "comment body still has a section Stage 6 cuts (Declined or Suggestions deferred) — move it to the Linear closeout"
+  fi
+}
+
+# scope_guard <wt> — print the base ref after checking that the branch, measured
+# against the profile's base, touches only the profile's path scope and is not
+# suspiciously long. Real incident: an autofix run branched from this machine's
+# local fork-trunk `main` (a 153-commit local tooling aggregate) and this
+# script pushed the WHOLE delta upstream as PR #723 (closed within minutes).
+# Fail closed throughout: never guess at the base ref. The git calls run from
+# inside the worktree, not with -C, as create always ran them.
+scope_guard() { # wt
+  local base affected offending commit_count
+  base="$(profile_base "$run_id" "$1")" || exit 1
+  affected="$(ledger_decision "$run_id" affected_repo)"
+  # A unit name only: it becomes part of the path scope below. Checked with an
+  # explicit ASCII class under LC_ALL=C, since bash 3.2 case ranges admit
+  # other letters under a UTF-8 locale.
+  if [ -n "$affected" ] && { [ "$affected" = . ] || [ "$affected" = .. ] \
+      || ! printf '%s' "$affected" | LC_ALL=C grep -Eq '^[A-Za-z0-9._-]+$'; }; then
+    die "affected_repo '$affected' is not a plain unit name — refusing (fork-trunk leak guard)"
+  fi
+  if profile_get "$run_id" '.path_scope[]' | grep -q '{affected_repo}'; then
+    [ -n "$affected" ] || die "no affected_repo decision in ledger for $run_id"
+  fi
+  offending="$( (cd "$1" && git diff --name-only "$base...HEAD") | profile_offending_paths "$run_id" "$affected")" || exit 1
+  if [ -n "$offending" ]; then
+    die "branch carries changes beyond the profile's path scope — fork-trunk leak guard (see PR #723 incident); offending paths (first 10):
+$(printf '%s\n' "$offending" | head -10)"
+  fi
+  commit_count="$(cd "$1" && git rev-list --count "$base..HEAD")" \
+    || die "could not read the commit count against $base — refusing (fork-trunk leak guard)"
+  printf '%s' "$commit_count" | LC_ALL=C grep -Eq '^[0-9]+$' \
+    || die "unreadable commit count '$commit_count' against $base — refusing (fork-trunk leak guard)"
+  if [ "$commit_count" -gt "$AUTOFIX_MAX_BRANCH_COMMITS" ]; then
+    die "branch carries $commit_count commits ahead of $base (max \$AUTOFIX_MAX_BRANCH_COMMITS=$AUTOFIX_MAX_BRANCH_COMMITS) — fork-trunk leak guard (see PR #723 incident)"
+  fi
+  printf '%s' "$base"
+}
 
 # comment — post the self-review summary on the run's PR, or edit it when this
 # run already posted one: the team keeps one summary comment per PR, updated by
@@ -28,18 +92,7 @@ if [ "$cmd" = comment ]; then
     *) die "unknown flag: $1" ;;
   esac; done
   [ -n "$body_file" ] || die "--body-file required"
-  [ -s "$body_file" ] || die "comment body is empty: $body_file"
-  bash "$BIN/redact.sh" scan "$body_file" || die "redaction findings in comment body — fix and retry"
-  # pr-ready and self-review read the pass from this marker on the PR. A body
-  # edited for disclosure hygiene can lose it and still post cleanly.
-  grep -Eq '<!-- newspack-self-review passed=[0-9a-f]{40} rounds=[0-9]+ -->' "$body_file" \
-    || die "comment body has no newspack-self-review marker line — keep the one self-review wrote"
-  # Unattended, nobody reads the body before it posts, and a declined or deferred
-  # finding can describe a weakness the run left unfixed. A secure run's operator
-  # previews the body, so a section they chose to keep is theirs to keep.
-  if ! is_secure "$run_id" && grep -Eq '^Declined:|<summary>Suggestions deferred' "$body_file"; then
-    die "comment body still has a section Stage 6 cuts (Declined or Suggestions deferred) — move it to the Linear closeout"
-  fi
+  check_summary_body "$body_file"
 
   url="$("$LEDGER" get "$run_id" '.pr.url // empty')"
   [ -n "$url" ] || die "no PR recorded in ledger for $run_id — run pr.sh create first"
@@ -80,6 +133,47 @@ if [ "$cmd" = comment ]; then
   exit 0
 fi
 
+# prepare — the forge's publish check. Runs everything create checks before it
+# writes, over every body the delivery batch will carry, and records the head
+# and the bodies' digests. Pushes nothing and posts nothing.
+if [ "$cmd" = prepare ]; then
+  [ "$("$LEDGER" get "$run_id" '.mode' 2>/dev/null)" = forge ] \
+    || die "pr.sh prepare is the forge's publish check; this run is not a forge run"
+  body_file=""; summary_file=""; closeout_file=""
+  while [ $# -gt 0 ]; do case "$1" in
+    --body-file) body_file="$2"; shift 2 ;;
+    --summary-file) summary_file="$2"; shift 2 ;;
+    --closeout-file) closeout_file="$2"; shift 2 ;;
+    *) die "unknown flag: $1" ;;
+  esac; done
+  [ -n "$body_file" ] || die "--body-file required"
+  plain=("$body_file"); [ -z "$closeout_file" ] || plain+=("$closeout_file")
+  all=("${plain[@]}"); [ -z "$summary_file" ] || all+=("$summary_file")
+  # Redaction before anything else, over every body the batch will carry.
+  for f in "${plain[@]}"; do
+    [ -s "$f" ] || die "body is empty or missing: $f"
+    bash "$BIN/redact.sh" scan "$f" || die "redaction findings in $f — fix and retry"
+  done
+  [ -z "$summary_file" ] || check_summary_body "$summary_file"
+  branch="$("$LEDGER" get "$run_id" '.branch // empty')"
+  [ -n "$branch" ] || die "no branch recorded in ledger for $run_id"
+  wt="$(run_wt "$run_id")"; [ -d "$wt" ] || die "worktree missing: $wt"
+  cd "$wt"
+  base="$(scope_guard "$wt")" || exit 1
+  head="$(git rev-parse HEAD)"; remote="$(profile_get "$run_id" .push_remote)"
+  files='[]'
+  for f in "${all[@]}"; do
+    files="$(printf '%s' "$files" | jq --arg p "$f" --arg d "$(secure_digest "$f")" '. + [{path:$p, sha256:$d}]')"
+  done
+  # The batch the operator approves is built from these bytes; the digests let
+  # the dispatcher refuse a batch whose bodies changed after prepare.
+  "$LEDGER" set "$run_id" '.prepared = {head:$h, base:$b, remote:$r, branch:$br, at:$t, files:$f}' \
+    --arg h "$head" --arg b "$base" --arg r "$remote" --arg br "$branch" --arg t "$(now_utc)" --argjson f "$files"
+  printf 'HEAD=%s\nBRANCH=%s\nBASE=%s\nREMOTE=%s\n' "$head" "$branch" "$base" "$remote"
+  for f in "${all[@]}"; do printf 'FILE=%s\n' "$f"; done
+  exit 0
+fi
+
 title=""; body_file=""; confirmed=""; no_copilot=""
 while [ $# -gt 0 ]; do case "$1" in
   --title) title="$2"; shift 2 ;;
@@ -96,32 +190,13 @@ bash "$BIN/redact.sh" scan "$body_file" || die "redaction findings in PR body �
 
 branch="$("$LEDGER" get "$run_id" '.branch // empty')"
 [ -n "$branch" ] || die "no branch recorded in ledger for $run_id"
-wt="$(wt_dir "$branch")"
+wt="$(run_wt "$run_id")"
 [ -d "$wt" ] || die "worktree missing: $wt"
 cd "$wt"
 
-# 2. PR-scope guard — a run branch must be based on, and only touch, the
-# affected repo. Real incident: an autofix run branched from this machine's
-# local fork-trunk `main` (a 153-commit local tooling aggregate) and this
-# script pushed the WHOLE delta upstream as PR #723 (closed within minutes).
-# Runs BEFORE the attempt cap below — a scope violation must not burn an
-# attempt. Fail closed throughout: never guess at the upstream base ref.
-fetch_upstream_main "$wt"
-
-affected_repo="$(ledger_decision "$run_id" affected_repo)"
-[ -n "$affected_repo" ] || die "no affected_repo decision in ledger for $run_id"
-
-offending="$(git diff --name-only origin/main...HEAD \
-  | grep -v -e "^plugins/${affected_repo}/" -e "^themes/${affected_repo}/" || true)"
-if [ -n "$offending" ]; then
-  die "branch carries changes beyond the affected repo — fork-trunk leak guard (see PR #723 incident); offending paths (first 10):
-$(printf '%s\n' "$offending" | head -10)"
-fi
-
-commit_count="$(git rev-list --count origin/main..HEAD)"
-if [ "$commit_count" -gt "$AUTOFIX_MAX_BRANCH_COMMITS" ]; then
-  die "branch carries $commit_count commits ahead of origin/main (max \$AUTOFIX_MAX_BRANCH_COMMITS=$AUTOFIX_MAX_BRANCH_COMMITS) — fork-trunk leak guard (see PR #723 incident)"
-fi
+# 2. PR-scope guard (see scope_guard above). Runs BEFORE the attempt cap below:
+# a scope violation must not burn an attempt.
+base="$(scope_guard "$wt")" || exit 1
 
 # 3. disclosing-write gate (secure runs only). The artifact the operator approves
 # is the RESOLVED PR body PLUS the commit messages and the commit diff that would be pushed to a
@@ -133,16 +208,16 @@ if is_secure "$run_id"; then
   {
     printf '### PR title\n%s\n\n### PR body\n' "$title"
     cat "$body_file"
-    # Diff against origin/main, the base the scope guard above checks. Local
+    # Diff against $base, the base the scope guard above checks. Local
     # `main` is the fork-trunk on this machine, so main...HEAD shows the whole
     # trunk delta instead of what the push adds.
     # The push also publishes every commit message and trailer, and a squash
     # merge carries them to main. The digest binds them, so an approval covers
     # the words that go out as well as the diff.
-    printf '\n\n### Commit messages (git log origin/main..HEAD) — pushed to github.com\n'
-    git log --reverse --format='%h%n%B--' origin/main..HEAD
-    printf '\n\n### Commit diff (git diff origin/main...HEAD) — pushed to github.com\n'
-    git diff origin/main...HEAD
+    printf '\n\n### Commit messages (git log %s..HEAD) — pushed to github.com\n' "$base"
+    git log --reverse --format='%h%n%B--' "$base..HEAD"
+    printf '\n\n### Commit diff (git diff %s...HEAD) — pushed to github.com\n' "$base"
+    git diff "$base...HEAD"
   } > "$art"
   secure_gate "$run_id" pr "$art" "$confirmed"   # preview+exit7, or verify digest & return
 fi
@@ -157,7 +232,7 @@ fi
 "$LEDGER" set "$run_id" '.attempts.pr += 1'
 
 # 5. push (idempotent — branch may carry new commits even when a PR exists)
-git push -u origin "$branch"
+git push -u "$(profile_get "$run_id" .push_remote)" "$branch"
 
 # 6. adopt an existing open PR for this branch, or create a draft PR
 existing="$(gh pr list --head "$branch" --state open --json url,number,isDraft --jq '.[0]' 2>/dev/null || true)"

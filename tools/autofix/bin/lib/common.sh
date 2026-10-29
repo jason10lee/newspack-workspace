@@ -142,6 +142,27 @@ is_secure() { # run_id
   esac
 }
 
+# is_forge <run_id> — is this a forge run? FAIL CLOSED, like is_secure: the
+# forge's checks refuse writes (pr.sh create/comment, claim comments, labels),
+# so an unreadable ledger is treated as forge and the write is refused.
+is_forge() { # run_id
+  local v
+  v="$(bash "$AUTOFIX_BIN_DIR/ledger.sh" get "$1" '.mode // ""' 2>/dev/null)" \
+    || { log "is_forge: ledger read failed for $1 — treating as FORGE (fail-closed)"; return 0; }
+  [ "$v" = forge ]
+}
+
+# run_wt <run_id> — the run's worktree. A forge run outside the monorepo
+# records its path in .worktree (the dispatcher's directory pool); every other
+# run derives it from .branch, as before.
+run_wt() { # run_id
+  local w b
+  w="$(bash "$AUTOFIX_BIN_DIR/ledger.sh" get "$1" '.worktree // empty' 2>/dev/null)"
+  if [ -n "$w" ]; then printf '%s' "$w"; return 0; fi
+  b="$(bash "$AUTOFIX_BIN_DIR/ledger.sh" get "$1" '.branch // empty' 2>/dev/null)"
+  wt_dir "$b"
+}
+
 # secure_digest <file> — sha256 over a file's exact bytes (the canonical artifact
 # an operator approves). Portable across shasum (macOS) and sha256sum (Linux).
 secure_digest() { # file
