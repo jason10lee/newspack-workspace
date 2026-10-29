@@ -27,6 +27,9 @@ assert_contains "$line" "Read the brief." "and the prompt"
 STUB_BG_OUT='Workspace not trusted. Run `claude` in /x once and accept the trust prompt, then retry.' \
   launch_session forge-l "$D" "$S" p >/dev/null 2>&1; rc=$?
 assert_eq 3 "$rc" "an untrusted directory returns 3"
+STUB_BG_RC=1 STUB_BG_OUT='Workspace not trusted. Run `claude` in /x once and accept the trust prompt, then retry.' \
+  launch_session forge-l "$D" "$S" p >/dev/null 2>&1; rc=$?
+assert_eq 3 "$rc" "an untrusted directory returns 3 when claude exits non-zero too"
 STUB_BG_OUT='something else' launch_session forge-l "$D" "$S" p >/dev/null 2>&1; rc=$?
 assert_eq 1 "$rc" "output without an id returns 1"
 
