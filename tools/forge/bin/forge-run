@@ -1,0 +1,104 @@
+#!/bin/bash
+# forge-run — the steps of a forge run session that must not depend on
+# judgment: the launch wait and the claim, the Security re-check at stage
+# boundaries, and the three ways a run ends. Run sessions call it from their
+# pinned tooling; the dispatcher never does. The judgment around each step is
+# the forge skill's.
+set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/lib/forge.sh"
+# shellcheck source=../../autofix/bin/lib/linear.sh
+. "$AUTOFIX_BIN_DIR/lib/linear.sh"
+# Longer than the dispatcher's own wait: a session that starts fast reaches
+# Stage 0 before the dispatcher has seen it, and must not give up first.
+: "${FORGE_LAUNCH_WAIT:=$((FORGE_LAUNCH_TIMEOUT + 60))}"
+
+lg() { bash "$FORGE_LEDGER" "$@"; }
+
+require_run() { # rid
+  [ "$(lg get "$1" '.mode' 2>/dev/null)" = forge ] || die "$1 is not a forge run (or its ledger cannot be read)"
+}
+
+run_dir() { dirname "$(lg path "$1")"; }
+
+# claim_state <rid> — held, released or none, from the newest claim or release
+# in the run's history. A rework must not claim a held issue again: claim.sh
+# would record the run's own assignee and state as the values to restore.
+claim_state() {
+  lg get "$1" '[.stage_history[]
+      | select((.stage == "intake" and .outcome == "claimed") or (.stage == "release" and .outcome == "restored"))]
+    | last | if . == null then "none" elif .outcome == "claimed" then "held" else "released" end'
+}
+
+cmd_state() { # rid
+  local rid="${1:?usage: forge-run state <run id>}"
+  require_run "$rid"
+  printf 'RUN=%s\nISSUE=%s\nSTAGE=%s\nCLAIM=%s\nFRESH_TEST_IN_PROGRESS=%s\nREWORK=%s\n' \
+    "$rid" "$(lg get "$rid" .issue)" "$(lg get "$rid" '.stage // ""')" "$(claim_state "$rid")" \
+    "$(lg get "$rid" '.fresh_test_in_progress // false')" \
+    "$(lg get "$rid" '[.decisions[] | select(.key == "rework") | .value] | last // ""')"
+}
+
+# wait_launch <rid> — 0 confirmed, 3 abandoned, 4 the wait ran out.
+wait_launch() {
+  local rid="$1" start
+  start="$(date +%s)"
+  while :; do
+    case "$(lg get "$rid" '.launch // ""')" in
+      confirmed) return 0 ;;
+      abandoned) return 3 ;;
+    esac
+    [ $(( $(date +%s) - start )) -lt "$FORGE_LAUNCH_WAIT" ] || return 4
+    sleep "$FORGE_POLL_INTERVAL"
+  done
+}
+
+cmd_claim() { # rid
+  local rid="${1:?usage: forge-run claim <run id>}" issue rc=0 summary me who state
+  require_run "$rid"
+  issue="$(lg get "$rid" .issue)"
+  wait_launch "$rid" || rc=$?
+  case "$rc" in
+    0) ;;
+    3) lg history "$rid" launch abandoned-seen ""
+       echo "ABANDONED $rid: the dispatcher gave up on this launch. Nothing was claimed; end the session."
+       exit 3 ;;
+    *) lg history "$rid" launch wait-expired "no confirmation in ${FORGE_LAUNCH_WAIT}s"
+       echo "WAIT-EXPIRED $rid: the launch was never confirmed. Nothing was claimed; end the session."
+       exit 4 ;;
+  esac
+  rc=0; summary="$(bash "$AUTOFIX_BIN_DIR/intake.sh" check "$issue")" || rc=$?
+  case "$rc" in
+    0) ;;
+    2) echo "SECURITY $issue: it carries the Security label. Make the Security stop."; exit 2 ;;
+    3) echo "EXISTING-PR $issue: the issue already has a PR attachment. Make an early stop."; exit 5 ;;
+    *) die "intake check failed for $issue" ;;
+  esac
+  me="$(linear_viewer_id)"
+  [ -n "$me" ] && [ "$me" != null ] || die "cannot read the Linear viewer"
+  who="$(printf '%s' "$summary" | jq -r '.assigneeId // ""')"
+  state="$(printf '%s' "$summary" | jq -r '.stateName // ""')"
+  if [ "$(claim_state "$rid")" = held ]; then
+    if [ "$who" = "$me" ] && [ "$state" = "In Progress" ]; then
+      lg history "$rid" intake claim-verified "the claim from an earlier session still holds"
+      echo "HELD $issue"
+      return 0
+    fi
+    lg drift "$rid" claim "assignee=me state=In Progress" "assignee=${who:-none} state=$state"
+    echo "CLAIM-LOST $issue: the assignee or state changed since this run claimed it. Make an early stop."
+    exit 7
+  fi
+  if [ -n "$who" ] && [ "$who" != "$me" ]; then
+    echo "HELD-BY-OTHER $issue: it is assigned to someone else. Make an early stop; nothing was claimed."
+    exit 6
+  fi
+  rc=0; bash "$AUTOFIX_BIN_DIR/claim.sh" claim "$issue" "$rid" || rc=$?
+  [ "$rc" -eq 0 ] || { echo "CLAIM-FAILED $issue: claim.sh exited $rc (its message is above)"; exit 1; }
+  echo "CLAIMED $issue"
+}
+
+cmd="${1:?usage: forge-run state|claim <run id>}"; shift
+case "$cmd" in
+  state) cmd_state "$@" ;;
+  claim) cmd_claim "$@" ;;
+  *) die "unknown command: $cmd" ;;
+esac
