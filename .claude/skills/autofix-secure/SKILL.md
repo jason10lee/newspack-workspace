@@ -130,7 +130,9 @@ discipline — **don't telegraph the vulnerability** — on top:
   cross-repo sibling found by the adjacent-input probe becomes a *draft*
   follow-up for the operator (an issue's title and text can leave Linear, by a
   sync to GitHub or by being quoted elsewhere, and telegraph the sibling flaw),
-  not an auto-created issue.
+  not an auto-created issue. The draft holds a neutral title, the sibling repo
+  and a short description; the full account goes to the run report, and
+  Override 6 probes the draft before the operator sees it.
 - **Stage 6 PR + closeout** wording is neutral (below); PoC/exploit payloads
   and any fuzzing harness stay under the run dir, **never committed**. The
   regression test that lands is the minimal behavioral assertion under a
@@ -226,7 +228,8 @@ let the operator triage each round:
 The checklist above catches the words, not the information: a neutral sentence
 such as "editors can change the URL as well as administrators" names who could
 abuse a flaw without any word on the list. So before the PR gate, before each
-gated write after it that carries prose, and before any escalation note, a
+gated write after it that carries prose, before any escalation note, and on
+each drafted follow-up issue, a
 reader that knows nothing about the run says what weakness it can see, once
 from what is already public and once with the new prose added. What the second reader finds and the first does
 not came from the prose.
@@ -260,6 +263,36 @@ Write the run's own account of the weakness first, if the run report does not
 already hold it: `<run-dir>/weakness.md`, with who could abuse it, with what
 input, and to what effect. You compare the replies against it. It sits beside
 the readers' directories, so only their prompt keeps them from it.
+
+**Each drafted follow-up issue** (Stage 4) describes a sibling flaw that is
+not fixed anywhere, so there is no diff to read it against and no point at
+which it becomes public. Its title travels furthest, since a cited issue ID
+expands to it, and a sync to GitHub carries the description too. Write the full account first, as
+`<run-dir>/follow-up-<n>.md`: the sibling repo and where the flaw is, and who
+could abuse it, with what input, to what effect. Then build
+`<run-dir>/probe/follow-up-<n>/draft.md` with only the draft's title, the
+sibling repo and its short description, and run one reader on that directory
+with this prompt instead of the one below:
+
+> You are looking at the title and description of an issue in a public
+> open-source project's tracker. Read only the files in `<dir>`. Do not read
+> any other file or directory, do not run git or any other command against a
+> repository, and do not search the web. Question: does this text point to a
+> security weakness? If you think it does, say what someone with less access
+> than a site administrator could do, and how: who, what input, what effect.
+> Give your best guess even if you are unsure. Also say whether the text calls
+> this security work: a vulnerability, where a report came from, or how severe
+> it is. Reply with: a verdict (security weakness / probably / probably not /
+> not); the weakness in two or three sentences, or "none"; what the text says
+> about it being security work, quoting the words you rely on, or "nothing";
+> your confidence, 0–100; and up to five short quotes that led you to it.
+
+Save the reply verbatim as `<run-dir>/probe/follow-up-<n>-<k>.md` and compare
+it with `follow-up-<n>.md` on the four points below. Any point it names,
+quoting the draft for it, is **prose discloses**: rewrite the title or
+description and run the reader again, within the run's two-rewrite limit.
+After the limit, the draft goes to the operator with the point that still
+shows. Anything else is clean. Record the reading in the ledger as for the PR.
 
 **Before the PR gate** (Stage 6, once the body is written and before the fresh
 test, so that the fresh tester follows "How to test" as the probe left it),
@@ -384,6 +417,9 @@ so a secure run's report adds each of these:
   `<run-dir>/weakness.md` (Overrides 4 and 6).
 - Each probe reading, with the path of the saved reply it rests on
   (Override 6).
+- A `## Follow-up drafts` section: each drafted follow-up issue as the probe
+  left it, its reading, and the full account from `<run-dir>/follow-up-<n>.md`
+  for the operator to add once the issue is filed (Overrides 4 and 6).
 
 A run that stops on a bail or an escalation still writes its report, as base
 Stage 7 requires, and gathers whichever of these exist by then. A run that
