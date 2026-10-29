@@ -290,7 +290,9 @@ with this prompt instead of the one below:
 Save the reply verbatim as `<run-dir>/probe/follow-up-<n>-<k>.md` and compare
 it with `follow-up-<n>.md` on the four points below. Any point it names,
 quoting the draft for it, is **prose discloses**: rewrite the title or
-description and run the reader again, within the run's two-rewrite limit.
+description and run the reader again, up to two rewrites for each draft. That
+limit is the draft's own, apart from the run's limit below, since the draft is
+separate text and its rewrites should not use up the ones the PR needs later.
 After the limit, the draft goes to the operator with the point that still
 shows. Anything else is clean. Record the reading in the ledger as for the PR.
 
@@ -344,8 +346,8 @@ not. Then:
   published yet: the PR title or body, or the note or comment in `new-text.md`
   when a note or later probe found them. Then rebuild that probe's directory
   and run its with-prose reader again. Two rewrites is the limit for the whole
-  run, not for each probe; after the second, go to the gate anyway and say
-  which point still shows. A quoted commit message is not yours to reword,
+  run, not for each probe (a follow-up draft has its own, above); after the
+  second, go to the gate anyway and say which point still shows. A quoted commit message is not yours to reword,
   because that moves HEAD past the commit self-review passed: name it to the
   operator at the gate, who decides whether to reword it and run self-review
   again. An escalation note quoted from `public-text.md` is already posted, so
@@ -419,7 +421,9 @@ so a secure run's report adds each of these:
   (Override 6).
 - A `## Follow-up drafts` section: each drafted follow-up issue as the probe
   left it, its reading, and the full account from `<run-dir>/follow-up-<n>.md`
-  for the operator to add once the issue is filed (Overrides 4 and 6).
+  for the operator. It stays in the report, and the operator decides where it
+  goes once the issue is filed: the issue's description and comments can leave
+  Linear like its title (Overrides 4 and 6).
 
 A run that stops on a bail or an escalation still writes its report, as base
 Stage 7 requires, and gathers whichever of these exist by then. A run that
