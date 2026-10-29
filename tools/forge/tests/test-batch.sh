@@ -3,6 +3,9 @@ set -uo pipefail
 cd "$(dirname "$0")" || exit 1; . ../../autofix/tests/helpers.sh; . ./setup.sh
 . ../../autofix/bin/lib/common.sh   # secure_digest
 REPO="$(mktemp -d)"; export AUTOFIX_WORKSPACE_ROOT="$REPO"
+FX=../../autofix/tests/fixtures
+M="$(mktemp -d)"; export AUTOFIX_LINEAR_MOCK_DIR="$M"
+cp "$FX/viewer.json" "$FX/states.json" "$M/"; cp "$FX/issue_ok.json" "$M/issue.json"
 g() { git -C "$REPO" -c user.name=t -c user.email=t@example.com "$@"; }
 g init -q -b main; g commit -q --allow-empty -m one
 g remote add fork git@github.com:someone/tools.git
@@ -60,6 +63,16 @@ else
   echo "skip  batch-approval not installed; boundness not checked"
 fi
 
+# the labels are read again at publish time: a delivered run can wait days
+cp "$FX/issue_security.json" "$M/issue.json"
+out="$(bash "$F" batch forge-b 2>&1)"; rc=$?
+assert_eq 1 "$rc" "batch refuses an issue that gained the Security label after delivery"
+assert_contains "$out" "Security label" "and says why"
+cp "$FX/issue_pr.json" "$M/issue.json"
+out="$(bash "$F" batch forge-b 2>&1)"; rc=$?
+assert_eq 1 "$rc" "batch refuses an issue that already has a PR"
+assert_contains "$out" "already has a PR" "and says why"
+cp "$FX/issue_ok.json" "$M/issue.json"
 printf 'changed\n' >> "$D/closeout.md"
 fb forge-b >/dev/null; assert_eq 1 $? "batch refuses a body changed since prepare"
 printf 'Closeout.\n' > "$D/closeout.md"

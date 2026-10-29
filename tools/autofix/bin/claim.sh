@@ -69,7 +69,9 @@ case "$cmd" in
       # claim outright; a corrupt ledger can't testify to an active run anyway
       jq -e 'type == "object"' "$lf" >/dev/null 2>&1 \
         || { log "same-issue guard: skipping unparsable ledger $lf"; continue; }
-      other="$(jq -r --arg i "$issue_id" 'select(.issue==$i and .terminal==null) | .run_id' "$lf")"
+      # A forge run the operator retired is done with the issue even though
+      # nothing set its terminal state, so it does not hold the issue either.
+      other="$(jq -r --arg i "$issue_id" 'select(.issue==$i and .terminal==null and .retired_at==null) | .run_id' "$lf")"
       if [ -n "$other" ] && [ "$other" != "$run_id" ]; then
         log "SAME-ISSUE: non-terminal run $other already targets $issue_id"
         # mark THIS run's own ledger terminal now — otherwise it stays

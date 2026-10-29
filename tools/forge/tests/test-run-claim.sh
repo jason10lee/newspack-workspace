@@ -105,4 +105,12 @@ assert_eq 0 "$rc" "a rework of a stopped run claims again"
 assert_contains "$out" "CLAIMED" "and says so"
 assert_eq 1 "$(updates)" "through one update"
 
+
+# a run the operator retired does not hold the issue against a new one
+run f-old; bash "$L" set f-old '.delivery = {kind: "delivered", at: "2026-10-29T00:00:00Z"} | .retired_at = "2026-10-29T01:00:00Z"'
+bash "$L" init f-new NPPM-2993 forge >/dev/null; bash "$L" set f-new '.launch = "confirmed"'; mock f-new "$FX/issue_ok.json"
+out="$(fr claim f-new)"; rc=$?
+assert_eq 0 "$rc" "a retired run of the same issue does not block a new claim"
+assert_contains "$out" "CLAIMED NPPM-2993" "and the new run claims"
+
 finish

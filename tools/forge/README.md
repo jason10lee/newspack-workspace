@@ -22,12 +22,13 @@ The dispatcher session runs these from the root checkout, following the
   gone or stalled session is stopped; the run is marked `bailed-dead` and its
   Linear fields are restored under the forge grant, unless it delivered first.
 - `forge status` lists forge runs, the queue and the secure queue.
-- `forge rework <run> <suggestion>` relaunches a delivered, stopped or dead run.
+- `forge rework <run> <suggestion>` relaunches a delivered, stopped or dead run,
+  unless its issue now has a PR or the Security label.
 - `forge retire <run>` records the operator's decision and frees the pool
   directory; a worktree inside it must be clean.
 - `forge batch <run>` builds the publish batch for a delivered run from what
   `pr.sh prepare` checked, refusing when the branch or a body has changed
-  since. The dispatcher previews it with `batch-approval` and runs it only
+  since, or when the issue now has a PR or the Security label. The dispatcher previews it with `batch-approval` and runs it only
   after the operator approves.
 
 ## Run sessions

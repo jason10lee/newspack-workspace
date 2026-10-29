@@ -41,7 +41,7 @@ Never edit a run's worktree, and never work its issue yourself.
 
 Then wait for the operator's choice.
 
-- **Rework**: `bash tools/forge/bin/forge rework <RID> <suggestion>`. The run resumes at the stage the suggestion touches. A stopped or dead run claims the issue again first.
+- **Rework**: `bash tools/forge/bin/forge rework <RID> <suggestion>`. The run resumes at the stage the suggestion touches. A stopped or dead run claims the issue again first. Rework refuses once the issue has a PR, and once it carries the Security label: changes to a published run are made by hand on its branch.
 - **Keep**: `bash tools/forge/bin/forge retire <RID>`. It frees the run's pool directory and keeps the branch. For a monorepo run it prints the command that destroys the env; run that only when the operator says so.
 - **Publish**: only for a run that delivered. Follow the steps below.
 
@@ -49,7 +49,7 @@ Then wait for the operator's choice.
 
 The PR is the forge's first write to a public surface, and it goes out as one approved batch.
 
-1. Run `bash tools/forge/bin/forge batch <RID>`. It checks that the branch and every body are still what `pr.sh prepare` recorded, then writes the plan: the push of the exact head, the draft PR, the review summary comment, and the Linear closeout. It prints `BATCH=<path>`.
+1. Run `bash tools/forge/bin/forge batch <RID>`. It re-reads the issue, refusing one that now carries the Security label or already has a PR, and checks that the branch and every body are still what `pr.sh prepare` recorded. Then it writes the plan: the push of the exact head, the draft PR, the review summary comment, and the Linear closeout. It prints `BATCH=<path>`.
 2. Run the humanize pass over every body in the plan, in a subagent, as the `humanize-before-post` experiment says. If you apply a finding, edit that body in the run directory, run `pr.sh prepare` again from the run's pinned tooling with the same files (`.prepared.files` in the ledger lists them), and go back to step 1.
 3. Preview the plan in a command of its own, naming the plan by its literal path: `~/.agent-knowledge/bin/batch-approval preview <path>`. Put the preview's full text in your reply.
 4. Wait for the operator's approval line for that batch. Nothing else counts.

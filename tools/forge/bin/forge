@@ -295,6 +295,21 @@ EOL
   echo "secure queue (start these with autofix-secure):"; cat "$FORGE_STATE/secure-queue" 2>/dev/null || true
 }
 
+# issue_unchanged <issue> <action> — a delivered run can wait days for the
+# operator, and the issue can change meanwhile: triage adds the Security label
+# after filing, and a PR appears once the run is published. Either one rules
+# out publishing it, and reworking it.
+issue_unchanged() {
+  local rc=0
+  bash "$AUTOFIX_BIN_DIR/intake.sh" check "$1" >/dev/null || rc=$?
+  case "$rc" in
+    0) ;;
+    2) die "$1 now carries the Security label: it goes to a supervised autofix-secure run, not to $2" ;;
+    3) die "$1 already has a PR: $2 does not apply once a run is published" ;;
+    *) die "intake check failed for $1" ;;
+  esac
+}
+
 cmd_rework() { # rid suggestion...
   local rid="${1:?usage: forge rework <run id> <suggestion>}" term del
   shift
@@ -309,6 +324,7 @@ cmd_rework() { # rid suggestion...
     routed-secure) die "$rid went to autofix-secure; the forge does not work security issues" ;;
     *) die "$rid ended as $term; launch the issue again instead" ;;
   esac
+  issue_unchanged "$(bash "$FORGE_LEDGER" get "$rid" .issue)" rework
   bash "$FORGE_LEDGER" set "$rid" '.decisions += [{key: "rework", value: $v}]' --arg v "$*"
   queue_add rework "$rid"
   echo "REWORK-QUEUED $rid"
@@ -366,6 +382,7 @@ cmd_batch() { # rid — the publish batch, built from pr.sh prepare's record
   [ "$(lgr '.terminal // ""')" = "" ] && [ "$(lgr '.delivery.kind // ""')" = delivered ] \
     || die "$rid has not delivered; only a delivered run is published"
   [ "$(lgr '.prepared // ""')" != "" ] || die "$rid has no pr.sh prepare record"
+  issue_unchanged "$(lgr .issue)" publishing
   head="$(lgr .prepared.head)"; remote="$(lgr .prepared.remote)"
   branch="$(lgr .prepared.branch)"; base="$(lgr .prepared.base)"
   printf '%s\n%s\n%s' "$remote" "$branch" "$base" | LC_ALL=C grep -Eqv '^[A-Za-z0-9._/-]+$' \
