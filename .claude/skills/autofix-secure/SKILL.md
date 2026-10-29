@@ -167,7 +167,8 @@ discipline — **don't telegraph the vulnerability** — on top:
 
 Applies to every artifact that is public or can become public: code comments,
 commit subjects/bodies, branch names, PR title/description, changelog entries,
-test/fixture names, and any Linear comment text. Linear itself is internal, but
+test/fixture names, and any Linear text: comments, and the titles and
+descriptions of drafted issues. Linear itself is internal, but
 its text can leave it, by a sync to GitHub or by being quoted elsewhere, and
 once out it cannot be pulled back. `run-secure` names the branch
 from the issue ID alone (`nppm-1234-<4hex>`), because Linear's `branchName` is
@@ -372,8 +373,8 @@ the run dir, and the Stage 7 run report lists each reading.
 
 ## Stage 7 — what the run report gathers
 
-The base Stage 7 list does not name what the overrides above hold back for the
-report, so a secure run's report adds each of these:
+Base Stage 7 does not name what the overrides above hold back for the report,
+so a secure run's report adds each of these:
 
 - A `## Urgency signals` section, copied from `<run-dir>/signals.md`
   (Override 4).
@@ -384,8 +385,11 @@ report, so a secure run's report adds each of these:
 - Each probe reading, with the path of the saved reply it rests on
   (Override 6).
 
-A run that reaches Stage 7 with the report already written, such as one that
-resumes after an escalation, adds whatever is missing instead of rewriting it.
+A run that stops on a bail or an escalation still writes its report, as base
+Stage 7 requires, and gathers whichever of these exist by then. A run that
+reaches Stage 7 with the report already written, such as one that resumes after
+an escalation, adds whatever is missing instead of rewriting it, except
+`## Friction`, which it rewrites from `.friction` and keeps last.
 
 ## Hard rules (unchanged from base — never override)
 
