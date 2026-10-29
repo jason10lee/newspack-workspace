@@ -8,9 +8,6 @@ set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/lib/forge.sh"
 # shellcheck source=../../autofix/bin/lib/linear.sh
 . "$AUTOFIX_BIN_DIR/lib/linear.sh"
-# Longer than the dispatcher's own wait: a session that starts fast reaches
-# Stage 0 before the dispatcher has seen it, and must not give up first.
-: "${FORGE_LAUNCH_WAIT:=$((FORGE_LAUNCH_TIMEOUT + 60))}"
 
 lg() { bash "$FORGE_LEDGER" "$@"; }
 
