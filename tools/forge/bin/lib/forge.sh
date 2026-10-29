@@ -157,3 +157,66 @@ write_run_settings() { # rid tooling_dir -> path of the settings file
   }' > "$f"
   printf '%s\n' "$f"
 }
+
+# --- sessions ----------------------------------------------------------------
+# Runs are background sessions: `claude stop` works only on those, and their
+# rows in `claude agents --json --all` carry a pid while the process lives.
+# Plugins installed for the workspace path do not load in a pool dir, so the
+# launcher passes them as plugin dirs.
+: "${FORGE_PLUGINS:=newspack@newspack-devkit team-os@newspack-team-os linear@claude-plugins-official codex@openai-codex}"
+: "${FORGE_PLUGINS_JSON:=$HOME/.claude/plugins/installed_plugins.json}"
+: "${FORGE_LAUNCH_TIMEOUT:=90}"
+: "${FORGE_POLL_INTERVAL:=5}"
+
+plugin_dirs() { # one install path per configured plugin installed for the workspace
+  local k p
+  for k in $FORGE_PLUGINS; do
+    p="$(jq -r --arg k "$k" --arg w "$WORKSPACE_ROOT" \
+      '[.plugins[$k][]? | select(.projectPath == $w) | .installPath][0] // empty' \
+      "$FORGE_PLUGINS_JSON" 2>/dev/null)"
+    if [ -n "$p" ] && [ -d "$p" ]; then printf '%s\n' "$p"
+    else log "plugin $k is not installed for $WORKSPACE_ROOT; the run starts without it"; fi
+  done
+}
+
+launch_session() { # rid dir settings prompt -> session id; 3 untrusted, 1 other failure
+  local rid="$1" dir="$2" settings="$3" prompt="$4" out id p
+  set -- --bg -n "$rid" --permission-mode auto --settings "$settings"
+  while IFS= read -r p; do [ -n "$p" ] && set -- "$@" --plugin-dir "$p"; done <<EOP
+$(plugin_dirs)
+EOP
+  out="$(cd "$dir" && claude "$@" "$prompt" 2>&1)" || { log "claude --bg failed: $out"; return 1; }
+  # --bg refuses an untrusted directory, and exits 0 when it does.
+  case "$out" in *"Workspace not trusted"*) return 3 ;; esac
+  id="$(printf '%s\n' "$out" | LC_ALL=C sed -n 's/^backgrounded · \([0-9a-f]\{8\}\) · .*/\1/p' | head -1)"
+  [ -n "$id" ] || { log "no session id in: $out"; return 1; }
+  printf '%s\n' "$id"
+}
+
+session_row() { # id -> its row from claude agents, or nothing
+  claude agents --json --all 2>/dev/null | jq -c --arg i "$1" '.[]? | select(.id == $i)' 2>/dev/null | head -1
+}
+session_alive() { session_row "$1" | jq -e 'has("pid")' >/dev/null 2>&1; }
+
+# confirm_launch — the run's Stage 0 claims only after this writes "confirmed",
+# and waits longer than FORGE_LAUNCH_TIMEOUT for it, so a session that appears
+# late finds "abandoned" and exits without claiming.
+confirm_launch() { # rid id -> 0 confirmed, 1 abandoned
+  local rid="$1" id="$2" cur deadline
+  cur="$(bash "$FORGE_LEDGER" get "$rid" '.launch // ""')"
+  [ -z "$cur" ] || die "launch of $rid is already '$cur'"
+  deadline=$(( $(date +%s) + FORGE_LAUNCH_TIMEOUT ))
+  while :; do
+    if session_alive "$id"; then
+      bash "$FORGE_LEDGER" set "$rid" '.launch = "confirmed"'
+      bash "$FORGE_LEDGER" history "$rid" launch confirmed "session $id"
+      return 0
+    fi
+    [ "$(date +%s)" -lt "$deadline" ] || break
+    sleep "$FORGE_POLL_INTERVAL"
+  done
+  claude stop "$id" >/dev/null 2>&1 || true
+  bash "$FORGE_LEDGER" set "$rid" '.launch = "abandoned" | .terminal = "bailed-launch"'
+  bash "$FORGE_LEDGER" history "$rid" launch abandoned "session $id not seen within ${FORGE_LAUNCH_TIMEOUT}s"
+  return 1
+}
