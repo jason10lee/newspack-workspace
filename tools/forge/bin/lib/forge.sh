@@ -150,8 +150,10 @@ write_run_settings() { # rid tooling_dir -> path of the settings file
   [ -f "$hook" ] || die "pinned tooling has no MCP hook: $hook"
   case "$hook" in *'"'*|*"'"*|*'$'*|*'`'*) die "unsafe characters in the tooling path: $hook" ;; esac
   f="$RUNS_DIR/$rid/settings.json"
-  jq -n --arg hook "$hook" --arg rid "$rid" --arg ws "$WORKSPACE_ROOT" --arg runs "$RUNS_DIR" '{
-    env: {FORGE_RUN_ID: $rid, AUTOFIX_WORKSPACE_ROOT: $ws, AUTOFIX_RUNS_DIR: $runs},
+  jq -n --arg hook "$hook" --arg rid "$rid" --arg ws "$WORKSPACE_ROOT" --arg runs "$RUNS_DIR" \
+    --arg state "$FORGE_STATE" --arg wait "$FORGE_LAUNCH_WAIT" '{
+    env: {FORGE_RUN_ID: $rid, AUTOFIX_WORKSPACE_ROOT: $ws, AUTOFIX_RUNS_DIR: $runs,
+          FORGE_STATE: $state, FORGE_LAUNCH_WAIT: $wait},
     hooks: {PreToolUse: [{matcher: "mcp__.*",
       hooks: [{type: "command", command: ("bash \"" + $hook + "\"")}]}]}
   }' > "$f"
@@ -166,6 +168,10 @@ write_run_settings() { # rid tooling_dir -> path of the settings file
 : "${FORGE_PLUGINS:=newspack@newspack-devkit team-os@newspack-team-os linear@claude-plugins-official codex@openai-codex}"
 : "${FORGE_PLUGINS_JSON:=$HOME/.claude/plugins/installed_plugins.json}"
 : "${FORGE_LAUNCH_TIMEOUT:=90}"
+# A run's Stage 0 waits longer than the dispatcher does, so a session that
+# starts before the dispatcher has seen it does not give up on a good launch.
+: "${FORGE_LAUNCH_MARGIN:=60}"
+: "${FORGE_LAUNCH_WAIT:=$((FORGE_LAUNCH_TIMEOUT + FORGE_LAUNCH_MARGIN))}"
 : "${FORGE_POLL_INTERVAL:=5}"
 
 plugin_dirs() { # one install path per configured plugin installed for the workspace
@@ -180,12 +186,19 @@ plugin_dirs() { # one install path per configured plugin installed for the works
 }
 
 launch_session() { # rid dir settings prompt -> session id; 3 untrusted, 1 other failure
-  local rid="$1" dir="$2" settings="$3" prompt="$4" out id p
+  local rid="$1" dir="$2" settings="$3" prompt="$4" out id p scrub=() v
   set -- --bg -n "$rid" --permission-mode auto --settings "$settings"
   while IFS= read -r p; do [ -n "$p" ] && set -- "$@" --plugin-dir "$p"; done <<EOP
 $(plugin_dirs)
 EOP
-  out="$(cd "$dir" && claude "$@" "$prompt" 2>&1)" || { log "claude --bg failed: $out"; return 1; }
+  # A run takes its environment from its settings file, never from the
+  # dispatcher's shell: a dispatcher's AUTOFIX_LINEAR_MOCK_DIR would point the
+  # run at mocks, and its CLAUDE_CODE_SESSION_ID names another session.
+  for v in $(compgen -e); do
+    case "$v" in AUTOFIX_*|FORGE_*|CLAUDE_CODE_SESSION_ID) scrub+=(-u "$v") ;; esac
+  done
+  out="$(cd "$dir" && env ${scrub[@]+"${scrub[@]}"} claude "$@" "$prompt" 2>&1)" \
+    || { log "claude --bg failed: $out"; return 1; }
   # --bg refuses an untrusted directory, and exits 0 when it does.
   case "$out" in *"Workspace not trusted"*) return 3 ;; esac
   id="$(printf '%s\n' "$out" | LC_ALL=C sed -n 's/^backgrounded · \([0-9a-f]\{8\}\) · .*/\1/p' | head -1)"

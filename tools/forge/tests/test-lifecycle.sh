@@ -42,7 +42,16 @@ assert_eq null "$(bash "$L" get "$r" .terminal)" "the run is not made terminal"
 assert_eq yes "$([ -d "$wt" ] && echo yes || echo no)" "its worktree is untouched"
 assert_eq "$br" "$(git -C "$wt" branch --show-current)" "on its branch"
 
+# a run whose PR is out cannot be reworked: its claim would stop on the PR
+# attachment and restore the issue's fields under an open PR
 deliver "$r"
+cp "$FX/issue_pr.json" "$M/issue.json"
+out="$(bash "$F" rework "$r" address review 2>&1)"; rc=$?
+assert_eq 1 "$rc" "a run whose issue already has a PR cannot be reworked"
+assert_contains "$out" "already has a PR" "and says why"
+assert_eq delivered "$(bash "$L" get "$r" .delivery.kind)" "the run is left as it was"
+cp "$FX/issue_ok.json" "$M/issue.json"
+
 echo change > "$wt/dirty.txt"
 out="$(forge retire "$r")"; rc=$?
 assert_eq 1 "$rc" "retire refuses a worktree with uncommitted changes"

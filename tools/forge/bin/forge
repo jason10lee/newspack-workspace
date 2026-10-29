@@ -295,6 +295,21 @@ EOL
   echo "secure queue (start these with autofix-secure):"; cat "$FORGE_STATE/secure-queue" 2>/dev/null || true
 }
 
+# issue_unchanged <issue> <action> — a delivered run can wait days for the
+# operator, and the issue can change meanwhile: triage adds the Security label
+# after filing, and a PR appears once the run is published. Either one rules
+# out publishing it, and reworking it.
+issue_unchanged() {
+  local rc=0
+  bash "$AUTOFIX_BIN_DIR/intake.sh" check "$1" >/dev/null || rc=$?
+  case "$rc" in
+    0) ;;
+    2) die "$1 now carries the Security label: it goes to a supervised autofix-secure run, not to $2" ;;
+    3) die "$1 already has a PR: $2 does not apply once a run is published" ;;
+    *) die "intake check failed for $1" ;;
+  esac
+}
+
 cmd_rework() { # rid suggestion...
   local rid="${1:?usage: forge rework <run id> <suggestion>}" term del
   shift
@@ -309,6 +324,7 @@ cmd_rework() { # rid suggestion...
     routed-secure) die "$rid went to autofix-secure; the forge does not work security issues" ;;
     *) die "$rid ended as $term; launch the issue again instead" ;;
   esac
+  issue_unchanged "$(bash "$FORGE_LEDGER" get "$rid" .issue)" rework
   bash "$FORGE_LEDGER" set "$rid" '.decisions += [{key: "rework", value: $v}]' --arg v "$*"
   queue_add rework "$rid"
   echo "REWORK-QUEUED $rid"
@@ -337,7 +353,80 @@ cmd_retire() { # rid
   echo "RETIRED $rid"
 }
 
-cmd="${1:?usage: forge launch|next|check|status|rework|retire ...}"; shift
+# sq <text> — the text in single quotes, for a command a batch approves.
+sq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
+
+# heredoc_cmd <command> <file> — the command fed the file through a quoted
+# heredoc, so the batch binds the body's bytes. The delimiter is one no body
+# line equals.
+heredoc_cmd() {
+  local d=FORGE_BODY n=0 body
+  body="$(cat "$2")"
+  while printf '%s\n' "$body" | grep -qx "$d"; do n=$((n + 1)); d="FORGE_BODY_$n"; done
+  printf "%s <<'%s'\n%s\n%s" "$1" "$d" "$body" "$d"
+}
+
+# repo_slug <remote url> — owner/name for gh -R, from a github.com URL only.
+repo_slug() {
+  printf '%s' "$1" | LC_ALL=C sed -nE \
+    's#^(https://github\.com/|git@github\.com:|ssh://git@github\.com/)([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)$#\2#p' \
+    | sed 's/\.git$//'
+}
+
+cmd_batch() { # rid — the publish batch, built from pr.sh prepare's record
+  local rid="${1:?usage: forge batch <run id>}" wt head remote branch base repo url slug pr_base
+  local title issue plan role path sha body_f="" summary_f="" closeout_f="" n
+  require_forge_run "$rid"
+  lgr() { bash "$FORGE_LEDGER" get "$rid" "$1"; }
+  [ "$(lgr '.retired_at // ""')" = "" ] || die "$rid is retired"
+  [ "$(lgr '.terminal // ""')" = "" ] && [ "$(lgr '.delivery.kind // ""')" = delivered ] \
+    || die "$rid has not delivered; only a delivered run is published"
+  [ "$(lgr '.prepared // ""')" != "" ] || die "$rid has no pr.sh prepare record"
+  issue_unchanged "$(lgr .issue)" publishing
+  head="$(lgr .prepared.head)"; remote="$(lgr .prepared.remote)"
+  branch="$(lgr .prepared.branch)"; base="$(lgr .prepared.base)"
+  printf '%s\n%s\n%s' "$remote" "$branch" "$base" | LC_ALL=C grep -Eqv '^[A-Za-z0-9._/-]+$' \
+    && die "unexpected characters in the remote, branch or base of the prepare record"
+  wt="$(lgr '.worktree // ""')"
+  [ "$(git -C "$wt" rev-parse HEAD 2>/dev/null)" = "$head" ] \
+    || die "the branch moved since pr.sh prepare (head was $head); prepare again"
+  while IFS="$(printf '\t')" read -r role path sha; do
+    [ -n "$path" ] || continue
+    [ -f "$path" ] && [ "$(secure_digest "$path")" = "$sha" ] || die "$path changed since pr.sh prepare; prepare again"
+    case "$role" in
+      body) body_f="$path" ;; summary) summary_f="$path" ;; closeout) closeout_f="$path" ;;
+      *) die "a body in the prepare record has no role; run pr.sh prepare again with the current tooling" ;;
+    esac
+  done <<EOF
+$(lgr '.prepared.files[] | [(.role // "-"), .path, .sha256] | @tsv')
+EOF
+  [ -n "$body_f" ] || die "no PR body in the prepare record"
+  title="$(ledger_decision "$rid" pr_title)"
+  [ -n "$title" ] || die "no pr_title decision in the ledger"
+  case "$title" in *$'\n'*) die "the PR title has a newline" ;; esac
+  repo="$(profile_get "$rid" '.repo // empty')"; repo="${repo:-$WORKSPACE_ROOT}"
+  url="$(git -C "$repo" remote get-url "$remote" 2>/dev/null)" || die "no remote $remote in $repo"
+  slug="$(repo_slug "$url")"
+  [ -n "$slug" ] || die "remote $remote ($url) is not a github.com repository; the forge publishes only there"
+  pr_base="$base"
+  git -C "$repo" show-ref --verify -q "refs/remotes/$base" && pr_base="${base#*/}"
+  issue="$(lgr .issue)"
+  plan="$(dirname "$(bash "$FORGE_LEDGER" path "$rid")")/batch.jsonl"
+  {
+    jq -nc --arg c "git -C $(sq "$repo") push $remote $head:refs/heads/$branch" '{tool: "Bash", tool_input: {command: $c}}'
+    jq -nc --arg c "$(heredoc_cmd "gh pr create -R $slug --draft --base $pr_base --head $branch --title $(sq "$title") --body-file -" "$body_f")" \
+      '{tool: "Bash", tool_input: {command: $c}}'
+    [ -z "$summary_f" ] || jq -nc --arg c "$(heredoc_cmd "gh pr comment $branch -R $slug --body-file -" "$summary_f")" \
+      '{tool: "Bash", tool_input: {command: $c}}'
+    [ -z "$closeout_f" ] || jq -nc --arg i "$issue" --rawfile b "$closeout_f" \
+      '{tool: "mcp__plugin_linear_linear__save_comment", tool_input: {issueId: $i, body: ($b | sub("\n+$"; ""))}}'
+  } > "$plan"
+  n="$(grep -c . "$plan")"
+  bash "$FORGE_LEDGER" set "$rid" '.batch = {path: $p, at: $t, head: $h}' --arg p "$plan" --arg t "$(now_utc)" --arg h "$head"
+  printf 'BATCH=%s\nENTRIES=%s\n' "$plan" "$n"
+}
+
+cmd="${1:?usage: forge launch|next|check|status|rework|retire|batch ...}"; shift
 case "$cmd" in
   launch) cmd_launch "$@" ;;
   next) cmd_next ;;
@@ -345,5 +434,6 @@ case "$cmd" in
   status) cmd_status ;;
   rework) cmd_rework "$@" ;;
   retire) cmd_retire "$@" ;;
+  batch) cmd_batch "$@" ;;
   *) die "unknown command: $cmd" ;;
 esac

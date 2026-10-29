@@ -315,4 +315,12 @@ assert_contains "$out" "not a plain unit name" "refusal names the bad affected_r
 out="$(STUB_REVCOUNT='fatal: bad revision' bash "$P" prepare frp1 --body-file "$BODY" 2>&1)" && rc=0 || rc=$?
 assert_eq 1 "$rc" "non-numeric commit count fails the scope guard"
 assert_contains "$out" "commit count" "refusal names the commit count"
+# prepare records each body's role and its absolute path
+CLOSE="$(mktemp)"; printf 'Closeout text.\n' > "$CLOSE"
+bash "$P" prepare frp1 --body-file "$BODY" --closeout-file "$CLOSE" >/dev/null 2>&1
+assert_eq "body closeout" "$(bash "$L" get frp1 '[.prepared.files[].role] | join(" ")')" "prepare records each body's role"
+rel="$(basename "$BODY")"
+( cd "$(dirname "$BODY")" && bash "$OLDPWD/$P" prepare frp1 --body-file "$rel" >/dev/null 2>&1 )
+assert_eq "$(cd "$(dirname "$BODY")" && pwd)/$rel" "$(bash "$L" get frp1 '.prepared.files[0].path')" "a relative body path is recorded absolute"
+
 finish

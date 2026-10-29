@@ -4,6 +4,7 @@
 printf '%s|%s\n' "$PWD" "$*" >> "${STUB_LOG:?}"
 case "$1" in
   --bg)
+    [ -z "${STUB_ENV_LOG:-}" ] || env > "$STUB_ENV_LOG"
     if [ -n "${STUB_BG_OUT:-}" ]; then printf '%s\n' "$STUB_BG_OUT"; exit 0; fi
     name=""
     while [ $# -gt 0 ]; do [ "$1" = -n ] && { name="$2"; break; }; shift; done
