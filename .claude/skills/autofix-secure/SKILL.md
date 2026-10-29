@@ -388,8 +388,10 @@ so a secure run's report adds each of these:
 A run that stops on a bail or an escalation still writes its report, as base
 Stage 7 requires, and gathers whichever of these exist by then. A run that
 reaches Stage 7 with the report already written, such as one that resumes after
-an escalation, adds whatever is missing instead of rewriting it, except
-`## Friction`, which it rewrites from `.friction` and keeps last.
+an escalation, brings every section up to date with the run dir and
+the ledger, since a probe reading or a self-review result can postdate the
+first write, and rewrites
+`## Friction` from `.friction`, keeping it last.
 
 ## Hard rules (unchanged from base — never override)
 
