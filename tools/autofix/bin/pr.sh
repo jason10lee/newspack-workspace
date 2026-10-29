@@ -140,10 +140,11 @@ if [ "$cmd" = prepare ]; then
   [ "$("$LEDGER" get "$run_id" '.mode' 2>/dev/null)" = forge ] \
     || die "pr.sh prepare is the forge's publish check; this run is not a forge run"
   body_file=""; summary_file=""; closeout_file=""
+  abspath() { (cd "$(dirname "$1")" 2>/dev/null && printf '%s/%s' "$(pwd)" "$(basename "$1")") || printf '%s' "$1"; }
   while [ $# -gt 0 ]; do case "$1" in
-    --body-file) body_file="$2"; shift 2 ;;
-    --summary-file) summary_file="$2"; shift 2 ;;
-    --closeout-file) closeout_file="$2"; shift 2 ;;
+    --body-file) body_file="$(abspath "$2")"; shift 2 ;;
+    --summary-file) summary_file="$(abspath "$2")"; shift 2 ;;
+    --closeout-file) closeout_file="$(abspath "$2")"; shift 2 ;;
     *) die "unknown flag: $1" ;;
   esac; done
   [ -n "$body_file" ] || die "--body-file required"
@@ -162,9 +163,13 @@ if [ "$cmd" = prepare ]; then
   base="$(scope_guard "$wt")" || exit 1
   head="$(git rev-parse HEAD)"; remote="$(profile_get "$run_id" .push_remote)"
   files='[]'
-  for f in "${all[@]}"; do
-    files="$(printf '%s' "$files" | jq --arg p "$f" --arg d "$(secure_digest "$f")" '. + [{path:$p, sha256:$d}]')"
-  done
+  # Each body carries its role, so the dispatcher's batch puts it on the right
+  # surface without guessing from the order.
+  add_file() { files="$(printf '%s' "$files" | jq --arg r "$1" --arg p "$2" --arg d "$(secure_digest "$2")" \
+    '. + [{role:$r, path:$p, sha256:$d}]')"; }
+  add_file body "$body_file"
+  [ -z "$closeout_file" ] || add_file closeout "$closeout_file"
+  [ -z "$summary_file" ] || add_file summary "$summary_file"
   # The batch the operator approves is built from these bytes; the digests let
   # the dispatcher refuse a batch whose bodies changed after prepare.
   "$LEDGER" set "$run_id" '.prepared = {head:$h, base:$b, remote:$r, branch:$br, at:$t, files:$f}' \
