@@ -53,4 +53,12 @@ out="$( (confirm_launch forge-c1 1a2b3c4d) 2>&1)"; rc=$?
 assert_eq 1 "$rc" "confirming twice is refused"
 assert_contains "$out" "already 'confirmed'" "and says so"
 
+assert_eq unknown "$(STUB_AGENTS_FAIL=1 session_state 1a2b3c4d)" "a failing claude agents is unknown"
+echo 'not json' > "$STUB_AGENTS"
+assert_eq unknown "$(session_state 1a2b3c4d)" "output that is not a JSON array is unknown"
+echo '[]' > "$STUB_AGENTS"
+assert_eq unknown "$(session_state 1a2b3c4d)" "a session with no row is unknown"
+gone;  assert_eq gone "$(session_state 1a2b3c4d)" "a row without a pid is gone"
+alive; assert_eq alive "$(session_state 1a2b3c4d)" "a row with a pid is alive"
+
 finish

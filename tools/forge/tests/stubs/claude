@@ -8,13 +8,16 @@ case "$1" in
     name=""
     while [ $# -gt 0 ]; do [ "$1" = -n ] && { name="$2"; break; }; shift; done
     printf 'backgrounded · %s · %s\n' "${STUB_BG_ID:-1a2b3c4d}" "$name" ;;
-  agents) cat "${STUB_AGENTS:?}" ;;
+  agents)
+    if [ "${STUB_AGENTS_FAIL:-0}" = 1 ]; then echo "Starting background service…" >&2; exit 1; fi
+    cat "${STUB_AGENTS:?}" ;;
   stop)
     printf 'stopped %s\n' "$2"
     if [ "${STUB_STOP_KILLS:-1}" = 1 ]; then
       jq --arg i "$2" 'map(if .id == $i then del(.pid) else . end)' "$STUB_AGENTS" > "$STUB_AGENTS.tmp" \
         && mv "$STUB_AGENTS.tmp" "$STUB_AGENTS"
     fi
+    if [ "${STUB_STOP_BREAKS_AGENTS:-0}" = 1 ]; then echo 'not json' > "$STUB_AGENTS"; fi
     if [ -n "${STUB_STOP_RUN:-}" ]; then bash "$STUB_STOP_RUN"; fi ;;
   *) echo "stub claude: unexpected call: $*" >&2; exit 64 ;;
 esac

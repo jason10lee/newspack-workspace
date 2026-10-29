@@ -193,10 +193,20 @@ EOP
   printf '%s\n' "$id"
 }
 
-session_row() { # id -> its row from claude agents, or nothing
-  claude agents --json --all 2>/dev/null | jq -c --arg i "$1" '.[]? | select(.id == $i)' 2>/dev/null | head -1
+# session_state <id> — alive (its row has a pid), gone (its row has none) or
+# unknown. A failing `claude agents`, output that is not a JSON array, and a
+# missing row are all unknown: none of them shows the session ended, and
+# reading them as gone would bail a healthy run and restore its claim.
+session_state() {
+  local out
+  out="$(claude agents --json --all 2>/dev/null)" || { echo unknown; return 0; }
+  printf '%s' "$out" | jq -r --arg i "$1" '
+    if type != "array" then "unknown"
+    else [.[] | select(.id == $i)] | if length == 0 then "unknown"
+      elif (.[0] | has("pid")) then "alive" else "gone" end
+    end' 2>/dev/null || echo unknown
 }
-session_alive() { session_row "$1" | jq -e 'has("pid")' >/dev/null 2>&1; }
+session_alive() { [ "$(session_state "$1")" = alive ]; }
 
 # confirm_launch — the run's Stage 0 claims only after this writes "confirmed",
 # and waits longer than FORGE_LAUNCH_TIMEOUT for it, so a session that appears
@@ -224,3 +234,6 @@ confirm_launch() { # rid id -> 0 confirmed, 1 abandoned
 # --- liveness ----------------------------------------------------------------
 : "${FORGE_STAGE_BOUND:=7200}"    # autofix's two-hour wall-clock bound
 : "${FORGE_STOP_TIMEOUT:=180}"
+# How long past FORGE_LAUNCH_TIMEOUT a launch may sit unconfirmed before
+# `forge check` decides the dispatcher died during it.
+: "${FORGE_STALE_MARGIN:=600}"

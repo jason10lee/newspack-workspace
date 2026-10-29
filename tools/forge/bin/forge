@@ -27,15 +27,29 @@ issue_busy() {
   done | head -1
 }
 
+# Set while a launch is in progress: FORGE_MADE_WT=made once this launch has
+# added the run's worktree, and FORGE_RELAUNCH_PRIOR holds the fields a rework
+# cleared, so a failed relaunch can put them back.
+FORGE_MADE_WT=""
+FORGE_RELAUNCH_PRIOR=""
+
 # abandon <rid> <launch|untrusted> <reason> — a launch that failed after the
-# ledger existed: terminal, so it holds no slot or pool dir, and any worktree it
-# made for a no-env profile is removed with its unused branch.
+# ledger existed. A new run becomes terminal, so it holds no slot or pool dir,
+# and a worktree this launch made is removed with its unused branch. A failed
+# rework instead gets its prior state back: it touches no worktree, because the
+# one in the ledger may be a monorepo env's.
 abandon() {
   local rid="$1" kind="$2" why="$3" wt br repo
+  if [ -n "$FORGE_RELAUNCH_PRIOR" ]; then
+    bash "$FORGE_LEDGER" set "$rid" '. + $p' --argjson p "$FORGE_RELAUNCH_PRIOR"
+    bash "$FORGE_LEDGER" history "$rid" rework launch-failed "$why"
+    echo "REWORK-FAILED $rid: $why. The run is back as it was; rework it again when the cause is fixed."
+    exit 4
+  fi
   bash "$FORGE_LEDGER" set "$rid" '.launch = "abandoned" | .terminal = $t' --arg t "bailed-$kind"
   bash "$FORGE_LEDGER" history "$rid" launch abandoned "$why"
   wt="$(bash "$FORGE_LEDGER" get "$rid" '.worktree // empty')"
-  if [ -n "$wt" ] && [ -d "$wt" ]; then
+  if [ "$FORGE_MADE_WT" = made ] && [ -n "$wt" ] && [ -d "$wt" ]; then
     repo="$(profile_get "$rid" '.repo // empty')"; repo="${repo:-$WORKSPACE_ROOT}"
     br="$(bash "$FORGE_LEDGER" get "$rid" '.branch // empty')"
     git -C "$repo" worktree remove "$wt" >/dev/null 2>&1 || log "could not remove $wt; remove it before reusing the pool dir"
@@ -59,6 +73,7 @@ prepare_worktree() {
   [ ! -e "$wt" ] || die "the pool dir already holds a worktree: $wt"
   git -C "$repo" worktree add -q "$wt" -b "$branch" "$base" || die "could not add the worktree $wt"
   bash "$FORGE_LEDGER" set "$rid" '.worktree = $w | .branch = $b' --arg w "$wt" --arg b "$branch"
+  printf made
 }
 
 write_brief() { # rid -> path of the brief
@@ -105,8 +120,7 @@ start_session() {
   if confirm_launch "$rid" "$id"; then
     printf 'LAUNCHED %s\nRUN_ID=%s\nSESSION=%s\nPOOL=%s\n' "$rid" "$rid" "$id" "$pool"
   else
-    echo "ABANDONED $rid: session $id was not seen within ${FORGE_LAUNCH_TIMEOUT}s"
-    exit 4
+    abandon "$rid" launch "session $id was not seen within ${FORGE_LAUNCH_TIMEOUT}s"
   fi
 }
 
@@ -134,9 +148,10 @@ launch_new() { # issue profile
   [ -n "$stem" ] || stem="$(printf '%s' "$issue" | tr '[:upper:]' '[:lower:]')"
   bash "$FORGE_LEDGER" set "$rid" \
     '.decisions += [{key: "branch_stem", value: $s}, {key: "profile", value: $p}]
-     | .pool_dir = $d | .tooling = {sha: $sha, dir: $dir}' \
-    --arg s "$stem" --arg p "$profile" --arg d "$pool" --arg sha "${pin%% *}" --arg dir "${pin#* }"
-  ( prepare_worktree "$rid" ) || abandon "$rid" launch "could not prepare the run's worktree"
+     | .pool_dir = $d | .tooling = {sha: $sha, dir: $dir} | .launch_started_at = $t' \
+    --arg s "$stem" --arg p "$profile" --arg d "$pool" --arg sha "${pin%% *}" --arg dir "${pin#* }" \
+    --arg t "$(now_utc)"
+  FORGE_MADE_WT="$( (prepare_worktree "$rid") )" || abandon "$rid" launch "could not prepare the run's worktree"
   start_session "$rid"
 }
 
@@ -145,7 +160,9 @@ launch_new() { # issue profile
 # through Stage 0's claim, which the skill does on seeing launch=confirmed.
 relaunch() {
   local rid="$1"
-  bash "$FORGE_LEDGER" set "$rid" '.delivery = null | .terminal = null | .launch = null | .session = null'
+  FORGE_RELAUNCH_PRIOR="$(bash "$FORGE_LEDGER" get "$rid" '{delivery, terminal, launch, session, launch_started_at} | tojson')"
+  bash "$FORGE_LEDGER" set "$rid" '.delivery = null | .terminal = null | .launch = null | .session = null
+    | .launch_started_at = $t' --arg t "$(now_utc)"
   bash "$FORGE_LEDGER" history "$rid" rework relaunching ""
   start_session "$rid"
 }
@@ -189,9 +206,23 @@ cmd_next() {
 # session is gone when its row has no pid. A stop that does not take changes
 # nothing; a run that delivered or stopped meanwhile keeps its state.
 check_run() {
-  local rid="$1" launch id last epoch age why issue rel deadline st
+  local rid="$1" launch id last epoch age why issue rel deadline st state started
   launch="$(bash "$FORGE_LEDGER" get "$rid" '.launch // ""')"
-  [ "$launch" = confirmed ] || { echo "PENDING $rid (launch: ${launch:-unset})"; return 0; }
+  if [ "$launch" != confirmed ]; then
+    # A launch whose dispatcher died before confirming or abandoning it would
+    # hold the slot for good. Once it is well past the confirm window, end it.
+    started="$(bash "$FORGE_LEDGER" get "$rid" '.launch_started_at // empty')"
+    if [ -z "$launch" ] && epoch="$(iso8601_to_epoch "$started")" \
+       && [ $(( $(date +%s) - epoch )) -gt $(( FORGE_LAUNCH_TIMEOUT + FORGE_STALE_MARGIN )) ]; then
+      id="$(bash "$FORGE_LEDGER" get "$rid" '.session.id // empty')"
+      [ -z "$id" ] || claude stop "$id" >/dev/null 2>&1 || true
+      bash "$FORGE_LEDGER" set "$rid" '.launch = "abandoned" | .terminal = "bailed-stale"'
+      bash "$FORGE_LEDGER" history "$rid" launch abandoned "launch never confirmed; started $started"
+      echo "STALE-LAUNCH $rid: its launch started $started and was never confirmed; abandoned. Its pool dir stays held until you retire it."
+      return 0
+    fi
+    echo "PENDING $rid (launch: ${launch:-unset})"; return 0
+  fi
   id="$(bash "$FORGE_LEDGER" get "$rid" '.session.id // empty')"
   [ -n "$id" ] || { echo "NO-SESSION $rid: confirmed but no session id recorded; leaving it"; return 0; }
   last="$(bash "$FORGE_LEDGER" get "$rid" '([.stage_history[].at] | max) // .session.launched_at // empty')"
@@ -200,19 +231,24 @@ check_run() {
     epoch="$(date +%s)"
   fi
   age=$(( $(date +%s) - epoch ))
-  if session_alive "$id"; then
-    if [ "$age" -le "$FORGE_STAGE_BOUND" ]; then echo "ALIVE $rid ($id, last progress ${age}s ago)"; return 0; fi
-    why="stalled: no progress for ${age}s"
-    claude stop "$id" >/dev/null 2>&1 || true
-    deadline=$(( $(date +%s) + FORGE_STOP_TIMEOUT ))
-    while session_alive "$id" && [ "$(date +%s)" -lt "$deadline" ]; do sleep "$FORGE_POLL_INTERVAL"; done
-    if session_alive "$id"; then
-      echo "STOP-UNCONFIRMED $rid: asked $id to stop ($why) and it is still running; changed nothing"
-      return 0
-    fi
-  else
-    why="session $id is gone"
-  fi
+  state="$(session_state "$id")"
+  case "$state" in
+    unknown) echo "UNKNOWN-STATE $rid: could not read session $id from claude agents; changed nothing"; return 0 ;;
+    alive)
+      if [ "$age" -le "$FORGE_STAGE_BOUND" ]; then echo "ALIVE $rid ($id, last progress ${age}s ago)"; return 0; fi
+      why="stalled: no progress for ${age}s"
+      claude stop "$id" >/dev/null 2>&1 || true
+      deadline=$(( $(date +%s) + FORGE_STOP_TIMEOUT ))
+      state="$(session_state "$id")"
+      while [ "$state" != gone ] && [ "$(date +%s)" -lt "$deadline" ]; do
+        sleep "$FORGE_POLL_INTERVAL"; state="$(session_state "$id")"
+      done
+      if [ "$state" != gone ]; then
+        echo "STOP-UNCONFIRMED $rid: asked $id to stop ($why) and could not confirm it ended (state: $state); changed nothing"
+        return 0
+      fi ;;
+    *) why="session $id is gone" ;;
+  esac
   st="$(bash "$FORGE_LEDGER" get "$rid" '.terminal // .delivery.kind // empty')"
   [ -z "$st" ] || { echo "SETTLED $rid ($st)"; return 0; }
   bash "$FORGE_LEDGER" set "$rid" '.terminal = "bailed-dead"'
@@ -248,7 +284,7 @@ cmd_status() {
   printf 'run\tissue\tlaunch\tstage\tstate\tpool\tsession\talive\n'
   [ -z "$lfs" ] || while IFS= read -r lf; do
     id="$(jq -r '.session.id // ""' "$lf")"
-    alive="-"; [ -z "$id" ] || { session_alive "$id" && alive=yes || alive=no; }
+    alive="-"; [ -z "$id" ] || alive="$(session_state "$id")"
     jq -r --arg a "$alive" '[.run_id, .issue, (.launch // "-"), (.stage // "-"),
       (if .retired_at then "retired" else (.terminal // .delivery.kind // "working") end),
       (.pool_dir // "-"), (.session.id // "-"), $a] | @tsv' "$lf"

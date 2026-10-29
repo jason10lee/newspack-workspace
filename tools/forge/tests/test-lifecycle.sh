@@ -32,6 +32,16 @@ assert_eq null "$(bash "$L" get "$r" .delivery)" "the delivery is cleared"
 assert_eq confirmed "$(bash "$L" get "$r" .launch)" "the new session's launch is confirmed"
 assert_eq "$wt" "$(bash "$L" get "$r" .worktree)" "the run keeps its worktree"
 
+# a rework that cannot launch leaves the run as it was
+deliver "$r"
+out="$(STUB_BG_OUT='Workspace not trusted.' bash "$F" rework "$r" try again 2>/dev/null)"; rc=$?
+assert_eq 4 "$rc" "a rework that cannot launch exits 4"
+assert_contains "$out" "REWORK-FAILED $r" "and says so"
+assert_eq delivered "$(bash "$L" get "$r" .delivery.kind)" "the delivery is restored"
+assert_eq null "$(bash "$L" get "$r" .terminal)" "the run is not made terminal"
+assert_eq yes "$([ -d "$wt" ] && echo yes || echo no)" "its worktree is untouched"
+assert_eq "$br" "$(git -C "$wt" branch --show-current)" "on its branch"
+
 deliver "$r"
 echo change > "$wt/dirty.txt"
 out="$(forge retire "$r")"; rc=$?

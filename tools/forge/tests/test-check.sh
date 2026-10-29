@@ -68,4 +68,27 @@ out="$(forge check)"
 assert_contains "$out" "UNKNOWN-PROGRESS forge-t" "an unusable timestamp is reported"
 assert_contains "$out" "ALIVE forge-t" "and never read as stalled"
 
+# claude agents failing is not a dead session
+fresh; mkrun forge-x; alive
+out="$(STUB_AGENTS_FAIL=1 bash "$F" check 2>/dev/null)"
+assert_contains "$out" "UNKNOWN-STATE forge-x" "a failing claude agents is reported, not read as gone"
+assert_eq null "$(bash "$L" get forge-x .terminal)" "and changes nothing"
+fresh; mkrun forge-y; alive; bash "$L" set forge-y '.stage_history = [{stage:"x", outcome:"y", at:"2026-01-01T00:00:00Z"}]'
+out="$(FORGE_STAGE_BOUND=60 STUB_STOP_BREAKS_AGENTS=1 bash "$F" check 2>/dev/null)"
+assert_contains "$out" "STOP-UNCONFIRMED forge-y" "a stop that cannot be confirmed is reported"
+assert_eq null "$(bash "$L" get forge-y .terminal)" "and changes nothing"
+
+# a launch the dispatcher never finished is abandoned once it is stale
+fresh; bash "$L" init forge-st NPPM-1 forge >/dev/null
+bash "$L" set forge-st '.launch_started_at = "2026-01-01T00:00:00Z" | .session = {id: "1a2b3c4d", launched_at: "2026-01-01T00:00:00Z"}'
+alive; : > "$STUB_LOG"
+out="$(forge check)"
+assert_contains "$out" "STALE-LAUNCH forge-st" "an unfinished launch is reported stale"
+assert_eq bailed-stale "$(bash "$L" get forge-st .terminal)" "and made terminal"
+assert_eq abandoned "$(bash "$L" get forge-st .launch)" "with launch=abandoned"
+assert_contains "$(cat "$STUB_LOG")" "stop 1a2b3c4d" "and its session is stopped"
+fresh; bash "$L" init forge-nw NPPM-1 forge >/dev/null
+bash "$L" set forge-nw '.launch_started_at = $t' --arg t "$(now)"
+assert_contains "$(forge check)" "PENDING forge-nw" "a launch still in its window is left alone"
+
 finish

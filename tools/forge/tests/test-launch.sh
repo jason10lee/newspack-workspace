@@ -104,4 +104,20 @@ assert_eq "" "$(cat "$FORGE_STATE/queue")" "and removes it from the queue"
 out="$(forge next)"
 assert_contains "$out" "SLOT-BUSY" "next waits while the slot is held"
 
+# an unseen no-env session removes the worktree it made, so its dir is reusable
+for lf in "$RUNS_DIR"/forge-*/ledger.json; do
+  r="$(basename "$(dirname "$lf")")"
+  [ "$(bash "$L" get "$r" '.terminal == null and .delivery == null')" = true ] \
+    && bash "$L" set "$r" '.delivery = {kind:"delivered", at:"2026-10-29T00:00:00Z"}'
+done
+echo '[]' > "$STUB_AGENTS"
+out="$(forge launch NPPM-10 --profile newspack-workspace-tooling)"; rc=$?
+assert_eq 4 "$rc" "an unseen no-env session abandons the launch"
+assert_eq no "$([ -e "$FORGE_POOL_ROOT/newspack-workspace-tooling/2/wt" ] && echo yes || echo no)" "and removes the worktree it made"
+alive
+out="$(forge launch NPPM-11 --profile newspack-workspace-tooling)"; rc=$?
+assert_eq 0 "$rc" "so the next launch into that dir succeeds"
+assert_eq "$FORGE_POOL_ROOT/newspack-workspace-tooling/2/wt" "$(bash "$L" get "$(rid_of "$out")" .worktree)" "in the same dir"
+assert_contains "$(bash "$L" get "$(rid_of "$out")" '.launch_started_at // ""')" "T" "a launch records when it started"
+
 finish
