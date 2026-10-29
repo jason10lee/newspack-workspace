@@ -197,10 +197,12 @@ EOP
   for v in $(compgen -e); do
     case "$v" in AUTOFIX_*|FORGE_*|CLAUDE_CODE_SESSION_ID) scrub+=(-u "$v") ;; esac
   done
-  out="$(cd "$dir" && env ${scrub[@]+"${scrub[@]}"} claude "$@" "$prompt" 2>&1)" \
-    || { log "claude --bg failed: $out"; return 1; }
-  # --bg refuses an untrusted directory, and exits 0 when it does.
+  local rc=0
+  out="$(cd "$dir" && env ${scrub[@]+"${scrub[@]}"} claude "$@" "$prompt" 2>&1)" || rc=$?
+  # --bg refuses an untrusted directory. Some versions exit 0 when they do and
+  # others do not, so the message decides, before the exit status.
   case "$out" in *"Workspace not trusted"*) return 3 ;; esac
+  [ "$rc" -eq 0 ] || { log "claude --bg failed: $out"; return 1; }
   id="$(printf '%s\n' "$out" | LC_ALL=C sed -n 's/^backgrounded · \([0-9a-f]\{8\}\) · .*/\1/p' | head -1)"
   [ -n "$id" ] || { log "no session id in: $out"; return 1; }
   printf '%s\n' "$id"

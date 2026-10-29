@@ -66,6 +66,12 @@ assert_contains "$out" "not trusted" "and tells the operator what to do"
 r5="$(basename "$RUNS_DIR"/forge-nppm-5-*)"
 assert_eq bailed-untrusted "$(bash "$L" get "$r5" .terminal)" "the run is terminal"
 assert_eq abandoned "$(bash "$L" get "$r5" .launch)" "launch=abandoned"
+bash "$L" set "$r5" '.retired_at = "2026-10-29T00:00:00Z"'   # free the issue for the next case
+out="$(STUB_BG_RC=1 STUB_BG_OUT='Workspace not trusted. Run `claude` in /x once' bash "$F" launch NPPM-5 2>/dev/null)"; rc=$?
+assert_eq 4 "$rc" "an untrusted dir abandons the launch when claude exits non-zero"
+assert_contains "$out" "not trusted" "and still tells the operator what to do"
+r5b=""; for d in "$RUNS_DIR"/forge-nppm-5-*; do [ "$(basename "$d")" = "$r5" ] || r5b="$(basename "$d")"; done
+assert_eq bailed-untrusted "$(bash "$L" get "$r5b" .terminal)" "and records it as untrusted"
 
 # session never seen
 echo '[]' > "$STUB_AGENTS"; : > "$STUB_LOG"
