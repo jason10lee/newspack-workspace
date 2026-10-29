@@ -1,3 +1,4 @@
+# shellcheck shell=bash disable=SC2034  # sourced: the tests use these variables
 # setup.sh — shared fixture for forge tests. Source after autofix's helpers.sh,
 # from the tests directory.
 export AUTOFIX_ROOT; AUTOFIX_ROOT="$(mktemp -d)"

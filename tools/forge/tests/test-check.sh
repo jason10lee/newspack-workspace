@@ -15,7 +15,7 @@ mock() { # rid — Linear mocks for a claim by this run
   cp "$FX/issue_ok.json" "$M/issue.json"
   sed "s/RUNID/$1/" "$FX/issue_postclaim_ok.json" > "$M/issue_postclaim.json"
 }
-fresh() { AUTOFIX_ROOT="$(mktemp -d)"; export AUTOFIX_ROOT; RUNS_DIR="$AUTOFIX_ROOT/runs"; }
+fresh() { AUTOFIX_ROOT="$(mktemp -d)"; export AUTOFIX_ROOT; }
 updates() { [ -f "$M/requests.log" ] || { echo 0; return; }; grep -c issueUpdate "$M/requests.log" || true; }
 
 assert_eq NO-RUNS "$(forge check)" "nothing running → NO-RUNS"

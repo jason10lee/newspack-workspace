@@ -54,4 +54,8 @@ assert_eq 1 "$rc" "secure run cannot select a non-default profile"
 paths=$'tools/autofix/bin/pr.sh\nplugins/x#;s#.*#tools/#;s#y#z/a.php'
 assert_eq "tools/autofix/bin/pr.sh" "$(printf '%s\n' "$paths" | pf profile_offending_paths p1 'x#;s#.*#tools/#;s#y#z')" "crafted affected_repo cannot rewrite the scope"
 
+# the tooling profile runs the forge's suite as well as autofix's
+assert_contains "$(jq -r '."newspack-workspace-tooling".suite[]' ../profiles.json)" "bash tools/forge/tests/run-tests.sh" "tooling suite includes the forge tests"
+assert_contains "$(jq -r '."newspack-workspace-tooling".commands[]' ../profiles.json)" "bash tools/forge/tests/run-tests.sh" "and allows them as a command"
+
 finish

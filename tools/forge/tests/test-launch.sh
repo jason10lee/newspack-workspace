@@ -13,7 +13,7 @@ M="$(mktemp -d)"; export AUTOFIX_LINEAR_MOCK_DIR="$M"
 cp "$FX/viewer.json" "$FX/states.json" "$M/"; cp "$FX/issue_ok.json" "$M/issue.json"
 forge() { bash "$F" "$@" 2>/dev/null; }
 rid_of() { sed -n 's/^RUN_ID=//p' <<<"$1"; }
-nruns() { ls -d "$RUNS_DIR"/forge-* 2>/dev/null | grep -c . || true; }
+nruns() { local n=0 d; for d in "$RUNS_DIR"/forge-*; do [ -d "$d" ] && n=$((n + 1)); done; echo "$n"; }
 
 # happy path
 alive
@@ -63,7 +63,7 @@ cp "$FX/issue_ok.json" "$M/issue.json"
 out="$(STUB_BG_OUT='Workspace not trusted. Run `claude` in /x once' bash "$F" launch NPPM-5 2>/dev/null)"; rc=$?
 assert_eq 4 "$rc" "an untrusted dir abandons the launch"
 assert_contains "$out" "not trusted" "and tells the operator what to do"
-r5="$(ls -d "$RUNS_DIR"/forge-nppm-5-* | xargs basename)"
+r5="$(basename "$RUNS_DIR"/forge-nppm-5-*)"
 assert_eq bailed-untrusted "$(bash "$L" get "$r5" .terminal)" "the run is terminal"
 assert_eq abandoned "$(bash "$L" get "$r5" .launch)" "launch=abandoned"
 
@@ -90,7 +90,7 @@ assert_eq "$(bash "$L" get "$r8" .branch)" "$(git -C "$wt" branch --show-current
 # a failed no-env launch removes the worktree it made
 bash "$L" set "$r8" '.delivery = {kind:"delivered", at:"2026-10-29T00:00:00Z"}'
 out="$(STUB_BG_OUT='Workspace not trusted.' bash "$F" launch NPPM-9 --profile newspack-workspace-tooling 2>/dev/null)"
-r9="$(ls -d "$RUNS_DIR"/forge-nppm-9-* | xargs basename)"
+r9="$(basename "$RUNS_DIR"/forge-nppm-9-*)"
 b9="$(bash "$L" get "$r9" .branch)"
 assert_eq no "$([ -e "$FORGE_POOL_ROOT/newspack-workspace-tooling/2/wt" ] && echo yes || echo no)" "the abandoned worktree is removed"
 assert_eq "" "$(g branch --list "$b9")" "and its unused branch deleted"

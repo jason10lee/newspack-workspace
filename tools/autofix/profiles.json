@@ -15,8 +15,8 @@
     "base": { "ref": "main", "fetch": null },
     "env": false,
     "path_scope": ["n", "bin/", "config/", "tools/", ".claude/skills/"],
-    "commands": ["bash tools/autofix/tests/run-tests.sh"],
-    "suite": ["bash tools/autofix/tests/run-tests.sh"],
+    "commands": ["bash tools/autofix/tests/run-tests.sh", "bash tools/forge/tests/run-tests.sh"],
+    "suite": ["bash tools/autofix/tests/run-tests.sh", "bash tools/forge/tests/run-tests.sh"],
     "lint": "none",
     "push_remote": "fork",
     "team_repo": false
