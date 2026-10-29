@@ -89,3 +89,53 @@ secure_queue_add() { # issue
   mkdir -p "$FORGE_STATE"
   printf '%s %s\n' "$1" "$(now_utc)" >> "$FORGE_STATE/secure-queue"
 }
+
+# --- pinned tooling ----------------------------------------------------------
+# A run invokes autofix's and the forge's scripts from an export of local main
+# taken at launch, never from a checkout: its own edits to tools/ and other
+# sessions' uncommitted edits in the shared root checkout cannot reach it. An
+# export rather than a worktree, because a monorepo worktree per main SHA is a
+# full checkout each time, and a sparse one writes to the shared repo config.
+: "${FORGE_TOOLING_REPO:=$WORKSPACE_ROOT}"
+FORGE_TOOLING_PATHS="tools .claude/skills"
+
+pin_tooling() { # -> "<sha> <dir>"
+  local sha dir tmp p have=""
+  sha="$(git -C "$FORGE_TOOLING_REPO" rev-parse -q --verify 'refs/heads/main^{commit}')" \
+    || die "cannot resolve main in $FORGE_TOOLING_REPO"
+  dir="$FORGE_STATE/tooling/$sha"
+  if [ ! -d "$dir" ]; then
+    mkdir -p "$FORGE_STATE/tooling"
+    for p in $FORGE_TOOLING_PATHS; do
+      git -C "$FORGE_TOOLING_REPO" cat-file -e "$sha:$p" 2>/dev/null && have="$have $p"
+    done
+    [ -n "$have" ] || die "main at $sha has none of: $FORGE_TOOLING_PATHS"
+    tmp="$(mktemp -d "$FORGE_STATE/tooling/.pin.XXXXXX")"
+    # shellcheck disable=SC2086  # $have is a list of paths
+    if ! git -C "$FORGE_TOOLING_REPO" archive --format=tar "$sha" $have | tar -x -C "$tmp"; then
+      rm -rf "$tmp"; die "could not export tooling at $sha"
+    fi
+    printf '%s\n' "$sha" > "$tmp/.forge-tooling-sha"
+    # Contents first: on macOS, renaming a directory needs write access to it.
+    find "$tmp" -mindepth 1 -exec chmod a-w {} +
+    if ! mv "$tmp" "$dir" 2>/dev/null; then
+      chmod -R u+w "$tmp"; rm -rf "$tmp"
+      [ -d "$dir" ] || die "could not place the tooling export at $dir"
+    fi
+    chmod a-w "$dir"
+  fi
+  [ "$(cat "$dir/.forge-tooling-sha" 2>/dev/null)" = "$sha" ] \
+    || die "tooling export at $dir does not match $sha"
+  printf '%s %s\n' "$sha" "$dir"
+}
+
+prune_tooling() { # remove exports that no unretired forge run references
+  local keep d
+  keep="$(_each_ledger 'select(.retired_at == null) | .tooling.dir // empty')" || return 1
+  for d in "$FORGE_STATE"/tooling/*/; do
+    d="${d%/}"
+    [ -d "$d" ] || continue
+    printf '%s\n' "$keep" | grep -Fxq -- "$d" && continue
+    chmod -R u+w "$d" && rm -rf "$d" && log "pruned tooling export $d"
+  done
+}
