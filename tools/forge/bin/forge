@@ -1,0 +1,185 @@
+#!/bin/bash
+# forge — the commands the forge's dispatcher session runs. Run sessions never
+# run these. See tools/forge/README.md.
+set -euo pipefail
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/forge.sh"
+. "$AUTOFIX_BIN_DIR/lib/profile.sh"
+
+mint_forge_id() { # issue
+  local issue hex cand
+  issue="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  while :; do
+    hex="$(openssl rand -hex 2)"
+    cand="forge-$issue-$(date +%Y%m%d)-$hex"
+    [ -e "$RUNS_DIR/$cand" ] || { echo "$cand"; return; }
+  done
+}
+
+# issue_busy <issue> — the id of any run, in any mode, still working that issue
+# or waiting on the operator's decision about it.
+issue_busy() {
+  local lf
+  for lf in "$RUNS_DIR"/*/ledger.json; do
+    [ -f "$lf" ] || continue
+    jq -r --arg i "$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')" \
+      'select((.issue | ascii_upcase) == $i and .terminal == null and .retired_at == null) | .run_id' \
+      "$lf" 2>/dev/null || true
+  done | head -1
+}
+
+# abandon <rid> <launch|untrusted> <reason> — a launch that failed after the
+# ledger existed: terminal, so it holds no slot or pool dir, and any worktree it
+# made for a no-env profile is removed with its unused branch.
+abandon() {
+  local rid="$1" kind="$2" why="$3" wt br repo
+  bash "$FORGE_LEDGER" set "$rid" '.launch = "abandoned" | .terminal = $t' --arg t "bailed-$kind"
+  bash "$FORGE_LEDGER" history "$rid" launch abandoned "$why"
+  wt="$(bash "$FORGE_LEDGER" get "$rid" '.worktree // empty')"
+  if [ -n "$wt" ] && [ -d "$wt" ]; then
+    repo="$(profile_get "$rid" '.repo // empty')"; repo="${repo:-$WORKSPACE_ROOT}"
+    br="$(bash "$FORGE_LEDGER" get "$rid" '.branch // empty')"
+    git -C "$repo" worktree remove "$wt" >/dev/null 2>&1 || log "could not remove $wt; remove it before reusing the pool dir"
+    [ -z "$br" ] || git -C "$repo" branch -d "$br" >/dev/null 2>&1 || log "kept branch $br"
+  fi
+  echo "ABANDONED $rid: $why"
+  exit 4
+}
+
+# prepare_worktree <rid> — for a profile with no env, the run's worktree goes
+# inside its pool dir, which the operator has already trusted. A monorepo run's
+# worktree comes from env.sh in Stage 2.
+prepare_worktree() {
+  local rid="$1" repo base stem branch wt
+  [ "$(profile_get "$rid" '.env')" = true ] && return 0
+  repo="$(profile_get "$rid" '.repo // empty')"; repo="${repo:-$WORKSPACE_ROOT}"
+  base="$(profile_base "$rid" "$repo")"
+  stem="$(ledger_decision "$rid" branch_stem)"
+  branch="$stem-$(openssl rand -hex 2)"
+  wt="$(bash "$FORGE_LEDGER" get "$rid" .pool_dir)/wt"
+  [ ! -e "$wt" ] || die "the pool dir already holds a worktree: $wt"
+  git -C "$repo" worktree add -q "$wt" -b "$branch" "$base" || die "could not add the worktree $wt"
+  bash "$FORGE_LEDGER" set "$rid" '.worktree = $w | .branch = $b' --arg w "$wt" --arg b "$branch"
+}
+
+write_brief() { # rid -> path of the brief
+  local rid="$1" f
+  f="$RUNS_DIR/$rid/brief.md"
+  jq -r --arg ledger "$RUNS_DIR/$rid/ledger.json" '
+"# Forge run \(.run_id)
+
+You are a forge run session. You work one Linear issue to delivery and stop there.
+
+- Run id: \(.run_id)
+- Issue: \(.issue)
+- Ledger: \($ledger). Read and update it only with `\(.tooling.dir)/tools/autofix/bin/ledger.sh`.
+- Tooling, pinned at \(.tooling.sha): `\(.tooling.dir)`. Run every autofix and forge script from there, never from a checkout.
+- Profile: \([.decisions[] | select(.key == "profile") | .value] | last)
+- Worktree: \(.worktree // "made by env.sh in Stage 2")
+
+Follow the forge skill at `\(.tooling.dir)/.claude/skills/forge/SKILL.md` from Stage 0. If that file does not exist, record `stage: launch, outcome: no-skill` in the ledger history and end the session without claiming anything.
+
+These rules apply even though this directory loads no project instructions:
+
+- Never push, open a PR, or post to Linear or GitHub. The only Linear writes you may make are the claim and the conditional restore, through `tools/autofix/bin/claim.sh`.
+- Commit messages carry `Co-Authored-By: Claude Opus 5.5 (1M context) 🔨 <noreply@anthropic.com>` and never a `Claude-Session:` trailer.
+- Work only in the run'"'"'s worktree. Never check out a branch in the root checkout.
+"' "$RUNS_DIR/$rid/ledger.json" > "$f"
+  printf '%s\n' "$f"
+}
+
+# start_session <rid> — settings, brief, session, launch handshake. Each step
+# that can fail after the ledger exists ends in abandon, never in a bare die.
+start_session() {
+  local rid="$1" tdir pool settings brief id rc=0
+  tdir="$(bash "$FORGE_LEDGER" get "$rid" .tooling.dir)"
+  pool="$(bash "$FORGE_LEDGER" get "$rid" .pool_dir)"
+  settings="$( (write_run_settings "$rid" "$tdir") )" || abandon "$rid" launch "could not write the run's settings"
+  brief="$( (write_brief "$rid") )" || abandon "$rid" launch "could not write the brief"
+  id="$(launch_session "$rid" "$pool" "$settings" "You are forge run $rid. Read $brief and follow it.")" || rc=$?
+  case "$rc" in
+    0) ;;
+    3) abandon "$rid" untrusted "the pool dir $pool is not trusted yet. Run \`claude\` there once, accept the trust prompt, quit, and launch again" ;;
+    *) abandon "$rid" launch "claude --bg did not start a session" ;;
+  esac
+  bash "$FORGE_LEDGER" set "$rid" '.session = {id: $i, launched_at: $t}' --arg i "$id" --arg t "$(now_utc)"
+  if confirm_launch "$rid" "$id"; then
+    printf 'LAUNCHED %s\nRUN_ID=%s\nSESSION=%s\nPOOL=%s\n' "$rid" "$rid" "$id" "$pool"
+  else
+    echo "ABANDONED $rid: session $id was not seen within ${FORGE_LAUNCH_TIMEOUT}s"
+    exit 4
+  fi
+}
+
+launch_new() { # issue profile
+  local issue="$1" profile="$2" summary rc=0 pool pin rid stem busy
+  busy="$(issue_busy "$issue")"
+  [ -z "$busy" ] || { echo "ALREADY $issue: run $busy is working it or waiting on your decision; rework or retire it"; exit 5; }
+  summary="$(bash "$AUTOFIX_BIN_DIR/intake.sh" check "$issue")" || rc=$?
+  case "$rc" in
+    0) ;;
+    2) secure_queue_add "$issue"
+       echo "ROUTED-SECURE $issue: it carries the Security label, so the forge will not work it. Nothing was written. Start a supervised run with: AUTOFIX_SECURE=1 tools/autofix/bin/autofix run-secure $issue"
+       exit 2 ;;
+    3) echo "EXISTING-PR $issue: the issue already has a PR attachment. Nothing was written."; exit 3 ;;
+    *) die "intake check failed for $issue" ;;
+  esac
+  pool="$(pool_take "$profile")" || {
+    queue_add issue "$issue" "$profile"
+    echo "QUEUED $issue: every $profile pool dir is held by a run waiting on your decision: $(pool_holders "$profile" | tr '\n' ' ')"
+    return 0; }
+  pin="$(pin_tooling)"
+  rid="$(mint_forge_id "$issue")"
+  bash "$FORGE_LEDGER" init "$rid" "$issue" forge >/dev/null
+  stem="$(printf '%s' "$summary" | jq -r '.branchName // empty')"
+  [ -n "$stem" ] || stem="$(printf '%s' "$issue" | tr '[:upper:]' '[:lower:]')"
+  bash "$FORGE_LEDGER" set "$rid" \
+    '.decisions += [{key: "branch_stem", value: $s}, {key: "profile", value: $p}]
+     | .pool_dir = $d | .tooling = {sha: $sha, dir: $dir}' \
+    --arg s "$stem" --arg p "$profile" --arg d "$pool" --arg sha "${pin%% *}" --arg dir "${pin#* }"
+  ( prepare_worktree "$rid" ) || abandon "$rid" launch "could not prepare the run's worktree"
+  start_session "$rid"
+}
+
+relaunch() { die "rework is not implemented yet (Task 7)"; }
+
+cmd_launch() { # ISSUE [--profile NAME]
+  local issue="${1:?usage: forge launch <ISSUE> [--profile NAME]}" profile=newspack-workspace rc=0
+  shift
+  while [ $# -gt 0 ]; do
+    case "$1" in --profile) profile="${2:?--profile needs a name}"; shift 2 ;; *) die "unknown flag: $1" ;; esac
+  done
+  printf '%s' "$issue" | LC_ALL=C grep -Eq '^[A-Za-z]+-[0-9]+$' || die "not an issue id: $issue"
+  jq -e --arg p "$profile" 'has($p)' "$AUTOFIX_PROFILES" >/dev/null 2>&1 \
+    || die "no kept profile named $profile (a drafted profile is never launched)"
+  slot_free || rc=$?
+  [ "$rc" -ne 2 ] || die "cannot read the forge's run state"
+  if [ "$rc" -ne 0 ]; then
+    queue_add issue "$issue" "$profile"
+    echo "QUEUED $issue: the slot is held by $(slot_holders | tr '\n' ' ')"
+    return 0
+  fi
+  launch_new "$issue" "$profile"
+}
+
+cmd_next() {
+  local rc=0 line
+  slot_free || rc=$?
+  [ "$rc" -ne 2 ] || die "cannot read the forge's run state"
+  [ "$rc" -eq 0 ] || { echo "SLOT-BUSY $(slot_holders | tr '\n' ' ')"; return 0; }
+  line="$(queue_head)" || { echo "QUEUE-EMPTY"; return 0; }
+  queue_pop
+  # shellcheck disable=SC2086  # queue lines are space-separated words
+  set -- $line
+  case "$1" in
+    issue) launch_new "$2" "$3" ;;
+    rework) relaunch "$2" ;;
+    *) die "bad queue line: $line" ;;
+  esac
+}
+
+cmd="${1:?usage: forge launch|next ...}"; shift
+case "$cmd" in
+  launch) cmd_launch "$@" ;;
+  next) cmd_next ;;
+  *) die "unknown command: $cmd" ;;
+esac

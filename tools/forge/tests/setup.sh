@@ -1,6 +1,7 @@
 # setup.sh — shared fixture for forge tests. Source after autofix's helpers.sh,
 # from the tests directory.
-export AUTOFIX_ROOT; AUTOFIX_ROOT="$(mktemp -d)"            # RUNS_DIR=$AUTOFIX_ROOT/runs
+export AUTOFIX_ROOT; AUTOFIX_ROOT="$(mktemp -d)"
+RUNS_DIR="$AUTOFIX_ROOT/runs"   # what common.sh derives when AUTOFIX_ROOT is given
 export FORGE_STATE; FORGE_STATE="$(mktemp -d)"
 export FORGE_POOL_ROOT="$FORGE_STATE/dirs"
 export FORGE_POLL_INTERVAL=0 FORGE_LAUNCH_TIMEOUT=0 FORGE_STOP_TIMEOUT=0
