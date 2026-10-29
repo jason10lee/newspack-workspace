@@ -139,3 +139,21 @@ prune_tooling() { # remove exports that no unretired forge run references
     chmod -R u+w "$d" && rm -rf "$d" && log "pruned tooling export $d"
   done
 }
+
+# --- run settings ------------------------------------------------------------
+# Passed to the run session with --settings. The environment makes the pinned
+# scripts act on the real workspace and runs directory (they would otherwise
+# derive both from the export's location); the hook is the pinned copy.
+write_run_settings() { # rid tooling_dir -> path of the settings file
+  local rid="$1" tdir="$2" hook f
+  hook="$tdir/tools/forge/hooks/mcp-read-only.sh"
+  [ -f "$hook" ] || die "pinned tooling has no MCP hook: $hook"
+  case "$hook" in *'"'*|*"'"*|*'$'*|*'`'*) die "unsafe characters in the tooling path: $hook" ;; esac
+  f="$RUNS_DIR/$rid/settings.json"
+  jq -n --arg hook "$hook" --arg rid "$rid" --arg ws "$WORKSPACE_ROOT" --arg runs "$RUNS_DIR" '{
+    env: {FORGE_RUN_ID: $rid, AUTOFIX_WORKSPACE_ROOT: $ws, AUTOFIX_RUNS_DIR: $runs},
+    hooks: {PreToolUse: [{matcher: "mcp__.*",
+      hooks: [{type: "command", command: ("bash \"" + $hook + "\"")}]}]}
+  }' > "$f"
+  printf '%s\n' "$f"
+}
