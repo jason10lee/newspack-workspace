@@ -1,0 +1,20 @@
+#!/bin/bash
+# Test stub for the claude CLI. Logs each call with its working directory and
+# answers the three calls the forge makes from files the test controls.
+printf '%s|%s\n' "$PWD" "$*" >> "${STUB_LOG:?}"
+case "$1" in
+  --bg)
+    if [ -n "${STUB_BG_OUT:-}" ]; then printf '%s\n' "$STUB_BG_OUT"; exit 0; fi
+    name=""
+    while [ $# -gt 0 ]; do [ "$1" = -n ] && { name="$2"; break; }; shift; done
+    printf 'backgrounded · %s · %s\n' "${STUB_BG_ID:-1a2b3c4d}" "$name" ;;
+  agents) cat "${STUB_AGENTS:?}" ;;
+  stop)
+    printf 'stopped %s\n' "$2"
+    if [ "${STUB_STOP_KILLS:-1}" = 1 ]; then
+      jq --arg i "$2" 'map(if .id == $i then del(.pid) else . end)' "$STUB_AGENTS" > "$STUB_AGENTS.tmp" \
+        && mv "$STUB_AGENTS.tmp" "$STUB_AGENTS"
+    fi
+    if [ -n "${STUB_STOP_RUN:-}" ]; then bash "$STUB_STOP_RUN"; fi ;;
+  *) echo "stub claude: unexpected call: $*" >&2; exit 64 ;;
+esac
