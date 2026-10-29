@@ -140,7 +140,15 @@ launch_new() { # issue profile
   start_session "$rid"
 }
 
-relaunch() { die "rework is not implemented yet (Task 7)"; }
+# relaunch <rid> — rework: a new session for the same run, on the same pool
+# dir, worktree and pinned tooling. A run that stopped early or died goes back
+# through Stage 0's claim, which the skill does on seeing launch=confirmed.
+relaunch() {
+  local rid="$1"
+  bash "$FORGE_LEDGER" set "$rid" '.delivery = null | .terminal = null | .launch = null | .session = null'
+  bash "$FORGE_LEDGER" history "$rid" rework relaunching ""
+  start_session "$rid"
+}
 
 cmd_launch() { # ISSUE [--profile NAME]
   local issue="${1:?usage: forge launch <ISSUE> [--profile NAME]}" profile=newspack-workspace rc=0
@@ -228,10 +236,78 @@ $holders
 EOH
 }
 
-cmd="${1:?usage: forge launch|next|check ...}"; shift
+require_forge_run() { # rid
+  case "$1" in ""|*/*|.|..) die "not a run id: $1" ;; esac
+  [ -f "$RUNS_DIR/$1/ledger.json" ] || die "no run $1"
+  [ "$(bash "$FORGE_LEDGER" get "$1" .mode)" = forge ] || die "$1 is not a forge run"
+}
+
+cmd_status() {
+  local lfs lf id alive
+  lfs="$(forge_ledgers)" || exit 1
+  printf 'run\tissue\tlaunch\tstage\tstate\tpool\tsession\talive\n'
+  [ -z "$lfs" ] || while IFS= read -r lf; do
+    id="$(jq -r '.session.id // ""' "$lf")"
+    alive="-"; [ -z "$id" ] || { session_alive "$id" && alive=yes || alive=no; }
+    jq -r --arg a "$alive" '[.run_id, .issue, (.launch // "-"), (.stage // "-"),
+      (if .retired_at then "retired" else (.terminal // .delivery.kind // "working") end),
+      (.pool_dir // "-"), (.session.id // "-"), $a] | @tsv' "$lf"
+  done <<EOL
+$lfs
+EOL
+  echo; echo "queue:"; cat "$FORGE_STATE/queue" 2>/dev/null || true
+  echo "secure queue (start these with autofix-secure):"; cat "$FORGE_STATE/secure-queue" 2>/dev/null || true
+}
+
+cmd_rework() { # rid suggestion...
+  local rid="${1:?usage: forge rework <run id> <suggestion>}" term del
+  shift
+  [ $# -gt 0 ] || die "usage: forge rework <run id> <suggestion>"
+  require_forge_run "$rid"
+  [ "$(bash "$FORGE_LEDGER" get "$rid" '.retired_at // empty')" = "" ] || die "$rid is retired"
+  term="$(bash "$FORGE_LEDGER" get "$rid" '.terminal // empty')"
+  del="$(bash "$FORGE_LEDGER" get "$rid" '.delivery.kind // empty')"
+  case "$term" in
+    "") [ -n "$del" ] || die "$rid is still working; rework waits for its delivery" ;;
+    bailed-dead) ;;
+    routed-secure) die "$rid went to autofix-secure; the forge does not work security issues" ;;
+    *) die "$rid ended as $term; launch the issue again instead" ;;
+  esac
+  bash "$FORGE_LEDGER" set "$rid" '.decisions += [{key: "rework", value: $v}]' --arg v "$*"
+  queue_add rework "$rid"
+  echo "REWORK-QUEUED $rid"
+  cmd_next
+}
+
+cmd_retire() { # rid
+  local rid="${1:?usage: forge retire <run id>}" wt pool repo
+  require_forge_run "$rid"
+  [ "$(bash "$FORGE_LEDGER" get "$rid" '.retired_at // empty')" = "" ] || { echo "RETIRED $rid (already)"; return 0; }
+  [ "$(bash "$FORGE_LEDGER" get "$rid" 'if .terminal == null and .delivery == null then "working" else "" end')" = "" ] \
+    || die "$rid is still working; it can be retired once it delivers or ends"
+  wt="$(bash "$FORGE_LEDGER" get "$rid" '.worktree // empty')"
+  pool="$(bash "$FORGE_LEDGER" get "$rid" '.pool_dir // empty')"
+  if [ -n "$wt" ] && [ -n "$pool" ] && [ "${wt#"$pool"/}" != "$wt" ] && [ -d "$wt" ]; then
+    [ -z "$(git -C "$wt" status --porcelain)" ] || die "$wt has uncommitted changes; commit or discard them first"
+    repo="$(profile_get "$rid" '.repo // empty')"; repo="${repo:-$WORKSPACE_ROOT}"
+    git -C "$repo" worktree remove "$wt" || die "could not remove $wt"
+    echo "removed $wt; branch $(bash "$FORGE_LEDGER" get "$rid" '.branch // "-"') kept"
+  elif [ -n "$(bash "$FORGE_LEDGER" get "$rid" '.env.name // empty')" ]; then
+    echo "env and worktree kept; destroy them with: tools/autofix/bin/env.sh destroy $rid"
+  fi
+  bash "$FORGE_LEDGER" set "$rid" '.retired_at = $t' --arg t "$(now_utc)"
+  bash "$FORGE_LEDGER" history "$rid" retire retired ""
+  prune_tooling || true
+  echo "RETIRED $rid"
+}
+
+cmd="${1:?usage: forge launch|next|check|status|rework|retire ...}"; shift
 case "$cmd" in
   launch) cmd_launch "$@" ;;
   next) cmd_next ;;
   check) cmd_check ;;
+  status) cmd_status ;;
+  rework) cmd_rework "$@" ;;
+  retire) cmd_retire "$@" ;;
   *) die "unknown command: $cmd" ;;
 esac
