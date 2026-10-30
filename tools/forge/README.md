@@ -19,8 +19,13 @@ The dispatcher session runs these from the root checkout, following the
   writing anything.
 - `forge next` launches the head of the queue when the slot is free.
 - `forge check` applies the liveness rule to every run holding the slot. A
-  gone or stalled session is stopped; the run is marked `bailed-dead` and its
-  Linear fields are restored under the forge grant, unless it delivered first.
+  gone session is stopped; a run with no progress past the stage bound is
+  first marked, and stopped only if a check at least `FORGE_STALE_RECHECK`
+  seconds later (default 600) still sees no progress, since the clock
+  includes the machine's sleep. A mark set just before a long sleep can
+  still stop a run on the first check after the wake. A stopped run is
+  marked `bailed-dead` and its Linear fields are restored under the forge
+  grant, unless it delivered first.
 - `forge status` lists forge runs, the queue and the secure queue.
 - `forge rework <run> <suggestion>` relaunches a delivered, stopped or dead run,
   unless its issue now has a PR or the Security label.
@@ -28,8 +33,9 @@ The dispatcher session runs these from the root checkout, following the
   directory; a worktree inside it must be clean.
 - `forge batch <run>` builds the publish batch for a delivered run from what
   `pr.sh prepare` checked, refusing when the branch or a body has changed
-  since, or when the issue now has a PR or the Security label. The dispatcher previews it with `batch-approval` and runs it only
-  after the operator approves.
+  since, or when the issue now has a PR or the Security label. The
+  dispatcher previews it with `batch-approval` and runs it only after the
+  operator approves.
 
 ## Run sessions
 
@@ -61,13 +67,16 @@ judgment:
   directory asks once.
 - **Pinned tooling**: a read-only export of `tools/` and `.claude/skills/` from
   local `main` at launch, under `~/.local/state/newspack/forge/tooling/<sha>`.
-- **Settings** that point the scripts at the real workspace and runs directory,
-  and carry the forge state dir and the run's launch wait. The run gets no
-  `AUTOFIX_*` or `FORGE_*` variable, or session id, from the dispatcher's
-  shell. The settings also install `hooks/mcp-read-only.sh`, which denies
-  every MCP tool not listed in `mcp-read-tools.txt`. Add a tool there only
-  after checking that it cannot write. The hook does not stop a run's Bash from writing with the Linear key in
-  the workspace `.env`; the spec's open question 5 tracks that.
+- **Settings** that point the scripts at the real workspace and runs
+  directory, and carry the forge state dir and the run's launch wait. The run
+  gets no `AUTOFIX_*` or `FORGE_*` variable, or session id, from the
+  dispatcher's shell. The settings also install `hooks/mcp-read-only.sh`,
+  which denies every MCP tool not listed in `mcp-read-tools.txt`. Add a tool
+  there only after checking that it cannot write. The hook does not stop a
+  run's Bash from writing with the Linear key in the workspace `.env`; the
+  spec's open question 5 tracks that. The settings also name their own file in
+  `REPRISE_SETTINGS`, which `reprise-team-launch` passes to the review session
+  it starts, so the hook covers that session too.
 
 ## Tests
 
