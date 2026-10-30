@@ -17,6 +17,29 @@ require_run() { # rid
 
 run_dir() { dirname "$(lg path "$1")"; }
 
+# notify <title> <message> — a local macOS notification. A run session runs in
+# the background, so a notification sent to its terminal reaches no one;
+# Notification Center does. The text goes in as arguments, never as script, and
+# a failed notification never fails the step that sent it.
+notify() {
+  command -v osascript >/dev/null 2>&1 || return 0
+  osascript - "$1" "$2" >/dev/null 2>&1 <<'OSA' || true
+on run argv
+  display notification (item 2 of argv) with title (item 1 of argv)
+end run
+OSA
+}
+
+cmd_notify() { # rid message...
+  local rid="${1:?usage: forge-run notify <run id> <message>}"
+  shift
+  [ $# -gt 0 ] || die "usage: forge-run notify <run id> <message>"
+  require_run "$rid"
+  notify "forge $(lg get "$rid" .issue)" "$*"
+  lg history "$rid" notify sent "$*"
+  echo "NOTIFIED $rid"
+}
+
 # claim_state <rid> — held, released or none, from the newest claim or release
 # in the run's history. A rework must not claim a held issue again: claim.sh
 # would record the run's own assignee and state as the values to restore.
@@ -148,6 +171,7 @@ cmd_stop() { # rid packet reason...
   lg set "$rid" '.delivery = {kind: "stopped", at: $t, packet: $p, reason: $r}' \
     --arg t "$(now_utc)" --arg p "$packet" --arg r "$*"
   lg history "$rid" deliver stopped "$*"
+  notify "forge $(lg get "$rid" .issue)" "stopped: $*. The packet is in the run directory."
   echo "STOPPED $rid"
 }
 
@@ -163,6 +187,7 @@ cmd_route_secure() { # rid packet
     --arg t "$(now_utc)" --arg p "$packet"
   lg history "$rid" deliver routed-secure ""
   secure_queue_add "$issue"
+  notify "forge $issue" "routed to autofix-secure: the issue carries the Security label."
   echo "ROUTED-SECURE $issue: the claim is restored and the issue is queued for a supervised autofix-secure run"
 }
 
@@ -185,10 +210,11 @@ cmd_deliver() { # rid packet
   esac
   lg set "$rid" '.delivery = {kind: "delivered", at: $t, packet: $p}' --arg t "$(now_utc)" --arg p "$packet"
   lg history "$rid" deliver delivered ""
+  notify "forge $issue" "delivered: run $rid is ready for your decision."
   echo "DELIVERED $rid"
 }
 
-cmd="${1:?usage: forge-run state|claim|security-check|stop|route-secure|deliver <run id> ...}"; shift
+cmd="${1:?usage: forge-run state|claim|security-check|stop|route-secure|deliver|notify <run id> ...}"; shift
 case "$cmd" in
   state) cmd_state "$@" ;;
   claim) cmd_claim "$@" ;;
@@ -196,5 +222,6 @@ case "$cmd" in
   stop) cmd_stop "$@" ;;
   route-secure) cmd_route_secure "$@" ;;
   deliver) cmd_deliver "$@" ;;
+  notify) cmd_notify "$@" ;;
   *) die "unknown command: $cmd" ;;
 esac

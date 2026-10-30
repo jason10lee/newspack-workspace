@@ -44,6 +44,9 @@ judgment:
   again, so the values a later restore puts back stay the original ones.
 - `forge-run security-check <run>` re-reads the issue's labels at a stage
   boundary.
+- `forge-run notify <run> <message>` posts a macOS notification titled with
+  the issue. The three endings send one on their own; a run calls this when
+  it waits on the operator.
 - `forge-run deliver <run> <packet>`, `forge-run stop <run> <packet> <reason>`
   and `forge-run route-secure <run> <packet>` are the three ways a run ends.
   Each needs a packet in the run directory, and the last two restore the claim.
