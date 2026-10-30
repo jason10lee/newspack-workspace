@@ -128,7 +128,10 @@ assert_contains "$out" "changed since pr.sh prepare" "and says so"
 
 # a claim that wrote but never recorded itself is restored
 fresh; bash "$L" init f-u NPPM-2993 forge >/dev/null; mock f-u "$FX/issue_ok.json"
+# a rework: the earlier session claimed and restored, and the new session's
+# claim wrote but failed before recording itself
 bash "$L" set f-u '.launch = "confirmed" | .linear_prior = {assigneeId: null, stateId: "7fad47f0-3b4a-42ca-bf01-41a979e4cbbe", claimed_state_id: "f00ac312-3e9b-4fc2-a119-1a7cd68ece00"}'
+bash "$L" history f-u intake claimed x; bash "$L" history f-u release restored x; bash "$L" history f-u intake claiming ""
 fr stop f-u "$(packet f-u "## Why it stopped" "## Friction")" claim did not record >/dev/null
 assert_eq 1 "$(updates)" "a claim that wrote but never recorded is restored by stop"
 

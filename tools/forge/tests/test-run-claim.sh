@@ -119,4 +119,22 @@ out="$(fr claim f-if)"; rc=$?
 assert_eq 1 "$rc" "an intake failure exits 1"
 assert_contains "$out" "CLAIM-FAILED" "with the token the skill knows"
 
+# the claim marks itself before claim.sh writes, so a write that never records is still known
+confirmed f-mk; mock f-mk "$FX/issue_ok.json"
+fr claim f-mk >/dev/null
+assert_eq "claiming claimed" "$(bash "$L" get f-mk '[.stage_history[] | select(.stage == "intake") | .outcome] | join(" ")')" "the claim records claiming before claimed"
+# an earlier claim that wrote but never recorded, found holding: recovered, not claimed again
+confirmed f-rc; bash "$L" history f-rc intake claimed x; bash "$L" history f-rc release restored x; bash "$L" history f-rc intake claiming ""
+mock f-rc "$(issue_with ".data.issue.assignee = {id: \"$ME\"} | .data.issue.state = $INPROG")"
+out="$(fr claim f-rc)"; rc=$?
+assert_eq 0 "$rc" "a claim that wrote but never recorded is recovered on the next claim"
+assert_contains "$out" "HELD" "as held"
+assert_eq 0 "$(updates)" "without writing again"
+# an earlier claim that never wrote: the issue is untouched, so it claims normally
+confirmed f-nw; bash "$L" history f-nw intake claiming ""; mock f-nw "$FX/issue_ok.json"
+out="$(fr claim f-nw)"; rc=$?
+assert_eq 0 "$rc" "a claim that never wrote is made again"
+assert_contains "$out" "CLAIMED" "and says so"
+assert_eq 1 "$(updates)" "through one update"
+
 finish

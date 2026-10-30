@@ -274,12 +274,11 @@ check_run() {
   bash "$FORGE_LEDGER" set "$rid" '.terminal = "bailed-dead"'
   bash "$FORGE_LEDGER" history "$rid" liveness bailed-dead "$why"
   issue="$(bash "$FORGE_LEDGER" get "$rid" .issue)"
-  # Restore when the newest claim event is a claim, or when a claim may have
-  # written before it recorded itself (claim.sh records the state it sets first).
-  if [ "$(bash "$FORGE_LEDGER" get "$rid" '([.stage_history[]
-        | select((.stage == "intake" and .outcome == "claimed") or (.stage == "release" and .outcome == "restored"))]
-        | last | .outcome) as $o
-      | if $o == "claimed" or ($o == null and (.linear_prior.claimed_state_id // null) != null) then "yes" else "no" end')" = yes ]; then
+  # Restore when the newest claim event is a claim, or a claim that started and
+  # never recorded how it ended (forge-run marks "claiming" before claim.sh writes).
+  if [ "$(bash "$FORGE_LEDGER" get "$rid" '[.stage_history[]
+        | select((.stage == "intake" and (.outcome == "claimed" or .outcome == "claiming")) or (.stage == "release" and .outcome == "restored"))]
+        | last | .outcome // "" | if . == "claimed" or . == "claiming" then "yes" else "no" end')" = yes ]; then
     if bash "$AUTOFIX_BIN_DIR/claim.sh" release "$issue" "$rid" >/dev/null 2>&1; then rel="restored"
     else rel="the restore failed; check $issue by hand"; fi
   else

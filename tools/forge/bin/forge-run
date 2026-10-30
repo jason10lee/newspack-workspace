@@ -40,13 +40,16 @@ cmd_notify() { # rid message...
   echo "NOTIFIED $rid"
 }
 
-# claim_state <rid> — held, released or none, from the newest claim or release
-# in the run's history. A rework must not claim a held issue again: claim.sh
-# would record the run's own assignee and state as the values to restore.
+# claim_state <rid> — held, released, claiming or none, from the newest claim
+# event in the run's history. A rework must not claim a held issue again:
+# claim.sh would record the run's own assignee and state as the values to
+# restore. "claiming" means a claim started and never recorded how it ended, so
+# it may have written.
 claim_state() {
   lg get "$1" '[.stage_history[]
-      | select((.stage == "intake" and .outcome == "claimed") or (.stage == "release" and .outcome == "restored"))]
-    | last | if . == null then "none" elif .outcome == "claimed" then "held" else "released" end'
+      | select((.stage == "intake" and (.outcome == "claimed" or .outcome == "claiming")) or (.stage == "release" and .outcome == "restored"))]
+    | last | if . == null then "none" elif .outcome == "claimed" then "held"
+      elif .outcome == "claiming" then "claiming" else "released" end'
 }
 
 cmd_state() { # rid
@@ -73,7 +76,7 @@ wait_launch() {
 }
 
 cmd_claim() { # rid
-  local rid="${1:?usage: forge-run claim <run id>}" issue rc=0 summary me who state
+  local rid="${1:?usage: forge-run claim <run id>}" issue rc=0 summary me who state st
   require_run "$rid"
   issue="$(lg get "$rid" .issue)"
   wait_launch "$rid" || rc=$?
@@ -98,7 +101,15 @@ cmd_claim() { # rid
     || { echo "CLAIM-FAILED $issue: could not read the Linear viewer; nothing was claimed"; exit 1; }
   who="$(printf '%s' "$summary" | jq -r '.assigneeId // ""')"
   state="$(printf '%s' "$summary" | jq -r '.stateName // ""')"
-  if [ "$(claim_state "$rid")" = held ]; then
+  st="$(claim_state "$rid")"
+  # An earlier claim that wrote but never recorded itself left the issue as this
+  # run would have; take it as held rather than claim again over our own values.
+  if [ "$st" = claiming ] && [ "$who" = "$me" ] && [ "$state" = "In Progress" ]; then
+    lg history "$rid" intake claimed "recovered: an earlier claim wrote and never recorded itself"
+    echo "HELD $issue"
+    return 0
+  fi
+  if [ "$st" = held ]; then
     if [ "$who" = "$me" ] && [ "$state" = "In Progress" ]; then
       lg history "$rid" intake claim-verified "the claim from an earlier session still holds"
       echo "HELD $issue"
@@ -112,6 +123,7 @@ cmd_claim() { # rid
     echo "HELD-BY-OTHER $issue: it is assigned to someone else. Make an early stop; nothing was claimed."
     exit 6
   fi
+  lg history "$rid" intake claiming ""
   rc=0; bash "$AUTOFIX_BIN_DIR/claim.sh" claim "$issue" "$rid" || rc=$?
   [ "$rc" -eq 0 ] || { echo "CLAIM-FAILED $issue: claim.sh exited $rc (its message is above)"; exit 1; }
   echo "CLAIMED $issue"
@@ -155,14 +167,11 @@ require_packet() {
   printf '%s' "$real"
 }
 
-# release_claim <rid> — the conditional restore, when the run holds its claim,
-# or when a claim may have written before it could record itself: claim.sh
-# records the state it sets before it writes. The restore is conditional, so
-# releasing a claim that never landed changes nothing.
+# release_claim <rid> — the conditional restore, when the run holds its claim
+# or a claim may have written before it recorded itself. The restore is
+# conditional, so releasing a claim that never landed changes nothing.
 release_claim() {
-  local st; st="$(claim_state "$1")"
-  if [ "$st" = none ] && [ -z "$(lg get "$1" '.linear_prior.claimed_state_id // ""')" ]; then return 0; fi
-  [ "$st" != released ] || return 0
+  case "$(claim_state "$1")" in held|claiming) ;; *) return 0 ;; esac
   bash "$AUTOFIX_BIN_DIR/claim.sh" release "$(lg get "$1" .issue)" "$1" \
     || die "the conditional restore failed and nothing else changed; run this again"
 }
