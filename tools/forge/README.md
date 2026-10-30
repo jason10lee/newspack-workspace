@@ -21,8 +21,8 @@ The dispatcher session runs these from the root checkout, following the
 - `forge check` applies the liveness rule to every run holding the slot. A
   gone session is stopped; a run with no progress past the stage bound is
   first marked, and stopped only if a check at least `FORGE_STALE_RECHECK`
-  seconds later (default 600) still sees no progress, since the clock
-  includes the machine's sleep. A mark set just before a long sleep can
+  seconds later (default 2700) still sees no progress, since the clock
+  includes the machine's sleep and a review round records none until it ends. A mark set just before a long sleep can
   still stop a run on the first check after the wake. A stopped run is
   marked `bailed-dead` and its Linear fields are restored under the forge
   grant, unless it delivered first.
@@ -72,7 +72,11 @@ judgment:
   gets no `AUTOFIX_*` or `FORGE_*` variable, or session id, from the
   dispatcher's shell. The settings also install `hooks/mcp-read-only.sh`,
   which denies every MCP tool not listed in `mcp-read-tools.txt`. Add a tool
-  there only after checking that it cannot write. The hook does not stop a
+  there only after checking that it cannot write outside the run's env. The
+  browser tools are the one case of acting on a site: they serve a review's
+  live tier, navigation passes only within the run's env host, and page
+  scripts stay denied. A click on an outbound link can still leave that host.
+  The hook does not stop a
   run's Bash from writing with the Linear key in the workspace `.env`; the
   spec's open question 5 tracks that. The settings also name their own file in
   `REPRISE_SETTINGS`, which `reprise-team-launch` passes to the review session
