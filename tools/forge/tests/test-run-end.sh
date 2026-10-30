@@ -59,12 +59,12 @@ fr stop f-s1 "$p" again >/dev/null; rc=$?
 assert_eq 1 "$rc" "a run that ended cannot stop again"
 
 fresh; bash "$L" init f-s2 NPPM-2993 forge >/dev/null; mock f-s2 "$FX/issue_ok.json"
-fr stop f-s2 "$(packet f-s2 "## Friction")" held by someone else >/dev/null; rc=$?
+fr stop f-s2 "$(packet f-s2 "## Why it stopped" "## Friction")" held by someone else >/dev/null; rc=$?
 assert_eq 0 "$rc" "a run that never claimed can stop"
 assert_eq 0 "$(updates)" "with no Linear write"
 
 claimed f-s3; bash "$L" set f-s3 '.fresh_test_in_progress = true'
-fr stop f-s3 "$(packet f-s3 "## Friction")" x >/dev/null; rc=$?
+fr stop f-s3 "$(packet f-s3 "## Why it stopped" "## Friction")" x >/dev/null; rc=$?
 assert_eq 1 "$rc" "stop refuses a run inside a fresh test"
 assert_eq 1 "$(updates)" "and restores nothing"
 
@@ -110,5 +110,26 @@ assert_eq 1 "$rc" "deliver refuses a run that does not hold its claim"
 claimed f-np
 fr deliver f-np "$(packet f-np "${FULL[@]}")" >/dev/null; rc=$?
 assert_eq 1 "$rc" "deliver refuses a run with no pr.sh prepare record"
+
+# stop needs the heading the dispatcher reads first
+claimed f-w
+fr stop f-w "$(packet f-w "## Friction")" scope grew >/dev/null; rc=$?
+assert_eq 1 "$rc" "stop refuses a packet with no Why it stopped section"
+
+# deliver refuses a body changed since prepare
+claimed f-b
+B="$(dirname "$(bash "$L" path f-b)")/pr-body.md"; echo body > "$B"
+bash "$L" set f-b '.worktree = $w | .prepared = {head: $h, files: [{role: "body", path: $b, sha256: $d}]}' \
+  --arg w "$W" --arg h "$(git -C "$W" rev-parse HEAD)" --arg b "$B" --arg d "$(shasum -a 256 "$B" | awk '{print $1}')"
+echo changed >> "$B"
+out="$(bash "$R" deliver f-b "$(packet f-b "${FULL[@]}")" 2>&1)"; rc=$?
+assert_eq 1 "$rc" "deliver refuses a body changed since prepare"
+assert_contains "$out" "changed since pr.sh prepare" "and says so"
+
+# a claim that wrote but never recorded itself is restored
+fresh; bash "$L" init f-u NPPM-2993 forge >/dev/null; mock f-u "$FX/issue_ok.json"
+bash "$L" set f-u '.launch = "confirmed" | .linear_prior = {assigneeId: null, stateId: "7fad47f0-3b4a-42ca-bf01-41a979e4cbbe", claimed_state_id: "f00ac312-3e9b-4fc2-a119-1a7cd68ece00"}'
+fr stop f-u "$(packet f-u "## Why it stopped" "## Friction")" claim did not record >/dev/null
+assert_eq 1 "$(updates)" "a claim that wrote but never recorded is restored by stop"
 
 finish

@@ -113,4 +113,10 @@ out="$(fr claim f-new)"; rc=$?
 assert_eq 0 "$rc" "a retired run of the same issue does not block a new claim"
 assert_contains "$out" "CLAIMED NPPM-2993" "and the new run claims"
 
+# every exit-1 path names itself
+run f-if; bash "$L" set f-if '.launch = "confirmed"'; mock f-if "$FX/issue_ok.json"; rm "$M/issue.json"
+out="$(fr claim f-if)"; rc=$?
+assert_eq 1 "$rc" "an intake failure exits 1"
+assert_contains "$out" "CLAIM-FAILED" "with the token the skill knows"
+
 finish

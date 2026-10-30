@@ -91,10 +91,11 @@ cmd_claim() { # rid
     0) ;;
     2) echo "SECURITY $issue: it carries the Security label. Make the Security stop."; exit 2 ;;
     3) echo "EXISTING-PR $issue: the issue already has a PR attachment. Make an early stop."; exit 5 ;;
-    *) die "intake check failed for $issue" ;;
+    *) echo "CLAIM-FAILED $issue: the intake check failed (exit $rc); nothing was claimed"; exit 1 ;;
   esac
   me="$(linear_viewer_id)"
-  [ -n "$me" ] && [ "$me" != null ] || die "cannot read the Linear viewer"
+  [ -n "$me" ] && [ "$me" != null ] \
+    || { echo "CLAIM-FAILED $issue: could not read the Linear viewer; nothing was claimed"; exit 1; }
   who="$(printf '%s' "$summary" | jq -r '.assigneeId // ""')"
   state="$(printf '%s' "$summary" | jq -r '.stateName // ""')"
   if [ "$(claim_state "$rid")" = held ]; then
@@ -154,9 +155,14 @@ require_packet() {
   printf '%s' "$real"
 }
 
-# release_claim <rid> — the conditional restore, when the run holds its claim.
+# release_claim <rid> — the conditional restore, when the run holds its claim,
+# or when a claim may have written before it could record itself: claim.sh
+# records the state it sets before it writes. The restore is conditional, so
+# releasing a claim that never landed changes nothing.
 release_claim() {
-  [ "$(claim_state "$1")" = held ] || return 0
+  local st; st="$(claim_state "$1")"
+  if [ "$st" = none ] && [ -z "$(lg get "$1" '.linear_prior.claimed_state_id // ""')" ]; then return 0; fi
+  [ "$st" != released ] || return 0
   bash "$AUTOFIX_BIN_DIR/claim.sh" release "$(lg get "$1" .issue)" "$1" \
     || die "the conditional restore failed and nothing else changed; run this again"
 }
@@ -166,7 +172,7 @@ cmd_stop() { # rid packet reason...
   shift 2
   [ $# -gt 0 ] || die "usage: forge-run stop <run id> <packet> <reason>"
   require_run "$rid"; not_ended "$rid"
-  packet="$(require_packet "$rid" "$packet" "## Friction")" || exit 1
+  packet="$(require_packet "$rid" "$packet" "## Why it stopped" "## Friction")" || exit 1
   release_claim "$rid"
   lg set "$rid" '.delivery = {kind: "stopped", at: $t, packet: $p, reason: $r}' \
     --arg t "$(now_utc)" --arg p "$packet" --arg r "$*"
@@ -201,6 +207,13 @@ cmd_deliver() { # rid packet
   wt="$(lg get "$rid" '.worktree // ""')"
   [ "$(git -C "$wt" rev-parse HEAD 2>/dev/null)" = "$head" ] \
     || die "the branch moved since pr.sh prepare; run prepare again"
+  while IFS="$(printf '\t')" read -r path sha; do
+    [ -n "$path" ] || continue
+    [ -f "$path" ] && [ "$(secure_digest "$path")" = "$sha" ] \
+      || die "$path changed since pr.sh prepare; run prepare again"
+  done <<EOF
+$(lg get "$rid" '(.prepared.files // [])[] | [.path, .sha256] | @tsv')
+EOF
   issue="$(lg get "$rid" .issue)"
   check_issue "$issue" || rc=$?
   case "$rc" in

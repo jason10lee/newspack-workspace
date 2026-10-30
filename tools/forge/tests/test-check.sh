@@ -122,4 +122,10 @@ out="$(FORGE_STAGE_BOUND=60 FORGE_STALE_RECHECK=0 bash "$F" check 2>/dev/null)"
 assert_contains "$out" "STALE-MARKED forge-q" "new progress that is itself stale renews the mark"
 assert_eq "2026-01-02T00:00:00Z" "$(bash "$L" get forge-q .liveness.last_progress)" "against the newer progress"
 
+fresh; mkrun forge-v; gone; mock forge-v
+bash "$L" set forge-v '.linear_prior = {assigneeId: null, stateId: "7fad47f0-3b4a-42ca-bf01-41a979e4cbbe", claimed_state_id: "f00ac312-3e9b-4fc2-a119-1a7cd68ece00"}'
+sed "s/RUNID/forge-v/" "$FX/issue_release_unchanged.json" > "$M/issue_release.json"
+out="$(forge check)"
+assert_contains "$out" "restored" "a claim that wrote but never recorded is restored by check"
+
 finish
