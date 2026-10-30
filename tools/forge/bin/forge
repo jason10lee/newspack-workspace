@@ -206,7 +206,7 @@ cmd_next() {
 # session is gone when its row has no pid. A stop that does not take changes
 # nothing; a run that delivered or stopped meanwhile keeps its state.
 check_run() {
-  local rid="$1" launch id last epoch age why issue rel deadline st state started
+  local rid="$1" launch id last epoch age why issue rel deadline st state started seen seen_last seen_epoch now
   launch="$(bash "$FORGE_LEDGER" get "$rid" '.launch // ""')"
   if [ "$launch" != confirmed ]; then
     # A launch whose dispatcher died before confirming or abandoning it would
@@ -235,8 +235,28 @@ check_run() {
   case "$state" in
     unknown) echo "UNKNOWN-STATE $rid: could not read session $id from claude agents; changed nothing"; return 0 ;;
     alive)
-      if [ "$age" -le "$FORGE_STAGE_BOUND" ]; then echo "ALIVE $rid ($id, last progress ${age}s ago)"; return 0; fi
-      why="stalled: no progress for ${age}s"
+      if [ "$age" -le "$FORGE_STAGE_BOUND" ]; then
+        [ "$(bash "$FORGE_LEDGER" get "$rid" '.liveness // empty')" = "" ] \
+          || bash "$FORGE_LEDGER" set "$rid" '.liveness = null'
+        echo "ALIVE $rid ($id, last progress ${age}s ago)"; return 0
+      fi
+      # Wall-clock age includes the machine's sleep, so one stale reading proves
+      # nothing. Mark the run; stop it only when a check at least
+      # FORGE_STALE_RECHECK later still sees the same last progress.
+      now="$(date +%s)"
+      seen="$(bash "$FORGE_LEDGER" get "$rid" '.liveness.stale_seen_at // empty')"
+      seen_last="$(bash "$FORGE_LEDGER" get "$rid" '.liveness.last_progress // empty')"
+      if [ -z "$seen" ] || [ "$seen_last" != "$last" ] || ! seen_epoch="$(iso8601_to_epoch "$seen")"; then
+        bash "$FORGE_LEDGER" set "$rid" '.liveness = {stale_seen_at: $t, last_progress: $l}' \
+          --arg t "$(now_utc)" --arg l "$last"
+        echo "STALE-MARKED $rid ($id): no progress for ${age}s. A check ${FORGE_STALE_RECHECK}s or more from now stops it if it still has none."
+        return 0
+      fi
+      if [ $(( now - seen_epoch )) -lt "$FORGE_STALE_RECHECK" ]; then
+        echo "STALE-WAITING $rid ($id): marked stale at $seen; check again once ${FORGE_STALE_RECHECK}s have passed"
+        return 0
+      fi
+      why="stalled: no progress for ${age}s, seen by two checks"
       claude stop "$id" >/dev/null 2>&1 || true
       deadline=$(( $(date +%s) + FORGE_STOP_TIMEOUT ))
       state="$(session_state "$id")"
