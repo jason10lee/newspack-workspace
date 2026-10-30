@@ -10,6 +10,7 @@ bash "$L" init forge-e NPPM-1 forge >/dev/null
 s="$(write_run_settings forge-e "$T")"
 assert_eq "$FORGE_STATE" "$(jq -r .env.FORGE_STATE "$s")" "the run's settings carry the forge state dir"
 assert_eq 150 "$(jq -r .env.FORGE_LAUNCH_WAIT "$s")" "and a launch wait longer than the dispatcher's timeout"
+assert_eq "$s" "$(jq -r .env.REPRISE_SETTINGS "$s")" "the settings name themselves for sessions the run starts through reprise"
 
 E="$(mktemp)"
 AUTOFIX_LINEAR_MOCK_DIR=/tmp/mock FORGE_SOMETHING=1 CLAUDE_CODE_SESSION_ID=abc KEEP_ME=1 STUB_ENV_LOG="$E" \

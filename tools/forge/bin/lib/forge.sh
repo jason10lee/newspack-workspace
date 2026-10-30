@@ -151,9 +151,9 @@ write_run_settings() { # rid tooling_dir -> path of the settings file
   case "$hook" in *'"'*|*"'"*|*'$'*|*'`'*) die "unsafe characters in the tooling path: $hook" ;; esac
   f="$RUNS_DIR/$rid/settings.json"
   jq -n --arg hook "$hook" --arg rid "$rid" --arg ws "$WORKSPACE_ROOT" --arg runs "$RUNS_DIR" \
-    --arg state "$FORGE_STATE" --arg wait "$FORGE_LAUNCH_WAIT" '{
+    --arg state "$FORGE_STATE" --arg wait "$FORGE_LAUNCH_WAIT" --arg self "$f" '{
     env: {FORGE_RUN_ID: $rid, AUTOFIX_WORKSPACE_ROOT: $ws, AUTOFIX_RUNS_DIR: $runs,
-          FORGE_STATE: $state, FORGE_LAUNCH_WAIT: $wait},
+          FORGE_STATE: $state, FORGE_LAUNCH_WAIT: $wait, REPRISE_SETTINGS: $self},
     hooks: {PreToolUse: [{matcher: "mcp__.*",
       hooks: [{type: "command", command: ("bash \"" + $hook + "\"")}]}]}
   }' > "$f"
