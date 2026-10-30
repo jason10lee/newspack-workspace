@@ -17,6 +17,36 @@ assert_contains "$(call mcp__github__create_pull_request "$HOOK")" "read list" "
 out="$(printf 'not json' | bash "$HOOK")"
 assert_eq deny "$(decision "$out")" "unparseable input is denied"
 
+# the browser reaches this run's env and nothing else
+PW=mcp__plugin_playwright_playwright
+assert_eq "" "$(call ${PW}__browser_click "$HOOK")" "a listed browser tool is allowed"
+assert_eq "" "$(call mcp__playwright__browser_snapshot "$HOOK")" "under either server name"
+assert_eq deny "$(decision "$(call ${PW}__browser_evaluate "$HOOK")")" "page scripts are denied: they could leave the env"
+assert_eq deny "$(decision "$(call ${PW}__browser_run_code "$HOOK")")" "and so is running code"
+N="$(mktemp -d)"; mkdir -p "$N/run"
+printf '{"env":{"name":"autofix-nppm-1-ab12"}}' > "$N/run/ledger.json"
+nav() { # url [tool]
+  jq -n --arg t "${2:-${PW}__browser_navigate}" --arg u "$1" '{tool_name: $t, tool_input: {url: $u}}' \
+    | AUTOFIX_RUNS_DIR="$N" FORGE_RUN_ID=run bash "$HOOK"
+}
+assert_eq "" "$(nav https://autofix-nppm-1-ab12.test/wp-admin/?a=1)" "navigating to the run's env is allowed"
+assert_eq "" "$(nav http://autofix-nppm-1-ab12.test)" "with no path too"
+assert_eq "" "$(nav https://autofix-nppm-1-ab12.test:8443/ mcp__playwright__browser_navigate)" "under either server name, with a port"
+for u in https://example.com/ https://other.test/ https://autofix-nppm-1-ab12.test.example.com/ \
+  https://autofix-nppm-1-ab12.test@example.com/ 'https://autofix-nppm-1-ab12.test:1@example.com/' \
+  'https://autofix-nppm-1-ab12.test\@example.com/' 'https://example.com/https://autofix-nppm-1-ab12.test/' \
+  file:///etc/passwd ''; do
+  assert_eq deny "$(decision "$(nav "$u")")" "navigation to '$u' is denied"
+done
+assert_contains "$(nav https://example.com/)" "autofix-nppm-1-ab12.test" "the deny names the host a run may reach"
+printf '{"env":{"name":"example.com/x"}}' > "$N/run/ledger.json"
+assert_eq deny "$(decision "$(nav https://example.com/x.test/)")" "a ledger name that is not a plain label widens nothing"
+printf '{"env":null}' > "$N/run/ledger.json"
+assert_eq deny "$(decision "$(nav https://autofix-nppm-1-ab12.test/)")" "a run with no env may not navigate"
+printf '{"env":{"name":"autofix-nppm-1-ab12"}}' > "$N/run/ledger.json"
+out="$(printf '{"tool_name":"%s__browser_navigate","tool_input":{"url":"https://autofix-nppm-1-ab12.test/"}}' "$PW" | env -u FORGE_RUN_ID -u AUTOFIX_RUNS_DIR bash "$HOOK")"
+assert_eq deny "$(decision "$out")" "outside a run, navigation is denied"
+
 # a copy with no list beside it denies everything MCP
 T="$(mktemp -d)"; mkdir -p "$T/hooks"; cp "$HOOK" "$T/hooks/"
 assert_eq deny "$(decision "$(call mcp__plugin_linear_linear__get_issue "$T/hooks/mcp-read-only.sh")")" "a missing list denies (fail closed)"

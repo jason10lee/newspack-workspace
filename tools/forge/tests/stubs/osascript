@@ -1,0 +1,6 @@
+#!/bin/bash
+# Test stub for osascript: logs the arguments and the script it was given, one
+# record per call, and fails when the test asks it to.
+{ printf 'osascript|%s\n' "$*"; cat; printf '\n--\n'; } >> "${STUB_NOTIFY_LOG:-/dev/null}"
+[ "${STUB_OSA_FAIL:-0}" = 1 ] && exit 1
+exit 0

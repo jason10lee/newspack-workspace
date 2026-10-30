@@ -8,6 +8,7 @@ export FORGE_POOL_ROOT="$FORGE_STATE/dirs"
 export FORGE_POLL_INTERVAL=0 FORGE_LAUNCH_TIMEOUT=0 FORGE_STOP_TIMEOUT=0
 export STUB_LOG; STUB_LOG="$(mktemp)"
 export STUB_AGENTS; STUB_AGENTS="$(mktemp)"; echo '[]' > "$STUB_AGENTS"
+export STUB_NOTIFY_LOG; STUB_NOTIFY_LOG="$(mktemp)"
 PATH="$(pwd)/stubs:$PATH"; export PATH
 L=../../autofix/bin/ledger.sh
 F=../bin/forge

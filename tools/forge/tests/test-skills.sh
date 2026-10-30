@@ -52,9 +52,16 @@ check_paths "$DIS" "every path the dispatcher skill names exists"
 assert_contains "$(cat "$DIS")" "600000" "the dispatcher skill sets long Bash timeouts"
 assert_contains "$(cat "$DIS")" "batch-approval preview" "publishing goes through a batch preview"
 README="$ROOT/tools/forge/README.md"
-for c in $(labels "$ROOT/tools/forge/bin/forge-run") $(labels "$ROOT/tools/forge/bin/forge"); do
-  [ "$c" = '*' ] && continue
-  assert_contains "$(cat "$README")" "$c" "the README describes '$c'"
+for c in $(labels "$ROOT/tools/forge/bin/forge-run"); do
+  assert_contains "$(cat "$README")" "\`forge-run $c" "the README describes 'forge-run $c'"
 done
+for c in $(labels "$ROOT/tools/forge/bin/forge"); do
+  assert_contains "$(cat "$README")" "\`forge $c" "the README describes 'forge $c'"
+done
+assert_contains "$(cat "$RUN")" "forge-run notify" "the run skill says how to reach the operator while waiting"
+assert_contains "$(cat "$RUN")" "re-read every section of the packet" "a rework re-reads its packet before delivering again"
+assert_contains "$(cat "$DIS")" "STALE-MARKED" "the dispatcher skill explains a stale mark"
+r0="$(first_line "$RUN" "forge-run claim \$RID")"; r1="$(first_line "$RUN" "If it printed \`FRESH_TEST_IN_PROGRESS=true\`")"
+assert_eq yes "$([ -n "$r0" ] && [ -n "$r1" ] && [ "$r0" -lt "$r1" ] && echo yes || echo no)" "Stage 0 claims before it restores an interrupted fresh test"
 
 finish

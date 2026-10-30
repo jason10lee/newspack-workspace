@@ -151,9 +151,9 @@ write_run_settings() { # rid tooling_dir -> path of the settings file
   case "$hook" in *'"'*|*"'"*|*'$'*|*'`'*) die "unsafe characters in the tooling path: $hook" ;; esac
   f="$RUNS_DIR/$rid/settings.json"
   jq -n --arg hook "$hook" --arg rid "$rid" --arg ws "$WORKSPACE_ROOT" --arg runs "$RUNS_DIR" \
-    --arg state "$FORGE_STATE" --arg wait "$FORGE_LAUNCH_WAIT" '{
+    --arg state "$FORGE_STATE" --arg wait "$FORGE_LAUNCH_WAIT" --arg self "$f" '{
     env: {FORGE_RUN_ID: $rid, AUTOFIX_WORKSPACE_ROOT: $ws, AUTOFIX_RUNS_DIR: $runs,
-          FORGE_STATE: $state, FORGE_LAUNCH_WAIT: $wait},
+          FORGE_STATE: $state, FORGE_LAUNCH_WAIT: $wait, REPRISE_SETTINGS: $self},
     hooks: {PreToolUse: [{matcher: "mcp__.*",
       hooks: [{type: "command", command: ("bash \"" + $hook + "\"")}]}]}
   }' > "$f"
@@ -248,6 +248,9 @@ confirm_launch() { # rid id -> 0 confirmed, 1 abandoned
 
 # --- liveness ----------------------------------------------------------------
 : "${FORGE_STAGE_BOUND:=7200}"    # autofix's two-hour wall-clock bound
+# A stale reading only marks a run; a check this many seconds later stops it if
+# the run has still recorded nothing. Wall-clock age includes the machine's sleep.
+: "${FORGE_STALE_RECHECK:=2700}"
 : "${FORGE_STOP_TIMEOUT:=180}"
 # How long past FORGE_LAUNCH_TIMEOUT a launch may sit unconfirmed before
 # `forge check` decides the dispatcher died during it.

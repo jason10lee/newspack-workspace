@@ -17,13 +17,39 @@ require_run() { # rid
 
 run_dir() { dirname "$(lg path "$1")"; }
 
-# claim_state <rid> — held, released or none, from the newest claim or release
-# in the run's history. A rework must not claim a held issue again: claim.sh
-# would record the run's own assignee and state as the values to restore.
+# notify <title> <message> — a local macOS notification. A run session runs in
+# the background, so a notification sent to its terminal reaches no one;
+# Notification Center does. The text goes in as arguments, never as script, and
+# a failed notification never fails the step that sent it.
+notify() {
+  command -v osascript >/dev/null 2>&1 || return 0
+  osascript - "$1" "$2" >/dev/null 2>&1 <<'OSA' || true
+on run argv
+  display notification (item 2 of argv) with title (item 1 of argv)
+end run
+OSA
+}
+
+cmd_notify() { # rid message...
+  local rid="${1:?usage: forge-run notify <run id> <message>}"
+  shift
+  [ $# -gt 0 ] || die "usage: forge-run notify <run id> <message>"
+  require_run "$rid"
+  notify "forge $(lg get "$rid" .issue)" "$*"
+  lg history "$rid" notify sent "$*"
+  echo "NOTIFIED $rid"
+}
+
+# claim_state <rid> — held, released, claiming or none, from the newest claim
+# event in the run's history. A rework must not claim a held issue again:
+# claim.sh would record the run's own assignee and state as the values to
+# restore. "claiming" means a claim started and never recorded how it ended, so
+# it may have written.
 claim_state() {
   lg get "$1" '[.stage_history[]
-      | select((.stage == "intake" and .outcome == "claimed") or (.stage == "release" and .outcome == "restored"))]
-    | last | if . == null then "none" elif .outcome == "claimed" then "held" else "released" end'
+      | select((.stage == "intake" and (.outcome == "claimed" or .outcome == "claiming")) or (.stage == "release" and .outcome == "restored"))]
+    | last | if . == null then "none" elif .outcome == "claimed" then "held"
+      elif .outcome == "claiming" then "claiming" else "released" end'
 }
 
 cmd_state() { # rid
@@ -50,7 +76,7 @@ wait_launch() {
 }
 
 cmd_claim() { # rid
-  local rid="${1:?usage: forge-run claim <run id>}" issue rc=0 summary me who state
+  local rid="${1:?usage: forge-run claim <run id>}" issue rc=0 summary me who state st
   require_run "$rid"
   issue="$(lg get "$rid" .issue)"
   wait_launch "$rid" || rc=$?
@@ -68,13 +94,22 @@ cmd_claim() { # rid
     0) ;;
     2) echo "SECURITY $issue: it carries the Security label. Make the Security stop."; exit 2 ;;
     3) echo "EXISTING-PR $issue: the issue already has a PR attachment. Make an early stop."; exit 5 ;;
-    *) die "intake check failed for $issue" ;;
+    *) echo "CLAIM-FAILED $issue: the intake check failed (exit $rc); nothing was claimed"; exit 1 ;;
   esac
   me="$(linear_viewer_id)"
-  [ -n "$me" ] && [ "$me" != null ] || die "cannot read the Linear viewer"
+  [ -n "$me" ] && [ "$me" != null ] \
+    || { echo "CLAIM-FAILED $issue: could not read the Linear viewer; nothing was claimed"; exit 1; }
   who="$(printf '%s' "$summary" | jq -r '.assigneeId // ""')"
   state="$(printf '%s' "$summary" | jq -r '.stateName // ""')"
-  if [ "$(claim_state "$rid")" = held ]; then
+  st="$(claim_state "$rid")"
+  # An earlier claim that wrote but never recorded itself left the issue as this
+  # run would have; take it as held rather than claim again over our own values.
+  if [ "$st" = claiming ] && [ "$who" = "$me" ] && [ "$state" = "In Progress" ]; then
+    lg history "$rid" intake claimed "recovered: an earlier claim wrote and never recorded itself"
+    echo "HELD $issue"
+    return 0
+  fi
+  if [ "$st" = held ]; then
     if [ "$who" = "$me" ] && [ "$state" = "In Progress" ]; then
       lg history "$rid" intake claim-verified "the claim from an earlier session still holds"
       echo "HELD $issue"
@@ -88,6 +123,7 @@ cmd_claim() { # rid
     echo "HELD-BY-OTHER $issue: it is assigned to someone else. Make an early stop; nothing was claimed."
     exit 6
   fi
+  lg history "$rid" intake claiming ""
   rc=0; bash "$AUTOFIX_BIN_DIR/claim.sh" claim "$issue" "$rid" || rc=$?
   [ "$rc" -eq 0 ] || { echo "CLAIM-FAILED $issue: claim.sh exited $rc (its message is above)"; exit 1; }
   echo "CLAIMED $issue"
@@ -131,9 +167,11 @@ require_packet() {
   printf '%s' "$real"
 }
 
-# release_claim <rid> — the conditional restore, when the run holds its claim.
+# release_claim <rid> — the conditional restore, when the run holds its claim
+# or a claim may have written before it recorded itself. The restore is
+# conditional, so releasing a claim that never landed changes nothing.
 release_claim() {
-  [ "$(claim_state "$1")" = held ] || return 0
+  case "$(claim_state "$1")" in held|claiming) ;; *) return 0 ;; esac
   bash "$AUTOFIX_BIN_DIR/claim.sh" release "$(lg get "$1" .issue)" "$1" \
     || die "the conditional restore failed and nothing else changed; run this again"
 }
@@ -143,11 +181,12 @@ cmd_stop() { # rid packet reason...
   shift 2
   [ $# -gt 0 ] || die "usage: forge-run stop <run id> <packet> <reason>"
   require_run "$rid"; not_ended "$rid"
-  packet="$(require_packet "$rid" "$packet" "## Friction")" || exit 1
+  packet="$(require_packet "$rid" "$packet" "## Why it stopped" "## Friction")" || exit 1
   release_claim "$rid"
   lg set "$rid" '.delivery = {kind: "stopped", at: $t, packet: $p, reason: $r}' \
     --arg t "$(now_utc)" --arg p "$packet" --arg r "$*"
   lg history "$rid" deliver stopped "$*"
+  notify "forge $(lg get "$rid" .issue)" "stopped: $*. The packet is in the run directory."
   echo "STOPPED $rid"
 }
 
@@ -163,6 +202,7 @@ cmd_route_secure() { # rid packet
     --arg t "$(now_utc)" --arg p "$packet"
   lg history "$rid" deliver routed-secure ""
   secure_queue_add "$issue"
+  notify "forge $issue" "routed to autofix-secure: the issue carries the Security label."
   echo "ROUTED-SECURE $issue: the claim is restored and the issue is queued for a supervised autofix-secure run"
 }
 
@@ -176,6 +216,13 @@ cmd_deliver() { # rid packet
   wt="$(lg get "$rid" '.worktree // ""')"
   [ "$(git -C "$wt" rev-parse HEAD 2>/dev/null)" = "$head" ] \
     || die "the branch moved since pr.sh prepare; run prepare again"
+  while IFS="$(printf '\t')" read -r path sha; do
+    [ -n "$path" ] || continue
+    [ -f "$path" ] && [ "$(secure_digest "$path")" = "$sha" ] \
+      || die "$path changed since pr.sh prepare; run prepare again"
+  done <<EOF
+$(lg get "$rid" '(.prepared.files // [])[] | [.path, .sha256] | @tsv')
+EOF
   issue="$(lg get "$rid" .issue)"
   check_issue "$issue" || rc=$?
   case "$rc" in
@@ -185,10 +232,11 @@ cmd_deliver() { # rid packet
   esac
   lg set "$rid" '.delivery = {kind: "delivered", at: $t, packet: $p}' --arg t "$(now_utc)" --arg p "$packet"
   lg history "$rid" deliver delivered ""
+  notify "forge $issue" "delivered: run $rid is ready for your decision."
   echo "DELIVERED $rid"
 }
 
-cmd="${1:?usage: forge-run state|claim|security-check|stop|route-secure|deliver <run id> ...}"; shift
+cmd="${1:?usage: forge-run state|claim|security-check|stop|route-secure|deliver|notify <run id> ...}"; shift
 case "$cmd" in
   state) cmd_state "$@" ;;
   claim) cmd_claim "$@" ;;
@@ -196,5 +244,6 @@ case "$cmd" in
   stop) cmd_stop "$@" ;;
   route-secure) cmd_route_secure "$@" ;;
   deliver) cmd_deliver "$@" ;;
+  notify) cmd_notify "$@" ;;
   *) die "unknown command: $cmd" ;;
 esac
