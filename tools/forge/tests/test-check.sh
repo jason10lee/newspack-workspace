@@ -129,4 +129,7 @@ sed "s/RUNID/forge-v/" "$FX/issue_release_unchanged.json" > "$M/issue_release.js
 out="$(forge check)"
 assert_contains "$out" "restored" "a claim that wrote but never recorded is restored by check"
 
+# the recheck has to outlast a review round, which records no progress until it ends
+assert_eq 2700 "$( unset FORGE_STALE_RECHECK; . ../bin/lib/forge.sh; echo "$FORGE_STALE_RECHECK" )" "the default recheck is 45 minutes"
+
 finish

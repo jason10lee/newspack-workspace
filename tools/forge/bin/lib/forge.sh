@@ -250,7 +250,7 @@ confirm_launch() { # rid id -> 0 confirmed, 1 abandoned
 : "${FORGE_STAGE_BOUND:=7200}"    # autofix's two-hour wall-clock bound
 # A stale reading only marks a run; a check this many seconds later stops it if
 # the run has still recorded nothing. Wall-clock age includes the machine's sleep.
-: "${FORGE_STALE_RECHECK:=600}"
+: "${FORGE_STALE_RECHECK:=2700}"
 : "${FORGE_STOP_TIMEOUT:=180}"
 # How long past FORGE_LAUNCH_TIMEOUT a launch may sit unconfirmed before
 # `forge check` decides the dispatcher died during it.

@@ -29,7 +29,7 @@ bash tools/forge/bin/forge launch <ISSUE> [--profile <name>]
 
 ## While runs work
 
-- `bash tools/forge/bin/forge check` stops a run whose session died, and restores its claim. A run that has gone two hours without progress is first only marked (`STALE-MARKED`), because the clock includes the Mac's sleep; a later check at least ten minutes on stops it if it still has none (`STALE-WAITING` means it is too soon to tell). Run `check` whenever the operator asks about runs, and before `next`. `UNKNOWN-STATE` and `STOP-UNCONFIRMED` change nothing; report them.
+- `bash tools/forge/bin/forge check` stops a run whose session died, and restores its claim. A run that has gone two hours without progress is first only marked (`STALE-MARKED`), because the clock includes the Mac's sleep; a later check at least 45 minutes on stops it if it still has none (`STALE-WAITING` means it is too soon to tell). Run `check` whenever the operator asks about runs, and before `next`. `UNKNOWN-STATE` and `STOP-UNCONFIRMED` change nothing; report them.
 - `bash tools/forge/bin/forge next` starts the head of the queue when the slot is free.
 - `bash tools/forge/bin/forge status` lists the runs, the queue and the secure queue.
 
