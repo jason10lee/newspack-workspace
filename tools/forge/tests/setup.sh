@@ -14,3 +14,5 @@ L=../../autofix/bin/ledger.sh
 F=../bin/forge
 alive() { printf '[{"id":"%s","kind":"background","pid":4242,"state":"blocked"}]\n' "${1:-1a2b3c4d}" > "$STUB_AGENTS"; }
 gone()  { printf '[{"id":"%s","kind":"background","state":"done"}]\n' "${1:-1a2b3c4d}" > "$STUB_AGENTS"; }
+# A session that ended its turn on a question: no process, but `claude attach` resumes it.
+waiting() { printf '[{"id":"%s","kind":"background","state":"blocked"}]\n' "${1:-1a2b3c4d}" > "$STUB_AGENTS"; }

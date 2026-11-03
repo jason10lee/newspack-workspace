@@ -15,7 +15,7 @@ case "$1" in
   stop)
     printf 'stopped %s\n' "$2"
     if [ "${STUB_STOP_KILLS:-1}" = 1 ]; then
-      jq --arg i "$2" 'map(if .id == $i then del(.pid) else . end)' "$STUB_AGENTS" > "$STUB_AGENTS.tmp" \
+      jq --arg i "$2" 'map(if .id == $i then del(.pid) | .state = "stopped" else . end)' "$STUB_AGENTS" > "$STUB_AGENTS.tmp" \
         && mv "$STUB_AGENTS.tmp" "$STUB_AGENTS"
     fi
     if [ "${STUB_STOP_BREAKS_AGENTS:-0}" = 1 ]; then echo 'not json' > "$STUB_AGENTS"; fi

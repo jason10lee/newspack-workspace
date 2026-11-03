@@ -75,6 +75,19 @@ out="$(forge check)"
 assert_contains "$out" "UNKNOWN-PROGRESS forge-t" "an unusable timestamp is reported"
 assert_contains "$out" "ALIVE forge-t" "and never read as stalled"
 
+# a session waiting on a question is not dead, however long it waits
+fresh; mkrun forge-wq; waiting; bash "$L" set forge-wq '.stage_history = [{stage:"x", outcome:"y", at:"2026-01-01T00:00:00Z"}]'
+: > "$STUB_LOG"
+out="$(FORGE_STAGE_BOUND=60 FORGE_STALE_RECHECK=0 bash "$F" check 2>/dev/null)"
+out="$(FORGE_STAGE_BOUND=60 FORGE_STALE_RECHECK=0 bash "$F" check 2>/dev/null)"
+assert_contains "$out" "WAITING forge-wq" "a waiting session is reported"
+assert_contains "$out" "claude attach 1a2b3c4d" "with how to answer it"
+assert_eq null "$(bash "$L" get forge-wq .terminal)" "and is never bailed"
+assert_eq "" "$(grep 'stop 1a2b3c4d' "$STUB_LOG")" "and never stopped"
+bash "$L" set forge-wq '.liveness = {stale_seen_at: "2026-01-01T00:00:00Z", last_progress: "x"}'
+FORGE_STAGE_BOUND=60 bash "$F" check >/dev/null 2>&1
+assert_eq null "$(bash "$L" get forge-wq .liveness)" "and a stale mark from before it waited is cleared"
+
 # claude agents failing is not a dead session
 fresh; mkrun forge-x; alive
 out="$(STUB_AGENTS_FAIL=1 bash "$F" check 2>/dev/null)"

@@ -208,9 +208,12 @@ EOP
   printf '%s\n' "$id"
 }
 
-# session_state <id> — alive (its row has a pid), gone (its row has none) or
-# unknown. A failing `claude agents`, output that is not a JSON array, and a
-# missing row are all unknown: none of them shows the session ended, and
+# session_state <id> — alive (its row has a pid), waiting, gone or unknown.
+# A session that ends its turn on a question loses its process but keeps state
+# "blocked", and `claude attach` resumes it, so it is waiting for the operator,
+# not dead. Only "done" and "stopped" without a pid are gone. A failing
+# `claude agents`, output that is not a JSON array, a missing row and a state
+# this does not know are all unknown: none of them shows the session ended, and
 # reading them as gone would bail a healthy run and restore its claim.
 session_state() {
   local out
@@ -218,7 +221,10 @@ session_state() {
   printf '%s' "$out" | jq -r --arg i "$1" '
     if type != "array" then "unknown"
     else [.[] | select(.id == $i)] | if length == 0 then "unknown"
-      elif (.[0] | has("pid")) then "alive" else "gone" end
+      elif (.[0] | has("pid")) then "alive"
+      elif .[0].state == "blocked" then "waiting"
+      elif .[0].state == "done" or .[0].state == "stopped" then "gone"
+      else "unknown" end
     end' 2>/dev/null || echo unknown
 }
 session_alive() { [ "$(session_state "$1")" = alive ]; }

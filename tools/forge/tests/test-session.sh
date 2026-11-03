@@ -63,5 +63,12 @@ echo '[]' > "$STUB_AGENTS"
 assert_eq unknown "$(session_state 1a2b3c4d)" "a session with no row is unknown"
 gone;  assert_eq gone "$(session_state 1a2b3c4d)" "a row without a pid is gone"
 alive; assert_eq alive "$(session_state 1a2b3c4d)" "a row with a pid is alive"
+waiting; assert_eq waiting "$(session_state 1a2b3c4d)" "a blocked row without a pid is waiting, not gone"
+printf '[{"id":"1a2b3c4d","kind":"background","state":"stopped"}]\n' > "$STUB_AGENTS"
+assert_eq gone "$(session_state 1a2b3c4d)" "a stopped row without a pid is gone"
+printf '[{"id":"1a2b3c4d","kind":"background","state":"somethingnew"}]\n' > "$STUB_AGENTS"
+assert_eq unknown "$(session_state 1a2b3c4d)" "a state it does not know, without a pid, is unknown"
+printf '[{"id":"1a2b3c4d","kind":"background"}]\n' > "$STUB_AGENTS"
+assert_eq unknown "$(session_state 1a2b3c4d)" "no state and no pid is unknown"
 
 finish
