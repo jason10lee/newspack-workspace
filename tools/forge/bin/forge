@@ -203,7 +203,8 @@ cmd_next() {
 }
 
 # check_run <rid> — the spec's liveness rule for one run holding the slot. A
-# session is gone when its row has no pid. A stop that does not take changes
+# session is gone when its row has no pid and says it is done or stopped; one
+# waiting on a question is left for the operator. A stop that does not take changes
 # nothing; a run that delivered or stopped meanwhile keeps its state.
 check_run() {
   local rid="$1" launch id last epoch age why issue rel deadline st state started seen seen_last seen_epoch now
@@ -234,6 +235,12 @@ check_run() {
   state="$(session_state "$id")"
   case "$state" in
     unknown) echo "UNKNOWN-STATE $rid: could not read session $id from claude agents; changed nothing"; return 0 ;;
+    waiting)
+      # Waiting on the operator is not a stall, however long it lasts.
+      [ "$(bash "$FORGE_LEDGER" get "$rid" '.liveness // empty')" = "" ] \
+        || bash "$FORGE_LEDGER" set "$rid" '.liveness = null'
+      echo "WAITING $rid ($id): the session ended its turn waiting for an answer; run \`claude attach $id\` to give one"
+      return 0 ;;
     alive)
       if [ "$age" -le "$FORGE_STAGE_BOUND" ]; then
         [ "$(bash "$FORGE_LEDGER" get "$rid" '.liveness // empty')" = "" ] \

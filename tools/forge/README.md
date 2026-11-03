@@ -19,7 +19,10 @@ The dispatcher session runs these from the root checkout, following the
   writing anything.
 - `forge next` launches the head of the queue when the slot is free.
 - `forge check` applies the liveness rule to every run holding the slot. A
-  gone session is stopped; a run with no progress past the stage bound is
+  session is gone when `claude agents` shows it `done` or `stopped` with no
+  process. One that ended its turn on a question shows `blocked` with no
+  process; `claude attach` resumes it, so `check` reports it as `WAITING` and
+  never stops it or judges it stalled. A gone session is stopped; a run with no progress past the stage bound is
   first marked, and stopped only if a check at least `FORGE_STALE_RECHECK`
   seconds later (default 2700) still sees no progress, since the clock
   includes the machine's sleep and a review round records none until it ends. A mark set just before a long sleep can
