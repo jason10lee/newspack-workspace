@@ -12,7 +12,9 @@ export STUB_NOTIFY_LOG; STUB_NOTIFY_LOG="$(mktemp)"
 PATH="$(pwd)/stubs:$PATH"; export PATH
 L=../../autofix/bin/ledger.sh
 F=../bin/forge
-alive() { printf '[{"id":"%s","kind":"background","pid":4242,"state":"blocked"}]\n' "${1:-1a2b3c4d}" > "$STUB_AGENTS"; }
+alive() { printf '[{"id":"%s","kind":"background","pid":4242,"state":"working"}]\n' "${1:-1a2b3c4d}" > "$STUB_AGENTS"; }
 gone()  { printf '[{"id":"%s","kind":"background","state":"done"}]\n' "${1:-1a2b3c4d}" > "$STUB_AGENTS"; }
-# A session that ended its turn on a question: no process, but `claude attach` resumes it.
+# A session waiting on a question: "blocked", at first with its process and
+# later without one; `claude attach` resumes it either way.
 waiting() { printf '[{"id":"%s","kind":"background","state":"blocked"}]\n' "${1:-1a2b3c4d}" > "$STUB_AGENTS"; }
+waiting_live() { printf '[{"id":"%s","kind":"background","pid":4242,"state":"blocked","status":"waiting"}]\n' "${1:-1a2b3c4d}" > "$STUB_AGENTS"; }

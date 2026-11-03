@@ -44,6 +44,11 @@ assert_eq 0 "$rc" "a live session is confirmed"
 assert_eq confirmed "$(bash "$L" get forge-c1 .launch)" "launch=confirmed is recorded"
 assert_eq confirmed "$(bash "$L" get forge-c1 '.stage_history[-1].outcome')" "and logged"
 
+bash "$L" init forge-c3 NPPM-3 forge >/dev/null
+waiting_live; confirm_launch forge-c3 1a2b3c4d; rc=$?
+assert_eq 0 "$rc" "a new session already waiting on a prompt is confirmed, not abandoned"
+assert_eq confirmed "$(bash "$L" get forge-c3 .launch)" "launch=confirmed is recorded for it"
+
 bash "$L" init forge-c2 NPPM-2 forge >/dev/null
 : > "$STUB_LOG"; echo '[]' > "$STUB_AGENTS"
 confirm_launch forge-c2 1a2b3c4d; rc=$?
@@ -64,6 +69,7 @@ assert_eq unknown "$(session_state 1a2b3c4d)" "a session with no row is unknown"
 gone;  assert_eq gone "$(session_state 1a2b3c4d)" "a row without a pid is gone"
 alive; assert_eq alive "$(session_state 1a2b3c4d)" "a row with a pid is alive"
 waiting; assert_eq waiting "$(session_state 1a2b3c4d)" "a blocked row without a pid is waiting, not gone"
+waiting_live; assert_eq waiting "$(session_state 1a2b3c4d)" "a blocked row that still has its pid is waiting, not alive"
 printf '[{"id":"1a2b3c4d","kind":"background","state":"stopped"}]\n' > "$STUB_AGENTS"
 assert_eq gone "$(session_state 1a2b3c4d)" "a stopped row without a pid is gone"
 printf '[{"id":"1a2b3c4d","kind":"background","state":"somethingnew"}]\n' > "$STUB_AGENTS"

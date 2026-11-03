@@ -226,7 +226,9 @@ check_run() {
   fi
   id="$(bash "$FORGE_LEDGER" get "$rid" '.session.id // empty')"
   [ -n "$id" ] || { echo "NO-SESSION $rid: confirmed but no session id recorded; leaving it"; return 0; }
-  last="$(bash "$FORGE_LEDGER" get "$rid" '([.stage_history[].at] | max) // .session.launched_at // empty')"
+  # Time spent waiting for the operator is not the run's to account for: once
+  # a check has seen it waiting, its clock starts again from that sighting.
+  last="$(bash "$FORGE_LEDGER" get "$rid" '([.stage_history[].at] + [.waited_at // empty] | max) // .session.launched_at // empty')"
   if ! epoch="$(iso8601_to_epoch "$last")"; then
     echo "UNKNOWN-PROGRESS $rid: no usable progress time ('$last'), so it is not judged stalled"
     epoch="$(date +%s)"
@@ -234,12 +236,18 @@ check_run() {
   age=$(( $(date +%s) - epoch ))
   state="$(session_state "$id")"
   case "$state" in
-    unknown) echo "UNKNOWN-STATE $rid: could not read session $id from claude agents; changed nothing"; return 0 ;;
+    unknown)
+      seen="$(session_seen_state "$id")"
+      case "$seen" in
+        "(no row)") echo "UNKNOWN-STATE $rid: claude agents has no row for session $id; changed nothing" ;;
+        "("*) echo "UNKNOWN-STATE $rid: could not read session $id from claude agents $seen; changed nothing" ;;
+        *) echo "UNKNOWN-STATE $rid: claude agents shows session $id as $seen, which is not running, waiting or ended; changed nothing. If it has ended, run \`claude stop $id\` and check again." ;;
+      esac
+      return 0 ;;
     waiting)
       # Waiting on the operator is not a stall, however long it lasts.
-      [ "$(bash "$FORGE_LEDGER" get "$rid" '.liveness // empty')" = "" ] \
-        || bash "$FORGE_LEDGER" set "$rid" '.liveness = null'
-      echo "WAITING $rid ($id): the session ended its turn waiting for an answer; run \`claude attach $id\` to give one"
+      bash "$FORGE_LEDGER" set "$rid" '.liveness = null | .waited_at = $t' --arg t "$(now_utc)"
+      echo "WAITING $rid ($id): the session is waiting for an answer; run \`claude attach $id\` to give one"
       return 0 ;;
     alive)
       if [ "$age" -le "$FORGE_STAGE_BOUND" ]; then
