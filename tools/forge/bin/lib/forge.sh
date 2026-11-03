@@ -208,10 +208,11 @@ EOP
   printf '%s\n' "$id"
 }
 
-# session_state <id> — alive (its row has a pid), waiting, gone or unknown.
-# A session that ends its turn on a question loses its process but keeps state
-# "blocked", and `claude attach` resumes it, so it is waiting for the operator,
-# not dead. Only "done" and "stopped" without a pid are gone. A failing
+# session_state <id> — alive, waiting, gone or unknown. A session waiting on
+# a question shows state "blocked", at first with its process and later
+# without one, and `claude attach` resumes it either way, so it is waiting for
+# the operator: neither alive (the stall rule would stop it) nor dead. Any other
+# row with a pid is alive. Only "done" and "stopped" without a pid are gone. A failing
 # `claude agents`, output that is not a JSON array, a missing row and a state
 # this does not know are all unknown: none of them shows the session ended, and
 # reading them as gone would bail a healthy run and restore its claim.
@@ -221,13 +222,25 @@ session_state() {
   printf '%s' "$out" | jq -r --arg i "$1" '
     if type != "array" then "unknown"
     else [.[] | select(.id == $i)] | if length == 0 then "unknown"
-      elif (.[0] | has("pid")) then "alive"
       elif .[0].state == "blocked" then "waiting"
+      elif (.[0] | has("pid")) then "alive"
       elif .[0].state == "done" or .[0].state == "stopped" then "gone"
       else "unknown" end
     end' 2>/dev/null || echo unknown
 }
 session_alive() { [ "$(session_state "$1")" = alive ]; }
+
+# session_seen_state <id> — the state field of the session's row, or a note
+# saying why there is none, for messages that name what was seen.
+session_seen_state() {
+  local out
+  out="$(claude agents --json --all 2>/dev/null)" || { echo "(claude agents failed)"; return 0; }
+  printf '%s' "$out" | jq -r --arg i "$1" '
+    if type != "array" then "(unreadable output)"
+    else [.[] | select(.id == $i)] | if length == 0 then "(no row)"
+      else (.[0].state // "(no state)") + (if .[0] | has("pid") then " with a process" else " without a process" end) end
+    end' 2>/dev/null || echo "(unreadable output)"
+}
 
 # confirm_launch — the run's Stage 0 claims only after this writes "confirmed",
 # and waits longer than FORGE_LAUNCH_TIMEOUT for it, so a session that appears

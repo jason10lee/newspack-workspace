@@ -88,10 +88,36 @@ bash "$L" set forge-wq '.liveness = {stale_seen_at: "2026-01-01T00:00:00Z", last
 FORGE_STAGE_BOUND=60 bash "$F" check >/dev/null 2>&1
 assert_eq null "$(bash "$L" get forge-wq .liveness)" "and a stale mark from before it waited is cleared"
 
+# a waiting session that still has its process is never judged stalled either
+fresh; mkrun forge-wl; waiting_live; bash "$L" set forge-wl '.stage_history = [{stage:"x", outcome:"y", at:"2026-01-01T00:00:00Z"}]'
+: > "$STUB_LOG"
+FORGE_STAGE_BOUND=60 FORGE_STALE_RECHECK=0 bash "$F" check >/dev/null 2>&1
+out="$(FORGE_STAGE_BOUND=60 FORGE_STALE_RECHECK=0 bash "$F" check 2>/dev/null)"
+assert_contains "$out" "WAITING forge-wl" "a blocked session with its pid is reported waiting"
+assert_eq null "$(bash "$L" get forge-wl .terminal)" "and is never bailed"
+assert_eq "" "$(grep 'stop 1a2b3c4d' "$STUB_LOG")" "and never stopped"
+
+# answering a waiting run restarts its stall clock
+fresh; mkrun forge-ans; waiting; bash "$L" set forge-ans '.stage_history = [{stage:"x", outcome:"y", at:"2026-01-01T00:00:00Z"}]'
+FORGE_STAGE_BOUND=60 bash "$F" check >/dev/null 2>&1
+alive
+out="$(FORGE_STAGE_BOUND=60 FORGE_STALE_RECHECK=0 bash "$F" check 2>/dev/null)"
+assert_contains "$out" "ALIVE forge-ans" "a run answered after waiting is timed from when it was seen waiting"
+assert_eq null "$(bash "$L" get forge-ans .liveness)" "and carries no stale mark"
+
+# a state check does not know is named, and changes nothing
+fresh; mkrun forge-us; printf '[{"id":"1a2b3c4d","kind":"background","state":"somethingnew"}]\n' > "$STUB_AGENTS"
+out="$(bash "$F" check 2>/dev/null)"
+assert_contains "$out" "UNKNOWN-STATE forge-us" "an unrecognised state is reported"
+assert_contains "$out" "somethingnew" "by name"
+assert_eq "" "$(printf '%s' "$out" | grep 'could not read')" "without claiming the session could not be read"
+assert_eq null "$(bash "$L" get forge-us .terminal)" "and changes nothing"
+
 # claude agents failing is not a dead session
 fresh; mkrun forge-x; alive
 out="$(STUB_AGENTS_FAIL=1 bash "$F" check 2>/dev/null)"
 assert_contains "$out" "UNKNOWN-STATE forge-x" "a failing claude agents is reported, not read as gone"
+assert_contains "$out" "could not read session 1a2b3c4d" "and says it could not be read"
 assert_eq null "$(bash "$L" get forge-x .terminal)" "and changes nothing"
 fresh; mkrun forge-y; alive; bash "$L" set forge-y '.stage_history = [{stage:"x", outcome:"y", at:"2026-01-01T00:00:00Z"}]'
 FORGE_STAGE_BOUND=60 FORGE_STALE_RECHECK=0 bash "$F" check >/dev/null 2>&1
