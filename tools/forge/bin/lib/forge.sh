@@ -229,6 +229,9 @@ session_state() {
     end' 2>/dev/null || echo unknown
 }
 session_alive() { [ "$(session_state "$1")" = alive ]; }
+# A launch is confirmed by a running session or one already waiting on a prompt:
+# both started, and abandoning the second would stop a healthy run.
+session_started() { case "$(session_state "$1")" in alive|waiting) return 0 ;; *) return 1 ;; esac; }
 
 # session_seen_state <id> — the state field of the session's row, or a note
 # saying why there is none, for messages that name what was seen.
@@ -251,7 +254,7 @@ confirm_launch() { # rid id -> 0 confirmed, 1 abandoned
   [ -z "$cur" ] || die "launch of $rid is already '$cur'"
   deadline=$(( $(date +%s) + FORGE_LAUNCH_TIMEOUT ))
   while :; do
-    if session_alive "$id"; then
+    if session_started "$id"; then
       bash "$FORGE_LEDGER" set "$rid" '.launch = "confirmed"'
       bash "$FORGE_LEDGER" history "$rid" launch confirmed "session $id"
       return 0

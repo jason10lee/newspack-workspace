@@ -247,7 +247,7 @@ check_run() {
     waiting)
       # Waiting on the operator is not a stall, however long it lasts.
       bash "$FORGE_LEDGER" set "$rid" '.liveness = null | .waited_at = $t' --arg t "$(now_utc)"
-      echo "WAITING $rid ($id): the session ended its turn waiting for an answer; run \`claude attach $id\` to give one"
+      echo "WAITING $rid ($id): the session is waiting for an answer; run \`claude attach $id\` to give one"
       return 0 ;;
     alive)
       if [ "$age" -le "$FORGE_STAGE_BOUND" ]; then

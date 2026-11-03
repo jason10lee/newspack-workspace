@@ -44,6 +44,11 @@ assert_eq 0 "$rc" "a live session is confirmed"
 assert_eq confirmed "$(bash "$L" get forge-c1 .launch)" "launch=confirmed is recorded"
 assert_eq confirmed "$(bash "$L" get forge-c1 '.stage_history[-1].outcome')" "and logged"
 
+bash "$L" init forge-c3 NPPM-3 forge >/dev/null
+waiting_live; confirm_launch forge-c3 1a2b3c4d; rc=$?
+assert_eq 0 "$rc" "a new session already waiting on a prompt is confirmed, not abandoned"
+assert_eq confirmed "$(bash "$L" get forge-c3 .launch)" "launch=confirmed is recorded for it"
+
 bash "$L" init forge-c2 NPPM-2 forge >/dev/null
 : > "$STUB_LOG"; echo '[]' > "$STUB_AGENTS"
 confirm_launch forge-c2 1a2b3c4d; rc=$?
