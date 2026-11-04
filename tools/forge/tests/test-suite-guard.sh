@@ -28,6 +28,26 @@ denies 'yarn test'
 denies 'FOO=1 timeout 600 npm test'
 denies 'W=x; cd $W; n test-php --filter A; npx newspack-scripts test src/x'
 denies 'echo start && (cd p && pnpm test)'
+# the workspace's root script that runs every package's whole suite
+denies 'pnpm test:js'
+denies 'pnpm run test:js'
+denies 'npm run test:js'
+# npm's aliases for test
+denies 'npm t'
+denies 'npm tst'
+# pnpm's -w takes no value, so the word after it is the script
+denies 'pnpm -w test'
+denies 'pnpm -w run test:js'
+# pnpm and yarn run a package binary without exec
+denies 'pnpm jest src/a.test.js'
+denies 'pnpm newspack-scripts test'
+denies 'yarn jest'
+denies 'pnpm exec jest'
+# node starting a test runner's entry point
+denies 'node node_modules/jest/bin/jest.js'
+denies 'node ./node_modules/.bin/jest'
+denies 'node node_modules/newspack-scripts/scripts/test.js'
+denies 'node --max-old-space-size=4096 node_modules/@wordpress/scripts/bin/wp-scripts.js test-unit-js'
 
 allows 'n test-php --filter Checkout_Protection'
 allows 'bash tools/autofix/bin/verify.sh js forge-x src/a.js'
@@ -41,6 +61,12 @@ allows 'cat test.js'
 allows 'git commit -m "test: cover the guard"'
 allows 'n test'
 allows 'ls node_modules/.bin | grep jest'
+allows 'npm -w newspack-plugin run build'
+allows 'pnpm --filter newspack-plugin run build'
+allows 'pnpm lint'
+allows 'node -e "console.log(1)"'
+allows 'node scripts/build.js'
+allows 'yarn install'
 
 out="$(bashcall 'npm test')"
 assert_contains "$out" "verify.sh js" "the deny names the scoped helper"

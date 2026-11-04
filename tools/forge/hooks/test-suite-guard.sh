@@ -45,16 +45,34 @@ judge() {
     wp-scripts) [ "${1:-}" = test-unit-js ] && deny "wp-scripts test-unit-js" ;;
     n) [ "${1:-}" = test-js ] && deny "n test-js" ;;
     npm|pnpm|yarn)
+      # Drop options, and the value of those that take one. npm's -w names a
+      # workspace; pnpm's -w means the workspace root and takes no value.
       while [ $# -gt 0 ]; do
         case "$1" in
-          --filter|-F|--prefix|-C|--dir|--workspace|-w) shift; [ $# -gt 0 ] && shift ;;
+          --filter|-F|--prefix|-C|--dir|--workspace) shift; [ $# -gt 0 ] && shift ;;
+          -w) shift; [ "$word" = npm ] && [ $# -gt 0 ] && shift ;;
           -*) shift ;;
-          exec|dlx) shift; judge "$@"; return 0 ;;
-          run|run-script) shift ;;
-          test) deny "$word test" ;;
-          *) return 0 ;;
+          *) break ;;
         esac
-      done ;;
+      done
+      case "${1:-}" in run|run-script) shift; while [ $# -gt 0 ] && [ "${1#-}" != "$1" ]; do shift; done ;; esac
+      case "${1:-}" in
+        # `test` in every package that has Jest tests; `test:js` is the
+        # workspace root's, which runs every package's; t and tst are npm's
+        # aliases for test.
+        test|test:js|t|tst) deny "$word ${1}" ;;
+        exec|dlx) shift; judge "$@" ;;
+        "") ;;
+        # pnpm and yarn run a package binary by name, without exec.
+        *) [ "$word" = npm ] || judge "$@" ;;
+      esac ;;
+    node)
+      while [ $# -gt 0 ] && [ "${1#-}" != "$1" ]; do shift; done
+      case "${1:-}" in
+        */jest.js|jest.js|*/.bin/jest|*/jest/bin/*|*/jest-cli/*) deny "node ${1}" ;;
+        */newspack-scripts/scripts/test.js) deny "newspack-scripts test" ;;
+        */wp-scripts.js|*/.bin/wp-scripts) [ "${2:-}" = test-unit-js ] && deny "wp-scripts test-unit-js" ;;
+      esac ;;
   esac
   return 0
 }
