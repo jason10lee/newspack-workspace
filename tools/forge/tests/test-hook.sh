@@ -59,7 +59,7 @@ assert_eq deny "$(decision "$out")" "an environment variable does not widen the 
 
 # run settings
 . ../bin/lib/forge.sh
-TD="$(mktemp -d)"; mkdir -p "$TD/tools/forge/hooks"; cp "$HOOK" "$TD/tools/forge/hooks/"
+TD="$(mktemp -d)"; mkdir -p "$TD/tools/forge/hooks"; cp "$HOOK" ../hooks/test-suite-guard.sh "$TD/tools/forge/hooks/"
 bash "$L" init forge-s NPPM-1 forge >/dev/null
 f="$(write_run_settings forge-s "$TD")"
 assert_eq "$RUNS_DIR/forge-s/settings.json" "$f" "settings are written beside the ledger"
@@ -68,6 +68,12 @@ assert_eq "$WORKSPACE_ROOT" "$(jq -r .env.AUTOFIX_WORKSPACE_ROOT "$f")" "and the
 assert_eq "$RUNS_DIR" "$(jq -r .env.AUTOFIX_RUNS_DIR "$f")" "and the runs directory"
 assert_eq 'mcp__.*' "$(jq -r '.hooks.PreToolUse[0].matcher' "$f")" "the hook matches every MCP tool"
 assert_contains "$(jq -r '.hooks.PreToolUse[0].hooks[0].command' "$f")" "$TD/tools/forge/hooks/mcp-read-only.sh" "the hook runs from the pinned tooling"
+assert_eq Bash "$(jq -r '.hooks.PreToolUse[1].matcher' "$f")" "the suite guard matches Bash"
+assert_contains "$(jq -r '.hooks.PreToolUse[1].hooks[0].command' "$f")" "$TD/tools/forge/hooks/test-suite-guard.sh" "and runs from the pinned tooling"
+TG="$(mktemp -d)"; mkdir -p "$TG/tools/forge/hooks"; cp "$HOOK" "$TG/tools/forge/hooks/"
+out="$( (write_run_settings forge-s "$TG") 2>&1)"; rc=$?
+assert_eq 1 "$rc" "settings refuse tooling without the suite guard"
+assert_contains "$out" "no suite guard" "and say so"
 out="$( (write_run_settings forge-s "$(mktemp -d)") 2>&1)"; rc=$?
 assert_eq 1 "$rc" "settings refuse tooling without the hook"
 assert_contains "$out" "no MCP hook" "and say so"

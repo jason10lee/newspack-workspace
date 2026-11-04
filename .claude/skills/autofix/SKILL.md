@@ -243,8 +243,11 @@ the string is word-split into argv (globbing disabled) and exec'd directly, and
 the executable is enforced against a closed allowlist. Only these shapes run —
 anything else makes `verify.sh signal` die fail-closed:
 
-- `n test-php …` / `n test-js …` — the repo's own test wrappers (e.g.
-  `n test-php --filter test_something`). Other `n` subcommands are rejected.
+- `n test-php …` — the repo's own PHP test wrapper (e.g.
+  `n test-php --filter test_something`). Other `n` subcommands are rejected,
+  `n test-js` among them, because it always runs the whole Jest suite.
+- `jest-related <file>…` — Jest on the tests related to those files (paths
+  relative to the plugin), run from the plugin directory with one worker.
 - `npx playwright test …` — the exact fixed prefix for a Playwright repro you
   wrote. Bare `npx <package>` is rejected (it would install+run arbitrary code).
 
@@ -307,10 +310,15 @@ All required, in order:
 
 1. The Stage-2 failing signal now passes:
    `tools/autofix/bin/verify.sh signal <RUN_ID> --expect pass`
-2. Full test suite for the touched plugin:
-   `tools/autofix/bin/verify.sh suite <RUN_ID>` (runs `n test-php`, and
-   `n test-js` if the plugin's `package.json` has a real `test` script rather
-   than the `echo` placeholder).
+2. The touched plugin's tests:
+   `tools/autofix/bin/verify.sh suite <RUN_ID>`. It runs the full `n test-php`
+   suite, and, when the plugin's `package.json` has a real `test` script rather
+   than the `echo` placeholder, Jest on the tests related to the branch's
+   changed JS and TS files (`verify.sh js`). Never run the whole Jest suite
+   (`n test-js`, `npx newspack-scripts test`, `npm test`): one was running when
+   the database container every env shares was OOM-killed on 2026-10-31, and
+   `newspack-scripts test` cannot be limited by a path. For a single file, use
+   `tools/autofix/bin/verify.sh js <RUN_ID> <file>...`, with paths relative to the plugin.
 3. Lint changed files:
    `tools/autofix/bin/verify.sh lint <RUN_ID>` — **this covers PHP only**
    (root `phpcs.xml` against changed `*.php` files vs. `origin/main`). If the

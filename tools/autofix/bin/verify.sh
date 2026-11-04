@@ -6,7 +6,7 @@ BIN="$(dirname "${BASH_SOURCE[0]}")"
 require jq
 LEDGER="$BIN/ledger.sh"
 
-cmd="${1:?usage: verify.sh signal|lint|suite <run_id> [flags]}"; run_id="${2:?}"; shift 2
+cmd="${1:?usage: verify.sh signal|lint|suite|js <run_id> [flags]}"; run_id="${2:?}"; shift 2
 wt="$(run_wt "$run_id")"
 affected_repo() { ledger_decision "$run_id" affected_repo; }
 
@@ -23,9 +23,14 @@ affected_repo() { ledger_decision "$run_id" affected_repo; }
 #     (`"${EV_ARGV[@]}"`), never via `bash -c`.
 #   * The executable (argv[0]) must be one of a *closed* set that contains NO
 #     general-purpose code runner:
-#       - `n test-php` / `n test-js` — the repo's own wrapper, restricted to its
-#         two test subcommands. `n`'s other subcommands are not reachable, so it
-#         can't be turned into an arbitrary-command runner here.
+#       - `n test-php` — the repo's own wrapper, restricted to that test
+#         subcommand. `n`'s other subcommands are not reachable, so it can't be
+#         turned into an arbitrary-command runner here. `n test-js` is refused:
+#         it always runs the package's whole Jest suite, and one was running
+#         when the shared database container was OOM-killed on 2026-10-31.
+#       - `jest-related <file>…` — Jest on the tests related to those files,
+#         through lib/jest-related.js from the unit directory. It is rewritten
+#         to that fixed script, so it reaches no other code.
 #       - `npx playwright test …` — the EXACT fixed prefix only. Bare `npx`
 #         fetches-and-runs arbitrary npm packages, so `npx <anything-else>` is
 #         rejected; only Playwright (how the skill records browser repros) is
@@ -49,12 +54,18 @@ parse_evidence_argv() { # cmd-string
   EV_ARGV=( $ecmd )
   set +f
   [ "${#EV_ARGV[@]}" -gt 0 ] || die "empty evidence cmd after parsing"
+  EV_IN_UNIT=0
   case "${EV_ARGV[0]}" in
     n)
       case "${EV_ARGV[1]:-}" in
-        test-php|test-js) : ;;
-        *) die "evidence cmd not allowed: 'n ${EV_ARGV[1]:-}' (only 'n test-php' / 'n test-js')" ;;
+        test-php) EV_IN_UNIT=1 ;;
+        test-js) die "evidence cmd not allowed: 'n test-js' runs the whole Jest suite; use 'jest-related <file>…'" ;;
+        *) die "evidence cmd not allowed: 'n ${EV_ARGV[1]:-}' (only 'n test-php', or 'jest-related <file>…' for Jest)" ;;
       esac
+      ;;
+    jest-related)
+      [ "${#EV_ARGV[@]}" -gt 1 ] || die "evidence cmd not allowed: 'jest-related' needs at least one file"
+      EV_ARGV=( node "$AUTOFIX_BIN_DIR/lib/jest-related.js" "${EV_ARGV[@]:1}" ); EV_IN_UNIT=1
       ;;
     npx)
       { [ "${EV_ARGV[1]:-}" = playwright ] && [ "${EV_ARGV[2]:-}" = test ]; } \
@@ -65,7 +76,7 @@ parse_evidence_argv() { # cmd-string
       # runner). The ledger's .evidence[].cmd must match one exactly, or
       # extend it with arguments; nothing else runs.
       profile_allows_cmd "$run_id" "$ecmd" \
-        || die "evidence cmd executable not in allowlist: '${EV_ARGV[0]}' (allowed: 'n test-php', 'n test-js', 'npx playwright test', or a command the run's profile names)"
+        || die "evidence cmd executable not in allowlist: '${EV_ARGV[0]}' (allowed: 'n test-php', 'jest-related <file>…', 'npx playwright test', or a command the run's profile names)"
       ;;
   esac
 }
@@ -89,10 +100,10 @@ case "$cmd" in
         # Validate + word-split BEFORE running so a rejection dies visibly.
         # Never a shell — exec argv directly.
         parse_evidence_argv "$ecmd"
-        # `n` resolves its project from the cwd; Playwright specs keep running
-        # from the worktree root, as they always have.
+        # `n` and Jest resolve their project from the cwd; Playwright specs
+        # keep running from the worktree root, as they always have.
         run_dir="$wt"
-        if [ "${EV_ARGV[0]}" = n ]; then run_dir="$(project_dir "$wt" "$(affected_repo)")" || exit 1; fi
+        if [ "$EV_IN_UNIT" = 1 ]; then run_dir="$(project_dir "$wt" "$(affected_repo)")" || exit 1; fi
         if out="$( (cd "$run_dir" && "${EV_ARGV[@]}") 2>&1 )"; then st=pass; else st=fail; fi
         log "evidence[$i] '$ecmd' → $st"
         # Surface the tail of EVERY failing command — including an expected
@@ -138,11 +149,31 @@ EOF
     fi
     plugin_dir="$(project_dir "$wt" "$(affected_repo)")" || exit 1
     (cd "$plugin_dir" && n test-php)
-    # `n test-js` runs the package's `test` script. Packages without JS tests
-    # carry an `echo` placeholder there, which isn't worth a pnpm install.
+    # Jest runs only on tests related to the changed files, never the whole
+    # suite: on 2026-10-31 a whole-suite run OOM-killed the database container
+    # every env shares. Packages without JS tests carry an `echo` placeholder
+    # as their `test` script, and are skipped.
     if jq -e '(.scripts.test // "") | length > 0 and (startswith("echo ") | not)' \
          "$plugin_dir/package.json" >/dev/null 2>&1; then
-      (cd "$plugin_dir" && n test-js)
+      bash "$AUTOFIX_BIN_DIR/verify.sh" js "$run_id"
     fi ;;
+  js)
+    # js <run_id> [file...] — Jest on the host, one worker, limited to tests
+    # related to the given files, or to the JS and TS files the branch changed
+    # in the affected unit (committed, uncommitted and untracked). With none,
+    # it runs nothing.
+    [ -d "$wt" ] || die "worktree missing: $wt"
+    plugin_dir="$(project_dir "$wt" "$(affected_repo)")" || exit 1
+    if [ $# -gt 0 ]; then files=("$@")
+    else
+      base="$(git -C "$wt" merge-base "$(profile_get "$run_id" '.base.ref')" HEAD)"
+      files=()
+      while IFS= read -r f; do [ -n "$f" ] && files+=("$f"); done <<EOF
+$( { git -C "$plugin_dir" diff --relative --name-only --diff-filter=d "$base" -- '*.js' '*.jsx' '*.ts' '*.tsx' '*.mjs' '*.cjs'
+     git -C "$plugin_dir" ls-files --others --exclude-standard -- '*.js' '*.jsx' '*.ts' '*.tsx' '*.mjs' '*.cjs'; } | sort -u)
+EOF
+    fi
+    [ "${#files[@]}" -gt 0 ] || { log "js: no changed JS or TS files, so no Jest run"; exit 0; }
+    (cd "$plugin_dir" && node "$AUTOFIX_BIN_DIR/lib/jest-related.js" "${files[@]}") ;;
   *) die "unknown subcommand: $cmd" ;;
 esac

@@ -87,6 +87,14 @@ judgment:
   spec's open question 5 tracks that. The settings also name their own file in
   `REPRISE_SETTINGS`, which `reprise-team-launch` passes to the review session
   it starts, so the hook covers that session too.
+- **A suite guard**, `hooks/test-suite-guard.sh`, also installed by the
+  settings for every Bash call. It denies the commands that start a whole JS
+  test suite (`n test-js`, `newspack-scripts test`, `wp-scripts test-unit-js`,
+  `jest`, and `npm`, `pnpm` or `yarn` running `test`), because one was running
+  when the shared database container was OOM-killed on 2026-10-31. Jest runs
+  through `verify.sh js`, which runs only tests related to the given or changed
+  files, on the host, with one worker. The guard reads command words, so it
+  catches the commands a run reaches for, not a script that starts Jest itself.
 
 ## Tests
 

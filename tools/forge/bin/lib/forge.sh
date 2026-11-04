@@ -143,19 +143,22 @@ prune_tooling() { # remove exports that no unretired forge run references
 # --- run settings ------------------------------------------------------------
 # Passed to the run session with --settings. The environment makes the pinned
 # scripts act on the real workspace and runs directory (they would otherwise
-# derive both from the export's location); the hook is the pinned copy.
+# derive both from the export's location); the hooks are the pinned copies.
 write_run_settings() { # rid tooling_dir -> path of the settings file
-  local rid="$1" tdir="$2" hook f
+  local rid="$1" tdir="$2" hook guard f
   hook="$tdir/tools/forge/hooks/mcp-read-only.sh"
+  guard="$tdir/tools/forge/hooks/test-suite-guard.sh"
   [ -f "$hook" ] || die "pinned tooling has no MCP hook: $hook"
-  case "$hook" in *'"'*|*"'"*|*'$'*|*'`'*) die "unsafe characters in the tooling path: $hook" ;; esac
+  [ -f "$guard" ] || die "pinned tooling has no suite guard: $guard"
+  case "$tdir" in *'"'*|*"'"*|*'$'*|*'`'*) die "unsafe characters in the tooling path: $tdir" ;; esac
   f="$RUNS_DIR/$rid/settings.json"
-  jq -n --arg hook "$hook" --arg rid "$rid" --arg ws "$WORKSPACE_ROOT" --arg runs "$RUNS_DIR" \
+  jq -n --arg hook "$hook" --arg guard "$guard" --arg rid "$rid" --arg ws "$WORKSPACE_ROOT" --arg runs "$RUNS_DIR" \
     --arg state "$FORGE_STATE" --arg wait "$FORGE_LAUNCH_WAIT" --arg self "$f" '{
     env: {FORGE_RUN_ID: $rid, AUTOFIX_WORKSPACE_ROOT: $ws, AUTOFIX_RUNS_DIR: $runs,
           FORGE_STATE: $state, FORGE_LAUNCH_WAIT: $wait, REPRISE_SETTINGS: $self},
-    hooks: {PreToolUse: [{matcher: "mcp__.*",
-      hooks: [{type: "command", command: ("bash \"" + $hook + "\"")}]}]}
+    hooks: {PreToolUse: [
+      {matcher: "mcp__.*", hooks: [{type: "command", command: ("bash \"" + $hook + "\"")}]},
+      {matcher: "Bash", hooks: [{type: "command", command: ("bash \"" + $guard + "\"")}]}]}
   }' > "$f"
   printf '%s\n' "$f"
 }
