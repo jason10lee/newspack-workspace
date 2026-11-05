@@ -1,0 +1,115 @@
+#!/bin/bash
+# The suite guard denies a run's Bash call that would start a whole JS test
+# suite, and leaves every other command alone.
+set -uo pipefail
+cd "$(dirname "$0")" || exit 1; . ../../autofix/tests/helpers.sh
+HOOK=../hooks/test-suite-guard.sh
+bashcall() { jq -n --arg c "$1" '{tool_name: "Bash", tool_input: {command: $c}}' | bash "$HOOK"; }
+decision() { [ -n "$1" ] || { echo allow; return; }; jq -r '.hookSpecificOutput.permissionDecision // "allow"' <<<"$1"; }
+denies() { assert_eq deny "$(decision "$(bashcall "$1")")" "denies: $1"; }
+allows() { assert_eq allow "$(decision "$(bashcall "$1")")" "allows: $1"; }
+
+denies 'n test-js'
+denies 'n test-js newspack-plugin'
+denies 'cd plugins/newspack-plugin && n test-js'
+denies 'npx newspack-scripts test src/other-scripts/recaptcha-checkout-block 2>&1 | tail -18'
+denies 'newspack-scripts test'
+denies './node_modules/.bin/wp-scripts test-unit-js --config x'
+denies 'npx jest src/a.test.js'
+denies 'node_modules/.bin/jest'
+denies 'jest --runInBand'
+denies 'npm test'
+denies 'npm run test'
+denies 'pnpm test'
+denies 'pnpm --filter newspack-plugin test'
+denies 'pnpm -F newspack-plugin run test'
+denies 'pnpm -r test'
+denies 'yarn test'
+denies 'FOO=1 timeout 600 npm test'
+denies 'W=x; cd $W; n test-php --filter A; npx newspack-scripts test src/x'
+denies 'echo start && (cd p && pnpm test)'
+# the workspace's root script that runs every package's whole suite
+denies 'pnpm test:js'
+denies 'pnpm run test:js'
+denies 'npm run test:js'
+# npm's aliases for test
+denies 'npm t'
+denies 'npm tst'
+# pnpm's -w takes no value, so the word after it is the script
+denies 'pnpm -w test'
+denies 'pnpm -w run test:js'
+# pnpm and yarn run a package binary without exec
+denies 'pnpm jest src/a.test.js'
+denies 'pnpm newspack-scripts test'
+denies 'yarn jest'
+denies 'pnpm exec jest'
+# node starting a test runner's entry point
+denies 'node node_modules/jest/bin/jest.js'
+denies 'node ./node_modules/.bin/jest'
+denies 'node node_modules/newspack-scripts/scripts/test.js'
+denies 'node --max-old-space-size=4096 node_modules/@wordpress/scripts/bin/wp-scripts.js test-unit-js'
+# n passing a package manager through to the container
+denies 'n npm test'
+denies 'n npm run test:js'
+denies 'n npx jest'
+denies 'n npm newspack-plugin test'
+denies 'n npm newspack-plugin run test'
+denies 'n npx newspack-plugin jest'
+allows 'n npm newspack-plugin run build'
+# a command string given to a shell
+denies 'bash -c "n test-js"'
+denies "sh -c 'npx jest'"
+denies 'bash -lc "cd p && pnpm test"'
+# shell keywords before a command
+denies 'for f in a b; do npx jest $f; done'
+denies 'if true; then npm test; fi'
+denies 'while true; do pnpm test; done'
+# wrappers with options
+denies 'nohup npm test'
+denies 'timeout -k 5 600 npm test'
+denies 'nice -n 10 pnpm test'
+denies 'env -u FOO npm test'
+denies 'xargs -n 1 npx jest'
+# options after run, and -- before the command
+denies 'pnpm run --filter x test'
+denies 'npm exec -- jest'
+denies 'npx -- jest'
+# a package binary started by node
+denies 'node node_modules/.bin/newspack-scripts test'
+denies 'node node_modules/newspack-scripts/bin/newspack-scripts.js test'
+
+allows 'n test-php --filter Checkout_Protection'
+allows 'bash tools/autofix/bin/verify.sh js forge-x src/a.js'
+allows 'bash tools/autofix/bin/verify.sh suite forge-x'
+allows 'node tools/autofix/bin/lib/jest-related.js src/a.js'
+allows 'grep -rn jest package.json'
+allows 'npm run test:php'
+allows 'npm run build'
+allows 'pnpm install'
+allows 'cat test.js'
+allows 'git commit -m "test: cover the guard"'
+allows 'n test'
+allows 'ls node_modules/.bin | grep jest'
+allows 'npm -w newspack-plugin run build'
+allows 'pnpm --filter newspack-plugin run build'
+allows 'pnpm lint'
+allows 'node -e "console.log(1)"'
+allows 'node scripts/build.js'
+allows 'yarn install'
+allows 'bash -c "n test-php --filter A"'
+allows 'nice -n 10 n test-php'
+allows 'timeout 600 bash tools/autofix/bin/verify.sh suite forge-x'
+allows 'for f in a; do echo $f; done'
+allows 'n npm run build'
+allows 'node node_modules/.bin/newspack-scripts build'
+allows 'bash --norc tools/x.sh'
+
+out="$(bashcall 'npm test')"
+assert_contains "$out" "verify.sh js" "the deny names the scoped helper"
+assert_contains "$out" "$(cd ../../autofix/bin && pwd)/verify.sh" "at its path in this tooling"
+out="$(jq -n '{tool_name: "Bash", tool_input: {command: "npm test"}}' | FORGE_RUN_ID=forge-x bash "$HOOK")"
+assert_contains "$out" "verify.sh js forge-x" "with the session's run id, so a review session the run starts knows it too"
+assert_eq "" "$(jq -n '{tool_name: "Read", tool_input: {file_path: "npm test"}}' | bash "$HOOK")" "other tools pass untouched"
+assert_eq "" "$(printf 'not json' | bash "$HOOK")" "unreadable input is let through: this guard is a tripwire, not a gate"
+
+finish

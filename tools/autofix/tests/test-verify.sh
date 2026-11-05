@@ -92,6 +92,29 @@ reject_case "bare-node-script"       'node evil.js'
 reject_case "n-non-test-subcommand"  'n build newspack-plugin'
 reject_case "semicolon-glued-subcmd" 'n test-php; rm -rf x'
 reject_case "bare-executable"        'curl http://evil/x'
+# `n test-js` always runs the package's whole Jest suite, so JS evidence goes
+# through the related-tests helper instead, and needs a file.
+reject_case "n-test-js-whole-suite"  'n test-js'
+reject_case "jest-related-no-files"  'jest-related'
+
+cat > "$STUB/node" <<'EOF'
+#!/bin/bash
+printf 'node %s\n' "$*" >> "${ARGV_LOG:?}"
+printf '%s node %s\n' "$PWD" "$*" >> "${CWD_LOG:?}"
+[ -f "$1" ] || exit 9
+for a in "$@"; do case "$a" in *PASS*) exit 0 ;; *FAIL*) exit 1 ;; esac; done
+exit 0
+EOF
+chmod +x "$STUB/node"
+bash "$L" init runjr NPPM-J operator-named >/dev/null
+bash "$L" set runjr '.branch = "br-1"'
+bash "$L" set runjr '.decisions += [{key:"affected_repo", value:"my-plugin"}]'
+bash "$L" evidence runjr failing-test src/a.test.js 'jest-related src/a_FAIL.test.js'
+: > "$CWD_LOG"
+bash "$V" signal runjr --expect fail >/dev/null 2>&1
+assert_eq 0 $? "jest-related evidence runs and reads red"
+assert_contains "$(cat "$CWD_LOG")" "plugins/my-plugin node " "from the plugin dir"
+assert_contains "$(cat "$CWD_LOG")" "lib/jest-related.js src/a_FAIL.test.js" "through the helper, with the given file"
 
 # No-shell proof: an allowlisted `n test-php …` whose args carry a `; touch …`
 # suffix is accepted (argv[1] is test-php) and RUNS, but the `touch` never
@@ -235,23 +258,51 @@ exit 0
 EOF
 chmod +x "$SUITE_STUB/n"
 export N_LOG="$SUITE_STUB/n.log"; : > "$N_LOG"
+# node stands in for the Jest helper, which verify.sh starts with node.
+cat > "$SUITE_STUB/node" <<'EOF'
+#!/bin/bash
+echo "$PWD node $*" >> "${N_LOG:?}"
+[ -f "$1" ] || { echo "node stub: no such script $1" >> "${N_LOG:?}"; exit 9; }
+exit "${NODE_STUB_RC:-0}"
+EOF
+chmod +x "$SUITE_STUB/node"
 bash "$L" set runv '.decisions += [{key:"affected_repo", value:"my-plugin"}]'
-mkdir -p "$WT/plugins/my-plugin"
+mkdir -p "$WT/plugins/my-plugin/src"
 printf '{"scripts":{"test":"newspack-scripts test"}}\n' > "$WT/plugins/my-plugin/package.json"
 bash "$V" suite runv >/dev/null 2>&1
 assert_eq 0 $? "suite exits 0"
 assert_contains "$(cat "$N_LOG")" "plugins/my-plugin n test-php" "n test-php runs from plugin dir"
-# `n test-js` runs `test`. No package here defines `test:js`, which the old
-# check keyed on, so Jest never ran in the gate.
-assert_contains "$(cat "$N_LOG")" "plugins/my-plugin n test-js" "n test-js runs when the package has a test script"
+# The whole Jest suite never runs, only tests related to the changed files.
+assert_eq 0 "$(grep -c 'test-js' "$N_LOG")" "n test-js never runs"
+assert_eq 0 "$(grep -c ' node ' "$N_LOG")" "and with no changed JS, Jest does not run at all"
+: > "$N_LOG"
+echo 'export const a = 1;' > "$WT/plugins/my-plugin/src/a.js"
+echo 'test( "a", () => {} );' > "$WT/plugins/my-plugin/src/a.test.ts"
+echo 'x' > "$WT/plugins/my-plugin/src/notes.txt"
+bash "$V" suite runv >/dev/null 2>&1
+assert_eq 0 $? "suite with changed JS exits 0"
+line="$(grep ' node ' "$N_LOG")"
+assert_contains "$line" "plugins/my-plugin node " "Jest runs from the plugin dir"
+assert_contains "$line" "lib/jest-related.js" "through the related-tests helper"
+assert_contains "$line" "src/a.js" "with the changed source file"
+assert_contains "$line" "src/a.test.ts" "and the changed test file"
+assert_eq 0 "$(grep -c notes.txt <<<"$line")" "and nothing that is not JS or TS"
+: > "$N_LOG"
+NODE_STUB_RC=1 bash "$V" suite runv >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq 1 "$rc" "a failing Jest run fails the suite"
+: > "$N_LOG"
+bash "$V" js runv src/other.js >/dev/null 2>&1
+assert_eq 0 $? "js runs on files it is given"
+assert_contains "$(cat "$N_LOG")" "lib/jest-related.js src/other.js" "and only those"
 : > "$N_LOG"
 printf '{"scripts":{"test":"echo No JS unit tests in this repository."}}\n' > "$WT/plugins/my-plugin/package.json"
 bash "$V" suite runv >/dev/null 2>&1
-assert_eq 0 "$(grep -c 'test-js' "$N_LOG")" "n test-js skipped for the echo placeholder"
+assert_eq 0 "$(grep -c ' node ' "$N_LOG")" "Jest skipped for the echo placeholder"
 : > "$N_LOG"
 rm "$WT/plugins/my-plugin/package.json"
 bash "$V" suite runv >/dev/null 2>&1
-assert_eq 0 "$(grep -c 'test-js' "$N_LOG")" "n test-js skipped without a package.json"
+assert_eq 0 "$(grep -c ' node ' "$N_LOG")" "Jest skipped without a package.json"
+rm -r "$WT/plugins/my-plugin/src"
 : > "$N_LOG"
 bash "$L" set runv '.decisions = []'
 bash "$V" suite runv >/dev/null 2>&1 && rc=0 || rc=$?
