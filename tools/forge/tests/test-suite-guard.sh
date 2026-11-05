@@ -52,6 +52,10 @@ denies 'node --max-old-space-size=4096 node_modules/@wordpress/scripts/bin/wp-sc
 denies 'n npm test'
 denies 'n npm run test:js'
 denies 'n npx jest'
+denies 'n npm newspack-plugin test'
+denies 'n npm newspack-plugin run test'
+denies 'n npx newspack-plugin jest'
+allows 'n npm newspack-plugin run build'
 # a command string given to a shell
 denies 'bash -c "n test-js"'
 denies "sh -c 'npx jest'"

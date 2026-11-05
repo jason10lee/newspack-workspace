@@ -59,8 +59,10 @@ judge() {
     n)
       case "${1:-}" in
         test-js) deny "n test-js" ;;
-        # n hands these to the package manager in the container.
-        npm|npx|pnpm|yarn) judge "$@" ;;
+        # n hands these to the package manager in the container, after an
+        # optional project name. Judged with and without the word that might
+        # be one, so `n npm newspack-plugin test` is caught as `npm test`.
+        npm|npx|pnpm|yarn) judge "$@"; [ $# -gt 1 ] && judge "$1" "${@:3}" ;;
       esac ;;
     bash|sh|zsh|dash)
       # With -c (alone or among other letters, as in -lc), the words after
