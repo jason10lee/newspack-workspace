@@ -68,11 +68,11 @@ tools/autofix/
 │   ├── intake.sh         # eligibility check + queue dry-run listing
 │   ├── claim.sh          # claim protocol (race verification, same-issue guard, conditional release)
 │   ├── ledger.sh         # locked init/path/get/set/history/drift/evidence/reclaim
-│   ├── env.sh            # n env create/up/destroy + setup flags + anchor-tag/push-check safeguard
+│   ├── env.sh            # n env create/up/destroy + setup flags + the unit's composer install + anchor-tag/push-check safeguard
 │   ├── verify.sh         # signal re-run, plugin test suite, root-phpcs lint
 │   ├── redact.sh         # outward-artifact redaction scanner (scan-only, never edits)
 │   ├── pr.sh             # push, adopt-or-create draft PR, Copilot review request
-│   └── lib/               # common.sh (config + helpers), linear.sh (GraphQL client)
+│   └── lib/               # common.sh (config + helpers), linear.sh (GraphQL client), jest-related.js, playwright-env.sh (which Playwright and Chromium a browser drive uses)
 └── tests/                 # shell test suite (tests/run-tests.sh) + fixtures/ for AUTOFIX_LINEAR_MOCK_DIR
 ```
 

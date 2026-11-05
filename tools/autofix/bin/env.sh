@@ -62,6 +62,17 @@ case "$cmd" in
     n setup --env "$name" --yes "$@" || die "n setup failed (attempt $((attempts+1)))"
     "$LEDGER" set "$run_id" '.env = {name:$n, worktrees:[$w]} | .branch = $b | .worktree = $p' \
       --arg n "$name" --arg w "$repo:$branch" --arg b "$branch" --arg p "$(wt_dir "$branch")"
+    # Env up gives the worktree's unit a runtime-only vendor/, so the suite's
+    # PHPUnit run would stop on a missing bootstrap. Install the dev
+    # dependencies, judged by the same check `n test-php` refuses on, from the
+    # unit's own directory because `n composer` resolves its project from the
+    # cwd. This runs after the env is recorded, so a failed install leaves an
+    # env that `destroy` can still find.
+    for unit in "$(wt_dir "$branch")/plugins/$repo" "$(wt_dir "$branch")/themes/$repo"; do
+      if [ -f "$unit/composer.json" ] && ! (. "$BIN/../../../bin/_common.sh" && project_has_dev_deps "$unit"); then
+        (cd "$unit" && n composer install) || die "composer install failed in $unit (attempt $((attempts+1)))"
+      fi
+    done
     "$LEDGER" history "$run_id" reproduce env-created "$name"
     echo "$name" ;;
   destroy)

@@ -189,4 +189,58 @@ assert_eq 1 "$rc" "env.sh create refuses a profile without an env"
 assert_contains "$out" "has no env" "refusal says the profile has no env"
 assert_eq "" "$(cat "$N_LOG")" "no n env call for an env-less profile"
 unset AUTOFIX_PROFILES
+# A new env's worktree has no dev dependencies, so create installs them for the
+# affected unit when it declares Composer packages and has none installed.
+# `n composer` resolves its project from the cwd, so it runs from that unit.
+cat > "$STUB/n" <<'EOF'
+#!/bin/bash
+echo "n $*" >> "${N_LOG:?}"
+[ "$1" = composer ] && echo "$PWD" >> "${N_CWD_LOG:?}"
+exit "${N_EXIT:-0}"
+EOF
+chmod +x "$STUB/n"
+export N_CWD_LOG="$STUB/n-cwd.log"
+bash "$L" init run-cmp NPPM-3001 operator-named >/dev/null
+bash "$L" set run-cmp '.decisions += [{key:"branch_stem", value:"nppm-3001-x"}]'
+P="$AUTOFIX_WORKSPACE_ROOT/worktrees/nppm-3001-x-cmp/plugins/my-plugin"; mkdir -p "$P"; echo '{}' > "$P/composer.json"
+: > "$N_LOG"; : > "$N_CWD_LOG"
+bash "$E" create run-cmp my-plugin >/dev/null 2>&1; rc=$?
+assert_eq 0 "$rc" "create succeeds with a Composer unit"
+assert_contains "$(cat "$N_LOG")" "n composer install" "and installs its dev dependencies"
+assert_eq "$P" "$(cat "$N_CWD_LOG")" "from the unit's directory in the run's worktree"
+assert_eq 2 "$(grep -c -E '^n (env create|setup)' "$N_LOG")" "after the env is created and set up"
+
+bash "$L" init run-cmq NPPM-3002 operator-named >/dev/null
+bash "$L" set run-cmq '.decisions += [{key:"branch_stem", value:"nppm-3002-x"}]'
+Q="$AUTOFIX_WORKSPACE_ROOT/worktrees/nppm-3002-x-cmq/plugins/my-plugin"; mkdir -p "$Q/vendor/composer"; echo '{}' > "$Q/composer.json"
+# Env up leaves a runtime-only vendor/; installed.json's top-level "dev" flag
+# is what tells it apart from a complete one.
+printf '{\n    "packages": [],\n    "dev": false,\n    "dev-package-names": []\n}\n' > "$Q/vendor/composer/installed.json"
+: > "$N_LOG"; bash "$E" create run-cmq my-plugin >/dev/null 2>&1
+assert_eq 1 "$(grep -c 'composer install' "$N_LOG")" "a runtime-only vendor/ still gets its dev dependencies"
+printf '{\n    "packages": [],\n    "dev": true,\n    "dev-package-names": []\n}\n' > "$Q/vendor/composer/installed.json"
+bash "$L" set run-cmq '.attempts.provisioning = 0'
+: > "$N_LOG"; bash "$E" create run-cmq my-plugin >/dev/null 2>&1
+assert_eq 0 "$(grep -c 'composer' "$N_LOG")" "a unit with dev dependencies installed is left alone"
+
+bash "$L" init run-cmr NPPM-3003 operator-named >/dev/null
+bash "$L" set run-cmr '.decisions += [{key:"branch_stem", value:"nppm-3003-x"}]'
+mkdir -p "$AUTOFIX_WORKSPACE_ROOT/worktrees/nppm-3003-x-cmr/plugins/my-plugin"
+: > "$N_LOG"; bash "$E" create run-cmr my-plugin >/dev/null 2>&1
+assert_eq 0 "$(grep -c 'composer' "$N_LOG")" "so is a unit without composer.json"
+
+bash "$L" init run-cms NPPM-3004 operator-named >/dev/null
+bash "$L" set run-cms '.decisions += [{key:"branch_stem", value:"nppm-3004-x"}]'
+S="$AUTOFIX_WORKSPACE_ROOT/worktrees/nppm-3004-x-cms/themes/my-theme"; mkdir -p "$S"; echo '{}' > "$S/composer.json"
+cat > "$STUB/n" <<'EOF'
+#!/bin/bash
+echo "n $*" >> "${N_LOG:?}"
+[ "$1" = composer ] && exit 3
+exit 0
+EOF
+: > "$N_LOG"; out="$(bash "$E" create run-cms my-theme 2>&1)"; rc=$?
+assert_eq 1 "$rc" "a failed install fails the create"
+assert_contains "$out" "composer install failed" "and says so"
+assert_eq true "$(bash "$L" get run-cms '.env != null')" "with the env recorded, so a destroy can find it"
+
 finish
