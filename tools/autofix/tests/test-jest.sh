@@ -6,6 +6,9 @@
 set -uo pipefail
 cd "$(dirname "$0")" || exit 1; . ./helpers.sh
 J="$(cd ../bin/lib && pwd)/jest-related.js"
+# A forge run's settings point this at the real workspace, whose newspack-scripts
+# would answer the cases below that expect none to be found.
+unset AUTOFIX_WORKSPACE_ROOT
 
 P="$(cd "$(mktemp -d)" && pwd -P)"; LOG="$P/argv.log"; export JEST_FAKE_LOG="$LOG"
 mkdir -p "$P/node_modules/newspack-scripts/scripts" "$P/node_modules/cross-spawn" "$P/bin"
