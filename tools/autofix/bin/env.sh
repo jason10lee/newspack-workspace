@@ -69,7 +69,7 @@ case "$cmd" in
     # cwd. This runs after the env is recorded, so a failed install leaves an
     # env that `destroy` can still find.
     for unit in "$(wt_dir "$branch")/plugins/$repo" "$(wt_dir "$branch")/themes/$repo"; do
-      if [ -f "$unit/composer.json" ] && ! (. "$BIN/../../../bin/_common.sh" && project_has_dev_deps "$unit"); then
+      if [ -f "$unit/composer.json" ] && ! (. "$WORKSPACE_ROOT/bin/_common.sh" && project_has_dev_deps "$unit"); then
         (cd "$unit" && n composer install) || die "composer install failed in $unit (attempt $((attempts+1)))"
       fi
     done
