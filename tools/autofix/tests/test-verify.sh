@@ -92,9 +92,8 @@ reject_case "bare-node-script"       'node evil.js'
 reject_case "n-non-test-subcommand"  'n build newspack-plugin'
 reject_case "semicolon-glued-subcmd" 'n test-php; rm -rf x'
 reject_case "bare-executable"        'curl http://evil/x'
-# `n test-js` always runs the package's whole Jest suite, which on 2026-10-31
-# was running when the shared database container was OOM-killed. JS evidence
-# goes through the related-tests helper instead, and needs a file.
+# `n test-js` always runs the package's whole Jest suite, so JS evidence goes
+# through the related-tests helper instead, and needs a file.
 reject_case "n-test-js-whole-suite"  'n test-js'
 reject_case "jest-related-no-files"  'jest-related'
 
@@ -273,8 +272,7 @@ printf '{"scripts":{"test":"newspack-scripts test"}}\n' > "$WT/plugins/my-plugin
 bash "$V" suite runv >/dev/null 2>&1
 assert_eq 0 $? "suite exits 0"
 assert_contains "$(cat "$N_LOG")" "plugins/my-plugin n test-php" "n test-php runs from plugin dir"
-# The whole Jest suite never runs: on 2026-10-31 one OOM-killed the shared
-# database container. Jest runs only on tests related to the changed files.
+# The whole Jest suite never runs, only tests related to the changed files.
 assert_eq 0 "$(grep -c 'test-js' "$N_LOG")" "n test-js never runs"
 assert_eq 0 "$(grep -c ' node ' "$N_LOG")" "and with no changed JS, Jest does not run at all"
 : > "$N_LOG"

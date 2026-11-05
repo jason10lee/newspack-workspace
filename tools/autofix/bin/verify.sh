@@ -26,8 +26,8 @@ affected_repo() { ledger_decision "$run_id" affected_repo; }
 #       - `n test-php` — the repo's own wrapper, restricted to that test
 #         subcommand. `n`'s other subcommands are not reachable, so it can't be
 #         turned into an arbitrary-command runner here. `n test-js` is refused:
-#         it always runs the package's whole Jest suite, and one was running
-#         when the shared database container was OOM-killed on 2026-10-31.
+#         it always runs the package's whole Jest suite (why that matters:
+#         see "A suite guard" in tools/forge/README.md).
 #       - `jest-related <file>…` — Jest on the tests related to those files,
 #         through lib/jest-related.js from the unit directory. It is rewritten
 #         to that fixed script, so it reaches no other code.
@@ -150,9 +150,8 @@ EOF
     plugin_dir="$(project_dir "$wt" "$(affected_repo)")" || exit 1
     (cd "$plugin_dir" && n test-php)
     # Jest runs only on tests related to the changed files, never the whole
-    # suite: on 2026-10-31 a whole-suite run OOM-killed the database container
-    # every env shares. Packages without JS tests carry an `echo` placeholder
-    # as their `test` script, and are skipped.
+    # suite (see "A suite guard" in tools/forge/README.md). Packages without JS tests carry an `echo`
+    # placeholder as their `test` script, and are skipped.
     if jq -e '(.scripts.test // "") | length > 0 and (startswith("echo ") | not)' \
          "$plugin_dir/package.json" >/dev/null 2>&1; then
       bash "$AUTOFIX_BIN_DIR/verify.sh" js "$run_id"

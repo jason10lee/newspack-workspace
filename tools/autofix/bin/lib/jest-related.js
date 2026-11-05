@@ -6,18 +6,31 @@
 //
 // `newspack-scripts test <path>` cannot do this: it puts its own arguments
 // after the caller's, and wp-scripts reads everything before its subcommand as
-// options for Node, so a path or a Jest flag never reaches Jest. On 2026-10-31
-// a run's scoped attempt ran the whole suite and the shared database container
-// was OOM-killed while it ran. So this loads newspack-scripts' test script with
-// its spawn replaced, keeps the command and arguments it would have used, and
-// starts that command itself with the Jest arguments after the subcommand.
-// With no files it refuses rather than run the whole suite.
+// options for Node, so a path or a Jest flag never reaches Jest and the whole
+// suite runs (why that matters: "A suite guard" in tools/forge/README.md). So
+// this loads newspack-scripts' test script with its spawn replaced, keeps the
+// command and arguments it would have used, and starts that command itself
+// with the Jest arguments after the subcommand.
+//
+// It refuses no files, an option, or a file that is not there. Jest runs with
+// --passWithNoTests, so a mistyped path would otherwise pass with nothing run.
+const fs = require( 'fs' );
 const path = require( 'path' );
 const { spawnSync } = require( 'child_process' );
 
 const files = process.argv.slice( 2 );
 if ( files.length === 0 ) {
 	console.error( 'jest-related: no files given; refusing to run the whole suite' );
+	process.exit( 2 );
+}
+const option = files.find( ( f ) => f.startsWith( '-' ) );
+if ( option ) {
+	console.error( `jest-related: '${ option }' is an option, not a file; options are not passed to Jest` );
+	process.exit( 2 );
+}
+const missing = files.filter( ( f ) => ! fs.existsSync( path.resolve( f ) ) );
+if ( missing.length ) {
+	console.error( `jest-related: not found in ${ process.cwd() }: ${ missing.join( ', ' ) }. Give paths relative to the plugin directory.` );
 	process.exit( 2 );
 }
 

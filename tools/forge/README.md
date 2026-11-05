@@ -88,13 +88,25 @@ judgment:
   `REPRISE_SETTINGS`, which `reprise-team-launch` passes to the review session
   it starts, so the hook covers that session too.
 - **A suite guard**, `hooks/test-suite-guard.sh`, also installed by the
-  settings for every Bash call. It denies the commands that start a whole JS
-  test suite (`n test-js`, `newspack-scripts test`, `wp-scripts test-unit-js`,
-  `jest`, and `npm`, `pnpm` or `yarn` running `test`), because one was running
-  when the shared database container was OOM-killed on 2026-10-31. Jest runs
-  through `verify.sh js`, which runs only tests related to the given or changed
-  files, on the host, with one worker. The guard reads command words, so it
-  catches the commands a run reaches for, not a script that starts Jest itself.
+  settings for every Bash call. Every env shares one database container, in a
+  Docker VM of about 8 GB, and a whole JS test suite can use enough memory to
+  get it killed: on 2026-10-31 a run's whole-suite Jest run was going when the
+  database was OOM-killed, and every env went down with it. So the guard
+  denies the usual ways of starting a whole suite (`n test-js`,
+  `newspack-scripts test`, `wp-scripts test-unit-js`, `jest`, `npm`, `pnpm` or
+  `yarn` running `test` or the root `test:js`, and those reached through `n`,
+  a shell's `-c`, common wrappers, or `node` with a path), and names
+  `verify.sh js`, which runs only the tests related to the given or changed
+  files, on the host, with one worker.
+
+  It is a tripwire, not a sandbox. It reads command words, so a script that
+  starts Jest itself, or a command it cannot pick apart, gets through, and it
+  denies some harmless commands that merely quote a test command after a `;`
+  or `|`. The database's real protection would be a memory limit, which the
+  forge does not set. The settings reach the review session `reprise` starts,
+  so the guard denies the devkit self-review's own `n test-js` step there; the
+  deny names `verify.sh js` with the run's ID, which that session can run
+  instead.
 
 ## Tests
 

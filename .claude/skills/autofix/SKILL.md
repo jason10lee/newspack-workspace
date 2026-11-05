@@ -315,9 +315,10 @@ All required, in order:
    suite, and, when the plugin's `package.json` has a real `test` script rather
    than the `echo` placeholder, Jest on the tests related to the branch's
    changed JS and TS files (`verify.sh js`). Never run the whole Jest suite
-   (`n test-js`, `npx newspack-scripts test`, `npm test`): one was running when
-   the database container every env shares was OOM-killed on 2026-10-31, and
-   `newspack-scripts test` cannot be limited by a path. For a single file, use
+   (`n test-js`, `npx newspack-scripts test`, `npm test`): it can exhaust the
+   memory of the database container every env shares (see "A suite guard" in
+   `tools/forge/README.md`), and `newspack-scripts test` cannot be limited by a
+   path. For a single file, use
    `tools/autofix/bin/verify.sh js <RUN_ID> <file>...`, with paths relative to the plugin.
 3. Lint changed files:
    `tools/autofix/bin/verify.sh lint <RUN_ID>` — **this covers PHP only**

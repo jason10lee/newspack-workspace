@@ -33,6 +33,7 @@ process.exit( result.status );
 EOF
 
 run() { (cd "$P" && node "$J" "$@"); }
+mkdir -p "$P/src"; : > "$P/src/a.js"; : > "$P/src/b.test.js"
 
 : > "$LOG"; run src/a.js src/b.test.js >/dev/null 2>&1; rc=$?
 assert_eq 0 "$rc" "a passing run exits 0"
@@ -53,7 +54,16 @@ assert_eq 2 "$rc" "no files is refused"
 assert_contains "$out" "whole suite" "and says why"
 assert_eq "" "$(cat "$LOG")" "and nothing runs"
 
-E="$(mktemp -d)"; out="$( (cd "$E" && node "$J" src/a.js) 2>&1)"; rc=$?
+: > "$LOG"; out="$(run src/a.js plugins/x/src/a.js 2>&1)"; rc=$?
+assert_eq 2 "$rc" "a file that is not there is refused"
+assert_contains "$out" "relative to the plugin" "and says paths are relative to the plugin"
+assert_eq "" "$(cat "$LOG")" "and nothing runs, rather than passing with no tests"
+
+: > "$LOG"; out="$(run src/a.js --watchAll 2>&1)"; rc=$?
+assert_eq 2 "$rc" "an option is refused"
+assert_eq "" "$(cat "$LOG")" "and never reaches Jest"
+
+E="$(mktemp -d)"; mkdir -p "$E/src"; : > "$E/src/a.js"; out="$( (cd "$E" && node "$J" src/a.js) 2>&1)"; rc=$?
 assert_eq 2 "$rc" "a package without newspack-scripts is refused"
 assert_contains "$out" "newspack-scripts" "and names what is missing"
 

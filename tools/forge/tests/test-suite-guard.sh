@@ -48,6 +48,31 @@ denies 'node node_modules/jest/bin/jest.js'
 denies 'node ./node_modules/.bin/jest'
 denies 'node node_modules/newspack-scripts/scripts/test.js'
 denies 'node --max-old-space-size=4096 node_modules/@wordpress/scripts/bin/wp-scripts.js test-unit-js'
+# n passing a package manager through to the container
+denies 'n npm test'
+denies 'n npm run test:js'
+denies 'n npx jest'
+# a command string given to a shell
+denies 'bash -c "n test-js"'
+denies "sh -c 'npx jest'"
+denies 'bash -lc "cd p && pnpm test"'
+# shell keywords before a command
+denies 'for f in a b; do npx jest $f; done'
+denies 'if true; then npm test; fi'
+denies 'while true; do pnpm test; done'
+# wrappers with options
+denies 'nohup npm test'
+denies 'timeout -k 5 600 npm test'
+denies 'nice -n 10 pnpm test'
+denies 'env -u FOO npm test'
+denies 'xargs -n 1 npx jest'
+# options after run, and -- before the command
+denies 'pnpm run --filter x test'
+denies 'npm exec -- jest'
+denies 'npx -- jest'
+# a package binary started by node
+denies 'node node_modules/.bin/newspack-scripts test'
+denies 'node node_modules/newspack-scripts/bin/newspack-scripts.js test'
 
 allows 'n test-php --filter Checkout_Protection'
 allows 'bash tools/autofix/bin/verify.sh js forge-x src/a.js'
@@ -67,10 +92,19 @@ allows 'pnpm lint'
 allows 'node -e "console.log(1)"'
 allows 'node scripts/build.js'
 allows 'yarn install'
+allows 'bash -c "n test-php --filter A"'
+allows 'nice -n 10 n test-php'
+allows 'timeout 600 bash tools/autofix/bin/verify.sh suite forge-x'
+allows 'for f in a; do echo $f; done'
+allows 'n npm run build'
+allows 'node node_modules/.bin/newspack-scripts build'
+allows 'bash --norc tools/x.sh'
 
 out="$(bashcall 'npm test')"
 assert_contains "$out" "verify.sh js" "the deny names the scoped helper"
 assert_contains "$out" "$(cd ../../autofix/bin && pwd)/verify.sh" "at its path in this tooling"
+out="$(jq -n '{tool_name: "Bash", tool_input: {command: "npm test"}}' | FORGE_RUN_ID=forge-x bash "$HOOK")"
+assert_contains "$out" "verify.sh js forge-x" "with the session's run id, so a review session the run starts knows it too"
 assert_eq "" "$(jq -n '{tool_name: "Read", tool_input: {file_path: "npm test"}}' | bash "$HOOK")" "other tools pass untouched"
 assert_eq "" "$(printf 'not json' | bash "$HOOK")" "unreadable input is let through: this guard is a tripwire, not a gate"
 
