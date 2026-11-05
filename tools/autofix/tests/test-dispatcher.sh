@@ -102,7 +102,7 @@ assert_eq 0 "$rc" "cleanup exits 0 despite corrupt ledger and refused destroy"
 assert_contains "$out" "skipping unparsable ledger" "sweep skips corrupt ledger and continues"
 assert_contains "$out" done1 "sweep visits bailed run"
 assert_contains "$out" "destroying env of bailed run done1" "bailed run env destroy attempted"
-assert_contains "$(cat "$N_LOG")" "env destroy autofix-env-done1 --yes" "bailed env destroy invoked via n"
+assert_eq "n env destroy autofix-env-done1" "$(grep 'env destroy autofix-env-done1' "$N_LOG")" "bailed env destroy invoked via n"
 
 # bailed-with-branch: destroy attempted WITHOUT waiver, refused fail-closed, sweep continues
 assert_contains "$out" "destroying env of bailed run done2 (branch nppm-6-fix-abcd — push check governs)" \

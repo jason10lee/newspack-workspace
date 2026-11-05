@@ -86,7 +86,7 @@ case "$cmd" in
         log "worktree $wt missing; proceeding without anchor tag (--waive-push-check)"
       fi
     fi
-    n env destroy "$name" --yes
+    n env destroy "$name"
     # Clear the env record so future sweeps don't retry a destroy that already
     # happened (run autofix-nppm-305: a stale .env made every sweep re-attempt
     # the destroy and error on the missing worktree).

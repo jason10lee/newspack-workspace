@@ -118,7 +118,7 @@ bash "$E" destroy run-slash >/dev/null 2>&1 && rc=0 || rc=$?
 assert_eq 0 "$rc" "slashed branch: destroy succeeds (worktree found at sanitized path)"
 assert_contains "$(git -C "$SLASH_WT" tag -l)" "autofix-anchor-run-slash" \
   "slashed branch: anchor tag created in the sanitized worktree dir"
-assert_contains "$(cat "$N_LOG")" "env destroy autofix-env-slash --yes" \
+assert_eq "n env destroy autofix-env-slash" "$(grep 'env destroy autofix-env-slash' "$N_LOG")" \
   "slashed branch: n env destroy invoked (push-check passed via RAW branch ls-remote)"
 assert_eq "null" "$(bash "$L" get run-slash '.env')" \
   "destroy clears .env so sweeps don't retry a completed destroy"
@@ -137,7 +137,7 @@ bash "$L" init run-merged NPPM-7 operator-named >/dev/null
 bash "$L" set run-merged '.env = {name:"autofix-env-merged"} | .branch = "nppm-7-merged" | .pr = {number:77}'
 bash "$E" destroy run-merged >/dev/null 2>&1 && rc=0 || rc=$?
 assert_eq 0 "$rc" "merged PR (remote branch deleted): destroy accepts a tip preserved in refs/pull/<n>/head"
-assert_contains "$(cat "$N_LOG")" "env destroy autofix-env-merged --yes" "merged PR: n env destroy invoked"
+assert_eq "n env destroy autofix-env-merged" "$(grep 'env destroy autofix-env-merged' "$N_LOG")" "merged PR: n env destroy invoked"
 
 # ...but a commit made after the PR head was last pushed is still unpushed.
 ( cd "$MERGED_WT" && git -c user.email=t@example.com -c user.name=t commit --allow-empty -qm later )
