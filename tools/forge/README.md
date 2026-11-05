@@ -108,6 +108,9 @@ judgment:
   deny names `verify.sh js` with the run's ID, which that session can run
   instead.
 
+  A run whose pinned tooling predates the guard runs without it, as it was
+  launched, so reworking it still works.
+
 ## Tests
 
 `bash tools/forge/tests/run-tests.sh`. They stub `claude` and use autofix's

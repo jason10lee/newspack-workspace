@@ -71,9 +71,10 @@ assert_contains "$(jq -r '.hooks.PreToolUse[0].hooks[0].command' "$f")" "$TD/too
 assert_eq Bash "$(jq -r '.hooks.PreToolUse[1].matcher' "$f")" "the suite guard matches Bash"
 assert_contains "$(jq -r '.hooks.PreToolUse[1].hooks[0].command' "$f")" "$TD/tools/forge/hooks/test-suite-guard.sh" "and runs from the pinned tooling"
 TG="$(mktemp -d)"; mkdir -p "$TG/tools/forge/hooks"; cp "$HOOK" "$TG/tools/forge/hooks/"
-out="$( (write_run_settings forge-s "$TG") 2>&1)"; rc=$?
-assert_eq 1 "$rc" "settings refuse tooling without the suite guard"
-assert_contains "$out" "no suite guard" "and say so"
+err="$(mktemp)"; f="$(write_run_settings forge-s "$TG" 2>"$err")"; rc=$?
+assert_eq 0 "$rc" "tooling pinned before the suite guard still gets settings, so its run can be reworked"
+assert_eq 1 "$(jq '.hooks.PreToolUse | length' "$f")" "with only the MCP hook"
+assert_contains "$(cat "$err")" "predates the suite guard" "and says the run goes without it"
 out="$( (write_run_settings forge-s "$(mktemp -d)") 2>&1)"; rc=$?
 assert_eq 1 "$rc" "settings refuse tooling without the hook"
 assert_contains "$out" "no MCP hook" "and say so"
