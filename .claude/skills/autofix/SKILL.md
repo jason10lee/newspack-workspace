@@ -169,9 +169,9 @@ Wraps `n env create <name> --worktree <repo>:<branch> --up` +
 `<branch_stem>-<4hex>` (the `branch_stem` decision you recorded in Stage 1,
 which itself came from Linear's `branchName` — keeps Linear's autolinking
 while staying collision-free). It then runs `n composer install` in the
-affected unit when the unit has a `composer.json` and no `vendor/`, because a
-new worktree has no dev dependencies and the suite's PHPUnit run would stop on
-a missing bootstrap. Provisioning attempts are capped
+affected unit when the unit has a `composer.json` and no dev dependencies
+installed, because env up provisions a runtime-only `vendor/` and the suite's
+PHPUnit run would stop on a missing bootstrap. Provisioning attempts are capped
 (`AUTOFIX_MAX_ATTEMPTS`, default 3); exhaustion sets `terminal: escalated`
 and dies rather than proceeding on a half-built env.
 

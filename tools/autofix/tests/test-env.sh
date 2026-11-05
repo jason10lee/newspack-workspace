@@ -212,9 +212,16 @@ assert_eq 2 "$(grep -c -E '^n (env create|setup)' "$N_LOG")" "after the env is c
 
 bash "$L" init run-cmq NPPM-3002 operator-named >/dev/null
 bash "$L" set run-cmq '.decisions += [{key:"branch_stem", value:"nppm-3002-x"}]'
-Q="$AUTOFIX_WORKSPACE_ROOT/worktrees/nppm-3002-x-cmq/plugins/my-plugin"; mkdir -p "$Q/vendor"; echo '{}' > "$Q/composer.json"
+Q="$AUTOFIX_WORKSPACE_ROOT/worktrees/nppm-3002-x-cmq/plugins/my-plugin"; mkdir -p "$Q/vendor/composer"; echo '{}' > "$Q/composer.json"
+# Env up leaves a runtime-only vendor/; installed.json's top-level "dev" flag
+# is what tells it apart from a complete one.
+printf '{\n    "packages": [],\n    "dev": false,\n    "dev-package-names": []\n}\n' > "$Q/vendor/composer/installed.json"
 : > "$N_LOG"; bash "$E" create run-cmq my-plugin >/dev/null 2>&1
-assert_eq 0 "$(grep -c 'composer' "$N_LOG")" "a unit with vendor/ already is left alone"
+assert_eq 1 "$(grep -c 'composer install' "$N_LOG")" "a runtime-only vendor/ still gets its dev dependencies"
+printf '{\n    "packages": [],\n    "dev": true,\n    "dev-package-names": []\n}\n' > "$Q/vendor/composer/installed.json"
+bash "$L" set run-cmq '.attempts.provisioning = 0'
+: > "$N_LOG"; bash "$E" create run-cmq my-plugin >/dev/null 2>&1
+assert_eq 0 "$(grep -c 'composer' "$N_LOG")" "a unit with dev dependencies installed is left alone"
 
 bash "$L" init run-cmr NPPM-3003 operator-named >/dev/null
 bash "$L" set run-cmr '.decisions += [{key:"branch_stem", value:"nppm-3003-x"}]'
