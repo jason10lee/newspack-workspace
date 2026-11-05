@@ -210,6 +210,8 @@ assert_contains "$(cat "$N_LOG")" "n composer install" "and installs its dev dep
 assert_eq "$P" "$(cat "$N_CWD_LOG")" "from the unit's directory in the run's worktree"
 assert_eq 2 "$(grep -c -E '^n (env create|setup)' "$N_LOG")" "after the env is created and set up"
 
+# env.sh reads the dev-dependency check from the workspace it serves.
+mkdir -p "$AUTOFIX_WORKSPACE_ROOT/bin"; cp ../../../bin/_common.sh "$AUTOFIX_WORKSPACE_ROOT/bin/"
 bash "$L" init run-cmq NPPM-3002 operator-named >/dev/null
 bash "$L" set run-cmq '.decisions += [{key:"branch_stem", value:"nppm-3002-x"}]'
 Q="$AUTOFIX_WORKSPACE_ROOT/worktrees/nppm-3002-x-cmq/plugins/my-plugin"; mkdir -p "$Q/vendor/composer"; echo '{}' > "$Q/composer.json"
@@ -222,6 +224,14 @@ printf '{\n    "packages": [],\n    "dev": true,\n    "dev-package-names": []\n}
 bash "$L" set run-cmq '.attempts.provisioning = 0'
 : > "$N_LOG"; bash "$E" create run-cmq my-plugin >/dev/null 2>&1
 assert_eq 0 "$(grep -c 'composer' "$N_LOG")" "a unit with dev dependencies installed is left alone"
+
+# A forge run's pinned tooling holds only tools/ and .claude/skills/, so the
+# dev-dependency check has to come from the workspace, not from beside env.sh.
+PIN="$(mktemp -d)"; mkdir -p "$PIN/tools"; cp -R "$(cd .. && pwd)" "$PIN/tools/autofix"
+bash "$L" set run-cmq '.attempts.provisioning = 0'
+: > "$N_LOG"; bash "$PIN/tools/autofix/bin/env.sh" create run-cmq my-plugin >/dev/null 2>&1
+assert_eq 0 "$(grep -c 'composer' "$N_LOG")" "pinned tooling reads the dev-dependency check from the workspace"
+rm -f "$AUTOFIX_WORKSPACE_ROOT/bin/_common.sh"
 
 bash "$L" init run-cmr NPPM-3003 operator-named >/dev/null
 bash "$L" set run-cmr '.decisions += [{key:"branch_stem", value:"nppm-3003-x"}]'
