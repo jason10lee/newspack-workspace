@@ -60,10 +60,11 @@ if is_forge "$run_id"; then
   esac
 fi
 
-# await_claim <issue-id> <me> <run-id> <need-comment> — read the issue until the
-# claim shows, and leave the last read in $post. Linear can answer a read with
-# data from before a write made a moment earlier, so one read that misses the
-# claim proves nothing; another assignee is the only early answer that does.
+# await_claim <issue-id> <me> <run-id> <need-comment> <prior-assignee> — read
+# the issue until the claim shows, and leave the last read in $post. Linear can
+# answer a read with data from before a write made a moment earlier, so a read
+# showing the issue as it was before the claim proves nothing. Only an assignee
+# that is neither us nor the prior one ends the wait early.
 await_claim() {
   local tries="${AUTOFIX_CLAIM_RECHECKS:-5}" delay="${AUTOFIX_CLAIM_RECHECK_DELAY:-2}" i=1 got n
   while :; do
@@ -73,7 +74,7 @@ await_claim() {
       [ "$4" != comment ] && return 0
       n="$(printf '%s' "$post" | jq -r --arg r "$3" '[.comments.nodes[].body | select(contains($r))] | length')"
       [ "$n" != 0 ] && return 0
-    elif [ -n "$got" ]; then
+    elif [ -n "$got" ] && [ "$got" != "$5" ]; then
       return 1
     fi
     [ "$i" -ge "$tries" ] && return 1
@@ -136,6 +137,7 @@ case "$cmd" in
     "$LEDGER" set "$run_id" '.linear_prior = $p' --argjson p "$(printf '%s' "$issue" \
       | jq '{assigneeId:(.assignee.id // null), stateId:.state.id, stateName:.state.name,
              labels:[.labels.nodes[].id]}')"
+    prior_assignee_id="$(printf '%s' "$issue" | jq -r '.assignee.id // ""')"
     in_progress="$(linear_gql states "$STATES_Q" "$(jq -nc --arg teamId "$team" '{teamId:$teamId}')" \
       | jq -r '.data.team.states.nodes[] | select(.name=="In Progress") | .id')"
     [ -n "$in_progress" ] || die "no 'In Progress' state on team $team"
@@ -162,7 +164,7 @@ case "$cmd" in
         "$LEDGER" history "$run_id" intake claim-comment-deferred "digest=$cdg file=$pvdir/claim-$cdg.txt"
         log "secure: claim comment deferred (preview $pvdir/claim-$cdg.txt) — verifying by assignee only"
       fi
-      if ! await_claim "$issue_id" "$me" "$run_id" assignee; then
+      if ! await_claim "$issue_id" "$me" "$run_id" assignee "$prior_assignee_id"; then
         log "LOST-RACE ($(is_secure "$run_id" && echo secure || echo forge)): claim did not hold (assignee=$(printf '%s' "$post" | jq -r '.assignee.id // ""')); backing off"
         back_off "$uuid" "$me" "$in_progress"
         # no back-off comment in secure mode (a disclosing write); log only.
@@ -182,7 +184,7 @@ case "$cmd" in
       # Ownership = assignee-match AND *this run's* claim comment. Assignee
       # alone is not run-specific — two concurrent runs under the same operator
       # identity would both see a match — so the comment must carry our RUN_ID.
-      if ! await_claim "$issue_id" "$me" "$run_id" comment; then
+      if ! await_claim "$issue_id" "$me" "$run_id" comment "$prior_assignee_id"; then
         log "LOST-RACE: claim did not hold (assignee=$(printf '%s' "$post" | jq -r '.assignee.id // ""')); backing off"
         back_off "$uuid" "$me" "$in_progress"
         comment "$uuid" "🤖 autofix run $run_id detected a competing claim and backed off."

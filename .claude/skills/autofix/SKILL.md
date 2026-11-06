@@ -72,7 +72,7 @@ around any of these except where a specific override is named:**
 | `2` | Security-labeled | nothing written; no ledger created | **never bypassable, in any mode** |
 | `3` | Issue already has an open PR attachment | nothing written | re-invoke with `--allow-existing-pr` |
 | `4` | Same-issue guard: another non-terminal run already targets this issue | a ledger *was* minted for this invocation (stage `intake`) but the claim never ran — `claim.sh` records `terminal: bailed-superseded` on this run's own ledger before exiting, so it's swept automatically by the next sweep; don't resume it | none |
-| `5` | Lost claim race | claim briefly succeeded, then another assignee appeared, or the claim still did not show after `AUTOFIX_CLAIM_RECHECKS` re-reads (Linear can serve a read from before the write); `claim.sh` already conditionally backed off the Linear fields it had set and recorded `terminal: bailed-lost-claim-race` on this run's own ledger | none |
+| `5` | Lost claim race | claim briefly succeeded, then an assignee other than this run's and the issue's previous one appeared, or the claim still did not show after `AUTOFIX_CLAIM_RECHECKS` re-reads (Linear can serve a read from before the write); `claim.sh` already conditionally backed off the Linear fields it had set and recorded `terminal: bailed-lost-claim-race` on this run's own ledger | none |
 
 `tools/autofix/bin/autofix resume <RUN_ID>` reclaims a dead run's lock
 (`ledger.sh reclaim`), prints the recorded `.stage`/`.terminal`, then **you**

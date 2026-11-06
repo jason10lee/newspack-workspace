@@ -122,6 +122,13 @@ last="$(grep issueUpdate "$AUTOFIX_LINEAR_MOCK_DIR/requests.log" | tail -1)"
 assert_contains "$last" '"assigneeId":null' "its back-off clears the assignee nobody else holds"
 assert_contains "$last" "$BACKLOG" "and puts the prior state back"
 
+# A stale read of an issue that was already assigned shows the old assignee.
+forge_run rf5 "$(postclaim '{"id":"teammate-x"}' "$BACKLOG")" "$(postclaim "{\"id\":\"$ME\"}" "$INPROG")"
+jq '.data.issue.assignee = {"id":"teammate-x"}' fixtures/issue_ok.json > "$AUTOFIX_LINEAR_MOCK_DIR/issue.json"
+bash "$C" claim NPPM-2993 rf5 >/dev/null 2>&1; rc=$?
+assert_eq 0 "$rc" "a stale read showing the prior assignee does not lose the claim"
+assert_eq 2 "$(reads)" "it reads again until the claim shows"
+
 forge_run rf3 "$(postclaim '{"id":"somebody-else"}' "$INPROG")"
 bash "$C" claim NPPM-2993 rf3 >/dev/null 2>&1; rc=$?
 assert_eq 5 "$rc" "another assignee loses the race"
