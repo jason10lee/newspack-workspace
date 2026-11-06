@@ -118,9 +118,11 @@ assert_eq "" "$(bash "$L" get rf1 '.terminal // empty')" "and the run is not mar
 forge_run rf2 "$(postclaim null "$BACKLOG")"
 bash "$C" claim NPPM-2993 rf2 >/dev/null 2>&1; rc=$?
 assert_eq 5 "$rc" "a claim that never shows is still a lost race"
-last="$(grep issueUpdate "$AUTOFIX_LINEAR_MOCK_DIR/requests.log" | tail -1)"
-assert_contains "$last" '"assigneeId":null' "its back-off clears the assignee nobody else holds"
-assert_contains "$last" "$BACKLOG" "and puts the prior state back"
+assert_eq 5 "$(reads)" "after every re-read"
+# A read showing the prior values may be stale over someone else's write, so
+# the back-off writes nothing: the claim's own update is the only one.
+assert_eq 1 "$(grep -c '^issueUpdate' "$AUTOFIX_LINEAR_MOCK_DIR/requests.log")" \
+  "and its back-off writes nothing it cannot see is still ours"
 
 # A stale read of an issue that was already assigned shows the old assignee.
 forge_run rf5 "$(postclaim '{"id":"teammate-x"}' "$BACKLOG")" "$(postclaim "{\"id\":\"$ME\"}" "$INPROG")"

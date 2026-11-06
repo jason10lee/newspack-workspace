@@ -83,21 +83,26 @@ await_claim() {
 }
 
 # back_off <uuid> <me> <in-progress-state-id> — undo this run's claim after a
-# lost race, field by field: a field goes back to its prior value unless the
-# last read shows someone else's value in it. A read showing the prior value is
-# treated as stale, since writing it again changes nothing if it is not.
+# lost race, using the last await_claim read in $post. A field goes back to its
+# prior value only when that read shows the value this run set (spec magi #2,
+# and the forge grant's condition). A read showing anything else, the prior
+# value included, may be stale over someone else's write, so the field is left
+# as it is and named in the log.
 back_off() {
   local prior_state prior_assignee got_state got_assignee input='{}'
   prior_state="$("$LEDGER" get "$run_id" '.linear_prior.stateId')"
   prior_assignee="$("$LEDGER" get "$run_id" '.linear_prior.assigneeId')"
-  [ "$prior_assignee" = null ] && prior_assignee=""
   got_state="$(printf '%s' "$post" | jq -r '.state.id // ""')"
   got_assignee="$(printf '%s' "$post" | jq -r '.assignee.id // ""')"
-  if [ "$got_state" = "$3" ] || [ "$got_state" = "$prior_state" ]; then
+  if [ "$got_state" = "$3" ]; then
     input="$(printf '%s' "$input" | jq --arg s "$prior_state" '.stateId = $s')"
+  else
+    log "back-off: state not shown as ours ($got_state); left as it is"
   fi
-  if [ "$got_assignee" = "$2" ] || [ "$got_assignee" = "$prior_assignee" ]; then
-    input="$(printf '%s' "$input" | jq --arg a "$prior_assignee" '.assigneeId = (if $a == "" then null else $a end)')"
+  if [ "$got_assignee" = "$2" ]; then
+    input="$(printf '%s' "$input" | jq --arg a "$prior_assignee" '.assigneeId = (if $a == "null" or $a == "" then null else $a end)')"
+  else
+    log "back-off: assignee not shown as ours (${got_assignee:-none}); left as it is"
   fi
   [ "$input" = "{}" ] || update_issue "$1" "$input"
 }
