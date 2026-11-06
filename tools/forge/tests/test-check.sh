@@ -211,6 +211,18 @@ bash "$L" history autofix-le intake claimed ""; bash "$L" set autofix-le '.termi
 assert_eq 0 "$(forge check | grep -c 'LOST-CLAIM')" "or once a later run of any mode has ended on it"
 assert_eq 0 "$(updates)" "with no Linear write"
 
+fresh; bash "$L" init forge-lp NPPM-2993 forge >/dev/null
+bash "$L" history forge-lp intake claimed ""
+bash "$L" set forge-lp '.stage_history[-1].at = "2026-01-01T00:00:00Z" | .delivery = {kind: "delivered"} | .retired_at = "2026-01-02T00:00:00Z"'
+lost forge-lb "intake claiming"
+assert_contains "$(forge check)" "LOST-CLAIM forge-lb" "an earlier run delivered and retired does not hold the restore back"
+assert_eq 1 "$(updates)" "so the claim is restored"
+
+fresh; lost forge-la "intake claiming"; bash "$L" init forge-lz NPPM-2993 forge >/dev/null
+bash "$L" history forge-lz launch abandoned ""; bash "$L" set forge-lz '.terminal = "bailed-launch"'
+assert_contains "$(forge check)" "LOST-CLAIM forge-la" "nor does a later launch that never reached a claim"
+assert_eq 1 "$(updates)" "so the claim is restored"
+
 fresh; lost forge-lt "intake claiming"; bash "$L" set forge-lt '.retired_at = "2026-11-06T00:00:00Z"'
 assert_eq 0 "$(forge check | grep -c 'LOST-CLAIM')" "a retired lost race is left alone"
 assert_eq 0 "$(updates)" "with no Linear write"

@@ -213,16 +213,18 @@ _CLAIM_HELD='[.stage_history[]
   | last | .outcome // "" | if . == "claimed" or . == "claiming" then "yes" else "no" end'
 
 # later_run <rid> <issue> <since> — the id of another run, in any mode, on the
-# same issue that is still open or recorded anything at or after <since>. Its
-# claim, live or ended, carries the same assignee and state as this run's, so
-# the restore cannot tell them apart.
+# same issue that is still open (as issue_busy reads it) or recorded an intake
+# event at or after <since>. Its claim, live or ended, carries the same assignee
+# and state as this run's, so the restore cannot tell them apart. A run retired
+# before this one launched, or one that never reached intake, holds no claim.
 later_run() {
   local lf
   for lf in "$RUNS_DIR"/*/ledger.json; do
     [ -f "$lf" ] || continue
     jq -r --arg r "$1" --arg i "$(printf '%s' "$2" | tr '[:lower:]' '[:upper:]')" --arg t "$3" \
       'select(.run_id != $r and (.issue | ascii_upcase) == $i
-        and (.terminal == null or any(.stage_history[]; .at >= $t))) | .run_id' \
+        and ((.terminal == null and .retired_at == null)
+          or any(.stage_history[]; .stage == "intake" and .at >= $t))) | .run_id' \
       "$lf" 2>/dev/null || true
   done | head -1
 }
