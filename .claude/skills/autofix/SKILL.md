@@ -72,7 +72,7 @@ around any of these except where a specific override is named:**
 | `2` | Security-labeled | nothing written; no ledger created | **never bypassable, in any mode** |
 | `3` | Issue already has an open PR attachment | nothing written | re-invoke with `--allow-existing-pr` |
 | `4` | Same-issue guard: another non-terminal run already targets this issue | a ledger *was* minted for this invocation (stage `intake`) but the claim never ran — `claim.sh` records `terminal: bailed-superseded` on this run's own ledger before exiting, so it's swept automatically by the next sweep; don't resume it | none |
-| `5` | Lost claim race | claim briefly succeeded, then an assignee other than this run's and the issue's previous one appeared, or the claim still did not show after `AUTOFIX_CLAIM_RECHECKS` re-reads (Linear can serve a read from before the write); `claim.sh` already conditionally backed off the Linear fields it had set and recorded `terminal: bailed-lost-claim-race` on this run's own ledger | none |
+| `5` | Lost claim race | claim briefly succeeded, then an assignee other than this run's and the issue's previous one appeared, or the claim still did not show after `AUTOFIX_CLAIM_RECHECKS` re-reads (Linear can serve a read from before the write); `claim.sh` put back each field a read showed as this run's, left the rest as they were, and recorded `terminal: bailed-lost-claim-race` on this run's own ledger. A `back-off: … left as it is` log line means the claim may still stand in Linear, since a read that never showed it can be stale: check the issue and tell the operator, because nothing restores it later | none |
 
 `tools/autofix/bin/autofix resume <RUN_ID>` reclaims a dead run's lock
 (`ledger.sh reclaim`), prints the recorded `.stage`/`.terminal`, then **you**
@@ -813,7 +813,7 @@ once it reaches a terminal state.
 |---|---|---|---|
 | `bailed-no-go` | Stage 1 | `claim.sh release <ISSUE-ID> <RUN_ID> --fail-label --comment "<brief>"` | env never created |
 | `bailed-no-repro` | Stage 2 | `claim.sh release <ISSUE-ID> <RUN_ID> --fail-label --comment "<...>"` | `env.sh destroy <RUN_ID>` |
-| `bailed-lost-claim-race` | Stage 0 (inside `claim.sh claim`) | conditional back-off + comment, done automatically by `claim.sh` | no env yet |
+| `bailed-lost-claim-race` | Stage 0 (inside `claim.sh claim`) | conditional back-off + comment, done automatically by `claim.sh`; a field its log says it left may still hold the claim (see the exit-`5` row) | no env yet |
 | `bailed-superseded` | Stage 0 (inside `claim.sh claim`, same-issue guard, exit 4) | none — this run never touched Linear | no env yet |
 | `escalated` | Stage 2/3/4/5/6, on attempts/loop/scope exhaustion or unresolved drift | none automatic — findings/state left for the operator; a fresh Linear comment noting the escalation is good practice but not scripted for you | env/worktree retained until the TTL sweep (`AUTOFIX_ESCALATED_ENV_TTL_DAYS`) |
 | `delivered` | Stage 6 (`pr.sh create`) | closeout comment via Linear MCP (PR link + evidence + findings cut from the summary); self-review summary comment on the PR via `pr.sh comment` | env retained until the PR merges/closes, then swept |
