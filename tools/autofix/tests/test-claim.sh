@@ -124,6 +124,14 @@ assert_eq 5 "$(reads)" "after every re-read"
 assert_eq 1 "$(grep -c '^issueUpdate' "$AUTOFIX_LINEAR_MOCK_DIR/requests.log")" \
   "and its back-off writes nothing it cannot see is still ours"
 
+# A read that fails says nothing about the claim: the run dies open, with no
+# back-off and no terminal state.
+forge_run rf6
+bash "$C" claim NPPM-2993 rf6 >/dev/null 2>&1; rc=$?
+assert_eq 1 "$rc" "a failed post-claim read is not a lost race"
+assert_eq "" "$(bash "$L" get rf6 '.terminal // empty')" "and the run is left open for a restore"
+assert_eq 1 "$(grep -c '^issueUpdate' "$AUTOFIX_LINEAR_MOCK_DIR/requests.log")" "and nothing is backed off"
+
 # A stale read of an issue that was already assigned shows the old assignee.
 forge_run rf5 "$(postclaim '{"id":"teammate-x"}' "$BACKLOG")" "$(postclaim "{\"id\":\"$ME\"}" "$INPROG")"
 jq '.data.issue.assignee = {"id":"teammate-x"}' fixtures/issue_ok.json > "$AUTOFIX_LINEAR_MOCK_DIR/issue.json"

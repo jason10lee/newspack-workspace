@@ -64,11 +64,13 @@ fi
 # the issue until the claim shows, and leave the last read in $post. Linear can
 # answer a read with data from before a write made a moment earlier, so a read
 # showing the issue as it was before the claim proves nothing. Only an assignee
-# that is neither us nor the prior one ends the wait early.
+# that is neither us nor the prior one ends the wait early. Returns 2 when a
+# read fails: that says nothing about the claim, and the caller must not treat
+# it as a lost race.
 await_claim() {
   local tries="${AUTOFIX_CLAIM_RECHECKS:-5}" delay="${AUTOFIX_CLAIM_RECHECK_DELAY:-2}" i=1 got n
   while :; do
-    post="$(fetch_issue issue_postclaim "$1")"
+    post="$(fetch_issue issue_postclaim "$1")" || return 2
     got="$(printf '%s' "$post" | jq -r '.assignee.id // ""')"
     if [ "$got" = "$2" ]; then
       [ "$4" != comment ] && return 0
@@ -169,7 +171,11 @@ case "$cmd" in
         "$LEDGER" history "$run_id" intake claim-comment-deferred "digest=$cdg file=$pvdir/claim-$cdg.txt"
         log "secure: claim comment deferred (preview $pvdir/claim-$cdg.txt) — verifying by assignee only"
       fi
-      if ! await_claim "$issue_id" "$me" "$run_id" assignee "$prior_assignee_id"; then
+      held=0; await_claim "$issue_id" "$me" "$run_id" assignee "$prior_assignee_id" || held=$?
+      # A failed read leaves the run open, as any other failure here does, so
+      # a later restore can still find it.
+      [ "$held" != 2 ] || die "post-claim read of $issue_id failed; claim not verified, run left open"
+      if [ "$held" != 0 ]; then
         log "LOST-RACE ($(is_secure "$run_id" && echo secure || echo forge)): claim did not hold (assignee=$(printf '%s' "$post" | jq -r '.assignee.id // ""')); backing off"
         back_off "$uuid" "$me" "$in_progress"
         # no back-off comment in secure mode (a disclosing write); log only.
@@ -189,7 +195,11 @@ case "$cmd" in
       # Ownership = assignee-match AND *this run's* claim comment. Assignee
       # alone is not run-specific — two concurrent runs under the same operator
       # identity would both see a match — so the comment must carry our RUN_ID.
-      if ! await_claim "$issue_id" "$me" "$run_id" comment "$prior_assignee_id"; then
+      held=0; await_claim "$issue_id" "$me" "$run_id" comment "$prior_assignee_id" || held=$?
+      # A failed read leaves the run open, as any other failure here does, so
+      # a later restore can still find it.
+      [ "$held" != 2 ] || die "post-claim read of $issue_id failed; claim not verified, run left open"
+      if [ "$held" != 0 ]; then
         log "LOST-RACE: claim did not hold (assignee=$(printf '%s' "$post" | jq -r '.assignee.id // ""')); backing off"
         back_off "$uuid" "$me" "$in_progress"
         comment "$uuid" "🤖 autofix run $run_id detected a competing claim and backed off."
