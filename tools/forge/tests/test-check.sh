@@ -171,4 +171,33 @@ assert_contains "$out" "restored" "a claim that wrote but never recorded is rest
 # the recheck has to outlast a review round, which records no progress until it ends
 assert_eq 2700 "$( unset FORGE_STALE_RECHECK; . ../bin/lib/forge.sh; echo "$FORGE_STALE_RECHECK" )" "the default recheck is 45 minutes"
 
+# A run that lost its claim race is terminal, so it holds no slot, but its claim
+# can still stand when every post-claim read was stale. check restores it once.
+lost() { # rid, then the newest claim events
+  local rid="$1"; shift
+  mkrun "$rid"; mock "$rid"; gone
+  for ev in "$@"; do bash "$L" history "$rid" "${ev%% *}" "${ev#* }" ""; done
+  bash "$L" set "$rid" '.terminal = "bailed-lost-claim-race" | .linear_prior = {assigneeId: null, stateId: "7fad47f0-3b4a-42ca-bf01-41a979e4cbbe", stateName: "Backlog", labels: [], claimed_state_id: "f00ac312-3e9b-4fc2-a119-1a7cd68ece00"}'
+  sed "s/RUNID/$rid/" "$FX/issue_release_unchanged.json" > "$M/issue_release.json"
+}
+fresh; lost forge-lr "intake claiming"
+out="$(forge check)"
+assert_contains "$out" "LOST-CLAIM forge-lr" "check restores the claim a lost race left standing"
+assert_contains "$out" "restored" "and says the restore ran"
+assert_eq 1 "$(updates)" "with one Linear update"
+assert_eq restored "$(bash "$L" get forge-lr '.stage_history[-1].outcome')" "and records the release"
+assert_eq bailed-lost-claim-race "$(bash "$L" get forge-lr .terminal)" "the run keeps its terminal state"
+out="$(forge check)"
+assert_eq 0 "$(printf '%s' "$out" | grep -c 'LOST-CLAIM')" "a second check leaves it alone"
+assert_eq 1 "$(updates)" "and writes nothing more"
+
+fresh; lost forge-lq "intake claiming" "release restored"
+out="$(forge check)"
+assert_eq 0 "$(printf '%s' "$out" | grep -c 'LOST-CLAIM')" "a lost race already released is left alone"
+assert_eq 0 "$(updates)" "with no Linear write"
+
+fresh; lost forge-lt "intake claiming"; bash "$L" set forge-lt '.retired_at = "2026-11-06T00:00:00Z"'
+assert_eq 0 "$(forge check | grep -c 'LOST-CLAIM')" "a retired lost race is left alone"
+assert_eq 0 "$(updates)" "with no Linear write"
+
 finish

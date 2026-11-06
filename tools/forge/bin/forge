@@ -206,6 +206,34 @@ cmd_next() {
 # session is gone when its row has no pid and says it is done or stopped; one
 # waiting on a question is left for the operator. A stop that does not take changes
 # nothing; a run that delivered or stopped meanwhile keeps its state.
+# "yes" when the newest claim event is a claim, or a claim that started and never
+# recorded how it ended (forge-run marks "claiming" before claim.sh writes).
+_CLAIM_HELD='[.stage_history[]
+  | select((.stage == "intake" and (.outcome == "claimed" or .outcome == "claiming")) or (.stage == "release" and .outcome == "restored"))]
+  | last | .outcome // "" | if . == "claimed" or . == "claiming" then "yes" else "no" end'
+
+# release_lost_claims — a run that lost its claim race is terminal, so it holds
+# no slot and check_run never sees it. When every read after its claim was stale,
+# claim.sh could not tell its own claim from someone else's, wrote nothing, and
+# left the claim standing. The release here is the same conditional restore a
+# dead run gets, so it resets only fields that still hold the run's values. It
+# records a release, so each run gets one.
+release_lost_claims() {
+  local rids rid issue rel
+  rids="$(_each_ledger 'select(.terminal == "bailed-lost-claim-race" and .retired_at == null) | .run_id')" || return 1
+  [ -n "$rids" ] || return 0
+  while IFS= read -r rid; do
+    [ "$(bash "$FORGE_LEDGER" get "$rid" "$_CLAIM_HELD")" = yes ] || continue
+    issue="$(bash "$FORGE_LEDGER" get "$rid" .issue)"
+    if bash "$AUTOFIX_BIN_DIR/claim.sh" release "$issue" "$rid" >/dev/null 2>&1; then
+      rel="$(bash "$FORGE_LEDGER" get "$rid" '.stage_history[-1].notes')"
+    else rel="the restore failed; check $issue by hand"; fi
+    echo "LOST-CLAIM $rid: lost its claim race; Linear: $rel"
+  done <<EOR
+$rids
+EOR
+}
+
 check_run() {
   local rid="$1" launch id last epoch age why issue rel deadline st state started seen seen_last seen_epoch now
   launch="$(bash "$FORGE_LEDGER" get "$rid" '.launch // ""')"
@@ -289,11 +317,8 @@ check_run() {
   bash "$FORGE_LEDGER" set "$rid" '.terminal = "bailed-dead"'
   bash "$FORGE_LEDGER" history "$rid" liveness bailed-dead "$why"
   issue="$(bash "$FORGE_LEDGER" get "$rid" .issue)"
-  # Restore when the newest claim event is a claim, or a claim that started and
-  # never recorded how it ended (forge-run marks "claiming" before claim.sh writes).
-  if [ "$(bash "$FORGE_LEDGER" get "$rid" '[.stage_history[]
-        | select((.stage == "intake" and (.outcome == "claimed" or .outcome == "claiming")) or (.stage == "release" and .outcome == "restored"))]
-        | last | .outcome // "" | if . == "claimed" or . == "claiming" then "yes" else "no" end')" = yes ]; then
+  # Restore when the run still holds its claim (_CLAIM_HELD).
+  if [ "$(bash "$FORGE_LEDGER" get "$rid" "$_CLAIM_HELD")" = yes ]; then
     if bash "$AUTOFIX_BIN_DIR/claim.sh" release "$issue" "$rid" >/dev/null 2>&1; then rel="restored"
     else rel="the restore failed; check $issue by hand"; fi
   else
@@ -304,6 +329,7 @@ check_run() {
 
 cmd_check() {
   local holders rid
+  release_lost_claims || die "cannot read the forge's run state"
   holders="$(slot_holders)" || die "cannot read the forge's run state"
   [ -n "$holders" ] || { echo "NO-RUNS"; return 0; }
   while IFS= read -r rid; do check_run "$rid"; done <<EOH
