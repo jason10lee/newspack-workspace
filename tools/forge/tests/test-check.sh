@@ -171,4 +171,60 @@ assert_contains "$out" "restored" "a claim that wrote but never recorded is rest
 # the recheck has to outlast a review round, which records no progress until it ends
 assert_eq 2700 "$( unset FORGE_STALE_RECHECK; . ../bin/lib/forge.sh; echo "$FORGE_STALE_RECHECK" )" "the default recheck is 45 minutes"
 
+# A run that lost its claim race is terminal, so it holds no slot, but its claim
+# can still stand when every post-claim read was stale. check restores it once.
+lost() { # rid, then the newest claim events
+  local rid="$1"; shift
+  mkrun "$rid"; mock "$rid"; gone
+  for ev in "$@"; do bash "$L" history "$rid" "${ev%% *}" "${ev#* }" ""; done
+  bash "$L" set "$rid" '.terminal = "bailed-lost-claim-race" | .linear_prior = {assigneeId: null, stateId: "7fad47f0-3b4a-42ca-bf01-41a979e4cbbe", stateName: "Backlog", labels: [], claimed_state_id: "f00ac312-3e9b-4fc2-a119-1a7cd68ece00"}'
+  sed "s/RUNID/$rid/" "$FX/issue_release_unchanged.json" > "$M/issue_release.json"
+}
+fresh; lost forge-lr "intake claiming"
+out="$(forge check)"
+assert_contains "$out" "LOST-CLAIM forge-lr" "check restores the claim a lost race left standing"
+assert_contains "$out" "restored" "and says the restore ran"
+assert_eq 1 "$(updates)" "with one Linear update"
+assert_eq restored "$(bash "$L" get forge-lr '.stage_history[-1].outcome')" "and records the release"
+assert_eq bailed-lost-claim-race "$(bash "$L" get forge-lr .terminal)" "the run keeps its terminal state"
+out="$(forge check)"
+assert_eq 0 "$(printf '%s' "$out" | grep -c 'LOST-CLAIM')" "a second check leaves it alone"
+assert_eq 1 "$(updates)" "and writes nothing more"
+
+fresh; lost forge-lq "intake claiming" "release restored"
+out="$(forge check)"
+assert_eq 0 "$(printf '%s' "$out" | grep -c 'LOST-CLAIM')" "a lost race already released is left alone"
+assert_eq 0 "$(updates)" "with no Linear write"
+
+fresh; lost forge-lw "intake claiming"
+sed "s/RUNID/forge-lw/" "$FX/issue_release_humanized.json" > "$M/issue_release.json"
+out="$(forge check)"
+assert_contains "$out" "drifted:[assigneeId stateId]" "a lost race leaves alone an issue the winner holds in progress"
+assert_eq 0 "$(updates)" "with no Linear write"
+
+fresh; lost forge-lo "intake claiming"; bash "$L" init forge-ln NPPM-2993 forge >/dev/null
+assert_eq 0 "$(forge check | grep -c 'LOST-CLAIM')" "a lost race is left alone once a later run is open on the issue"
+assert_eq 0 "$(updates)" "so that run's claim is not undone"
+
+fresh; lost forge-le "intake claiming"; bash "$L" init autofix-le NPPM-2993 standard >/dev/null
+bash "$L" history autofix-le intake claimed ""; bash "$L" set autofix-le '.terminal = "bailed-no-go"'
+assert_eq 0 "$(forge check | grep -c 'LOST-CLAIM')" "or once a later run of any mode has ended on it"
+assert_eq 0 "$(updates)" "with no Linear write"
+
+fresh; bash "$L" init forge-lp NPPM-2993 forge >/dev/null
+bash "$L" history forge-lp intake claimed ""
+bash "$L" set forge-lp '.stage_history[-1].at = "2026-01-01T00:00:00Z" | .delivery = {kind: "delivered"} | .retired_at = "2026-01-02T00:00:00Z"'
+lost forge-lb "intake claiming"
+assert_contains "$(forge check)" "LOST-CLAIM forge-lb" "an earlier run delivered and retired does not hold the restore back"
+assert_eq 1 "$(updates)" "so the claim is restored"
+
+fresh; lost forge-la "intake claiming"; bash "$L" init forge-lz NPPM-2993 forge >/dev/null
+bash "$L" history forge-lz launch abandoned ""; bash "$L" set forge-lz '.terminal = "bailed-launch"'
+assert_contains "$(forge check)" "LOST-CLAIM forge-la" "nor does a later launch that never reached a claim"
+assert_eq 1 "$(updates)" "so the claim is restored"
+
+fresh; lost forge-lt "intake claiming"; bash "$L" set forge-lt '.retired_at = "2026-11-06T00:00:00Z"'
+assert_eq 0 "$(forge check | grep -c 'LOST-CLAIM')" "a retired lost race is left alone"
+assert_eq 0 "$(updates)" "with no Linear write"
+
 finish

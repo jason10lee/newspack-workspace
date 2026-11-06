@@ -6,6 +6,16 @@ linear_gql() { # opname query [variables-json]
   local op="$1" q="$2" vars="${3:-"{}"}"
   if [ -n "${AUTOFIX_LINEAR_MOCK_DIR:-}" ]; then
     printf '%s\t%s\n' "$op" "$vars" >> "$AUTOFIX_LINEAR_MOCK_DIR/requests.log"
+    # A <op>.seq/ directory answers successive calls with its files in name
+    # order and repeats the last, for a read that changes between calls.
+    local seq="$AUTOFIX_LINEAR_MOCK_DIR/$op.seq" next
+    if [ -d "$seq" ]; then
+      next="$(find "$seq" -type f -name '*.json' | sort | head -1)"
+      [ -n "$next" ] || { log "empty mock sequence: $op"; return 1; }
+      cat "$next"
+      [ "$(find "$seq" -type f -name '*.json' | wc -l)" -gt 1 ] && rm -f "$next"
+      return 0
+    fi
     cat "$AUTOFIX_LINEAR_MOCK_DIR/$op.json" 2>/dev/null || { log "no mock fixture: $op"; return 1; }
     return 0
   fi

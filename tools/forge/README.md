@@ -31,7 +31,11 @@ The dispatcher session runs these from the root checkout, following the
   includes the machine's sleep and a review round records none until it ends. A mark set just before a long sleep can
   still stop a run on the first check after the wake. A stopped run is
   marked `bailed-dead` and its Linear fields are restored under the forge
-  grant, unless it delivered first.
+  grant, unless it delivered first. A run that lost its claim race holds no
+  slot, but its claim can still stand when a read after it was stale, so
+  `check` gives it the same conditional restore once and reports `LOST-CLAIM`.
+  It writes nothing when someone else holds the issue, and skips the run once
+  a later run has taken the issue up, since both claims look the same.
 - `forge status` lists forge runs, the queue and the secure queue.
 - `forge rework <run> <suggestion>` relaunches a delivered, stopped or dead run,
   unless its issue now has a PR or the Security label.

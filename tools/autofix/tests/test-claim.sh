@@ -2,6 +2,8 @@
 set -uo pipefail
 cd "$(dirname "$0")" || exit 1; . ./helpers.sh
 C=../bin/claim.sh; L=../bin/ledger.sh; A=../bin/autofix
+# The post-claim check waits between re-reads; the mock answers at once.
+export AUTOFIX_CLAIM_RECHECK_DELAY=0
 setup() { # $1 = postclaim fixture, $2 = run id
   export AUTOFIX_ROOT; AUTOFIX_ROOT="$(mktemp -d)"
   M="$(mktemp -d)"; export AUTOFIX_LINEAR_MOCK_DIR="$M"
@@ -90,4 +92,62 @@ assert_eq 1 "$rc" "empty --comment refuses the release"
 assert_contains "$out" "empty" "empty --comment named in the error"
 assert_eq "$log_before" "$(cat "$AUTOFIX_LINEAR_MOCK_DIR/requests.log")" \
   "requests.log unchanged — empty-comment die precedes any Linear read/write"
+# Linear can serve a read that predates a write made a moment earlier, so the
+# post-claim check re-reads before it calls a race lost. A sequence directory
+# serves its files in order, repeating the last.
+ME=56b3262a-bf16-4c9f-8c0f-8580fc5f6fea; BACKLOG=7fad47f0-3b4a-42ca-bf01-41a979e4cbbe; INPROG=f00ac312-3e9b-4fc2-a119-1a7cd68ece00
+postclaim() { # assignee-json state-id
+  printf '{ "data": { "issue": { "id": "abc-123", "identifier": "NPPM-2993", "assignee": %s, "state": { "id": "%s", "name": "x" }, "labels": { "nodes": [] }, "comments": { "nodes": [] } } } }\n' "$1" "$2"
+}
+forge_run() { # run id, then postclaim bodies in the order they are served
+  local rid="$1" i=0; shift
+  setup issue_postclaim_ok.json "$rid"; rm -f "$AUTOFIX_LINEAR_MOCK_DIR/issue_postclaim.json"
+  bash "$L" init "$rid" NPPM-2993 forge >/dev/null 2>&1 || true
+  bash "$L" set "$rid" '.mode = "forge" | .launch = "confirmed"'
+  mkdir -p "$AUTOFIX_LINEAR_MOCK_DIR/issue_postclaim.seq"
+  for body in "$@"; do i=$((i+1)); printf '%s\n' "$body" > "$AUTOFIX_LINEAR_MOCK_DIR/issue_postclaim.seq/$i.json"; done
+}
+reads() { grep -c '^issue_postclaim' "$AUTOFIX_LINEAR_MOCK_DIR/requests.log"; }
+
+forge_run rf1 "$(postclaim null "$BACKLOG")" "$(postclaim "{\"id\":\"$ME\"}" "$INPROG")"
+bash "$C" claim NPPM-2993 rf1 >/dev/null 2>&1; rc=$?
+assert_eq 0 "$rc" "a stale first read does not lose a claim that landed"
+assert_eq 2 "$(reads)" "it reads again until the claim shows"
+assert_eq "" "$(bash "$L" get rf1 '.terminal // empty')" "and the run is not marked as bailed"
+
+forge_run rf2 "$(postclaim null "$BACKLOG")"
+bash "$C" claim NPPM-2993 rf2 >/dev/null 2>&1; rc=$?
+assert_eq 5 "$rc" "a claim that never shows is still a lost race"
+assert_eq 5 "$(reads)" "after every re-read"
+# A read showing the prior values may be stale over someone else's write, so
+# the back-off writes nothing: the claim's own update is the only one.
+assert_eq 1 "$(grep -c '^issueUpdate' "$AUTOFIX_LINEAR_MOCK_DIR/requests.log")" \
+  "and its back-off writes nothing it cannot see is still ours"
+
+# A read that fails says nothing about the claim: the run dies open, with no
+# back-off and no terminal state.
+forge_run rf6
+bash "$C" claim NPPM-2993 rf6 >/dev/null 2>&1; rc=$?
+assert_eq 1 "$rc" "a failed post-claim read is not a lost race"
+assert_eq "" "$(bash "$L" get rf6 '.terminal // empty')" "and the run is left open for a restore"
+assert_eq 1 "$(grep -c '^issueUpdate' "$AUTOFIX_LINEAR_MOCK_DIR/requests.log")" "and nothing is backed off"
+
+# A stale read of an issue that was already assigned shows the old assignee.
+forge_run rf5 "$(postclaim '{"id":"teammate-x"}' "$BACKLOG")" "$(postclaim "{\"id\":\"$ME\"}" "$INPROG")"
+jq '.data.issue.assignee = {"id":"teammate-x"}' fixtures/issue_ok.json > "$AUTOFIX_LINEAR_MOCK_DIR/issue.json"
+bash "$C" claim NPPM-2993 rf5 >/dev/null 2>&1; rc=$?
+assert_eq 0 "$rc" "a stale read showing the prior assignee does not lose the claim"
+assert_eq 2 "$(reads)" "it reads again until the claim shows"
+
+forge_run rf3 "$(postclaim '{"id":"somebody-else"}' "$INPROG")"
+bash "$C" claim NPPM-2993 rf3 >/dev/null 2>&1; rc=$?
+assert_eq 5 "$rc" "another assignee loses the race"
+assert_eq 1 "$(reads)" "at once, without re-reading"
+last="$(grep issueUpdate "$AUTOFIX_LINEAR_MOCK_DIR/requests.log" | tail -1)"
+assert_eq 0 "$(printf '%s' "$last" | grep -c assigneeId)" "and the back-off leaves their assignment alone"
+
+forge_run rf4 "$(postclaim null "$BACKLOG")"
+out="$(bash "$C" claim NPPM-2993 rf4 2>&1)"
+assert_eq 0 "$(printf '%s' "$out" | grep -c 'secure')" "a forge run's lost race is not logged as secure"
+
 finish
