@@ -212,20 +212,39 @@ _CLAIM_HELD='[.stage_history[]
   | select((.stage == "intake" and (.outcome == "claimed" or .outcome == "claiming")) or (.stage == "release" and .outcome == "restored"))]
   | last | .outcome // "" | if . == "claimed" or . == "claiming" then "yes" else "no" end'
 
+# later_run <rid> <issue> <since> — the id of another run, in any mode, on the
+# same issue that is still open or recorded anything at or after <since>. Its
+# claim, live or ended, carries the same assignee and state as this run's, so
+# the restore cannot tell them apart.
+later_run() {
+  local lf
+  for lf in "$RUNS_DIR"/*/ledger.json; do
+    [ -f "$lf" ] || continue
+    jq -r --arg r "$1" --arg i "$(printf '%s' "$2" | tr '[:lower:]' '[:upper:]')" --arg t "$3" \
+      'select(.run_id != $r and (.issue | ascii_upcase) == $i
+        and (.terminal == null or any(.stage_history[]; .at >= $t))) | .run_id' \
+      "$lf" 2>/dev/null || true
+  done | head -1
+}
+
 # release_lost_claims — a run that lost its claim race is terminal, so it holds
-# no slot and check_run never sees it. When every read after its claim was stale,
-# claim.sh could not tell its own claim from someone else's, wrote nothing, and
-# left the claim standing. The release here is the same conditional restore a
-# dead run gets, so it resets only fields that still hold the run's values. It
-# records a release, so each run gets one.
+# no slot and check_run never sees it. When a read after its claim was stale,
+# claim.sh could not tell its own claim from someone else's and left that field
+# standing. The release here is the conditional restore a dead run gets, with
+# --if-assigned so that an issue the winner holds is left alone. A run that
+# came later on the same issue owns the claim now, so this one is skipped; a
+# claim the operator took by hand looks the same as this run's and is not
+# protected. A release is recorded on success, so each run gets one.
 release_lost_claims() {
-  local rids rid issue rel
+  local rids rid issue rel since
   rids="$(_each_ledger 'select(.terminal == "bailed-lost-claim-race" and .retired_at == null) | .run_id')" || return 1
   [ -n "$rids" ] || return 0
   while IFS= read -r rid; do
     [ "$(bash "$FORGE_LEDGER" get "$rid" "$_CLAIM_HELD")" = yes ] || continue
     issue="$(bash "$FORGE_LEDGER" get "$rid" .issue)"
-    if bash "$AUTOFIX_BIN_DIR/claim.sh" release "$issue" "$rid" >/dev/null 2>&1; then
+    since="$(bash "$FORGE_LEDGER" get "$rid" '[.stage_history[] | select(.stage == "intake")] | last | .at // ""')"
+    [ -z "$(later_run "$rid" "$issue" "$since")" ] || continue
+    if bash "$AUTOFIX_BIN_DIR/claim.sh" release "$issue" "$rid" --if-assigned >/dev/null 2>&1; then
       rel="$(bash "$FORGE_LEDGER" get "$rid" '.stage_history[-1].notes')"
     else rel="the restore failed; check $issue by hand"; fi
     echo "LOST-CLAIM $rid: lost its claim race; Linear: $rel"

@@ -196,6 +196,21 @@ out="$(forge check)"
 assert_eq 0 "$(printf '%s' "$out" | grep -c 'LOST-CLAIM')" "a lost race already released is left alone"
 assert_eq 0 "$(updates)" "with no Linear write"
 
+fresh; lost forge-lw "intake claiming"
+sed "s/RUNID/forge-lw/" "$FX/issue_release_humanized.json" > "$M/issue_release.json"
+out="$(forge check)"
+assert_contains "$out" "drifted:[assigneeId stateId]" "a lost race leaves alone an issue the winner holds in progress"
+assert_eq 0 "$(updates)" "with no Linear write"
+
+fresh; lost forge-lo "intake claiming"; bash "$L" init forge-ln NPPM-2993 forge >/dev/null
+assert_eq 0 "$(forge check | grep -c 'LOST-CLAIM')" "a lost race is left alone once a later run is open on the issue"
+assert_eq 0 "$(updates)" "so that run's claim is not undone"
+
+fresh; lost forge-le "intake claiming"; bash "$L" init autofix-le NPPM-2993 standard >/dev/null
+bash "$L" history autofix-le intake claimed ""; bash "$L" set autofix-le '.terminal = "bailed-no-go"'
+assert_eq 0 "$(forge check | grep -c 'LOST-CLAIM')" "or once a later run of any mode has ended on it"
+assert_eq 0 "$(updates)" "with no Linear write"
+
 fresh; lost forge-lt "intake claiming"; bash "$L" set forge-lt '.retired_at = "2026-11-06T00:00:00Z"'
 assert_eq 0 "$(forge check | grep -c 'LOST-CLAIM')" "a retired lost race is left alone"
 assert_eq 0 "$(updates)" "with no Linear write"

@@ -243,9 +243,12 @@ $marker"
     "$LEDGER" history "$run_id" comment posted "digest=$dg"
     log "posted comment on $issue_id ($dg)" ;;
   release)
-    fail_label=""; note=""; confirmed=""
+    fail_label=""; note=""; confirmed=""; if_assigned=""
     while [ $# -gt 0 ]; do case "$1" in
       --fail-label) fail_label=1; shift ;;
+      # Restore nothing unless the issue is still assigned to us. For a run that
+      # lost its claim race, In Progress under another assignee is the winner's.
+      --if-assigned) if_assigned=1; shift ;;
       # FAIL CLOSED on an explicitly passed empty comment (run autofix-nppm-305
       # incident: a vanished payload file became --comment "" and the release
       # shipped with no explanation on the issue). Omitting --comment is the
@@ -302,6 +305,9 @@ $marker"
     fi
     if [ -n "$already_restored" ]; then
       :
+    elif [ -n "$if_assigned" ] && [ "$cur_assignee" != "$me" ]; then
+      "$LEDGER" drift "$run_id" stateId "$claimed_state" "$cur_state"
+      drifted="$drifted stateId"
     elif [ "$cur_state" = "$claimed_state" ]; then
       input="$(printf '%s' "$input" | jq --arg s "$prior_state" '.stateId = $s')"
       restored="$restored stateId"
