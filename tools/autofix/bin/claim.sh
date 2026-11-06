@@ -60,6 +60,47 @@ if is_forge "$run_id"; then
   esac
 fi
 
+# await_claim <issue-id> <me> <run-id> <need-comment> — read the issue until the
+# claim shows, and leave the last read in $post. Linear can answer a read with
+# data from before a write made a moment earlier, so one read that misses the
+# claim proves nothing; another assignee is the only early answer that does.
+await_claim() {
+  local tries="${AUTOFIX_CLAIM_RECHECKS:-5}" delay="${AUTOFIX_CLAIM_RECHECK_DELAY:-2}" i=1 got n
+  while :; do
+    post="$(fetch_issue issue_postclaim "$1")"
+    got="$(printf '%s' "$post" | jq -r '.assignee.id // ""')"
+    if [ "$got" = "$2" ]; then
+      [ "$4" != comment ] && return 0
+      n="$(printf '%s' "$post" | jq -r --arg r "$3" '[.comments.nodes[].body | select(contains($r))] | length')"
+      [ "$n" != 0 ] && return 0
+    elif [ -n "$got" ]; then
+      return 1
+    fi
+    [ "$i" -ge "$tries" ] && return 1
+    i=$((i + 1)); sleep "$delay"
+  done
+}
+
+# back_off <uuid> <me> <in-progress-state-id> — undo this run's claim after a
+# lost race, field by field: a field goes back to its prior value unless the
+# last read shows someone else's value in it. A read showing the prior value is
+# treated as stale, since writing it again changes nothing if it is not.
+back_off() {
+  local prior_state prior_assignee got_state got_assignee input='{}'
+  prior_state="$("$LEDGER" get "$run_id" '.linear_prior.stateId')"
+  prior_assignee="$("$LEDGER" get "$run_id" '.linear_prior.assigneeId')"
+  [ "$prior_assignee" = null ] && prior_assignee=""
+  got_state="$(printf '%s' "$post" | jq -r '.state.id // ""')"
+  got_assignee="$(printf '%s' "$post" | jq -r '.assignee.id // ""')"
+  if [ "$got_state" = "$3" ] || [ "$got_state" = "$prior_state" ]; then
+    input="$(printf '%s' "$input" | jq --arg s "$prior_state" '.stateId = $s')"
+  fi
+  if [ "$got_assignee" = "$2" ] || [ "$got_assignee" = "$prior_assignee" ]; then
+    input="$(printf '%s' "$input" | jq --arg a "$prior_assignee" '.assigneeId = (if $a == "" then null else $a end)')"
+  fi
+  [ "$input" = "{}" ] || update_issue "$1" "$input"
+}
+
 case "$cmd" in
   claim)
     # same-issue guard (spec magi #4): another non-terminal run on this issue?
@@ -121,22 +162,9 @@ case "$cmd" in
         "$LEDGER" history "$run_id" intake claim-comment-deferred "digest=$cdg file=$pvdir/claim-$cdg.txt"
         log "secure: claim comment deferred (preview $pvdir/claim-$cdg.txt) — verifying by assignee only"
       fi
-      post="$(fetch_issue issue_postclaim "$issue_id")"
-      got_assignee="$(printf '%s' "$post" | jq -r '.assignee.id // ""')"
-      if [ "$got_assignee" != "$me" ]; then
-        log "LOST-RACE (secure): claim did not hold (assignee=$got_assignee); backing off"
-        prior_state="$("$LEDGER" get "$run_id" '.linear_prior.stateId')"
-        prior_assignee="$("$LEDGER" get "$run_id" '.linear_prior.assigneeId')"
-        got_state="$(printf '%s' "$post" | jq -r '.state.id // ""')"
-        input='{}'
-        if [ "$got_state" = "$in_progress" ]; then
-          input="$(printf '%s' "$input" | jq --arg s "$prior_state" '.stateId = $s')"
-        fi
-        if [ "$got_assignee" = "$me" ]; then
-          input="$(printf '%s' "$input" | jq --arg a "$prior_assignee" \
-            '.assigneeId = (if $a == "null" or $a == "" then null else $a end)')"
-        fi
-        [ "$input" = "{}" ] || update_issue "$uuid" "$input"
+      if ! await_claim "$issue_id" "$me" "$run_id" assignee; then
+        log "LOST-RACE ($(is_secure "$run_id" && echo secure || echo forge)): claim did not hold (assignee=$(printf '%s' "$post" | jq -r '.assignee.id // ""')); backing off"
+        back_off "$uuid" "$me" "$in_progress"
         # no back-off comment in secure mode (a disclosing write); log only.
         "$LEDGER" set "$run_id" '.terminal = "bailed-lost-claim-race"'
         exit 5
@@ -147,34 +175,16 @@ case "$cmd" in
       else
         "$LEDGER" history "$run_id" intake claimed "assignee=$me state=In Progress (forge; no comment)"
       fi
-      log "claimed $issue_id as secure run $run_id"
+      log "claimed $issue_id as $(is_secure "$run_id" && echo secure || echo forge) run $run_id"
     else
       comment "$uuid" "🤖 autofix run $run_id started"
-      # verify the claim held (spec codex #1): assignee is us AND our comment exists
-      post="$(fetch_issue issue_postclaim "$issue_id")"
-      got_assignee="$(printf '%s' "$post" | jq -r '.assignee.id // ""')"
+      # verify the claim held (spec codex #1): assignee is us AND our comment exists.
       # Ownership = assignee-match AND *this run's* claim comment. Assignee
       # alone is not run-specific — two concurrent runs under the same operator
       # identity would both see a match — so the comment must carry our RUN_ID.
-      has_comment="$(printf '%s' "$post" | jq -r --arg r "$run_id" \
-        '[.comments.nodes[].body | select(contains($r))] | length')"
-      if [ "$got_assignee" != "$me" ] || [ "$has_comment" = "0" ]; then
-        log "LOST-RACE: claim did not hold (assignee=$got_assignee); backing off"
-        prior_state="$("$LEDGER" get "$run_id" '.linear_prior.stateId')"
-        prior_assignee="$("$LEDGER" get "$run_id" '.linear_prior.assigneeId')"
-        got_state="$(printf '%s' "$post" | jq -r '.state.id // ""')"
-        # conditional back-off (spec magi #2): only unwind fields still holding
-        # the value this run set — assignee stays put if someone else already
-        # claimed it, and state stays put if it moved out from under us too.
-        input='{}'
-        if [ "$got_state" = "$in_progress" ]; then
-          input="$(printf '%s' "$input" | jq --arg s "$prior_state" '.stateId = $s')"
-        fi
-        if [ "$got_assignee" = "$me" ]; then
-          input="$(printf '%s' "$input" | jq --arg a "$prior_assignee" \
-            '.assigneeId = (if $a == "null" or $a == "" then null else $a end)')"
-        fi
-        [ "$input" = "{}" ] || update_issue "$uuid" "$input"
+      if ! await_claim "$issue_id" "$me" "$run_id" comment; then
+        log "LOST-RACE: claim did not hold (assignee=$(printf '%s' "$post" | jq -r '.assignee.id // ""')); backing off"
+        back_off "$uuid" "$me" "$in_progress"
         comment "$uuid" "🤖 autofix run $run_id detected a competing claim and backed off."
         "$LEDGER" set "$run_id" '.terminal = "bailed-lost-claim-race"'
         exit 5
