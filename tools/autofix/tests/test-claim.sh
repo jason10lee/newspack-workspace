@@ -19,24 +19,24 @@ setup issue_postclaim_ok.json run1
 bash "$C" claim NPPM-2993 run1
 assert_eq 0 $? "clean claim succeeds"
 assert_eq Backlog "$(bash "$L" get run1 '.linear_prior.stateName')" "prior state recorded"
+assert_eq true "$(bash "$L" get run1 '.issue_written')" "and records that the run wrote to the issue"
 
-# A rework claims again over the ledger of a run that already wrote. Its
-# claimed_state_id is the record of that earlier write (forge's later_run reads
-# it), so a claim that stops before its own write must leave it in place.
+# A rework claims again over the ledger of a run that already wrote, and its
+# claim stops before writing. The run still shows it once wrote (forge's
+# later_run reads that), but the earlier launch's claimed state is not this
+# one's: a teammate who then takes the issue In Progress keeps it when the
+# stopped run releases.
 setup issue_postclaim_ok.json run1b
-bash "$L" set run1b '.linear_prior = {assigneeId: null, stateId: "7fad47f0-3b4a-42ca-bf01-41a979e4cbbe", stateName: "Backlog", labels: [], claimed_state_id: "earlier-claim"}'
+bash "$L" set run1b '.linear_prior = {assigneeId: null, stateId: "7fad47f0-3b4a-42ca-bf01-41a979e4cbbe", stateName: "Backlog", labels: [], claimed_state_id: "f00ac312-3e9b-4fc2-a119-1a7cd68ece00"}'
 printf '{ "data": { "team": { "states": { "nodes": [ { "id": "7fad47f0-3b4a-42ca-bf01-41a979e4cbbe", "name": "Backlog" } ] } } } }' > "$AUTOFIX_LINEAR_MOCK_DIR/states.json"
 bash "$C" claim NPPM-2993 run1b >/dev/null 2>&1 && rc=0 || rc=$?
-assert_eq 1 "$rc" "a claim with no In Progress state stops"
-assert_eq earlier-claim "$(bash "$L" get run1b '.linear_prior.claimed_state_id')" \
-  "and keeps the record of the run's earlier write"
+assert_eq 1 "$rc" "a rework claim with no In Progress state stops"
 assert_eq 0 "$(grep -c issueUpdate "$AUTOFIX_LINEAR_MOCK_DIR/requests.log" 2>/dev/null || true)" "with no Linear write"
-setup issue_postclaim_ok.json run1c
-bash "$L" set run1c '.linear_prior = {claimed_state_id: "earlier-claim"}'
-bash "$C" claim NPPM-2993 run1c >/dev/null 2>&1
-assert_eq f00ac312-3e9b-4fc2-a119-1a7cd68ece00 "$(bash "$L" get run1c '.linear_prior.claimed_state_id')" \
-  "a claim that writes records its own claimed state"
-assert_eq Backlog "$(bash "$L" get run1c '.linear_prior.stateName')" "and its own prior"
+assert_eq true "$(bash "$L" get run1b '.issue_written')" "and the run still shows its earlier write"
+cp fixtures/issue_release_humanized.json "$AUTOFIX_LINEAR_MOCK_DIR/issue_release.json"
+bash "$C" release NPPM-2993 run1b >/dev/null 2>&1
+assert_eq 0 "$(grep issueUpdate "$AUTOFIX_LINEAR_MOCK_DIR/requests.log" 2>/dev/null | grep -c stateId || true)" \
+  "and its release leaves a teammate's In Progress alone"
 
 setup issue_postclaim_lost.json run2
 bash "$C" claim NPPM-2993 run2 >/dev/null 2>&1 && rc=0 || rc=$?

@@ -141,10 +141,11 @@ case "$cmd" in
     issue="$(fetch_issue issue "$issue_id")"
     uuid="$(printf '%s' "$issue" | jq -r .id)"
     team="$(printf '%s' "$issue" | jq -r .team.id)"
-    # A rework claims again over a ledger whose claimed_state_id records an
-    # earlier write. Keep it until this claim records its own (below), so a
-    # claim that stops before writing still shows the issue was written.
-    "$LEDGER" set "$run_id" '.linear_prior = ($p + ((.linear_prior // {}) | {claimed_state_id} | with_entries(select(.value != null))))' --argjson p "$(printf '%s' "$issue" \
+    # linear_prior is this launch's alone: release restores from it, so a
+    # rework starts it over. Whether any launch of the run wrote to the issue
+    # survives in issue_written (forge's later_run reads it), so a rework whose
+    # claim stops before its own write still shows the earlier one.
+    "$LEDGER" set "$run_id" '.issue_written = (.issue_written or .linear_prior.claimed_state_id != null) | .linear_prior = $p' --argjson p "$(printf '%s' "$issue" \
       | jq '{assigneeId:(.assignee.id // null), stateId:.state.id, stateName:.state.name,
              labels:[.labels.nodes[].id]}')"
     prior_assignee_id="$(printf '%s' "$issue" | jq -r '.assignee.id // ""')"
@@ -153,7 +154,7 @@ case "$cmd" in
     [ -n "$in_progress" ] || die "no 'In Progress' state on team $team"
     # remember the state id THIS RUN set, so release can tell "still where we
     # put it" apart from "a human moved it mid-run" (conditional restore).
-    "$LEDGER" set "$run_id" '.linear_prior.claimed_state_id = $s' --arg s "$in_progress"
+    "$LEDGER" set "$run_id" '.linear_prior.claimed_state_id = $s | .issue_written = true' --arg s "$in_progress"
     # assign-self + move to In Progress are working-state transitions, NOT
     # disclosing writes — ungated in every mode (spec judgment call #2).
     update_issue "$uuid" "$(jq -nc --arg a "$me" --arg s "$in_progress" '{assigneeId:$a, stateId:$s}')"

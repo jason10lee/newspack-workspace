@@ -237,6 +237,13 @@ bash "$L" history forge-lx intake claiming ""
 bash "$L" set forge-lx '.terminal = "bailed-lost-claim-race" | .retired_at = "2026-11-07T00:00:00Z" | .linear_prior = {claimed_state_id: "f00ac312-3e9b-4fc2-a119-1a7cd68ece00"}'
 assert_eq 0 "$(forge check | grep -c 'LOST-CLAIM forge-lg')" "a later run that reached its Linear write still holds the restore back"
 
+# A reworked run that wrote in an earlier launch still holds the restore back
+# when its later launch stops short of writing.
+fresh; lost forge-lh "intake claiming"; bash "$L" init forge-lw NPPM-2993 forge >/dev/null
+bash "$L" history forge-lw intake claiming ""
+bash "$L" set forge-lw '.terminal = "bailed-superseded" | .issue_written = true | .linear_prior = {assigneeId: null, stateId: "7fad47f0-3b4a-42ca-bf01-41a979e4cbbe"}'
+assert_eq 0 "$(forge check | grep -c 'LOST-CLAIM forge-lh')" "a reworked run that wrote earlier holds the restore back"
+
 fresh; lost forge-lt "intake claiming"; bash "$L" set forge-lt '.retired_at = "2026-11-06T00:00:00Z"'
 assert_eq 0 "$(forge check | grep -c 'LOST-CLAIM')" "a retired lost race is left alone"
 assert_eq 0 "$(updates)" "with no Linear write"

@@ -221,17 +221,16 @@ _CLAIM_HELD='[.stage_history[]
 # write: a run that lost its own race has no "claimed" event but may have
 # written. A run that marked "claiming" and stopped short (claim.sh's
 # same-issue guard, a failed read) never touched the issue, and neither did a
-# run retired before this one launched. A rework keeps the run's earlier
-# claimed_state_id (claim.sh carries it over until the new claim records its
-# own), so a reworked run that once wrote still counts once a later launch of
-# it records any intake event, even one that stops short; that errs toward
-# leaving the claim alone.
+# run retired before this one launched. A rework starts linear_prior over, but
+# claim.sh keeps issue_written once any launch has written, so a reworked run
+# that once wrote still counts once a later launch of it records any intake
+# event, even one that stops short; that errs toward leaving the claim alone.
 later_run() {
   local lf
   for lf in "$RUNS_DIR"/*/ledger.json; do
     [ -f "$lf" ] || continue
     jq -r --arg r "$1" --arg i "$(printf '%s' "$2" | tr '[:lower:]' '[:upper:]')" --arg t "$3" \
-      '(.linear_prior.claimed_state_id != null) as $wrote
+      '(.issue_written == true or .linear_prior.claimed_state_id != null) as $wrote
       | select(.run_id != $r and (.issue | ascii_upcase) == $i
         and ((.terminal == null and .retired_at == null)
           or any(.stage_history[]; .stage == "intake" and .at >= $t
