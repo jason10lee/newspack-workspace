@@ -180,7 +180,16 @@ cmd_stop() { # rid packet reason...
   local rid="${1:?usage: forge-run stop <run id> <packet> <reason>}" packet="${2:?usage: forge-run stop <run id> <packet> <reason>}"
   shift 2
   [ $# -gt 0 ] || die "usage: forge-run stop <run id> <packet> <reason>"
-  require_run "$rid"; not_ended "$rid"
+  require_run "$rid"
+  # autofix's env.sh escalates a run it can't provision and leaves the run
+  # holding its claim. The stop is what releases the claim and tells the
+  # operator, so an escalated run that has not delivered may still make it.
+  if [ "$(lg get "$rid" '.terminal == "escalated" and .delivery == null')" = true ]; then
+    [ "$(lg get "$rid" '.fresh_test_in_progress // false')" != true ] \
+      || die "$rid is inside a fresh test; restore the saved site and clear the mark first"
+  else
+    not_ended "$rid"
+  fi
   packet="$(require_packet "$rid" "$packet" "## Why it stopped" "## Friction")" || exit 1
   release_claim "$rid"
   lg set "$rid" '.delivery = {kind: "stopped", at: $t, packet: $p, reason: $r}' \

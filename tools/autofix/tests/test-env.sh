@@ -26,7 +26,9 @@ case "$1 $2" in
       d="$AUTOFIX_WORKSPACE_ROOT/worktrees/$(printf '%s' "${wt#*:}" | tr '/' '-')/themes/${wt%%:*}"
       mkdir -p "$d"; [ "$N_MKTHEME" = built ] && : > "$d/style.css"
     fi ;;
-  "env up") [ -n "${N_EXIT_UP:-}" ] && exit "$N_EXIT_UP" ;;
+  "env up")
+    [ -n "${N_UP_OUT:-}" ] && printf '%s\n' "$N_UP_OUT"
+    [ -n "${N_EXIT_UP:-}" ] && exit "$N_EXIT_UP" ;;
 esac
 exit "${N_EXIT:-0}"
 EOF
@@ -108,6 +110,27 @@ assert_eq 1 "$rc" "a failed build fails the create"
 assert_contains "$out" "n env up --build-worktrees failed" "and says which step failed"
 assert_eq "" "$(grep 'setup --env' "$N_LOG" || true)" "a failed build stops before n setup"
 assert_eq true "$(bash "$L" get run-bf '.env != null')" "a failed build leaves the env recorded, so a destroy can find it"
+
+# A build failure whose cause env up names can't pass on a retry, and its fix
+# (an install, or updating the root) changes the root checkout every env
+# shares. So the run escalates at once instead of retrying or acting on it.
+setup_run run-bm NPPM-3014 nppm-3014-bm
+: > "$N_LOG"; out="$(N_EXIT_UP=1 N_UP_OUT="Error: build failed for newspack-popups: the branch imports a module the root has not installed; run an install deliberately" bash "$E" create run-bm newspack-popups 2>&1)"; rc=$?
+assert_eq 1 "$rc" "a missing-module build failure fails the create"
+assert_eq escalated "$(bash "$L" get run-bm '.terminal')" "a missing-module build failure escalates the run"
+assert_contains "$out" "do not install packages, update the root checkout or rebase" "and tells the run not to act on the hint"
+assert_contains "$out" "the branch imports a module the root has not installed" "and keeps the cause"
+assert_eq 1 "$(bash "$L" get run-bm '.attempts.provisioning')" "a missing-module build failure uses one attempt"
+
+setup_run run-rb NPPM-3015 nppm-3015-rb
+: > "$N_LOG"; out="$(N_EXIT_UP=1 N_UP_OUT="Error: build failed for newspack-popups: the root checkout is behind the branch (a workspace package lacks an export it imports); update the root or rebase" bash "$E" create run-rb newspack-popups 2>&1)"; rc=$?
+assert_eq 1 "$rc" "a root-behind build failure fails the create"
+assert_eq escalated "$(bash "$L" get run-rb '.terminal')" "a root-behind build failure escalates the run"
+
+setup_run run-gb NPPM-3016 nppm-3016-gb
+: > "$N_LOG"; out="$(N_EXIT_UP=1 N_UP_OUT="Error: build failed for newspack-popups: see the build output above" bash "$E" create run-gb newspack-popups 2>&1)"; rc=$?
+assert_eq 1 "$rc" "an unnamed build failure fails the create"
+assert_eq null "$(bash "$L" get run-gb '.terminal')" "an unnamed build failure leaves the run free to retry"
 
 setup_run run-th NPPM-3012 nppm-3012-th
 : > "$N_LOG"; out="$(N_MKTHEME=bare bash "$E" create run-th newspack-theme 2>&1)"; rc=$?
