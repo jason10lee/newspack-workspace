@@ -223,6 +223,27 @@ bash "$L" history forge-lz launch abandoned ""; bash "$L" set forge-lz '.termina
 assert_contains "$(forge check)" "LOST-CLAIM forge-la" "nor does a later launch that never reached a claim"
 assert_eq 1 "$(updates)" "so the claim is restored"
 
+# A later launch that marked "claiming" and failed before claim.sh reached its
+# Linear write never touched the issue, so it does not hold the restore back.
+fresh; lost forge-lf "intake claiming"; bash "$L" init forge-ly NPPM-2993 forge >/dev/null
+bash "$L" history forge-ly intake claiming ""; bash "$L" set forge-ly '.terminal = "bailed-superseded"'
+assert_contains "$(forge check)" "LOST-CLAIM forge-lf" "a later launch that failed before its Linear write does not hold the restore back"
+assert_eq 1 "$(updates)" "so the claim is restored"
+
+# One that reached the write may hold the claim itself, even with no "claimed"
+# event (it lost its own race), so the restore still stands aside for it.
+fresh; lost forge-lg "intake claiming"; bash "$L" init forge-lx NPPM-2993 forge >/dev/null
+bash "$L" history forge-lx intake claiming ""
+bash "$L" set forge-lx '.terminal = "bailed-lost-claim-race" | .retired_at = "2026-11-07T00:00:00Z" | .linear_prior = {claimed_state_id: "f00ac312-3e9b-4fc2-a119-1a7cd68ece00"}'
+assert_eq 0 "$(forge check | grep -c 'LOST-CLAIM forge-lg')" "a later run that reached its Linear write still holds the restore back"
+
+# A reworked run that wrote in an earlier launch still holds the restore back
+# when its later launch stops short of writing.
+fresh; lost forge-lh "intake claiming"; bash "$L" init forge-lw NPPM-2993 forge >/dev/null
+bash "$L" history forge-lw intake claiming ""
+bash "$L" set forge-lw '.terminal = "bailed-superseded" | .issue_written = true | .linear_prior = {assigneeId: null, stateId: "7fad47f0-3b4a-42ca-bf01-41a979e4cbbe"}'
+assert_eq 0 "$(forge check | grep -c 'LOST-CLAIM forge-lh')" "a reworked run that wrote earlier holds the restore back"
+
 fresh; lost forge-lt "intake claiming"; bash "$L" set forge-lt '.retired_at = "2026-11-06T00:00:00Z"'
 assert_eq 0 "$(forge check | grep -c 'LOST-CLAIM')" "a retired lost race is left alone"
 assert_eq 0 "$(updates)" "with no Linear write"

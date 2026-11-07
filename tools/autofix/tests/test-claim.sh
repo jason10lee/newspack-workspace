@@ -19,6 +19,47 @@ setup issue_postclaim_ok.json run1
 bash "$C" claim NPPM-2993 run1
 assert_eq 0 $? "clean claim succeeds"
 assert_eq Backlog "$(bash "$L" get run1 '.linear_prior.stateName')" "prior state recorded"
+assert_eq true "$(bash "$L" get run1 '.issue_written')" "and records that the run wrote to the issue"
+
+# A rework claims again over the ledger of a run that already wrote, and its
+# claim stops before writing: at the viewer read, or with no In Progress state.
+# The run still shows it once wrote (forge's later_run reads that), but the
+# earlier launch's claimed state is not this one's: a teammate who then takes
+# the issue In Progress keeps it when the stopped run releases.
+for stop in viewer states; do
+  setup issue_postclaim_ok.json "run1b-$stop"
+  bash "$L" set "run1b-$stop" '.linear_prior = {assigneeId: null, stateId: "7fad47f0-3b4a-42ca-bf01-41a979e4cbbe", stateName: "Backlog", labels: [], claimed_state_id: "f00ac312-3e9b-4fc2-a119-1a7cd68ece00"}'
+  case "$stop" in
+    viewer) rm "$AUTOFIX_LINEAR_MOCK_DIR/viewer.json" ;;
+    states) printf '{ "data": { "team": { "states": { "nodes": [ { "id": "7fad47f0-3b4a-42ca-bf01-41a979e4cbbe", "name": "Backlog" } ] } } } }' > "$AUTOFIX_LINEAR_MOCK_DIR/states.json" ;;
+  esac
+  bash "$C" claim NPPM-2993 "run1b-$stop" >/dev/null 2>&1 && rc=0 || rc=$?
+  assert_eq 1 "$rc" "a rework claim stopped at the $stop read fails"
+  assert_eq 0 "$(grep -c issueUpdate "$AUTOFIX_LINEAR_MOCK_DIR/requests.log" 2>/dev/null || true)" "with no Linear write"
+  assert_eq true "$(bash "$L" get "run1b-$stop" '.issue_written')" "and the run still shows its earlier write"
+  cp fixtures/viewer.json "$AUTOFIX_LINEAR_MOCK_DIR/"
+  cp fixtures/issue_release_humanized.json "$AUTOFIX_LINEAR_MOCK_DIR/issue_release.json"
+  bash "$C" release NPPM-2993 "run1b-$stop" >/dev/null 2>&1
+  assert_eq 0 "$(grep issueUpdate "$AUTOFIX_LINEAR_MOCK_DIR/requests.log" 2>/dev/null | grep -c stateId || true)" \
+    "and its release leaves a teammate's In Progress alone"
+done
+
+# A launch whose claim stopped before writing has nothing of its own to
+# restore. Its release writes nothing even when the issue is assigned to the
+# viewer: the operator assigned since, and unassigning them would undo their
+# work. This holds for a rework of a released run and for a first launch.
+for kind in rework first; do
+  setup issue_postclaim_ok.json "run1n-$kind"
+  [ "$kind" = first ] || bash "$L" set "run1n-$kind" '.linear_prior = {assigneeId: null, stateId: "7fad47f0-3b4a-42ca-bf01-41a979e4cbbe", stateName: "Backlog", labels: [], claimed_state_id: "f00ac312-3e9b-4fc2-a119-1a7cd68ece00"}'
+  rm "$AUTOFIX_LINEAR_MOCK_DIR/viewer.json"
+  bash "$C" claim NPPM-2993 "run1n-$kind" >/dev/null 2>&1
+  cp fixtures/viewer.json "$AUTOFIX_LINEAR_MOCK_DIR/"
+  cp fixtures/issue_release_unchanged.json "$AUTOFIX_LINEAR_MOCK_DIR/issue_release.json"
+  bash "$C" release NPPM-2993 "run1n-$kind" >/dev/null 2>&1 && rc=0 || rc=$?
+  assert_eq 0 "$rc" "$kind: release after a claim that never wrote succeeds"
+  assert_eq 0 "$(grep -c issueUpdate "$AUTOFIX_LINEAR_MOCK_DIR/requests.log" 2>/dev/null || true)" \
+    "$kind: and leaves an issue assigned to the viewer alone"
+done
 
 setup issue_postclaim_lost.json run2
 bash "$C" claim NPPM-2993 run2 >/dev/null 2>&1 && rc=0 || rc=$?

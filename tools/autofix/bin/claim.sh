@@ -137,6 +137,12 @@ case "$cmd" in
       log "forge: launch not confirmed for $run_id — not claiming"
       exit 8
     fi
+    # linear_prior is this launch's alone: release restores from it, so a
+    # rework clears it before any read that can stop the claim. Whether any
+    # launch of the run wrote to the issue survives in issue_written (forge's
+    # later_run reads it), so a rework whose claim stops before its own write
+    # still shows the earlier one.
+    "$LEDGER" set "$run_id" '.issue_written = (.issue_written or .linear_prior.claimed_state_id != null) | .linear_prior = null'
     me="$(linear_viewer_id)"
     issue="$(fetch_issue issue "$issue_id")"
     uuid="$(printf '%s' "$issue" | jq -r .id)"
@@ -150,7 +156,7 @@ case "$cmd" in
     [ -n "$in_progress" ] || die "no 'In Progress' state on team $team"
     # remember the state id THIS RUN set, so release can tell "still where we
     # put it" apart from "a human moved it mid-run" (conditional restore).
-    "$LEDGER" set "$run_id" '.linear_prior.claimed_state_id = $s' --arg s "$in_progress"
+    "$LEDGER" set "$run_id" '.linear_prior.claimed_state_id = $s | .issue_written = true' --arg s "$in_progress"
     # assign-self + move to In Progress are working-state transitions, NOT
     # disclosing writes — ungated in every mode (spec judgment call #2).
     update_issue "$uuid" "$(jq -nc --arg a "$me" --arg s "$in_progress" '{assigneeId:$a, stateId:$s}')"
@@ -286,6 +292,13 @@ $marker"
       && [ "$("$LEDGER" get "$run_id" '[.stage_history[] | select(.stage == "release" and .outcome == "restored")] | length')" -gt 0 ]; then
       already_restored=1
       restored="(done at preview)"
+    fi
+    # A launch with no claimed state stopped before its claim wrote, so the
+    # issue holds nothing of this run's to restore. Whoever holds it now, the
+    # operator included, set that themselves; it is not drift either.
+    if [ -z "$already_restored" ] && { [ -z "$claimed_state" ] || [ "$claimed_state" = null ]; }; then
+      already_restored=1
+      restored="(nothing claimed)"
     fi
     # Conditional restore of assignee/status is a working-state transition, NOT
     # a disclosing write — it proceeds UNGATED even in secure mode, because
