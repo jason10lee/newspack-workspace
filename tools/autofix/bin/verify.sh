@@ -117,8 +117,8 @@ case "$cmd" in
         # Validate + word-split BEFORE running so a rejection dies visibly.
         # Never a shell — exec argv directly.
         parse_evidence_argv "$ecmd"
-        # `n` and Jest resolve their project from the cwd; Playwright specs
-        # keep running from the worktree root, as they always have.
+        # `n` and Jest resolve their project from the cwd. Playwright runs from
+        # the run dir (below); a profile's own commands run from the worktree.
         run_dir="$wt"
         if [ "$EV_IN_UNIT" = 1 ]; then run_dir="$(project_dir "$wt" "$(affected_repo)")" || exit 1; fi
         report=""
@@ -133,6 +133,7 @@ case "$cmd" in
           mkdir -p "$run_dir/node_modules/@playwright" && ln -sfn "$EV_PW_TEST" "$link"
           report="$run_dir/signal-$i.json"; rm -f "$report"
         fi
+        rc=0
         if out="$( (cd "$run_dir" && PLAYWRIGHT_JSON_OUTPUT_FILE="$report" "${EV_ARGV[@]}") 2>&1 )"; then st=pass; else rc=$?; st=fail
           # 126 and 127 mean the command itself could not run, not that a test
           # failed, so they never count as the red a --expect fail wants.
@@ -141,13 +142,16 @@ case "$cmd" in
         if [ -n "$report" ]; then
           # Playwright exits 1 for a failed test, a spec that could not load
           # and "No tests found" alike. Its JSON report tells them apart: a
-          # result counts only when a test ran and nothing failed to load.
-          rc="report"
+          # result counts only when a test ran and nothing failed to load. A
+          # report that reads green from a run Playwright exited non-zero (a
+          # flaky pass under --fail-on-flaky-tests) is no result either.
           st="$(jq -r 'if (.errors | length) > 0 or ((.stats.expected // 0) + (.stats.unexpected // 0) + (.stats.flaky // 0)) == 0 then "error"
                        elif .stats.unexpected > 0 then "fail" else "pass" end' "$report" 2>/dev/null)" || st=error
           [ -n "$st" ] || st=error
+          if [ "$st" = pass ] && [ "$rc" != 0 ]; then st=error; fi
+          rc="report"
         fi
-        if [ "$st" = error ]; then log "evidence[$i] '$ecmd' → could not run ($( [ "$rc" = report ] && echo "no test ran, or one failed to load" || echo "exit $rc" ))"
+        if [ "$st" = error ]; then log "evidence[$i] '$ecmd' → could not run ($( [ "$rc" = report ] && echo "no test ran, one failed to load, or Playwright failed a passing run" || echo "exit $rc" ))"
         else log "evidence[$i] '$ecmd' → $st"; fi
         # Surface the tail of EVERY failing command — including an expected
         # fail. A signal can fail for the wrong reason (run autofix-nppm-273:

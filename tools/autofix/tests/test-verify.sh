@@ -105,6 +105,9 @@ printf 'chrome=%s\n' "${CHROME_PATH:-}" >> "${ARGV_LOG:?}.env"
 if [ -n "${PLAYWRIGHT_JSON_OUTPUT_FILE:-}" ]; then
   case "$*" in
     *NOJSON*) : ;;
+    *FLAKYEXIT*) printf '{"stats":{"expected":0,"unexpected":0,"flaky":1},"errors":[]}' > "$PLAYWRIGHT_JSON_OUTPUT_FILE"; exit 1 ;;
+    *LOADERRGREEN*) printf '{"stats":{"expected":1,"unexpected":0,"flaky":0},"errors":[{"message":"Error: a spec failed to load"}]}' > "$PLAYWRIGHT_JSON_OUTPUT_FILE"; exit 1 ;;
+    *LOADERRRED*) printf '{"stats":{"expected":0,"unexpected":1,"flaky":0},"errors":[{"message":"Error: a spec failed to load"}]}' > "$PLAYWRIGHT_JSON_OUTPUT_FILE"; exit 1 ;;
     *NOTESTS*) printf '{"stats":{"expected":0,"unexpected":0,"flaky":0},"errors":[{"message":"Error: No tests found."}]}' > "$PLAYWRIGHT_JSON_OUTPUT_FILE" ;;
     *NOMODULE*) printf '{"stats":{"expected":0,"unexpected":0,"flaky":0},"errors":[{"message":"Cannot find package"}]}' > "$PLAYWRIGHT_JSON_OUTPUT_FILE" ;;
     *FAIL*) printf '{"stats":{"expected":0,"unexpected":1,"flaky":0},"errors":[]}' > "$PLAYWRIGHT_JSON_OUTPUT_FILE" ;;
@@ -207,6 +210,19 @@ for c in NOTESTS NOMODULE NOJSON; do
   assert_eq 1 "$rc" "$c: not read as the red"
   assert_contains "$out" "could not run" "$c: reported as could not run"
 done
+# A report that reads green while Playwright exits non-zero (a flaky pass under
+# --fail-on-flaky-tests) is not a green.
+pwcase pwflaky "specs/r_FLAKYEXIT.spec.js --retries=1 --fail-on-flaky-tests"
+out="$(bash "$V" signal pwflaky --expect pass 2>&1)" && rc=0 || rc=$?
+assert_eq 1 "$rc" "a pass Playwright itself failed is not a green"
+assert_contains "$out" "could not run" "and is reported as could not run"
+# A load error beside tests that ran is not a result either way.
+pwcase pwlg specs/r_LOADERRGREEN.spec.js
+bash "$V" signal pwlg --expect pass >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq 1 "$rc" "a load error beside a passing test is not a green"
+pwcase pwlr specs/r_LOADERRRED.spec.js
+bash "$V" signal pwlr --expect fail >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq 1 "$rc" "a load error beside a failing test is not the red"
 pwcase pwrep "specs/r_PASS.spec.js --reporter=dot"
 bash "$V" signal pwrep --expect pass >/dev/null 2>&1 && rc=0 || rc=$?
 assert_eq 1 "$rc" "an evidence command may not set its own reporter"
