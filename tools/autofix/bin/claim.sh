@@ -137,15 +137,17 @@ case "$cmd" in
       log "forge: launch not confirmed for $run_id — not claiming"
       exit 8
     fi
+    # linear_prior is this launch's alone: release restores from it, so a
+    # rework clears it before any read that can stop the claim. Whether any
+    # launch of the run wrote to the issue survives in issue_written (forge's
+    # later_run reads it), so a rework whose claim stops before its own write
+    # still shows the earlier one.
+    "$LEDGER" set "$run_id" '.issue_written = (.issue_written or .linear_prior.claimed_state_id != null) | .linear_prior = null'
     me="$(linear_viewer_id)"
     issue="$(fetch_issue issue "$issue_id")"
     uuid="$(printf '%s' "$issue" | jq -r .id)"
     team="$(printf '%s' "$issue" | jq -r .team.id)"
-    # linear_prior is this launch's alone: release restores from it, so a
-    # rework starts it over. Whether any launch of the run wrote to the issue
-    # survives in issue_written (forge's later_run reads it), so a rework whose
-    # claim stops before its own write still shows the earlier one.
-    "$LEDGER" set "$run_id" '.issue_written = (.issue_written or .linear_prior.claimed_state_id != null) | .linear_prior = $p' --argjson p "$(printf '%s' "$issue" \
+    "$LEDGER" set "$run_id" '.linear_prior = $p' --argjson p "$(printf '%s' "$issue" \
       | jq '{assigneeId:(.assignee.id // null), stateId:.state.id, stateName:.state.name,
              labels:[.labels.nodes[].id]}')"
     prior_assignee_id="$(printf '%s' "$issue" | jq -r '.assignee.id // ""')"
