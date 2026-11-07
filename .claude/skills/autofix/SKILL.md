@@ -174,6 +174,11 @@ without installing anything, so a branch whose JS build needs a package the
 workspace root has not installed fails provisioning. When webpack reports it
 (a module it can't resolve, or a workspace-package export the root lacks), the
 message names that cause; any other build failure points at the build output.
+A named cause can't pass on a retry, so `create` sets `terminal: escalated`
+and dies. Stop there and report the cause: never install packages, update the
+root checkout or rebase to get past it, because the root checkout is shared by
+every env and the host. Any other build failure is an ordinary provisioning
+failure.
 For a theme run, `create` also stops before `n setup` when the theme has no
 `style.css`. The env is recorded in the ledger right after `n env create`, so
 `env.sh destroy` can find it whichever later step fails. `create` then runs `n composer install` in the

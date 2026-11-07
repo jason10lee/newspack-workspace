@@ -66,7 +66,21 @@ case "$cmd" in
     # Start the env with the run's unit built from the branch. The build runs in
     # the container without installing, so the shared root install is never
     # rewritten, and a branch that needs a dependency the root lacks fails here.
-    n env up "$name" --build-worktrees || die "n env up --build-worktrees failed (attempt $((attempts+1)))"
+    up_log="$(mktemp)"
+    if ! n env up "$name" --build-worktrees 2>&1 | tee "$up_log"; then
+      # A cause env up can name won't change on a retry, and its remedy (an
+      # install, or updating the root) rewrites the root checkout every env and
+      # the host share. Escalate so the operator decides; never act on it here.
+      cause="$(grep -Eo "the branch imports a module the root has not installed|the root checkout is behind the branch" "$up_log" | head -1 || true)"
+      rm -f "$up_log"
+      if [ -n "$cause" ]; then
+        "$LEDGER" set "$run_id" '.terminal = "escalated"'
+        "$LEDGER" history "$run_id" reproduce env-build-blocked "$cause"
+        die "the build can't pass on a retry: $cause. Escalating: do not install packages, update the root checkout or rebase; report the cause to the operator"
+      fi
+      die "n env up --build-worktrees failed (attempt $((attempts+1)))"
+    fi
+    rm -f "$up_log"
     # n setup activates a theme run's theme, which fatals the site without a
     # stylesheet. The classic theme builds its style.css; the block theme
     # tracks its own.
