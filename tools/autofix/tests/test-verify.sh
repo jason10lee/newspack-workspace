@@ -105,6 +105,9 @@ printf 'chrome=%s\n' "${CHROME_PATH:-}" >> "${ARGV_LOG:?}.env"
 if [ -n "${PLAYWRIGHT_JSON_OUTPUT_FILE:-}" ]; then
   case "$*" in
     *NOJSON*) : ;;
+    *LAUNCHFAIL*) printf '{"stats":{"expected":0,"unexpected":1,"flaky":0},"errors":[],"suites":[{"specs":[{"tests":[{"status":"unexpected","results":[{"status":"failed","error":{"message":"Error: browserType.launch: Failed to launch chromium because executable does not exist"},"errors":[{"message":"Error: browserType.launch: Failed to launch chromium"}]}]}]}]}]}' > "$PLAYWRIGHT_JSON_OUTPUT_FILE"; exit 1 ;;
+    *LAUNCHMIXED*) printf '{"stats":{"expected":0,"unexpected":2,"flaky":0},"errors":[],"suites":[{"suites":[{"specs":[{"tests":[{"status":"unexpected","results":[{"status":"failed","error":{"message":"Error: expect(received).toBe(expected)"},"errors":[]}]}]},{"tests":[{"status":"unexpected","results":[{"status":"failed","error":{"message":"Error: browserType.launch: Target page, context or browser has been closed"},"errors":[]}]}]}]}]}]}' > "$PLAYWRIGHT_JSON_OUTPUT_FILE"; exit 1 ;;
+    *ASSERTRED*) printf '{"stats":{"expected":0,"unexpected":1,"flaky":0},"errors":[],"suites":[{"specs":[{"tests":[{"status":"unexpected","results":[{"status":"failed","error":{"message":"Error: expect(received).toBe(expected)"},"errors":[]}]}]}]}]}' > "$PLAYWRIGHT_JSON_OUTPUT_FILE"; exit 1 ;;
     *FLAKYEXIT*) printf '{"stats":{"expected":0,"unexpected":0,"flaky":1},"errors":[]}' > "$PLAYWRIGHT_JSON_OUTPUT_FILE"; exit 1 ;;
     *LOADERRGREEN*) printf '{"stats":{"expected":1,"unexpected":0,"flaky":0},"errors":[{"message":"Error: a spec failed to load"}]}' > "$PLAYWRIGHT_JSON_OUTPUT_FILE"; exit 1 ;;
     *LOADERRRED*) printf '{"stats":{"expected":0,"unexpected":1,"flaky":0},"errors":[{"message":"Error: a spec failed to load"}]}' > "$PLAYWRIGHT_JSON_OUTPUT_FILE"; exit 1 ;;
@@ -223,6 +226,17 @@ assert_eq 1 "$rc" "a load error beside a passing test is not a green"
 pwcase pwlr specs/r_LOADERRRED.spec.js
 bash "$V" signal pwlr --expect fail >/dev/null 2>&1 && rc=0 || rc=$?
 assert_eq 1 "$rc" "a load error beside a failing test is not the red"
+# A browser that never started is a failed test to Playwright, not a red.
+pwcase pwlaunch specs/r_LAUNCHFAIL.spec.js
+out="$(bash "$V" signal pwlaunch --expect fail 2>&1)" && rc=0 || rc=$?
+assert_eq 1 "$rc" "a browser launch failure is not the red"
+assert_contains "$out" "browser" "and the log says the browser did not launch"
+pwcase pwlmix specs/r_LAUNCHMIXED.spec.js
+bash "$V" signal pwlmix --expect fail >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq 1 "$rc" "one launch failure beside a real red is still no result"
+pwcase pwassert specs/r_ASSERTRED.spec.js
+bash "$V" signal pwassert --expect fail >/dev/null 2>&1
+assert_eq 0 $? "an assertion failure in the same report shape is still the red"
 pwcase pwrep "specs/r_PASS.spec.js --reporter=dot"
 bash "$V" signal pwrep --expect pass >/dev/null 2>&1 && rc=0 || rc=$?
 assert_eq 1 "$rc" "an evidence command may not set its own reporter"
