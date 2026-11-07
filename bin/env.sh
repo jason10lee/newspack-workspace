@@ -160,13 +160,15 @@ reject_extra_args() {
     fi
 }
 
-# Name the likely cause of a failed worktree build from its log.
+# Name the likely cause of a failed worktree build from its log. The trailing
+# "(cause: …)" tag is what scripts match, so the wording around it can change;
+# a failure no tag names gets none, and callers treat it as unknown.
 build_failure_hint() {
     local log="$1"
     if grep -q "Module not found: Error: Can't resolve" "$log"; then
-        echo "the branch imports a module the root has not installed; run an install deliberately"
+        echo "the branch imports a module the root has not installed; run an install deliberately (cause: missing-module)"
     elif grep -Eq "export '[^']*' \(imported as '[^']*'\) was not found in" "$log"; then
-        echo "the root checkout is behind the branch (a workspace package lacks an export it imports); update the root or rebase"
+        echo "the root checkout is behind the branch (a workspace package lacks an export it imports); update the root or rebase (cause: root-behind)"
     else
         echo "see the build output above"
     fi

@@ -71,7 +71,8 @@ case "$cmd" in
       # A cause env up can name won't change on a retry, and its remedy (an
       # install, or updating the root) rewrites the root checkout every env and
       # the host share. Escalate so the operator decides; never act on it here.
-      cause="$(grep -Eo "the branch imports a module the root has not installed|the root checkout is behind the branch" "$up_log" | head -1 || true)"
+      # bin/env.sh tags a named cause "(cause: …)"; match the tag, not the hint.
+      cause="$(grep -E '\(cause: (missing-module|root-behind)\)' "$up_log" | head -1 | sed 's/^Error: //' || true)"
       rm -f "$up_log"
       if [ -n "$cause" ]; then
         "$LEDGER" set "$run_id" '.terminal = "escalated"'
