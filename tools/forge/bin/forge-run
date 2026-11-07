@@ -180,18 +180,27 @@ cmd_stop() { # rid packet reason...
   local rid="${1:?usage: forge-run stop <run id> <packet> <reason>}" packet="${2:?usage: forge-run stop <run id> <packet> <reason>}"
   shift 2
   [ $# -gt 0 ] || die "usage: forge-run stop <run id> <packet> <reason>"
+  local later=""
   require_run "$rid"
   # autofix's env.sh escalates a run it can't provision and leaves the run
   # holding its claim. The stop is what releases the claim and tells the
   # operator, so an escalated run that has not delivered may still make it.
+  # Being terminal, it no longer keeps the issue busy, so a run launched since
+  # may hold the same assignee and state; the restore can't tell them apart.
   if [ "$(lg get "$rid" '.terminal == "escalated" and .delivery == null')" = true ]; then
     [ "$(lg get "$rid" '.fresh_test_in_progress // false')" != true ] \
       || die "$rid is inside a fresh test; restore the saved site and clear the mark first"
+    later="$(later_run "$rid" "$(lg get "$rid" .issue)" \
+      "$(lg get "$rid" '[.stage_history[] | select(.stage == "intake")] | last | .at // ""')")"
   else
     not_ended "$rid"
   fi
   packet="$(require_packet "$rid" "$packet" "## Why it stopped" "## Friction")" || exit 1
-  release_claim "$rid"
+  if [ -n "$later" ]; then
+    echo "Linear left alone: $later is a later run of $(lg get "$rid" .issue) and holds its claim now"
+  else
+    release_claim "$rid"
+  fi
   lg set "$rid" '.delivery = {kind: "stopped", at: $t, packet: $p, reason: $r}' \
     --arg t "$(now_utc)" --arg p "$packet" --arg r "$*"
   lg history "$rid" deliver stopped "$*"

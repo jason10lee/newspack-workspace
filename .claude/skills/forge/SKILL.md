@@ -220,7 +220,7 @@ It refuses when the issue now carries the Security label (make the Security stop
 
 ## Early stop
 
-Stop with findings instead of guessing. The stages above name the cases: a no-go, a bug you cannot reproduce, work that outgrows the spec, a schema migration or irreversible write, an exhausted loop or round bound, an open blocker after review, and a claim or Linear field that drifted.
+Stop with findings instead of guessing. The stages above name the cases: a no-go, a bug you cannot reproduce, work that outgrows the spec, a schema migration or irreversible write, an exhausted loop or round bound, an open blocker after review, a claim or Linear field that drifted, and an `env.sh create` that escalated the run (a build cause it names, or exhausted provisioning attempts). An escalated run still makes the stop: it is what releases the claim and notifies the operator.
 
 1. If `forge-run state` shows `FRESH_TEST_IN_PROGRESS=true`, restore the saved site first, as in Stage 0.
 2. Write `$RUN_DIR/packet.md` with the delivery packet's headings, plus `## Why it stopped` after the title: the stage, the reason, and what a person would need to do next. Always include `## Friction`, since friction is most often what stopped a run.

@@ -286,3 +286,30 @@ confirm_launch() { # rid id -> 0 confirmed, 1 abandoned
 # How long past FORGE_LAUNCH_TIMEOUT a launch may sit unconfirmed before
 # `forge check` decides the dispatcher died during it.
 : "${FORGE_STALE_MARGIN:=600}"
+
+# later_run <rid> <issue> <since> — the id of another run, in any mode, on the
+# same issue that is still open (as issue_busy reads it), or that reached its
+# Linear write at or after <since>. Its claim, live or ended, carries the same
+# assignee and state as this run's, so the restore cannot tell them apart.
+# Reaching the write shows as a "claimed" event, or as the
+# linear_prior.claimed_state_id that claim.sh records just before its claim
+# write: a run that lost its own race has no "claimed" event but may have
+# written. A run that marked "claiming" and stopped short (claim.sh's
+# same-issue guard, a failed read) never touched the issue, and neither did a
+# run retired before this one launched. A rework starts linear_prior over, but
+# claim.sh keeps issue_written once any launch has written, so a reworked run
+# that once wrote still counts once a later launch of it records any intake
+# event, even one that stops short; that errs toward leaving the claim alone.
+later_run() {
+  local lf
+  for lf in "$RUNS_DIR"/*/ledger.json; do
+    [ -f "$lf" ] || continue
+    jq -r --arg r "$1" --arg i "$(printf '%s' "$2" | tr '[:lower:]' '[:upper:]')" --arg t "$3" \
+      '(.issue_written == true or .linear_prior.claimed_state_id != null) as $wrote
+      | select(.run_id != $r and (.issue | ascii_upcase) == $i
+        and ((.terminal == null and .retired_at == null)
+          or any(.stage_history[]; .stage == "intake" and .at >= $t
+            and (.outcome == "claimed" or $wrote)))) | .run_id' \
+      "$lf" 2>/dev/null || true
+  done | head -1
+}
