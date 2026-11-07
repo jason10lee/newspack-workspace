@@ -17,6 +17,17 @@ export PATH="$STUB:$PATH"
 cat > "$STUB/n" <<'EOF'
 #!/bin/bash
 echo "n $*" >> "${N_LOG:?}"
+case "$1 $2" in
+  # N_MKTHEME makes `env create` leave a theme worktree behind, bare or built,
+  # the way n env create's worktree step would.
+  "env create")
+    if [ -n "${N_MKTHEME:-}" ]; then
+      wt="$(printf '%s\n' "$@" | grep -A1 -x -- --worktree | tail -1)"
+      d="$AUTOFIX_WORKSPACE_ROOT/worktrees/$(printf '%s' "${wt#*:}" | tr '/' '-')/themes/${wt%%:*}"
+      mkdir -p "$d"; [ "$N_MKTHEME" = built ] && : > "$d/style.css"
+    fi ;;
+  "env up") [ -n "${N_EXIT_UP:-}" ] && exit "$N_EXIT_UP" ;;
+esac
 exit "${N_EXIT:-0}"
 EOF
 chmod +x "$STUB/n"
@@ -75,8 +86,39 @@ bash "$L" set run-dup '.decisions += [{key:"branch_stem", value:"nppm-2996-old-t
 bash "$L" set run-dup '.decisions += [{key:"branch_stem", value:"nppm-2996"}]'
 : > "$N_LOG"
 bash "$E" create run-dup newspack-multibranded-site >/dev/null 2>&1
-assert_contains "$(cat "$N_LOG")" "--worktree newspack-multibranded-site:nppm-2996-dup " "duplicate branch_stem: the latest decision names the branch"
+# Anchored at the line end, so a longer stem that merely starts the same way fails.
+assert_eq 1 "$(grep -c -- '--worktree newspack-multibranded-site:nppm-2996-dup$' "$N_LOG")" "duplicate branch_stem: the latest decision names the branch"
 assert_eq "" "$(grep old-title-slug "$N_LOG" || true)" "duplicate branch_stem: the superseded stem is not used"
+
+# Provisioning builds the run's unit in the env before n setup, through
+# `n env up --build-worktrees`, which never installs at the workspace root.
+setup_run() { bash "$L" init "$1" "$2" operator-named >/dev/null; bash "$L" set "$1" ".decisions += [{key:\"branch_stem\", value:\"$3\"}]"; }
+line_of() { grep -n -- "$1" "$N_LOG" | head -1 | cut -d: -f1; }
+setup_run run-bld NPPM-3010 nppm-3010-bld
+: > "$N_LOG"; bash "$E" create run-bld newspack-popups >/dev/null 2>&1
+assert_eq "" "$(grep 'env create autofix-nppm-3010.*--up' "$N_LOG" || true)" "create does not pass --up"
+assert_contains "$(cat "$N_LOG")" "env up autofix-nppm-3010-" "create starts the env through n env up"
+assert_contains "$(grep 'env up autofix-nppm-3010-' "$N_LOG")" "--build-worktrees" "and builds its worktree units"
+assert_eq true "$([ "$(line_of 'env create autofix-nppm-3010')" -lt "$(line_of 'env up autofix-nppm-3010')" ] && [ "$(line_of 'env up autofix-nppm-3010')" -lt "$(line_of 'setup --env autofix-nppm-3010')" ] && echo true || echo false)" \
+  "order: env create, env up --build-worktrees, then n setup"
+
+setup_run run-bf NPPM-3011 nppm-3011-bf
+: > "$N_LOG"; out="$(N_EXIT_UP=1 bash "$E" create run-bf newspack-popups 2>&1)"; rc=$?
+assert_eq 1 "$rc" "a failed build fails the create"
+assert_contains "$out" "n env up --build-worktrees failed" "and says which step failed"
+assert_eq "" "$(grep 'setup --env' "$N_LOG" || true)" "a failed build stops before n setup"
+assert_eq true "$(bash "$L" get run-bf '.env != null')" "a failed build leaves the env recorded, so a destroy can find it"
+
+setup_run run-th NPPM-3012 nppm-3012-th
+: > "$N_LOG"; out="$(N_MKTHEME=bare bash "$E" create run-th newspack-theme 2>&1)"; rc=$?
+assert_eq 1 "$rc" "an unbuilt theme fails the create"
+assert_contains "$out" "theme newspack-theme is not built (no style.css)" "and says the theme is not built"
+assert_eq "" "$(grep 'setup --env' "$N_LOG" || true)" "an unbuilt theme stops before n setup"
+
+setup_run run-tb NPPM-3013 nppm-3013-tb
+: > "$N_LOG"; N_MKTHEME=built bash "$E" create run-tb newspack-theme >/dev/null 2>&1; rc=$?
+assert_eq 0 "$rc" "a built theme provisions"
+assert_contains "$(cat "$N_LOG")" "setup --env autofix-nppm-3013-" "and reaches n setup"
 
 # failure path: N_EXIT=1 twice more → third create attempt dies at cap
 export N_EXIT=1
@@ -242,6 +284,8 @@ assert_eq 0 "$(grep -c 'composer' "$N_LOG")" "so is a unit without composer.json
 bash "$L" init run-cms NPPM-3004 operator-named >/dev/null
 bash "$L" set run-cms '.decisions += [{key:"branch_stem", value:"nppm-3004-x"}]'
 S="$AUTOFIX_WORKSPACE_ROOT/worktrees/nppm-3004-x-cms/themes/my-theme"; mkdir -p "$S"; echo '{}' > "$S/composer.json"
+# A built theme, so the create gets past the style.css check to its composer step.
+: > "$S/style.css"
 cat > "$STUB/n" <<'EOF'
 #!/bin/bash
 echo "n $*" >> "${N_LOG:?}"
