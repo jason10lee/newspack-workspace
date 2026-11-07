@@ -144,14 +144,21 @@ case "$cmd" in
           # and "No tests found" alike. Its JSON report tells them apart: a
           # result counts only when a test ran and nothing failed to load. A
           # report that reads green from a run Playwright exited non-zero (a
-          # flaky pass under --fail-on-flaky-tests) is no result either.
+          # flaky pass under --fail-on-flaky-tests) is no result either. Nor is
+          # a browser that never started: Playwright reports it as a failed
+          # test, and it says nothing about the code under test.
           st="$(jq -r 'if (.errors | length) > 0 or ((.stats.expected // 0) + (.stats.unexpected // 0) + (.stats.flaky // 0)) == 0 then "error"
+                       elif [.. | objects | select(has("message")) | .message | strings | select(test("browserType\\.launch"))] | length > 0 then "launch"
                        elif .stats.unexpected > 0 then "fail" else "pass" end' "$report" 2>/dev/null)" || st=error
           [ -n "$st" ] || st=error
           if [ "$st" = pass ] && [ "$rc" != 0 ]; then st=error; fi
           rc="report"
+          if [ "$st" = launch ]; then st=error; rc="launch"; fi
         fi
-        if [ "$st" = error ]; then log "evidence[$i] '$ecmd' → could not run ($( [ "$rc" = report ] && echo "no test ran, one failed to load, or Playwright failed a passing run" || echo "exit $rc" ))"
+        why="exit $rc"
+        if [ "$rc" = report ]; then why="no test ran, one failed to load, or Playwright failed a passing run"
+        elif [ "$rc" = launch ]; then why="the browser did not launch; launch it with executablePath: process.env.CHROME_PATH"; fi
+        if [ "$st" = error ]; then log "evidence[$i] '$ecmd' → could not run ($why)"
         else log "evidence[$i] '$ecmd' → $st"; fi
         # Surface the tail of EVERY failing command — including an expected
         # fail. A signal can fail for the wrong reason (run autofix-nppm-273:
