@@ -239,8 +239,10 @@ build_env_worktrees() {
         [[ -n "$pkg" ]] || pkg="$repo"
         echo "Building $repo in place (--filter $pkg)..."
         log=$(mktemp)
+        # --if-present: a unit with no build script (super-cool-ad-inserter)
+        # has nothing to compile, so it counts as built rather than failing.
         docker exec -e NODE_PATH=/newspack-monorepo/node_modules/.pnpm/node_modules "$container" \
-            bash -c "cd /newspack-monorepo && pnpm --filter '$pkg' run build" 2>&1 | tee "$log"
+            bash -c "cd /newspack-monorepo && pnpm --filter '$pkg' run --if-present build" 2>&1 | tee "$log"
         rc=${PIPESTATUS[0]}
         # webpack reports a missing workspace export as a warning and exits 0,
         # but the bundle then imports undefined at runtime.

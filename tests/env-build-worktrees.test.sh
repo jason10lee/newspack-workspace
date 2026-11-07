@@ -15,7 +15,7 @@ STUB="$FIX/stub"; mkdir -p "$STUB"
 cat > "$STUB/docker" <<'EOF'
 #!/bin/bash
 echo "$*" >> "$DOCKER_LOG"
-case "$*" in *"run build"*) printf '%s\n' "${DOCKER_OUT:-}"; exit "${DOCKER_EXIT:-0}" ;; esac
+case "$*" in *"run --if-present build"*) printf '%s\n' "${DOCKER_OUT:-}"; exit "${DOCKER_EXIT:-0}" ;; esac
 exit 0
 EOF
 chmod +x "$STUB/docker"
@@ -51,7 +51,7 @@ EOF
 }
 
 run() { OUT=$(build_env_worktrees newspack_env_t "$COMPOSE" 2>&1); RC=$?; }
-builds() { grep -c 'run build' "$DOCKER_LOG"; }
+builds() { grep -c 'run --if-present build' "$DOCKER_LOG"; }
 
 reset_fixture
 mkdir -p "$W/worktrees/feat/themes/newspack-theme/node_modules"; : > "$W/worktrees/feat/themes/newspack-theme/node_modules/keep"
@@ -65,10 +65,11 @@ ok "a monorepo unit's dist is not hard-linked to the root's" "$([ "$W/plugins/ne
 ok "skips a dir the worktree already has (kept)" "$([ -f "$W/worktrees/feat/themes/newspack-theme/node_modules/keep" ] && echo y)" "y"
 ok "skips a dir the worktree already has (no nesting)" "$([ -e "$W/worktrees/feat/themes/newspack-theme/node_modules/node_modules" ] && echo y || echo n)" "n"
 ok "builds once per monorepo unit" "$(builds)" "2"
-has "builds popups by its package name" "$(grep 'run build' "$DOCKER_LOG" | head -1)" "--filter '@automattic/np-popups-fixture'"
-has "builds the theme by its package name" "$(grep 'run build' "$DOCKER_LOG" | tail -1)" "--filter 'newspack-theme'"
-ok "every build sets NODE_PATH to the root's hoist" "$(grep 'run build' "$DOCKER_LOG" | grep -c -- '-e NODE_PATH=/newspack-monorepo/node_modules/.pnpm/node_modules')" "2"
-ok "every build runs from /newspack-monorepo" "$(grep 'run build' "$DOCKER_LOG" | grep -c 'cd /newspack-monorepo &&')" "2"
+has "builds popups by its package name" "$(grep 'run --if-present build' "$DOCKER_LOG" | head -1)" "--filter '@automattic/np-popups-fixture'"
+has "builds the theme by its package name" "$(grep 'run --if-present build' "$DOCKER_LOG" | tail -1)" "--filter 'newspack-theme'"
+ok "every build sets NODE_PATH to the root's hoist" "$(grep 'run --if-present build' "$DOCKER_LOG" | grep -c -- '-e NODE_PATH=/newspack-monorepo/node_modules/.pnpm/node_modules')" "2"
+ok "every build runs from /newspack-monorepo" "$(grep 'run --if-present build' "$DOCKER_LOG" | grep -c 'cd /newspack-monorepo &&')" "2"
+ok "a unit with no build script counts as built" "$(grep 'run --if-present build' "$DOCKER_LOG" | wc -l | tr -d ' ')" "2"
 ok "never installs" "$(grep -c 'pnpm install' "$DOCKER_LOG")" "0"
 ok "enables pnpm before the first build" "$(grep -n -m1 'corepack enable pnpm' "$DOCKER_LOG" | cut -d: -f1)" "1"
 has "build output is shown" "$OUT" "compiled-marker"
