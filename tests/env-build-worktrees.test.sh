@@ -59,6 +59,9 @@ DOCKER_OUT=compiled-marker run
 ok "returns 0 when every build passes" "$RC" "0"
 ok "copies built dirs into a monorepo unit" "$([ -f "$W/worktrees/feat/plugins/newspack-popups/dist/d" ] && echo y)" "y"
 ok "copies built dirs into a repos worktree" "$([ -f "$W/worktrees-repos/newspack-manager/feat/node_modules/m" ] && echo y)" "y"
+# The unit builds over its dist in place, so a shared inode would let the build
+# rewrite the root's bundle.
+ok "a monorepo unit's dist is not hard-linked to the root's" "$([ "$W/plugins/newspack-popups/dist/d" -ef "$W/worktrees/feat/plugins/newspack-popups/dist/d" ] && echo linked || echo separate)" "separate"
 ok "skips a dir the worktree already has (kept)" "$([ -f "$W/worktrees/feat/themes/newspack-theme/node_modules/keep" ] && echo y)" "y"
 ok "skips a dir the worktree already has (no nesting)" "$([ -e "$W/worktrees/feat/themes/newspack-theme/node_modules/node_modules" ] && echo y || echo n)" "n"
 ok "builds once per monorepo unit" "$(builds)" "2"

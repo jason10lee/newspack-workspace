@@ -209,7 +209,14 @@ build_env_worktrees() {
             # Never copy over a dir the worktree already has: cp would nest the
             # copy inside it, and the worktree's own install is the better one.
             if [[ -d "$src/$dir" && ! -e "$dst/$dir" ]]; then
-                cp -al "$src/$dir" "$dst/$dir" 2>/dev/null || cp -a "$src/$dir" "$dst/$dir"
+                # A monorepo unit's build output is rewritten in place below,
+                # and a build without a clean step would write through a hard
+                # link into the root's copy, which every other env serves.
+                if [[ "$kind" == "monorepo" && ( "$dir" == dist || "$dir" == build ) ]]; then
+                    cp -a "$src/$dir" "$dst/$dir"
+                else
+                    cp -al "$src/$dir" "$dst/$dir" 2>/dev/null || cp -a "$src/$dir" "$dst/$dir"
+                fi
             fi
         done
         [[ "$kind" == "monorepo" ]] && units+=("$repo|$dst")
