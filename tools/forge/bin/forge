@@ -217,11 +217,13 @@ _CLAIM_HELD='[.stage_history[]
 # Linear write at or after <since>. Its claim, live or ended, carries the same
 # assignee and state as this run's, so the restore cannot tell them apart.
 # Reaching the write shows as a "claimed" event, or as the
-# linear_prior.claimed_state_id that claim.sh records just before its only
-# issue update: a run that lost its own race has no "claimed" event but may
-# have written. A run that marked "claiming" and stopped short (claim.sh's
+# linear_prior.claimed_state_id that claim.sh records just before its claim
+# write: a run that lost its own race has no "claimed" event but may have
+# written. A run that marked "claiming" and stopped short (claim.sh's
 # same-issue guard, a failed read) never touched the issue, and neither did a
-# run retired before this one launched.
+# run retired before this one launched. A rework keeps the run's earlier
+# linear_prior, so a reworked run that once wrote still counts after a later
+# launch of it stops short; that errs toward leaving the claim alone.
 later_run() {
   local lf
   for lf in "$RUNS_DIR"/*/ledger.json; do

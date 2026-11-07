@@ -37,7 +37,8 @@ The dispatcher session runs these from the root checkout, following the
   It writes nothing when someone else holds the issue, and skips the run while
   a later run is open on the issue or once one reached its own Linear write,
   since both claims look the same. A later launch that stopped before writing
-  does not hold the restore back.
+  does not hold the restore back, unless it is a rework of a run that wrote
+  earlier.
 - `forge status` lists forge runs, the queue and the secure queue.
 - `forge rework <run> <suggestion>` relaunches a delivered, stopped or dead run,
   unless its issue now has a PR or the Security label.
