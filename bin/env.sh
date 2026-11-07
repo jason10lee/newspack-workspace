@@ -160,6 +160,92 @@ reject_extra_args() {
     fi
 }
 
+# Name the likely cause of a failed worktree build from its log.
+build_failure_hint() {
+    local log="$1"
+    if grep -q "Module not found: Error: Can't resolve" "$log"; then
+        echo "the branch imports a module the root has not installed; run an install deliberately"
+    elif grep -Eq "export '[^']*' \(imported as '[^']*'\) was not found in" "$log"; then
+        echo "the root checkout is behind the branch (a workspace package lacks an export it imports); update the root or rebase"
+    else
+        echo "see the build output above"
+    fi
+}
+
+# Give each worktree in an env the branch's own built assets.
+#
+# The root's built dirs are copied in first, as upstream always has. A monorepo
+# unit then builds in place in the container, where the env mounts it into
+# /newspack-monorepo. It never installs: /newspack-monorepo is the root
+# checkout, so an install there rewrites the lockfile and node_modules that
+# every other env and the host share. The build therefore resolves its
+# dependencies from the root's node_modules, and fails rather than serving a
+# bundle that imports something the root lacks.
+#
+# NODE_PATH is set because a worktree that pnpm installed on the host has .bin
+# shims with host paths baked into their NODE_PATH, and undeclared imports
+# (newspack-theme's postcss) resolve only through it. The shims keep a NODE_PATH
+# that is already set, so the root's hoist directory stays reachable.
+build_env_worktrees() {
+    local container="$1" compose_file="$2"
+    local repo safe_branch kind host src dst dir
+    local units=()
+    while IFS='|' read -r repo safe_branch kind; do
+        if [[ "$kind" == "monorepo" ]]; then
+            host=$(get_repo_host_path "$repo")
+            [[ -n "$host" ]] || continue
+            src="$NABSPATH/$host"
+            dst="$NABSPATH/worktrees/$safe_branch/$host"
+        else
+            host=$(get_standalone_repo_host_path "$repo")
+            [[ -n "$host" ]] || continue
+            src="$NABSPATH/$host"
+            dst="$NABSPATH/worktrees-repos/$repo/$safe_branch"
+        fi
+        # A legacy mount can name a path that no longer exists; skip it.
+        [[ -d "$dst" ]] || continue
+        echo "Copying built assets for $repo..."
+        for dir in node_modules vendor dist build; do
+            # Never copy over a dir the worktree already has: cp would nest the
+            # copy inside it, and the worktree's own install is the better one.
+            if [[ -d "$src/$dir" && ! -e "$dst/$dir" ]]; then
+                cp -al "$src/$dir" "$dst/$dir" 2>/dev/null || cp -a "$src/$dir" "$dst/$dir"
+            fi
+        done
+        [[ "$kind" == "monorepo" ]] && units+=("$repo|$dst")
+    done < <(each_worktree_in_env "$compose_file")
+
+    [[ ${#units[@]} -gt 0 ]] || return 0
+
+    docker exec "$container" bash -c 'command -v pnpm >/dev/null 2>&1 || corepack enable pnpm' || {
+        echo "Error: could not enable pnpm in $container"
+        return 1
+    }
+
+    local unit pkg log rc
+    for unit in "${units[@]}"; do
+        repo="${unit%%|*}"
+        dst="${unit#*|}"
+        # The pnpm filter needs the package's name, which often differs from
+        # its directory (newspack-plugin is "newspack").
+        pkg=$(sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$dst/package.json" 2>/dev/null | head -n1)
+        [[ -n "$pkg" ]] || pkg="$repo"
+        echo "Building $repo in place (--filter $pkg)..."
+        log=$(mktemp)
+        docker exec -e NODE_PATH=/newspack-monorepo/node_modules/.pnpm/node_modules "$container" \
+            bash -c "cd /newspack-monorepo && pnpm --filter '$pkg' run build" 2>&1 | tee "$log"
+        rc=${PIPESTATUS[0]}
+        # webpack reports a missing workspace export as a warning and exits 0,
+        # but the bundle then imports undefined at runtime.
+        if [[ "$rc" -ne 0 ]] || grep -Eq "export '[^']*' \(imported as '[^']*'\) was not found in" "$log"; then
+            echo "Error: build failed for $repo: $(build_failure_hint "$log")"
+            rm -f "$log"
+            return 1
+        fi
+        rm -f "$log"
+    done
+}
+
 # Only dispatch subcommands when executed directly. When sourced (e.g. by the
 # host-side unit tests) just define the helpers above and return.
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
@@ -484,7 +570,7 @@ YAML
     up)
         env_name="$2"
         if [[ -z "$env_name" ]] || is_help_arg "$env_name"; then
-            env_usage "$env_name" "Usage: n env up <name> [--build]" "       n env up --all [--build]"
+            env_usage "$env_name" "Usage: n env up <name> [--build-worktrees]" "       n env up --all [--build-worktrees]" "" "  --build-worktrees  Build each worktree unit in the env (no install; ~40-70s per unit). --build is an alias."
         fi
         # --all: start all existing environments.
         if [[ "$env_name" == "--all" ]]; then
@@ -515,7 +601,7 @@ YAML
         auto_build=false
         while [[ $# -gt 0 ]]; do
             case $1 in
-                --build) auto_build=true; shift ;;
+                --build-worktrees|--build) auto_build=true; shift ;;
                 *) echo "Unknown option: $1"; exit 1 ;;
             esac
         done
@@ -797,47 +883,19 @@ MIGRATE
         # gitignored build artifact; activating an unbuilt theme (e.g. via
         # `n setup`) fatals the whole site with "stylesheet is missing". The JS/SCSS
         # build is slow and is `n ci-build all`'s job, not env-up's — so surface
-        # this early and actionably rather than building here.
-        if docker exec "$container_name" test -d /newspack-themes/newspack-theme \
+        # this early and actionably. --build-worktrees builds it below, so the
+        # warning would only mislead there.
+        if [[ "$auto_build" != true ]] \
+           && docker exec "$container_name" test -d /newspack-themes/newspack-theme \
            && ! docker exec "$container_name" test -f /newspack-themes/newspack-theme/newspack-theme/style.css; then
-            echo "Warning: newspack-theme is not built (style.css missing). Activating it (e.g. 'n setup') will fatal the site — run 'n ci-build all' first."
+            echo "Warning: newspack-theme is not built (style.css missing). Activating it (e.g. 'n setup') will fatal the site — run 'n env up $env_name --build-worktrees' or 'n ci-build all' first."
         fi
         # Reload Apache to pick up SSL config (it's running by now).
         docker exec "$container_name" apachectl graceful 2>/dev/null
-        echo "Environment '$env_name' is ready at https://${domain}/"
-        # Provision built assets for mounted worktrees.
         if [[ "$auto_build" == true ]]; then
-            # Tier-1 (monorepo plugin/theme) worktrees are workspace members (mounted
-            # at /newspack-monorepo/<host>), so build them IN PLACE with one workspace
-            # install + a single multi-filter build — no copy, no staleness. Tier-2
-            # standalone worktrees aren't workspace members; keep the asset copy.
-            tier1_filters=""
-            while IFS='|' read -r repo safe_branch kind; do
-                if [[ "$kind" == "monorepo" ]]; then
-                    # Monorepo worktree host path (plugins/X or themes/X) drives the
-                    # in-place, workspace-member build.
-                    host=$(get_repo_host_path "$repo")
-                    # Resolve the real pnpm package name from the worktree's package.json.
-                    pkg=$(docker exec "$container_name" node -p "require('/newspack-monorepo/${host}/package.json').name" 2>/dev/null)
-                    [[ -n "$pkg" ]] && tier1_filters="$tier1_filters --filter $pkg"
-                else
-                    # Tier-2 standalone repos/ worktrees aren't workspace members; copy
-                    # built assets from the base checkout into the worktree.
-                    src="$NABSPATH/$(get_standalone_repo_host_path "$repo")"
-                    dst="$NABSPATH/worktrees-repos/$repo/$safe_branch"
-                    echo "Copying built assets for $repo..."
-                    for dir in node_modules vendor dist build; do
-                        if [[ -d "$src/$dir" ]]; then
-                            cp -al "$src/$dir" "$dst/$dir" 2>/dev/null || cp -a "$src/$dir" "$dst/$dir"
-                        fi
-                    done
-                fi
-            done < <(each_worktree_in_env "$compose_file")
-            if [[ -n "$tier1_filters" ]]; then
-                echo "Building worktree plugin(s) in place:${tier1_filters}"
-                docker exec "$container_name" bash -c "cd /newspack-monorepo && pnpm install && pnpm${tier1_filters} run build"
-            fi
+            build_env_worktrees "$container_name" "$compose_file" || exit 1
         fi
+        echo "Environment '$env_name' is ready at https://${domain}/"
         ;;
     down)
         env_name="$2"
@@ -1181,8 +1239,8 @@ MIGRATE
         ;;
     *)
         echo "Usage: n env <create|up|down|destroy|list|cleanup|e2e-setup>"
-        echo "  up <name> [--build]      Start an environment"
-        echo "  up --all [--build]       Start all environments"
+        echo "  up <name> [--build-worktrees]  Start an environment; build its worktree units (no install). --build is an alias."
+        echo "  up --all [--build-worktrees]   Start all environments"
         echo "  cleanup [--all] [--yes]  Remove environments (--all selects everything, --yes skips confirmation)"
         echo "  e2e-setup <name> [opts]  Build a ready-to-run local e2e-tests environment (see --help)"
         ;;
