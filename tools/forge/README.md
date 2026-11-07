@@ -34,8 +34,10 @@ The dispatcher session runs these from the root checkout, following the
   grant, unless it delivered first. A run that lost its claim race holds no
   slot, but its claim can still stand when a read after it was stale, so
   `check` gives it the same conditional restore once and reports `LOST-CLAIM`.
-  It writes nothing when someone else holds the issue, and skips the run once
-  a later run has taken the issue up, since both claims look the same.
+  It writes nothing when someone else holds the issue, and skips the run while
+  a later run is open on the issue or once one reached its own Linear write,
+  since both claims look the same. A later launch that stopped before writing
+  does not hold the restore back.
 - `forge status` lists forge runs, the queue and the secure queue.
 - `forge rework <run> <suggestion>` relaunches a delivered, stopped or dead run,
   unless its issue now has a PR or the Security label.
