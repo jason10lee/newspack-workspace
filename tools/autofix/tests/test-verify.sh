@@ -22,7 +22,7 @@ cat > "$STUB/n" <<'EOF'
 printf 'n %s\n' "$*" >> "${ARGV_LOG:?}"
 printf '%s n %s\n' "$PWD" "$*" >> "${CWD_LOG:?}"
 printf 'n %s\n' "$*"
-for a in "$@"; do case "$a" in *PASS*) exit 0 ;; *FAIL*) exit 1 ;; esac; done
+for a in "$@"; do case "$a" in *NOTFOUND127*) exit 127 ;; *PASS*) exit 0 ;; *FAIL*) exit 1 ;; esac; done
 exit 0
 EOF
 cat > "$STUB/npx" <<'EOF'
@@ -100,6 +100,7 @@ reject_case "jest-related-no-files"  'jest-related'
 cat > "$STUB/node" <<'EOF'
 #!/bin/bash
 printf 'node %s\n' "$*" >> "${ARGV_LOG:?}"
+printf 'chrome=%s\n' "${CHROME_PATH:-}" >> "${ARGV_LOG:?}.env"
 printf '%s node %s\n' "$PWD" "$*" >> "${CWD_LOG:?}"
 [ -f "$1" ] || exit 9
 for a in "$@"; do case "$a" in *PASS*) exit 0 ;; *FAIL*) exit 1 ;; esac; done
@@ -153,7 +154,15 @@ assert_eq 0 $? "comma-separated --group list accepted and passes"
 assert_contains "$(cat "$ARGV_LOG")" 'byline-block,data-events-PASS' \
   "comma in group list reaches executable literally"
 
-# Playwright repro: the exact fixed prefix is ACCEPTED and runs.
+# Playwright repro: the exact fixed prefix is ACCEPTED and runs the
+# workspace's own Playwright CLI under node. npx would fetch Playwright from the
+# registry wherever no local copy resolves, so it is never called.
+PWD_FX="$AUTOFIX_WORKSPACE_ROOT/node_modules/.pnpm"
+mkdir -p "$PWD_FX/playwright@1.0.0/node_modules/playwright" "$PWD_FX/playwright-core@1.0.0/node_modules/playwright-core"
+: > "$PWD_FX/playwright@1.0.0/node_modules/playwright/cli.js"
+printf '{"browsers":[{"name":"chromium-headless-shell","revision":"7"}]}\n' > "$PWD_FX/playwright-core@1.0.0/node_modules/playwright-core/browsers.json"
+export PLAYWRIGHT_BROWSERS_PATH; PLAYWRIGHT_BROWSERS_PATH="$(mktemp -d)"; mkdir -p "$PLAYWRIGHT_BROWSERS_PATH/chromium_headless_shell-7"
+PW_CLI="$PWD_FX/playwright@1.0.0/node_modules/playwright/cli.js"
 : > "$ARGV_LOG"
 bash "$L" init runpw NPPM-P operator-named >/dev/null
 bash "$L" set runpw '.branch = "br-1"'
@@ -161,8 +170,40 @@ bash "$L" set runpw '.decisions += [{key:"affected_repo", value:"my-plugin"}]'
 bash "$L" evidence runpw playwright-repro r.spec.js 'npx playwright test specs/repro_PASS.spec.js'
 bash "$V" signal runpw --expect pass
 assert_eq 0 $? "npx playwright test <spec> accepted and passes"
-assert_contains "$(cat "$ARGV_LOG")" 'npx playwright test specs/repro_PASS.spec.js' \
-  "playwright prefix reaches npx"
+assert_contains "$(cat "$ARGV_LOG")" "node $PW_CLI test specs/repro_PASS.spec.js" \
+  "the spec reaches the workspace's Playwright CLI"
+assert_eq 0 "$(grep -c '^npx ' "$ARGV_LOG")" "and npx is never called"
+
+# A cache without the expected headless shell: the spec gets CHROME_PATH naming
+# the newest installed one, so a Playwright config can launch it.
+mv "$PLAYWRIGHT_BROWSERS_PATH/chromium_headless_shell-7" "$PLAYWRIGHT_BROWSERS_PATH/chromium_headless_shell-9"
+mkdir -p "$PLAYWRIGHT_BROWSERS_PATH/chromium_headless_shell-9/x"
+: > "$PLAYWRIGHT_BROWSERS_PATH/chromium_headless_shell-9/x/chrome-headless-shell"
+: > "$ARGV_LOG.env"
+bash "$V" signal runpw --expect pass >/dev/null 2>&1
+assert_contains "$(cat "$ARGV_LOG.env")" "chrome=$PLAYWRIGHT_BROWSERS_PATH/chromium_headless_shell-9/x/chrome-headless-shell" \
+  "the spec gets CHROME_PATH for the installed headless shell"
+rm -rf "$PLAYWRIGHT_BROWSERS_PATH/chromium_headless_shell-9"; mkdir -p "$PLAYWRIGHT_BROWSERS_PATH/chromium_headless_shell-7"
+
+# No workspace Playwright: the signal stops, and a red is never read off it.
+mv "$PWD_FX/playwright@1.0.0" "$PWD_FX/hidden-pw"
+bash "$L" init runnopw NPPM-P2 operator-named >/dev/null
+bash "$L" set runnopw '.branch = "br-1"'
+bash "$L" set runnopw '.decisions += [{key:"affected_repo", value:"my-plugin"}]'
+bash "$L" evidence runnopw playwright-repro r.spec.js 'npx playwright test specs/repro_FAIL.spec.js'
+out="$(bash "$V" signal runnopw --expect fail 2>&1)" && rc=0 || rc=$?
+assert_eq 1 "$rc" "no workspace Playwright: --expect fail does not pass"
+assert_contains "$out" "Playwright" "and says Playwright is missing"
+mv "$PWD_FX/hidden-pw" "$PWD_FX/playwright@1.0.0"
+
+# A command that could not run (126/127) is never the expected red.
+bash "$L" init run127 NPPM-P3 operator-named >/dev/null
+bash "$L" set run127 '.branch = "br-1"'
+bash "$L" set run127 '.decisions += [{key:"affected_repo", value:"my-plugin"}]'
+bash "$L" evidence run127 failing-test t.php 'n test-php --filter NOTFOUND127'
+out="$(bash "$V" signal run127 --expect fail 2>&1)" && rc=0 || rc=$?
+assert_eq 1 "$rc" "exit 127 does not pass --expect fail"
+assert_contains "$out" "could not run" "and is reported as a command that could not run"
 
 # CRITICAL 1 regression: a branch containing '/' (a Linear branchName like
 # "jason/nppm-1-fix") lives at the SANITIZED path on disk — `n` runs
@@ -199,7 +240,7 @@ bash "$L" evidence runcwd playwright-repro r.spec.js 'npx playwright test specs/
 bash "$V" signal runcwd --expect pass >/dev/null 2>&1
 assert_eq 0 $? "signal with n + npx evidence passes"
 assert_contains "$(cat "$CWD_LOG")" "$BR1/plugins/my-plugin n test-php" "signal runs n from plugins/<affected_repo>"
-assert_contains "$(cat "$CWD_LOG")" "$BR1 npx playwright" "signal still runs npx from the worktree root"
+assert_contains "$(cat "$CWD_LOG")" "$BR1 node $PW_CLI test" "signal still runs Playwright from the worktree root"
 
 mkdir -p "$BR1/themes/my-theme"
 : > "$CWD_LOG"

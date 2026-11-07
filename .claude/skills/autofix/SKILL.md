@@ -253,6 +253,11 @@ anything else makes `verify.sh signal` die fail-closed:
   relative to the plugin), run from the plugin directory with one worker.
 - `npx playwright test …` — the exact fixed prefix for a Playwright repro you
   wrote. Bare `npx <package>` is rejected (it would install+run arbitrary code).
+  `verify.sh` runs it with the workspace's own Playwright under node, from the
+  worktree root, with `CHROME_PATH` set as `lib/playwright-env.sh` sets it, so
+  no `node_modules/.bin` link in the worktree is needed. With no workspace
+  Playwright the signal stops instead of reading red, and any evidence command
+  that exits 126 or 127 (it could not run) fails the check whatever you expected.
 
 There is no `bash -c`, no `node`, no arbitrary executable. Because there is no
 shell, metacharacters inside an argument are literal, so real filters work

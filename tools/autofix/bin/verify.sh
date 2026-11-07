@@ -31,10 +31,13 @@ affected_repo() { ledger_decision "$run_id" affected_repo; }
 #       - `jest-related <file>…` — Jest on the tests related to those files,
 #         through lib/jest-related.js from the unit directory. It is rewritten
 #         to that fixed script, so it reaches no other code.
-#       - `npx playwright test …` — the EXACT fixed prefix only. Bare `npx`
-#         fetches-and-runs arbitrary npm packages, so `npx <anything-else>` is
-#         rejected; only Playwright (how the skill records browser repros) is
-#         permitted, and it can't install a different package.
+#       - `npx playwright test …` — the EXACT fixed prefix only, and npx never
+#         runs it. Where no local Playwright resolves (a worktree has no
+#         node_modules of its own), npx downloads the latest Playwright from the
+#         registry and runs that. So it is rewritten to the workspace's own
+#         Playwright CLI under node, found the way lib/playwright-env.sh finds
+#         it, with CHROME_PATH exported for the spec. No workspace Playwright
+#         stops the signal instead of reading as a red.
 #     `node`, `npx <other>`, `n <other>`, and every other executable are
 #     rejected. Because backslash/comma survive as literal argv, a legitimate
 #     PHPUnit filter like `n test-php --filter Namespace\Class::method` or a
@@ -70,6 +73,15 @@ parse_evidence_argv() { # cmd-string
     npx)
       { [ "${EV_ARGV[1]:-}" = playwright ] && [ "${EV_ARGV[2]:-}" = test ]; } \
         || die "evidence cmd not allowed: 'npx' is only permitted as 'npx playwright test …'"
+      # CHROME_PATH stays global: it has to reach the command, which runs
+      # after this function returns.
+      local pwenv PW_PATH=""; CHROME_PATH=""
+      pwenv="$(AUTOFIX_WORKSPACE_ROOT="$WORKSPACE_ROOT" bash "$AUTOFIX_BIN_DIR/lib/playwright-env.sh")" \
+        || die "evidence cmd needs the workspace's Playwright, and none is usable (see above); not running it"
+      eval "$pwenv"
+      [ -f "$PW_PATH/cli.js" ] || die "no Playwright CLI at $PW_PATH/cli.js; not running '$ecmd'"
+      export CHROME_PATH
+      EV_ARGV=( node "$PW_PATH/cli.js" "${EV_ARGV[@]:2}" )
       ;;
     *)
       # A kept profile may name further commands (a tooling repo's own test
@@ -104,14 +116,19 @@ case "$cmd" in
         # keep running from the worktree root, as they always have.
         run_dir="$wt"
         if [ "$EV_IN_UNIT" = 1 ]; then run_dir="$(project_dir "$wt" "$(affected_repo)")" || exit 1; fi
-        if out="$( (cd "$run_dir" && "${EV_ARGV[@]}") 2>&1 )"; then st=pass; else st=fail; fi
-        log "evidence[$i] '$ecmd' → $st"
+        if out="$( (cd "$run_dir" && "${EV_ARGV[@]}") 2>&1 )"; then st=pass; else rc=$?; st=fail
+          # 126 and 127 mean the command itself could not run, not that a test
+          # failed, so they never count as the red a --expect fail wants.
+          case "$rc" in 126|127) st=error ;; esac
+        fi
+        if [ "$st" = error ]; then log "evidence[$i] '$ecmd' → could not run (exit $rc)"
+        else log "evidence[$i] '$ecmd' → $st"; fi
         # Surface the tail of EVERY failing command — including an expected
         # fail. A signal can fail for the wrong reason (run autofix-nppm-273:
         # a missing-dev-deps PHPUnit bootstrap error read as the "failing
         # test"), and a status that matches the expectation would otherwise
         # hide it. The caller must confirm the failure is the assertion.
-        if [ "$st" = fail ]; then
+        if [ "$st" != pass ]; then
           printf '%s\n' "$out" | tail -n 5 | sed 's/^/[autofix]   | /' >&2
         fi
         [ "$st" = "$expect" ] || bad=1
