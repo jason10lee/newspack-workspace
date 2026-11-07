@@ -293,6 +293,13 @@ $marker"
       already_restored=1
       restored="(done at preview)"
     fi
+    # A launch with no claimed state stopped before its claim wrote, so the
+    # issue holds nothing of this run's to restore. Whoever holds it now, the
+    # operator included, set that themselves; it is not drift either.
+    if [ -z "$already_restored" ] && { [ -z "$claimed_state" ] || [ "$claimed_state" = null ]; }; then
+      already_restored=1
+      restored="(nothing claimed)"
+    fi
     # Conditional restore of assignee/status is a working-state transition, NOT
     # a disclosing write — it proceeds UNGATED even in secure mode, because
     # leaving a Security issue stuck In-Progress/assigned-to-bot is worse than
