@@ -63,6 +63,19 @@ fr stop f-s2 "$(packet f-s2 "## Why it stopped" "## Friction")" held by someone 
 assert_eq 0 "$rc" "a run that never claimed can stop"
 assert_eq 0 "$(updates)" "with no Linear write"
 
+# env.sh create escalates a run it can't provision; the stop must still
+# release the claim, or the issue stays assigned and In Progress.
+claimed f-se; bash "$L" set f-se '.terminal = "escalated"'
+out="$(fr stop f-se "$(packet f-se "## Why it stopped" "## Friction")" build blocked)"; rc=$?
+assert_eq 0 "$rc" "an escalated run can still stop"
+assert_eq 2 "$(updates)" "and its claim is restored"
+assert_eq stopped "$(bash "$L" get f-se .delivery.kind)" "and the stop is recorded"
+fr stop f-se "$(packet f-se "## Why it stopped" "## Friction")" again >/dev/null; rc=$?
+assert_eq 1 "$rc" "an escalated run that stopped cannot stop again"
+claimed f-sb; bash "$L" set f-sb '.terminal = "bailed-dead"'
+fr stop f-sb "$(packet f-sb "## Why it stopped" "## Friction")" x >/dev/null; rc=$?
+assert_eq 1 "$rc" "a run that ended any other way cannot stop"
+
 claimed f-s3; bash "$L" set f-s3 '.fresh_test_in_progress = true'
 fr stop f-s3 "$(packet f-s3 "## Why it stopped" "## Friction")" x >/dev/null; rc=$?
 assert_eq 1 "$rc" "stop refuses a run inside a fresh test"
