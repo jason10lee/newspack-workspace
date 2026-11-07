@@ -164,11 +164,19 @@ for that reset:
 `docker exec <container> cat /var/www/html/wp-config.php > <run-dir>/pristine-wp-config.php`
 (`<container>` is `newspack_env_<env name>` with dashes turned to underscores).
 
-Wraps `n env create <name> --worktree <repo>:<branch> --up` +
-`n setup --env <name> --yes <setup flags>`, where `<branch>` is
-`<branch_stem>-<4hex>` (the `branch_stem` decision you recorded in Stage 1,
-which itself came from Linear's `branchName` — keeps Linear's autolinking
-while staying collision-free). It then runs `n composer install` in the
+Wraps `n env create <name> --worktree <repo>:<branch>`, then
+`n env up <name> --build-worktrees`, then `n setup --env <name> --yes <setup
+flags>`, where `<branch>` is `<branch_stem>-<4hex>` (the `branch_stem`
+decision you recorded in Stage 1, which itself came from Linear's
+`branchName` — keeps Linear's autolinking while staying collision-free). The
+env up step builds the run's unit from the branch inside the env container,
+without installing anything, so a branch whose JS build needs a package the
+workspace root has not installed fails provisioning. When webpack reports it
+(a module it can't resolve, or a workspace-package export the root lacks), the
+message names that cause; any other build failure points at the build output.
+For a theme run, `create` also stops before `n setup` when the theme has no
+`style.css`. The env is recorded in the ledger right after `n env create`, so
+`env.sh destroy` can find it whichever later step fails. `create` then runs `n composer install` in the
 affected unit when the unit has a `composer.json` and no dev dependencies
 installed, because env up provisions a runtime-only `vendor/` and the suite's
 PHPUnit run would stop on a missing bootstrap. Provisioning attempts are capped

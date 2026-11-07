@@ -57,11 +57,24 @@ case "$cmd" in
     base="$(profile_base "$run_id" "$WORKSPACE_ROOT")"
     git -C "$WORKSPACE_ROOT" rev-parse -q --verify "refs/heads/$branch" >/dev/null 2>&1 \
       || git -C "$WORKSPACE_ROOT" branch "$branch" "$base"
-    n env create "$name" --worktree "$repo:$branch" --up || die "n env create failed (attempt $((attempts+1)))"
+    n env create "$name" --worktree "$repo:$branch" || die "n env create failed (attempt $((attempts+1)))"
     [ -d "$(wt_dir "$branch")" ] || log "warning: expected worktree dir not found: $(wt_dir "$branch")"
-    n setup --env "$name" --yes "$@" || die "n setup failed (attempt $((attempts+1)))"
+    # Record the env as soon as it exists, so a failure in any later step
+    # leaves an env that `destroy` can find.
     "$LEDGER" set "$run_id" '.env = {name:$n, worktrees:[$w]} | .branch = $b | .worktree = $p' \
       --arg n "$name" --arg w "$repo:$branch" --arg b "$branch" --arg p "$(wt_dir "$branch")"
+    # Start the env with the run's unit built from the branch. The build runs in
+    # the container without installing, so the shared root install is never
+    # rewritten, and a branch that needs a dependency the root lacks fails here.
+    n env up "$name" --build-worktrees || die "n env up --build-worktrees failed (attempt $((attempts+1)))"
+    # n setup activates a theme run's theme, which fatals the site without a
+    # stylesheet. The classic theme builds its style.css; the block theme
+    # tracks its own.
+    theme="$(wt_dir "$branch")/themes/$repo"
+    if [ -d "$theme" ] && [ ! -f "$theme/style.css" ] && [ ! -f "$theme/$repo/style.css" ]; then
+      die "theme $repo is not built (no style.css) (attempt $((attempts+1)))"
+    fi
+    n setup --env "$name" --yes "$@" || die "n setup failed (attempt $((attempts+1)))"
     # Env up gives the worktree's unit a runtime-only vendor/, so the suite's
     # PHPUnit run would stop on a missing bootstrap. Install the dev
     # dependencies, judged by the same check `n test-php` refuses on, from the
