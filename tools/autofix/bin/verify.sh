@@ -31,10 +31,13 @@ affected_repo() { ledger_decision "$run_id" affected_repo; }
 #       - `jest-related <file>…` — Jest on the tests related to those files,
 #         through lib/jest-related.js from the unit directory. It is rewritten
 #         to that fixed script, so it reaches no other code.
-#       - `npx playwright test …` — the EXACT fixed prefix only. Bare `npx`
-#         fetches-and-runs arbitrary npm packages, so `npx <anything-else>` is
-#         rejected; only Playwright (how the skill records browser repros) is
-#         permitted, and it can't install a different package.
+#       - `npx playwright test …` — the EXACT fixed prefix only, and npx never
+#         runs it. Where no local Playwright resolves (a worktree has no
+#         node_modules of its own), npx downloads the latest Playwright from the
+#         registry and runs that. So it runs the workspace's own
+#         @playwright/test CLI under node, at the version lib/playwright-env.sh
+#         finds, with CHROME_PATH exported for the spec. See EV_PW_TEST below
+#         for where it runs and how its result is read.
 #     `node`, `npx <other>`, `n <other>`, and every other executable are
 #     rejected. Because backslash/comma survive as literal argv, a legitimate
 #     PHPUnit filter like `n test-php --filter Namespace\Class::method` or a
@@ -54,7 +57,7 @@ parse_evidence_argv() { # cmd-string
   EV_ARGV=( $ecmd )
   set +f
   [ "${#EV_ARGV[@]}" -gt 0 ] || die "empty evidence cmd after parsing"
-  EV_IN_UNIT=0
+  EV_IN_UNIT=0; EV_PW_TEST=""
   case "${EV_ARGV[0]}" in
     n)
       case "${EV_ARGV[1]:-}" in
@@ -70,6 +73,20 @@ parse_evidence_argv() { # cmd-string
     npx)
       { [ "${EV_ARGV[1]:-}" = playwright ] && [ "${EV_ARGV[2]:-}" = test ]; } \
         || die "evidence cmd not allowed: 'npx' is only permitted as 'npx playwright test …'"
+      # CHROME_PATH stays global: it has to reach the command, which runs
+      # after this function returns.
+      local pwenv PW_PATH="" a; CHROME_PATH=""
+      pwenv="$(AUTOFIX_WORKSPACE_ROOT="$WORKSPACE_ROOT" bash "$AUTOFIX_BIN_DIR/lib/playwright-env.sh")" \
+        || die "evidence cmd needs the workspace's Playwright, and none is usable (see above); not running it"
+      eval "$pwenv"
+      for a in "${EV_ARGV[@]:3}"; do
+        case "$a" in --reporter*) die "evidence cmd may not set --reporter: verify.sh reads the result from its own JSON report" ;; esac
+      done
+      EV_PW_TEST="$WORKSPACE_ROOT/node_modules/.pnpm/@playwright+test@${PW_PATH##*/playwright@}"
+      EV_PW_TEST="${EV_PW_TEST%%/node_modules/playwright}/node_modules/@playwright/test"
+      [ -f "$EV_PW_TEST/cli.js" ] || die "no @playwright/test CLI at $EV_PW_TEST/cli.js; not running '$ecmd'"
+      export CHROME_PATH
+      EV_ARGV=( node "$EV_PW_TEST/cli.js" "${EV_ARGV[@]:2}" "--reporter=line,json" )
       ;;
     *)
       # A kept profile may name further commands (a tooling repo's own test
@@ -100,18 +117,48 @@ case "$cmd" in
         # Validate + word-split BEFORE running so a rejection dies visibly.
         # Never a shell — exec argv directly.
         parse_evidence_argv "$ecmd"
-        # `n` and Jest resolve their project from the cwd; Playwright specs
-        # keep running from the worktree root, as they always have.
+        # `n` and Jest resolve their project from the cwd. Playwright runs from
+        # the run dir (below); a profile's own commands run from the worktree.
         run_dir="$wt"
         if [ "$EV_IN_UNIT" = 1 ]; then run_dir="$(project_dir "$wt" "$(affected_repo)")" || exit 1; fi
-        if out="$( (cd "$run_dir" && "${EV_ARGV[@]}") 2>&1 )"; then st=pass; else st=fail; fi
-        log "evidence[$i] '$ecmd' → $st"
+        report=""
+        if [ -n "$EV_PW_TEST" ]; then
+          # A Playwright repro lives under the run dir, and an ESM import
+          # resolves by walking up from the spec, so the run dir gets a link to
+          # the workspace's @playwright/test. Running from there also keeps its
+          # default output out of the worktree.
+          run_dir="$RUNS_DIR/$run_id"
+          link="$run_dir/node_modules/@playwright/test"
+          if [ -e "$link" ] && [ ! -L "$link" ]; then die "$link exists and is not a link; not replacing it"; fi
+          mkdir -p "$run_dir/node_modules/@playwright" && ln -sfn "$EV_PW_TEST" "$link"
+          report="$run_dir/signal-$i.json"; rm -f "$report"
+        fi
+        rc=0
+        if out="$( (cd "$run_dir" && PLAYWRIGHT_JSON_OUTPUT_FILE="$report" "${EV_ARGV[@]}") 2>&1 )"; then st=pass; else rc=$?; st=fail
+          # 126 and 127 mean the command itself could not run, not that a test
+          # failed, so they never count as the red a --expect fail wants.
+          case "$rc" in 126|127) st=error ;; esac
+        fi
+        if [ -n "$report" ]; then
+          # Playwright exits 1 for a failed test, a spec that could not load
+          # and "No tests found" alike. Its JSON report tells them apart: a
+          # result counts only when a test ran and nothing failed to load. A
+          # report that reads green from a run Playwright exited non-zero (a
+          # flaky pass under --fail-on-flaky-tests) is no result either.
+          st="$(jq -r 'if (.errors | length) > 0 or ((.stats.expected // 0) + (.stats.unexpected // 0) + (.stats.flaky // 0)) == 0 then "error"
+                       elif .stats.unexpected > 0 then "fail" else "pass" end' "$report" 2>/dev/null)" || st=error
+          [ -n "$st" ] || st=error
+          if [ "$st" = pass ] && [ "$rc" != 0 ]; then st=error; fi
+          rc="report"
+        fi
+        if [ "$st" = error ]; then log "evidence[$i] '$ecmd' → could not run ($( [ "$rc" = report ] && echo "no test ran, one failed to load, or Playwright failed a passing run" || echo "exit $rc" ))"
+        else log "evidence[$i] '$ecmd' → $st"; fi
         # Surface the tail of EVERY failing command — including an expected
         # fail. A signal can fail for the wrong reason (run autofix-nppm-273:
         # a missing-dev-deps PHPUnit bootstrap error read as the "failing
         # test"), and a status that matches the expectation would otherwise
         # hide it. The caller must confirm the failure is the assertion.
-        if [ "$st" = fail ]; then
+        if [ "$st" != pass ]; then
           printf '%s\n' "$out" | tail -n 5 | sed 's/^/[autofix]   | /' >&2
         fi
         [ "$st" = "$expect" ] || bad=1

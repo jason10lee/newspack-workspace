@@ -253,6 +253,15 @@ anything else makes `verify.sh signal` die fail-closed:
   relative to the plugin), run from the plugin directory with one worker.
 - `npx playwright test …` — the exact fixed prefix for a Playwright repro you
   wrote. Bare `npx <package>` is rejected (it would install+run arbitrary code).
+  `verify.sh` runs it with the workspace's own `@playwright/test` under node,
+  from the run dir, so give spec and `--config` paths relative to the run dir
+  or absolute. It links `<run dir>/node_modules/@playwright/test` itself, so
+  the spec's import resolves with nothing installed, and it sets `CHROME_PATH`
+  as `lib/playwright-env.sh` does. It reads the result from its own JSON
+  report, so do not pass `--reporter`: a red counts only when a test ran and
+  failed. A spec that could not load, or found no tests, is "could not run"
+  and fails the check whatever you expected, as does any evidence command that
+  exits 126 or 127, and a workspace with no Playwright stops the signal.
 
 There is no `bash -c`, no `node`, no arbitrary executable. Because there is no
 shell, metacharacters inside an argument are literal, so real filters work
