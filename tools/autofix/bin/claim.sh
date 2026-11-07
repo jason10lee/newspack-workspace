@@ -141,7 +141,10 @@ case "$cmd" in
     issue="$(fetch_issue issue "$issue_id")"
     uuid="$(printf '%s' "$issue" | jq -r .id)"
     team="$(printf '%s' "$issue" | jq -r .team.id)"
-    "$LEDGER" set "$run_id" '.linear_prior = $p' --argjson p "$(printf '%s' "$issue" \
+    # A rework claims again over a ledger whose claimed_state_id records an
+    # earlier write. Keep it until this claim records its own (below), so a
+    # claim that stops before writing still shows the issue was written.
+    "$LEDGER" set "$run_id" '.linear_prior = ($p + ((.linear_prior // {}) | {claimed_state_id} | with_entries(select(.value != null))))' --argjson p "$(printf '%s' "$issue" \
       | jq '{assigneeId:(.assignee.id // null), stateId:.state.id, stateName:.state.name,
              labels:[.labels.nodes[].id]}')"
     prior_assignee_id="$(printf '%s' "$issue" | jq -r '.assignee.id // ""')"

@@ -222,11 +222,10 @@ _CLAIM_HELD='[.stage_history[]
 # written. A run that marked "claiming" and stopped short (claim.sh's
 # same-issue guard, a failed read) never touched the issue, and neither did a
 # run retired before this one launched. A rework keeps the run's earlier
-# linear_prior, so a reworked run that once wrote still counts once a later
-# launch of it records any intake event, even one that stops short; that errs
-# toward leaving the claim alone. The exception is a claim.sh that stops
-# between replacing linear_prior and recording claimed_state_id again: the
-# earlier write is forgotten, and the restore goes ahead.
+# claimed_state_id (claim.sh carries it over until the new claim records its
+# own), so a reworked run that once wrote still counts once a later launch of
+# it records any intake event, even one that stops short; that errs toward
+# leaving the claim alone.
 later_run() {
   local lf
   for lf in "$RUNS_DIR"/*/ledger.json; do
