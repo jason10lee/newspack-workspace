@@ -120,6 +120,9 @@ assert_eq 1 "$rc" "a missing-module build failure fails the create"
 assert_eq escalated "$(bash "$L" get run-bm '.terminal')" "a missing-module build failure escalates the run"
 assert_contains "$out" "do not install packages, update the root checkout or rebase" "and tells the run not to act on the hint"
 assert_contains "$out" "the branch imports a module the root has not installed" "and keeps the cause"
+err="$(printf '%s\n' "$out" | grep 'ERROR:')"
+assert_contains "$err" "the branch imports a module the root has not installed" "the escalation names the cause itself"
+case "$err" in *"install deliberately"*) echo "FAIL  the escalation drops the hint's remedy"; FAILURES=$((FAILURES+1)) ;; *) echo "ok    the escalation drops the hint's remedy" ;; esac
 assert_eq 1 "$(bash "$L" get run-bm '.attempts.provisioning')" "a missing-module build failure uses one attempt"
 
 setup_run run-rb NPPM-3015 nppm-3015-rb
@@ -131,7 +134,7 @@ assert_eq escalated "$(bash "$L" get run-rb '.terminal')" "a root-behind build f
 setup_run run-rw NPPM-3017 nppm-3017-rw
 : > "$N_LOG"; out="$(N_EXIT_UP=1 N_UP_OUT="Error: build failed for newspack-popups: some new wording (cause: root-behind)" bash "$E" create run-rw newspack-popups 2>&1)"; rc=$?
 assert_eq escalated "$(bash "$L" get run-rw '.terminal')" "a reworded hint with its cause tag still escalates"
-assert_contains "$out" "some new wording" "and passes the hint through"
+assert_contains "$(printf '%s\n' "$out" | grep 'ERROR:')" "the root checkout is behind the branch" "and names the cause from the tag, not the wording"
 
 setup_run run-gb NPPM-3016 nppm-3016-gb
 : > "$N_LOG"; out="$(N_EXIT_UP=1 N_UP_OUT="Error: build failed for newspack-popups: see the build output above" bash "$E" create run-gb newspack-popups 2>&1)"; rc=$?
