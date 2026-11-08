@@ -72,6 +72,17 @@ assert_eq 2 "$(updates)" "and its claim is restored"
 assert_eq stopped "$(bash "$L" get f-se .delivery.kind)" "and the stop is recorded"
 fr stop f-se "$(packet f-se "## Why it stopped" "## Friction")" again >/dev/null; rc=$?
 assert_eq 1 "$rc" "an escalated run that stopped cannot stop again"
+# A run launched on the issue after this one escalated owns the claim now, and
+# carries the same assignee and state. A late stop must leave it alone.
+claimed f-sl; bash "$L" set f-sl '.terminal = "escalated"'
+bash "$L" init f-sl2 NPPM-2993 forge >/dev/null
+out="$(bash "$R" stop f-sl "$(packet f-sl "## Why it stopped" "## Friction")" build blocked 2>&1)"; rc=$?
+assert_eq 0 "$rc" "a late stop of an escalated run still stops"
+assert_eq 1 "$(updates)" "but leaves a later run's claim alone"
+assert_contains "$out" "f-sl2" "and names the later run"
+case "$out" in *"holds its claim"*) echo "FAIL  without claiming the later run holds the claim"; FAILURES=$((FAILURES+1)) ;; *) echo "ok    without claiming the later run holds the claim" ;; esac
+assert_contains "$(bash "$L" get f-sl '[.stage_history[] | select(.outcome == "restore-skipped")] | length')" "1" "and the skipped restore is in the ledger"
+assert_eq stopped "$(bash "$L" get f-sl .delivery.kind)" "and the stop is recorded"
 claimed f-sb; bash "$L" set f-sb '.terminal = "bailed-dead"'
 fr stop f-sb "$(packet f-sb "## Why it stopped" "## Friction")" x >/dev/null; rc=$?
 assert_eq 1 "$rc" "a run that ended any other way cannot stop"

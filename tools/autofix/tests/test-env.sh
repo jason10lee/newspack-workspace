@@ -115,17 +115,26 @@ assert_eq true "$(bash "$L" get run-bf '.env != null')" "a failed build leaves t
 # (an install, or updating the root) changes the root checkout every env
 # shares. So the run escalates at once instead of retrying or acting on it.
 setup_run run-bm NPPM-3014 nppm-3014-bm
-: > "$N_LOG"; out="$(N_EXIT_UP=1 N_UP_OUT="Error: build failed for newspack-popups: the branch imports a module the root has not installed; run an install deliberately" bash "$E" create run-bm newspack-popups 2>&1)"; rc=$?
+: > "$N_LOG"; out="$(N_EXIT_UP=1 N_UP_OUT="Error: build failed for newspack-popups: the branch imports a module the root has not installed; run an install deliberately (cause: missing-module)" bash "$E" create run-bm newspack-popups 2>&1)"; rc=$?
 assert_eq 1 "$rc" "a missing-module build failure fails the create"
 assert_eq escalated "$(bash "$L" get run-bm '.terminal')" "a missing-module build failure escalates the run"
 assert_contains "$out" "do not install packages, update the root checkout or rebase" "and tells the run not to act on the hint"
 assert_contains "$out" "the branch imports a module the root has not installed" "and keeps the cause"
+err="$(printf '%s\n' "$out" | grep 'ERROR:')"
+assert_contains "$err" "the branch imports a module the root has not installed" "the escalation names the cause itself"
+case "$err" in *"install deliberately"*) echo "FAIL  the escalation drops the hint's remedy"; FAILURES=$((FAILURES+1)) ;; *) echo "ok    the escalation drops the hint's remedy" ;; esac
 assert_eq 1 "$(bash "$L" get run-bm '.attempts.provisioning')" "a missing-module build failure uses one attempt"
 
 setup_run run-rb NPPM-3015 nppm-3015-rb
-: > "$N_LOG"; out="$(N_EXIT_UP=1 N_UP_OUT="Error: build failed for newspack-popups: the root checkout is behind the branch (a workspace package lacks an export it imports); update the root or rebase" bash "$E" create run-rb newspack-popups 2>&1)"; rc=$?
+: > "$N_LOG"; out="$(N_EXIT_UP=1 N_UP_OUT="Error: build failed for newspack-popups: the root checkout is behind the branch (a workspace package lacks an export it imports); update the root or rebase (cause: root-behind)" bash "$E" create run-rb newspack-popups 2>&1)"; rc=$?
 assert_eq 1 "$rc" "a root-behind build failure fails the create"
 assert_eq escalated "$(bash "$L" get run-rb '.terminal')" "a root-behind build failure escalates the run"
+
+# The tag, not the hint's wording, decides: a reworded hint still escalates.
+setup_run run-rw NPPM-3017 nppm-3017-rw
+: > "$N_LOG"; out="$(N_EXIT_UP=1 N_UP_OUT="Error: build failed for newspack-popups: some new wording (cause: root-behind)" bash "$E" create run-rw newspack-popups 2>&1)"; rc=$?
+assert_eq escalated "$(bash "$L" get run-rw '.terminal')" "a reworded hint with its cause tag still escalates"
+assert_contains "$(printf '%s\n' "$out" | grep 'ERROR:')" "the root checkout is behind the branch" "and names the cause from the tag, not the wording"
 
 setup_run run-gb NPPM-3016 nppm-3016-gb
 : > "$N_LOG"; out="$(N_EXIT_UP=1 N_UP_OUT="Error: build failed for newspack-popups: see the build output above" bash "$E" create run-gb newspack-popups 2>&1)"; rc=$?

@@ -86,17 +86,20 @@ reset_fixture
 DOCKER_EXIT=1 DOCKER_OUT="Module not found: Error: Can't resolve 'x' in '/y'" run
 ok "missing module fails" "$RC" "1"
 has "missing module names the unit and the install hint" "$OUT" "Error: build failed for newspack-popups: the branch imports a module the root has not installed"
+has "missing module carries a stable cause tag" "$OUT" "(cause: missing-module)"
 ok "stops at the first failed unit" "$(builds)" "1"
 
 reset_fixture
 DOCKER_OUT="export 'getContrastColor' (imported as 'getContrastColor') was not found in 'newspack-components'" run
 ok "missing export fails a green build" "$RC" "1"
 has "missing export names the root-behind cause" "$OUT" "the root checkout is behind the branch"
+has "missing export carries a stable cause tag" "$OUT" "(cause: root-behind)"
 
 reset_fixture
 DOCKER_EXIT=2 DOCKER_OUT="something else broke" run
 ok "other failure fails" "$RC" "1"
 has "other failure points at the output" "$OUT" "see the build output above"
+case "$OUT" in *"(cause:"*) echo "  FAIL  other failure carries no cause tag"; fail=$((fail+1)) ;; *) echo "  PASS  other failure carries no cause tag"; pass=$((pass+1)) ;; esac
 
 # `n env up` option parsing, run as a script. An accepted option gets as far as
 # the missing compose file; a rejected one stops at "Unknown option".
