@@ -197,7 +197,8 @@ cmd_stop() { # rid packet reason...
   fi
   packet="$(require_packet "$rid" "$packet" "## Why it stopped" "## Friction")" || exit 1
   if [ -n "$later" ]; then
-    echo "Linear left alone: $later is a later run of $(lg get "$rid" .issue) and holds its claim now"
+    lg history "$rid" release restore-skipped "later run $later"
+    echo "Linear left alone: $later is a later run of $(lg get "$rid" .issue); whatever it set is its own to restore"
   else
     release_claim "$rid"
   fi

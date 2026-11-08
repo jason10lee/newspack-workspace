@@ -224,7 +224,7 @@ Stop with findings instead of guessing. The stages above name the cases: a no-go
 
 1. If `forge-run state` shows `FRESH_TEST_IN_PROGRESS=true`, restore the saved site first, as in Stage 0.
 2. Write `$RUN_DIR/packet.md` with the delivery packet's headings, plus `## Why it stopped` after the title: the stage, the reason, and what a person would need to do next. Always include `## Friction`, since friction is most often what stopped a run.
-3. Run `bash $T/tools/forge/bin/forge-run stop $RID $RUN_DIR/packet.md <the reason in a few words>`. It restores the Linear fields the run set, where they still hold the values it set, and records the stop.
+3. Run `bash $T/tools/forge/bin/forge-run stop $RID $RUN_DIR/packet.md <the reason in a few words>`. It restores the Linear fields the run set, where they still hold the values it set, and records the stop. If it prints `Linear left alone`, a later run of the issue exists and the restore was skipped; that line goes in your final message as it stands.
 4. End the session: `stop` has notified the operator.
 
 ## Security stop
