@@ -542,8 +542,9 @@ cmd_pass() { # rid role (--applied TEXT | --declined TEXT)... | --none
   echo "recorded a $role pass for $rid"
 }
 
-# The passes of the current delivery, body by body. Exits 3 when a body has no
-# pass, or when its file no longer holds the text its last pass read.
+# The passes of the current delivery, body by body. Exits 3 when a body's file
+# no longer matches its prepare record, when it has no pass, or when it no
+# longer holds the text its last pass read.
 cmd_passes() { # rid
   local rid="${1:?usage: forge passes <run id>}" at role path sha last rc=0
   require_forge_run "$rid"
