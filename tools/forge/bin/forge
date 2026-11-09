@@ -495,7 +495,88 @@ EOF
   printf 'BATCH=%s\nENTRIES=%s\n' "$plan" "$n"
 }
 
-cmd="${1:?usage: forge launch|next|check|status|rework|retire|batch ...}"; shift
+# ledger.sh get takes no jq arguments; these reads need some, so they go to the
+# file directly, as get does.
+ledger_jq() { # rid jq-args...
+  local rid="$1"; shift
+  jq -r "$@" "$(bash "$FORGE_LEDGER" path "$rid")"
+}
+
+# A humanize pass over one body, as the dispatcher decided its findings. Step 3
+# of publishing reports from these rows rather than from memory, which a
+# compaction can cut short. Each row keeps the digest of the text the pass read,
+# so a body edited after its last pass shows as unreviewed.
+cmd_pass() { # rid role (--applied TEXT | --declined TEXT)... | --none
+  local rid="${1:?usage: forge pass <run id> <role> [--applied TEXT]... [--declined TEXT]... | --none}"
+  local role="${2:?usage: forge pass <run id> <role> [--applied TEXT]... [--declined TEXT]... | --none}"
+  local applied='[]' declined='[]' none="" path at
+  shift 2
+  require_forge_run "$rid"
+  case "$role" in body|summary|closeout) ;; *) die "unknown role $role (body, summary or closeout)" ;; esac
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --applied) applied="$(jq -c --arg x "${2:?--applied needs a finding}" '. + [$x]' <<<"$applied")"; shift 2 ;;
+      --declined) declined="$(jq -c --arg x "${2:?--declined needs a finding and its reason}" '. + [$x]' <<<"$declined")"; shift 2 ;;
+      --none) none=1; shift ;;
+      *) die "unknown option $1" ;;
+    esac
+  done
+  if [ -n "$none" ]; then
+    [ "$applied$declined" = '[][]' ] || die "--none means the pass found nothing; drop it or the findings"
+  else
+    [ "$applied$declined" != '[][]' ] || die "give the pass's findings with --applied and --declined, or --none if it found nothing"
+  fi
+  [ "$(bash "$FORGE_LEDGER" get "$rid" '.delivery.kind // ""')" = delivered ] \
+    || die "$rid has not delivered; passes are recorded only while publishing"
+  at="$(bash "$FORGE_LEDGER" get "$rid" '.delivery.at')"
+  path="$(ledger_jq "$rid" --arg r "$role" '[(.prepared.files // [])[] | select(.role == $r) | .path][0] // ""')"
+  [ -n "$path" ] || die "the prepare record has no $role file"
+  [ -f "$path" ] || die "$path is missing"
+  # The batch publishes only what pr.sh prepare recorded, so a pass over any
+  # other text would report a change the batch does not carry.
+  [ "$(secure_digest "$path")" = "$(ledger_jq "$rid" --arg r "$role" '[(.prepared.files // [])[] | select(.role == $r) | .sha256][0] // ""')" ] \
+    || die "$path changed since pr.sh prepare; run it again before recording a pass"
+  bash "$FORGE_LEDGER" set "$rid" '.humanize_passes = ((.humanize_passes // []) + [{role: $r, at: $t, delivery_at: $d, sha256: $s, applied: $a, declined: $x}])' \
+    --arg r "$role" --arg t "$(now_utc)" --arg d "$at" --arg s "$(secure_digest "$path")" \
+    --argjson a "$applied" --argjson x "$declined"
+  echo "recorded a $role pass for $rid"
+}
+
+# The passes of the current delivery, body by body. Exits 3 when a body's file
+# no longer matches its prepare record, when it has no pass, or when it no
+# longer holds the text its last pass read.
+cmd_passes() { # rid
+  local rid="${1:?usage: forge passes <run id>}" at role path sha last rc=0
+  require_forge_run "$rid"
+  at="$(bash "$FORGE_LEDGER" get "$rid" '.delivery.at // ""')"
+  while IFS="$(printf '\t')" read -r role path sha; do
+    [ -n "$role" ] || continue
+    ledger_jq "$rid" --arg r "$role" --arg d "$at" '
+      [(.humanize_passes // [])[] | select(.role == $r and .delivery_at == $d)] | to_entries[]
+      | "  pass \(.key + 1) at \(.value.at)",
+        (if (.value.applied | length) + (.value.declined | length) == 0 then "    no findings" else empty end),
+        (.value.applied[] | "    applied: \(.)"),
+        (.value.declined[] | "    declined: \(.)")' > "$RUNS_DIR/$rid/.passes"
+    last="$(ledger_jq "$rid" --arg r "$role" --arg d "$at" \
+      '[(.humanize_passes // [])[] | select(.role == $r and .delivery_at == $d)] | last | .sha256 // ""')"
+    if [ ! -f "$path" ] || [ "$(secure_digest "$path")" != "$sha" ]; then
+      echo "$role: changed since pr.sh prepare"; rc=3
+    elif [ -z "$last" ]; then
+      echo "$role: no pass"; rc=3
+    elif [ ! -f "$path" ] || [ "$(secure_digest "$path")" != "$last" ]; then
+      echo "$role: changed since its last pass"; rc=3
+    else
+      echo "$role: covered by its last pass"
+    fi
+    cat "$RUNS_DIR/$rid/.passes"
+  done <<EOF
+$(bash "$FORGE_LEDGER" get "$rid" '(.prepared.files // [])[] | [.role // "-", .path, .sha256] | @tsv')
+EOF
+  rm -f "$RUNS_DIR/$rid/.passes"
+  return "$rc"
+}
+
+cmd="${1:?usage: forge launch|next|check|status|rework|retire|batch|pass|passes ...}"; shift
 case "$cmd" in
   launch) cmd_launch "$@" ;;
   next) cmd_next ;;
@@ -504,5 +585,7 @@ case "$cmd" in
   rework) cmd_rework "$@" ;;
   retire) cmd_retire "$@" ;;
   batch) cmd_batch "$@" ;;
+  pass) cmd_pass "$@" ;;
+  passes) cmd_passes "$@" ;;
   *) die "unknown command: $cmd" ;;
 esac

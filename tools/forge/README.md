@@ -49,6 +49,14 @@ The dispatcher session runs these from the root checkout, following the
   since, or when the issue now has a PR or the Security label. The
   dispatcher previews it with `batch-approval` and runs it only after the
   operator approves.
+- `forge pass <run> <role> [--applied <finding>]... [--declined <finding>]...`
+  records one humanize pass over a body (`body`, `summary` or `closeout`) and
+  what the dispatcher did with its findings; `--none` records a pass that
+  found nothing. Each row keeps the delivery it belongs to and the digest of
+  the text the pass read.
+- `forge passes <run>` lists the current delivery's passes body by body and
+  exits 3 when a body has no pass or changed after its last one. Publish step 3
+  reports from it, so the report does not depend on the dispatcher's memory.
 
 ## Run sessions
 
