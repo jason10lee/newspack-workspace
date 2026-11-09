@@ -66,6 +66,12 @@ assert_contains "$(cat "$DIS")" "STALE-MARKED" "the dispatcher skill explains a 
 pub="$(sed -n '/^## Publish/,$p' "$DIS")"
 assert_contains "$pub" "forge retire <RID>" "publishing ends by retiring the run"
 assert_eq 0 "$(grep -c 'once the PR merges or closes' "$DIS")" "and no longer waits for the PR to merge"
+# Retiring drops the busy guard; until Linear shows the PR, a relaunch could
+# start a second run on the issue.
+i0="$(grep -n 'intake.sh check <ISSUE>' <<<"$pub" | head -1 | cut -d: -f1)"
+r0="$(grep -n 'forge retire <RID>' <<<"$pub" | head -1 | cut -d: -f1)"
+assert_eq yes "$([ -n "$i0" ] && [ -n "$r0" ] && [ "$i0" -le "$r0" ] && grep -q 'intake.sh check <ISSUE>.*forge retire <RID>' <<<"$pub" && echo yes || echo no)" "it checks that Linear shows the PR before retiring"
+assert_contains "$pub" "every call in the batch has succeeded" "and retires only after the whole batch succeeded"
 r0="$(first_line "$RUN" "forge-run claim \$RID")"; r1="$(first_line "$RUN" "If it printed \`FRESH_TEST_IN_PROGRESS=true\`")"
 assert_eq yes "$([ -n "$r0" ] && [ -n "$r1" ] && [ "$r0" -lt "$r1" ] && echo yes || echo no)" "Stage 0 claims before it restores an interrupted fresh test"
 
