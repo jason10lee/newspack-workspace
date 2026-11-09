@@ -183,9 +183,10 @@ branch_root_mounted() {
 # The pnpm the root was installed with, from its packageManager field. Run from a
 # worktree, corepack would follow the branch's field instead, and a branch that
 # changes it would fetch another pnpm to run against the root's read-only
-# install. Naming the version to corepack is only half of it: pnpm 10 switches
-# itself to the nearest packageManager version unless
-# manage-package-manager-versions is off, so the branch builds turn that off.
+# install. A pnpm that corepack launched never switches itself to another
+# packageManager version, so naming the root's here is enough. The branch builds
+# also turn off manage-package-manager-versions, which only matters for a pnpm
+# installed some other way.
 root_pnpm_spec() {
     sed -n 's/.*"packageManager"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$NABSPATH/package.json" 2>/dev/null | head -n1
 }

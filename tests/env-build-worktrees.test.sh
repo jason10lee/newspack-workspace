@@ -141,7 +141,6 @@ has "unit builds from its branch root" "$(cat "$DOCKER_LOG")" "cd /newspack-work
 has "unit builds with the branch's NODE_PATH" "$(cat "$DOCKER_LOG")" "NODE_PATH=/newspack-worktrees/feat/node_modules/.pnpm/node_modules"
 ok "package build keeps the root's pnpm" "$(grep './packages/\*' "$DOCKER_LOG" | grep -c 'npm_config_manage_package_manager_versions=false')" "2"
 ok "unit builds keep the root's pnpm" "$(grep "filter '@automattic/np-popups-fixture'" "$DOCKER_LOG" | grep -c 'npm_config_manage_package_manager_versions=false')" "1"
-ok "the old path is left alone" "$(grep 'cd /newspack-monorepo' "$DOCKER_LOG" | grep -c 'manage_package_manager' || true)" "0"
 ok "no unit builds from the root checkout" "$(grep -c 'cd /newspack-monorepo' "$DOCKER_LOG")" "0"
 ok "root package node_modules copied in" "$([ -f "$W/worktrees/feat/packages/components/node_modules/x" ] && echo y)" "y"
 ok "a package's own node_modules is kept" "$([ -f "$W/worktrees/feat-b/packages/components/node_modules/keep" ] && [ ! -e "$W/worktrees/feat-b/packages/components/node_modules/x" ] && echo y)" "y"
@@ -170,6 +169,12 @@ reset_branch_fixture
 printf '{\n  "name": "newspack-workspace"\n}\n' > "$W/package.json"
 run
 has "plain pnpm without a root pin" "$(cat "$DOCKER_LOG")" "cd /newspack-worktrees/feat && pnpm --filter './packages/*'"
+
+# An env without branch volumes keeps today's build command.
+reset_fixture
+run
+ok "old path: units still build from the root checkout" "$([ "$(grep -c 'cd /newspack-monorepo' "$DOCKER_LOG")" -gt 0 ] && echo y)" "y"
+ok "old path: no pnpm setting added" "$(grep -c 'manage_package_manager' "$DOCKER_LOG" || true)" "0"
 
 # `n env up` option parsing, run as a script. An accepted option gets as far as
 # the missing compose file; a rejected one stops at "Unknown option".
