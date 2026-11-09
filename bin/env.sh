@@ -183,7 +183,9 @@ branch_root_mounted() {
 # The pnpm the root was installed with, from its packageManager field. Run from a
 # worktree, corepack would follow the branch's field instead, and a branch that
 # changes it would fetch another pnpm to run against the root's read-only
-# install.
+# install. Naming the version to corepack is only half of it: pnpm 10 switches
+# itself to the nearest packageManager version unless
+# manage-package-manager-versions is off, so the branch builds turn that off.
 root_pnpm_spec() {
     sed -n 's/.*"packageManager"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$NABSPATH/package.json" 2>/dev/null | head -n1
 }
@@ -291,7 +293,8 @@ build_env_worktrees() {
             fi
             echo "Building $repo in place (--filter $pkg)..."
             log=$(mktemp)
-            docker exec -e NODE_PATH="$root/node_modules/.pnpm/node_modules" "$container" \
+            docker exec -e NODE_PATH="$root/node_modules/.pnpm/node_modules" \
+                -e npm_config_manage_package_manager_versions=false "$container" \
                 bash -c "cd $root && $pnpm_cmd --filter '$pkg' run --if-present build" 2>&1 | tee "$log"
         else
             mode=""
@@ -331,7 +334,8 @@ build_branch_packages() {
     done
     echo "Building workspace packages for $safe_branch..."
     log=$(mktemp)
-    docker exec -e NODE_PATH="$root/node_modules/.pnpm/node_modules" "$container" \
+    docker exec -e NODE_PATH="$root/node_modules/.pnpm/node_modules" \
+        -e npm_config_manage_package_manager_versions=false "$container" \
         bash -c "cd $root && $pnpm_cmd --filter './packages/*' run --if-present build" 2>&1 | tee "$log"
     rc=${PIPESTATUS[0]}
     if [[ "$rc" -ne 0 ]] || grep -Eq "export '[^']*' \(imported as '[^']*'\) was not found in" "$log"; then
