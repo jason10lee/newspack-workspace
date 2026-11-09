@@ -191,10 +191,16 @@ root_pnpm_spec() {
 # Name the likely cause of a failed worktree build from its log. The trailing
 # "(cause: …)" tag is what scripts match, so the wording around it can change;
 # a failure no tag names gets none, and callers treat it as unknown.
+#
+# Pass "branch" as the second argument for a build run from the branch's own
+# root: there a missing workspace export is the branch's, not a sign that the
+# root checkout is behind.
 build_failure_hint() {
-    local log="$1"
+    local log="$1" mode="${2:-}"
     if grep -q "Module not found: Error: Can't resolve" "$log"; then
         echo "the branch imports a module the root has not installed; run an install deliberately (cause: missing-module)"
+    elif grep -Eq "export '[^']*' \(imported as '[^']*'\) was not found in" "$log" && [[ "$mode" == branch ]]; then
+        echo "the branch's own workspace packages lack an export a unit imports (cause: branch-export)"
     elif grep -Eq "export '[^']*' \(imported as '[^']*'\) was not found in" "$log"; then
         echo "the root checkout is behind the branch (a workspace package lacks an export it imports); update the root or rebase (cause: root-behind)"
     else
@@ -246,10 +252,17 @@ build_env_worktrees() {
                     cp -a "$src/$dir" "$dst/$dir"
                 else
                     cp -al "$src/$dir" "$dst/$dir" 2>/dev/null || cp -a "$src/$dir" "$dst/$dir"
+                    # A build from the branch's root writes its caches here. One
+                    # rewritten in place would write through a hard link into the
+                    # root's copy, so the branch starts a cache of its own.
+                    if [[ "$kind" == "monorepo" && "$dir" == node_modules ]] \
+                        && branch_root_mounted "$compose_file" "$safe_branch"; then
+                        rm -rf "$dst/node_modules/.cache"
+                    fi
                 fi
             fi
         done
-        [[ "$kind" == "monorepo" ]] && units+=("$repo|$dst")
+        [[ "$kind" == "monorepo" ]] && units+=("$repo|$dst|$safe_branch")
     done < <(each_worktree_in_env "$compose_file")
 
     [[ ${#units[@]} -gt 0 ]] || return 0
@@ -259,30 +272,74 @@ build_env_worktrees() {
         return 1
     }
 
-    local unit pkg log rc
+    local unit pkg log rc root mode pnpm_cmd spec built=" "
+    spec=$(root_pnpm_spec)
+    pnpm_cmd="pnpm"
+    [[ -n "$spec" ]] && pnpm_cmd="corepack $spec"
     for unit in "${units[@]}"; do
-        repo="${unit%%|*}"
-        dst="${unit#*|}"
+        IFS='|' read -r repo dst safe_branch <<< "$unit"
         # The pnpm filter needs the package's name, which often differs from
         # its directory (newspack-plugin is "newspack").
         pkg=$(sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$dst/package.json" 2>/dev/null | head -n1)
         [[ -n "$pkg" ]] || pkg="$repo"
-        echo "Building $repo in place (--filter $pkg)..."
-        log=$(mktemp)
-        # --if-present: a unit with no build script (super-cool-ad-inserter)
-        # has nothing to compile, so it counts as built rather than failing.
-        docker exec -e NODE_PATH=/newspack-monorepo/node_modules/.pnpm/node_modules "$container" \
-            bash -c "cd /newspack-monorepo && pnpm --filter '$pkg' run --if-present build" 2>&1 | tee "$log"
+        if branch_root_mounted "$compose_file" "$safe_branch"; then
+            root="/newspack-worktrees/$safe_branch"
+            mode=branch
+            if [[ "$built" != *" $safe_branch "* ]]; then
+                build_branch_packages "$container" "$safe_branch" "$pnpm_cmd" || return 1
+                built+="$safe_branch "
+            fi
+            echo "Building $repo in place (--filter $pkg)..."
+            log=$(mktemp)
+            docker exec -e NODE_PATH="$root/node_modules/.pnpm/node_modules" "$container" \
+                bash -c "cd $root && $pnpm_cmd --filter '$pkg' run --if-present build" 2>&1 | tee "$log"
+        else
+            mode=""
+            echo "Building $repo in place (--filter $pkg)..."
+            log=$(mktemp)
+            # --if-present: a unit with no build script (super-cool-ad-inserter)
+            # has nothing to compile, so it counts as built rather than failing.
+            docker exec -e NODE_PATH=/newspack-monorepo/node_modules/.pnpm/node_modules "$container" \
+                bash -c "cd /newspack-monorepo && pnpm --filter '$pkg' run --if-present build" 2>&1 | tee "$log"
+        fi
         rc=${PIPESTATUS[0]}
         # webpack reports a missing workspace export as a warning and exits 0,
         # but the bundle then imports undefined at runtime.
         if [[ "$rc" -ne 0 ]] || grep -Eq "export '[^']*' \(imported as '[^']*'\) was not found in" "$log"; then
-            echo "Error: build failed for $repo: $(build_failure_hint "$log")"
+            echo "Error: build failed for $repo: $(build_failure_hint "$log" "$mode")"
             rm -f "$log"
             return 1
         fi
         rm -f "$log"
     done
+}
+
+# Build a branch's workspace packages from its own root, once, before its units.
+# Plugins import newspack-components' build output, so the branch's source alone
+# would leave them on whatever dist the worktree holds. A package missing its
+# node_modules gets the root's, whose links are relative and so resolve through
+# the read-only overlay.
+build_branch_packages() {
+    local container="$1" safe_branch="$2" pnpm_cmd="$3"
+    local wt="$NABSPATH/worktrees/$safe_branch" root="/newspack-worktrees/$2" d p log rc
+    for d in "$NABSPATH"/packages/*/node_modules; do
+        [[ -d "$d" ]] || continue
+        p=$(basename "$(dirname "$d")")
+        if [[ -d "$wt/packages/$p" && ! -e "$wt/packages/$p/node_modules" ]]; then
+            cp -a "$d" "$wt/packages/$p/node_modules"
+        fi
+    done
+    echo "Building workspace packages for $safe_branch..."
+    log=$(mktemp)
+    docker exec -e NODE_PATH="$root/node_modules/.pnpm/node_modules" "$container" \
+        bash -c "cd $root && $pnpm_cmd --filter './packages/*' run --if-present build" 2>&1 | tee "$log"
+    rc=${PIPESTATUS[0]}
+    if [[ "$rc" -ne 0 ]] || grep -Eq "export '[^']*' \(imported as '[^']*'\) was not found in" "$log"; then
+        echo "Error: build failed for workspace packages on $safe_branch: $(build_failure_hint "$log" branch)"
+        rm -f "$log"
+        return 1
+    fi
+    rm -f "$log"
 }
 
 # Only dispatch subcommands when executed directly. When sourced (e.g. by the
