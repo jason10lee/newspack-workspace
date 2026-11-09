@@ -160,6 +160,34 @@ reject_extra_args() {
     fi
 }
 
+# The two compose volumes that give a monorepo worktree's branch its own root
+# in the container. A unit's links to the workspace packages are relative
+# (../../../packages/*), so building from the whole worktree resolves them to
+# the branch's packages/ rather than the root checkout's. The root's install is
+# laid over the worktree's own node_modules: it was built in the container,
+# while a worktree installed on the host carries host binaries. It is read-only
+# so that no build can rewrite what every other env and the host share.
+branch_root_volumes() {
+    local safe_branch="$1"
+    echo "      - ./worktrees/$safe_branch:/newspack-worktrees/$safe_branch"
+    echo "      - ./node_modules:/newspack-worktrees/$safe_branch/node_modules:ro"
+}
+
+# True when an env's compose file carries a branch's volumes. An env created
+# before they existed has none, and its units build the way they always have.
+branch_root_mounted() {
+    local compose_file="$1" safe_branch="$2"
+    grep -Fqx -- "      - ./worktrees/$safe_branch:/newspack-worktrees/$safe_branch" "$compose_file" 2>/dev/null
+}
+
+# The pnpm the root was installed with, from its packageManager field. Run from a
+# worktree, corepack would follow the branch's field instead, and a branch that
+# changes it would fetch another pnpm to run against the root's read-only
+# install.
+root_pnpm_spec() {
+    sed -n 's/.*"packageManager"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$NABSPATH/package.json" 2>/dev/null | head -n1
+}
+
 # Name the likely cause of a failed worktree build from its log. The trailing
 # "(cause: …)" tag is what scripts match, so the wording around it can change;
 # a failure no tag names gets none, and callers treat it as unknown.
@@ -303,6 +331,9 @@ case $1 in
         # --worktree/--domain can't leave an orphaned worktree behind. Each entry
         # is "mono|<branch>|<abs_dir>" or "repos|<repo>|<branch>|<abs_dir>".
         wt_specs=()
+        # Branches whose root volumes are already in worktree_volumes; space
+        # delimited, since /bin/bash 3.2 has no associative arrays.
+        branch_roots=" "
         domain=""
         auto_up=false
         isolated_db=false
@@ -342,6 +373,10 @@ case $1 in
                         # work, so builds land in the worktree's dist and are served immediately.
                         worktree_volumes+="      - $worktree_dir:$wt_container_path"$'\n'
                         worktree_volumes+="      - $worktree_dir:/newspack-monorepo/$wt_host_path"$'\n'
+                        if [[ "$branch_roots" != *" $safe_branch "* ]]; then
+                            worktree_volumes+="$(branch_root_volumes "$safe_branch")"$'\n'
+                            branch_roots+="$safe_branch "
+                        fi
                     else
                         # ---- Standalone repos/ checkout: worktree of its own git repo. ----
                         repos_host_path=$(get_standalone_repo_host_path "$wt_repo")
