@@ -173,7 +173,10 @@ env up step builds the run's unit from the branch inside the env container,
 without installing anything, so a branch whose JS build needs a package the
 workspace root has not installed fails provisioning. The unit builds against its
 own branch's workspace packages (`packages/*`), compiled from the branch first,
-so a fix that changes a package together with the unit is tested as one. When
+so a fix that changes a package together with the unit is built as one. Only
+this env build reads the branch's packages: `n build` and `n test-js` still
+resolve them from the root checkout, so a test of such a change reads the
+root's copy. When
 webpack reports a failure it can name (a module it can't resolve, or a
 workspace-package export the unit imports and the branch's packages lack), the
 message names that cause; any other build failure points at the build output.

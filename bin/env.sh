@@ -213,12 +213,16 @@ build_failure_hint() {
 # Give each worktree in an env the branch's own built assets.
 #
 # The root's built dirs are copied in first, as upstream always has. A monorepo
-# unit then builds in place in the container, where the env mounts it into
-# /newspack-monorepo. It never installs: /newspack-monorepo is the root
-# checkout, so an install there rewrites the lockfile and node_modules that
-# every other env and the host share. The build therefore resolves its
-# dependencies from the root's node_modules, and fails rather than serving a
-# bundle that imports something the root lacks.
+# unit then builds in place in the container. It never installs: the root
+# checkout's lockfile and node_modules are shared by every other env and the
+# host, so the build resolves its dependencies from them and fails rather than
+# serving a bundle that imports something the root lacks.
+#
+# Where the env carries its branch's volumes (branch_root_volumes), the unit
+# builds from the whole worktree at /newspack-worktrees/<branch>, after that
+# branch's packages/*, so it imports the branch's workspace packages. An env
+# created without them builds from /newspack-monorepo, where the unit is mounted
+# into the root checkout and imports the root's packages.
 #
 # NODE_PATH is set because a worktree that pnpm installed on the host has .bin
 # shims with host paths baked into their NODE_PATH, and undeclared imports
