@@ -532,6 +532,10 @@ cmd_pass() { # rid role (--applied TEXT | --declined TEXT)... | --none
   path="$(ledger_jq "$rid" --arg r "$role" '[(.prepared.files // [])[] | select(.role == $r) | .path][0] // ""')"
   [ -n "$path" ] || die "the prepare record has no $role file"
   [ -f "$path" ] || die "$path is missing"
+  # The batch publishes only what pr.sh prepare recorded, so a pass over any
+  # other text would report a change the batch does not carry.
+  [ "$(secure_digest "$path")" = "$(ledger_jq "$rid" --arg r "$role" '[(.prepared.files // [])[] | select(.role == $r) | .sha256][0] // ""')" ] \
+    || die "$path changed since pr.sh prepare; run it again before recording a pass"
   bash "$FORGE_LEDGER" set "$rid" '.humanize_passes = ((.humanize_passes // []) + [{role: $r, at: $t, delivery_at: $d, sha256: $s, applied: $a, declined: $x}])' \
     --arg r "$role" --arg t "$(now_utc)" --arg d "$at" --arg s "$(secure_digest "$path")" \
     --argjson a "$applied" --argjson x "$declined"
@@ -541,10 +545,10 @@ cmd_pass() { # rid role (--applied TEXT | --declined TEXT)... | --none
 # The passes of the current delivery, body by body. Exits 3 when a body has no
 # pass, or when its file no longer holds the text its last pass read.
 cmd_passes() { # rid
-  local rid="${1:?usage: forge passes <run id>}" at role path last rc=0
+  local rid="${1:?usage: forge passes <run id>}" at role path sha last rc=0
   require_forge_run "$rid"
   at="$(bash "$FORGE_LEDGER" get "$rid" '.delivery.at // ""')"
-  while IFS="$(printf '\t')" read -r role path; do
+  while IFS="$(printf '\t')" read -r role path sha; do
     [ -n "$role" ] || continue
     ledger_jq "$rid" --arg r "$role" --arg d "$at" '
       [(.humanize_passes // [])[] | select(.role == $r and .delivery_at == $d)] | to_entries[]
@@ -554,7 +558,9 @@ cmd_passes() { # rid
         (.value.declined[] | "    declined: \(.)")' > "$RUNS_DIR/$rid/.passes"
     last="$(ledger_jq "$rid" --arg r "$role" --arg d "$at" \
       '[(.humanize_passes // [])[] | select(.role == $r and .delivery_at == $d)] | last | .sha256 // ""')"
-    if [ -z "$last" ]; then
+    if [ ! -f "$path" ] || [ "$(secure_digest "$path")" != "$sha" ]; then
+      echo "$role: changed since pr.sh prepare"; rc=3
+    elif [ -z "$last" ]; then
       echo "$role: no pass"; rc=3
     elif [ ! -f "$path" ] || [ "$(secure_digest "$path")" != "$last" ]; then
       echo "$role: changed since its last pass"; rc=3
@@ -563,7 +569,7 @@ cmd_passes() { # rid
     fi
     cat "$RUNS_DIR/$rid/.passes"
   done <<EOF
-$(bash "$FORGE_LEDGER" get "$rid" '(.prepared.files // [])[] | [.role // "-", .path] | @tsv')
+$(bash "$FORGE_LEDGER" get "$rid" '(.prepared.files // [])[] | [.role // "-", .path, .sha256] | @tsv')
 EOF
   rm -f "$RUNS_DIR/$rid/.passes"
   return "$rc"

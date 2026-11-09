@@ -59,10 +59,15 @@ assert_eq 0 "$rc" "a fresh pass over the new text covers it"
 assert_contains "$out" "pass 2" "and both passes are listed"
 assert_contains "$out" "no findings" "including one that found nothing"
 
-# A pass reads the file now, not the prepare record: an edit without a fresh
-# prepare is caught too.
+# A body edited without a fresh prepare is not what the batch would publish, so
+# a pass over it would report a change the batch lacks.
 printf 'Edited, not prepared.\n' > "$D/review-summary.md"
-fps forge-p >/dev/null; assert_eq 3 $? "passes fails when a body's file no longer matches its prepare record"
+out="$(fp forge-p summary --none)"; rc=$?
+assert_eq 1 "$rc" "pass refuses a body that no longer matches its prepare record"
+assert_contains "$out" "pr.sh prepare" "and says to prepare it again"
+out="$(fps forge-p)"; rc=$?
+assert_eq 3 "$rc" "passes fails when a body no longer matches its prepare record"
+assert_contains "$out" "summary: changed since pr.sh prepare" "and says which"
 printf 'Summary.\n' > "$D/review-summary.md"
 
 # A rework ends the delivery; passes from it no longer count.
