@@ -61,6 +61,11 @@ done
 assert_contains "$(cat "$RUN")" "forge-run notify" "the run skill says how to reach the operator while waiting"
 assert_contains "$(cat "$RUN")" "re-read every section of the packet" "a rework re-reads its packet before delivering again"
 assert_contains "$(cat "$DIS")" "STALE-MARKED" "the dispatcher skill explains a stale mark"
+# A published run can't be reworked, so it gives up its pool directory at once
+# rather than holding it until the PR merges.
+pub="$(sed -n '/^## Publish/,$p' "$DIS")"
+assert_contains "$pub" "forge retire <RID>" "publishing ends by retiring the run"
+assert_eq 0 "$(grep -c 'once the PR merges or closes' "$DIS")" "and no longer waits for the PR to merge"
 r0="$(first_line "$RUN" "forge-run claim \$RID")"; r1="$(first_line "$RUN" "If it printed \`FRESH_TEST_IN_PROGRESS=true\`")"
 assert_eq yes "$([ -n "$r0" ] && [ -n "$r1" ] && [ "$r0" -lt "$r1" ] && echo yes || echo no)" "Stage 0 claims before it restores an interrupted fresh test"
 
