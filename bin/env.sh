@@ -160,13 +160,50 @@ reject_extra_args() {
     fi
 }
 
+# The two compose volumes that give a monorepo worktree's branch its own root
+# in the container. A unit's links to the workspace packages are relative
+# (../../../packages/*), so building from the whole worktree resolves them to
+# the branch's packages/ rather than the root checkout's. The root's install is
+# laid over the worktree's own node_modules: it was built in the container,
+# while a worktree installed on the host carries host binaries. It is read-only
+# so that no build can rewrite what every other env and the host share.
+branch_root_volumes() {
+    local safe_branch="$1"
+    echo "      - ./worktrees/$safe_branch:/newspack-worktrees/$safe_branch"
+    echo "      - ./node_modules:/newspack-worktrees/$safe_branch/node_modules:ro"
+}
+
+# True when an env's compose file carries a branch's volumes. An env created
+# before they existed has none, and its units build the way they always have.
+branch_root_mounted() {
+    local compose_file="$1" safe_branch="$2"
+    grep -Fqx -- "      - ./worktrees/$safe_branch:/newspack-worktrees/$safe_branch" "$compose_file" 2>/dev/null
+}
+
+# The pnpm the root was installed with, from its packageManager field. Run from a
+# worktree, corepack would follow the branch's field instead, and a branch that
+# changes it would fetch another pnpm to run against the root's read-only
+# install. A pnpm that corepack launched never switches itself to another
+# packageManager version, so naming the root's here is enough. The branch builds
+# also turn off manage-package-manager-versions, which only matters for a pnpm
+# installed some other way.
+root_pnpm_spec() {
+    sed -n 's/.*"packageManager"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$NABSPATH/package.json" 2>/dev/null | head -n1
+}
+
 # Name the likely cause of a failed worktree build from its log. The trailing
 # "(cause: …)" tag is what scripts match, so the wording around it can change;
 # a failure no tag names gets none, and callers treat it as unknown.
+#
+# Pass "branch" as the second argument for a build run from the branch's own
+# root: there a missing workspace export is the branch's, not a sign that the
+# root checkout is behind.
 build_failure_hint() {
-    local log="$1"
+    local log="$1" mode="${2:-}"
     if grep -q "Module not found: Error: Can't resolve" "$log"; then
         echo "the branch imports a module the root has not installed; run an install deliberately (cause: missing-module)"
+    elif grep -Eq "export '[^']*' \(imported as '[^']*'\) was not found in" "$log" && [[ "$mode" == branch ]]; then
+        echo "the branch's own workspace packages lack an export a unit imports (cause: branch-export)"
     elif grep -Eq "export '[^']*' \(imported as '[^']*'\) was not found in" "$log"; then
         echo "the root checkout is behind the branch (a workspace package lacks an export it imports); update the root or rebase (cause: root-behind)"
     else
@@ -177,12 +214,16 @@ build_failure_hint() {
 # Give each worktree in an env the branch's own built assets.
 #
 # The root's built dirs are copied in first, as upstream always has. A monorepo
-# unit then builds in place in the container, where the env mounts it into
-# /newspack-monorepo. It never installs: /newspack-monorepo is the root
-# checkout, so an install there rewrites the lockfile and node_modules that
-# every other env and the host share. The build therefore resolves its
-# dependencies from the root's node_modules, and fails rather than serving a
-# bundle that imports something the root lacks.
+# unit then builds in place in the container. It never installs: the root
+# checkout's lockfile and node_modules are shared by every other env and the
+# host, so the build resolves its dependencies from them and fails rather than
+# serving a bundle that imports something the root lacks.
+#
+# Where the env carries its branch's volumes (branch_root_volumes), the unit
+# builds from the whole worktree at /newspack-worktrees/<branch>, after that
+# branch's packages/*, so it imports the branch's workspace packages. An env
+# created without them builds from /newspack-monorepo, where the unit is mounted
+# into the root checkout and imports the root's packages.
 #
 # NODE_PATH is set because a worktree that pnpm installed on the host has .bin
 # shims with host paths baked into their NODE_PATH, and undeclared imports
@@ -218,10 +259,17 @@ build_env_worktrees() {
                     cp -a "$src/$dir" "$dst/$dir"
                 else
                     cp -al "$src/$dir" "$dst/$dir" 2>/dev/null || cp -a "$src/$dir" "$dst/$dir"
+                    # A build from the branch's root writes its caches here. One
+                    # rewritten in place would write through a hard link into the
+                    # root's copy, so the branch starts a cache of its own.
+                    if [[ "$kind" == "monorepo" && "$dir" == node_modules ]] \
+                        && branch_root_mounted "$compose_file" "$safe_branch"; then
+                        rm -rf "$dst/node_modules/.cache"
+                    fi
                 fi
             fi
         done
-        [[ "$kind" == "monorepo" ]] && units+=("$repo|$dst")
+        [[ "$kind" == "monorepo" ]] && units+=("$repo|$dst|$safe_branch")
     done < <(each_worktree_in_env "$compose_file")
 
     [[ ${#units[@]} -gt 0 ]] || return 0
@@ -231,30 +279,76 @@ build_env_worktrees() {
         return 1
     }
 
-    local unit pkg log rc
+    local unit pkg log rc root mode pnpm_cmd spec built=" "
+    spec=$(root_pnpm_spec)
+    pnpm_cmd="pnpm"
+    [[ -n "$spec" ]] && pnpm_cmd="corepack $spec"
     for unit in "${units[@]}"; do
-        repo="${unit%%|*}"
-        dst="${unit#*|}"
+        IFS='|' read -r repo dst safe_branch <<< "$unit"
         # The pnpm filter needs the package's name, which often differs from
         # its directory (newspack-plugin is "newspack").
         pkg=$(sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$dst/package.json" 2>/dev/null | head -n1)
         [[ -n "$pkg" ]] || pkg="$repo"
-        echo "Building $repo in place (--filter $pkg)..."
-        log=$(mktemp)
-        # --if-present: a unit with no build script (super-cool-ad-inserter)
-        # has nothing to compile, so it counts as built rather than failing.
-        docker exec -e NODE_PATH=/newspack-monorepo/node_modules/.pnpm/node_modules "$container" \
-            bash -c "cd /newspack-monorepo && pnpm --filter '$pkg' run --if-present build" 2>&1 | tee "$log"
+        if branch_root_mounted "$compose_file" "$safe_branch"; then
+            root="/newspack-worktrees/$safe_branch"
+            mode=branch
+            if [[ "$built" != *" $safe_branch "* ]]; then
+                build_branch_packages "$container" "$safe_branch" "$pnpm_cmd" || return 1
+                built+="$safe_branch "
+            fi
+            echo "Building $repo in place (--filter $pkg)..."
+            log=$(mktemp)
+            docker exec -e NODE_PATH="$root/node_modules/.pnpm/node_modules" \
+                -e npm_config_manage_package_manager_versions=false "$container" \
+                bash -c "cd $root && $pnpm_cmd --filter '$pkg' run --if-present build" 2>&1 | tee "$log"
+        else
+            mode=""
+            echo "Building $repo in place (--filter $pkg)..."
+            log=$(mktemp)
+            # --if-present: a unit with no build script (super-cool-ad-inserter)
+            # has nothing to compile, so it counts as built rather than failing.
+            docker exec -e NODE_PATH=/newspack-monorepo/node_modules/.pnpm/node_modules "$container" \
+                bash -c "cd /newspack-monorepo && pnpm --filter '$pkg' run --if-present build" 2>&1 | tee "$log"
+        fi
         rc=${PIPESTATUS[0]}
         # webpack reports a missing workspace export as a warning and exits 0,
         # but the bundle then imports undefined at runtime.
         if [[ "$rc" -ne 0 ]] || grep -Eq "export '[^']*' \(imported as '[^']*'\) was not found in" "$log"; then
-            echo "Error: build failed for $repo: $(build_failure_hint "$log")"
+            echo "Error: build failed for $repo: $(build_failure_hint "$log" "$mode")"
             rm -f "$log"
             return 1
         fi
         rm -f "$log"
     done
+}
+
+# Build a branch's workspace packages from its own root, once, before its units.
+# Plugins import newspack-components' build output, so the branch's source alone
+# would leave them on whatever dist the worktree holds. A package missing its
+# node_modules gets the root's, whose links are relative and so resolve through
+# the read-only overlay.
+build_branch_packages() {
+    local container="$1" safe_branch="$2" pnpm_cmd="$3"
+    local wt="$NABSPATH/worktrees/$safe_branch" root="/newspack-worktrees/$2" d p log rc
+    for d in "$NABSPATH"/packages/*/node_modules; do
+        [[ -d "$d" ]] || continue
+        p=$(basename "$(dirname "$d")")
+        if [[ -d "$wt/packages/$p" && ! -e "$wt/packages/$p/node_modules" ]]; then
+            cp -a "$d" "$wt/packages/$p/node_modules"
+        fi
+    done
+    echo "Building workspace packages for $safe_branch..."
+    log=$(mktemp)
+    docker exec -e NODE_PATH="$root/node_modules/.pnpm/node_modules" \
+        -e npm_config_manage_package_manager_versions=false "$container" \
+        bash -c "cd $root && $pnpm_cmd --filter './packages/*' run --if-present build" 2>&1 | tee "$log"
+    rc=${PIPESTATUS[0]}
+    if [[ "$rc" -ne 0 ]] || grep -Eq "export '[^']*' \(imported as '[^']*'\) was not found in" "$log"; then
+        echo "Error: build failed for workspace packages on $safe_branch: $(build_failure_hint "$log" branch)"
+        rm -f "$log"
+        return 1
+    fi
+    rm -f "$log"
 }
 
 # Only dispatch subcommands when executed directly. When sourced (e.g. by the
@@ -303,6 +397,9 @@ case $1 in
         # --worktree/--domain can't leave an orphaned worktree behind. Each entry
         # is "mono|<branch>|<abs_dir>" or "repos|<repo>|<branch>|<abs_dir>".
         wt_specs=()
+        # Branches whose root volumes are already in worktree_volumes; space
+        # delimited, since /bin/bash 3.2 has no associative arrays.
+        branch_roots=" "
         domain=""
         auto_up=false
         isolated_db=false
@@ -342,6 +439,10 @@ case $1 in
                         # work, so builds land in the worktree's dist and are served immediately.
                         worktree_volumes+="      - $worktree_dir:$wt_container_path"$'\n'
                         worktree_volumes+="      - $worktree_dir:/newspack-monorepo/$wt_host_path"$'\n'
+                        if [[ "$branch_roots" != *" $safe_branch "* ]]; then
+                            worktree_volumes+="$(branch_root_volumes "$safe_branch")"$'\n'
+                            branch_roots+="$safe_branch "
+                        fi
                     else
                         # ---- Standalone repos/ checkout: worktree of its own git repo. ----
                         repos_host_path=$(get_standalone_repo_host_path "$wt_repo")

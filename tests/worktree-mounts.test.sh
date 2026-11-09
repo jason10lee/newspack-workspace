@@ -45,4 +45,22 @@ ok "resolve_unsanitized_branch falls back to safe form when dir absent" "$(resol
   cd "$FIX/worktrees/feat-foo" && git checkout -q -b other ) >/dev/null 2>&1
 ok "resolve_unsanitized_branch reports live (retargeted) branch" "$(resolve_unsanitized_branch feat-foo "")" "other"
 
+# Branch volumes: one whole-worktree mount and a read-only root install per
+# branch, which the build uses to resolve the branch's own packages/.
+ok "branch volumes: worktree mount" "$(branch_root_volumes feat-x | sed -n 1p)" "      - ./worktrees/feat-x:/newspack-worktrees/feat-x"
+ok "branch volumes: read-only root node_modules" "$(branch_root_volumes feat-x | sed -n 2p)" "      - ./node_modules:/newspack-worktrees/feat-x/node_modules:ro"
+ok "branch volumes: two lines" "$(branch_root_volumes feat-x | wc -l | tr -d ' ')" "2"
+C2="$FIX/c2.yml"; { cat "$C"; branch_root_volumes feat-x; } > "$C2"
+ok "branch mount detected" "$(branch_root_mounted "$C2" feat-x && echo y)" "y"
+ok "other branch not detected" "$(branch_root_mounted "$C2" feat-y || echo n)" "n"
+ok "a branch whose name prefixes another is not detected" "$(branch_root_mounted "$C2" feat || echo n)" "n"
+ok "unit mount alone is not a branch mount" "$(branch_root_mounted "$C" feat-x || echo n)" "n"
+ok "each_worktree_in_env ignores branch volumes" "$(each_worktree_in_env "$C2" | grep -c '|')" "2"
+mkdir -p "$FIX/p1" "$FIX/p2"; : > "$FIX/p1/n"; : > "$FIX/p2/n"
+printf '{\n  "name": "w",\n  "packageManager": "pnpm@10.33.0"\n}\n' > "$FIX/p1/package.json"
+printf '{\n  "name": "w"\n}\n' > "$FIX/p2/package.json"
+ok "root pnpm spec read" "$(NABSPATH="$FIX/p1" root_pnpm_spec)" "pnpm@10.33.0"
+ok "root pnpm spec absent" "$(NABSPATH="$FIX/p2" root_pnpm_spec)" ""
+ok "create arm adds branch volumes" "$(grep -c 'branch_root_volumes "\$safe_branch"' "$BIN/env.sh")" "1"
+
 echo ""; echo "RESULT: $pass passed, $fail failed"; [ "$fail" -eq 0 ]

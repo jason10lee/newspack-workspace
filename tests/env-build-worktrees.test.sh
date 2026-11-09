@@ -15,7 +15,10 @@ STUB="$FIX/stub"; mkdir -p "$STUB"
 cat > "$STUB/docker" <<'EOF'
 #!/bin/bash
 echo "$*" >> "$DOCKER_LOG"
-case "$*" in *"run --if-present build"*) printf '%s\n' "${DOCKER_OUT:-}"; exit "${DOCKER_EXIT:-0}" ;; esac
+case "$*" in
+    *"./packages/*"*) printf '%s\n' "${DOCKER_PKG_OUT:-}"; exit "${DOCKER_PKG_EXIT:-0}" ;;
+    *"run --if-present build"*) printf '%s\n' "${DOCKER_OUT:-}"; exit "${DOCKER_EXIT:-0}" ;;
+esac
 exit 0
 EOF
 chmod +x "$STUB/docker"
@@ -47,8 +50,32 @@ reset_fixture() {
       - ./worktrees-repos/newspack-manager/feat:/newspack-repos/plugins/newspack-manager
 EOF
     export DOCKER_LOG="$FIX/docker.log"; : > "$DOCKER_LOG"
-    export DOCKER_OUT="" DOCKER_EXIT=0
+    export DOCKER_OUT="" DOCKER_EXIT=0 DOCKER_PKG_OUT="" DOCKER_PKG_EXIT=0
 }
+
+# The same env with branch root volumes (Task 1's mounts) and a second branch,
+# feat-b, carrying newspack-blocks. The root has a package install, a cache in
+# a unit's node_modules, and a pnpm pin.
+reset_branch_fixture() {
+    reset_fixture
+    rm -rf "$W/packages" "$W/package.json"
+    mkdir -p "$W/plugins/newspack-blocks/node_modules" "$W/worktrees/feat-b/plugins/newspack-blocks"
+    : > "$W/plugins/newspack-blocks/node_modules/m"
+    printf '{\n  "name": "newspack-blocks"\n}\n' > "$W/worktrees/feat-b/plugins/newspack-blocks/package.json"
+    mkdir -p "$W/packages/components/node_modules" "$W/packages/colors"
+    : > "$W/packages/components/node_modules/x"
+    mkdir -p "$W/worktrees/feat/packages/components" "$W/worktrees/feat-b/packages/components/node_modules"
+    : > "$W/worktrees/feat-b/packages/components/node_modules/keep"
+    mkdir -p "$W/plugins/newspack-popups/node_modules/.cache"; : > "$W/plugins/newspack-popups/node_modules/.cache/c"
+    printf '{\n  "name": "newspack-workspace",\n  "packageManager": "pnpm@10.33.0"\n}\n' > "$W/package.json"
+    {
+        echo "      - ./worktrees/feat-b/plugins/newspack-blocks:/newspack-plugins/newspack-blocks"
+        echo "      - ./worktrees/feat-b/plugins/newspack-blocks:/newspack-monorepo/plugins/newspack-blocks"
+        branch_root_volumes feat
+        branch_root_volumes feat-b
+    } >> "$COMPOSE"
+}
+line_of() { grep -n -F -- "$1" "$DOCKER_LOG" | head -1 | cut -d: -f1; }
 
 run() { OUT=$(build_env_worktrees newspack_env_t "$COMPOSE" 2>&1); RC=$?; }
 builds() { grep -c 'run --if-present build' "$DOCKER_LOG"; }
@@ -100,6 +127,54 @@ DOCKER_EXIT=2 DOCKER_OUT="something else broke" run
 ok "other failure fails" "$RC" "1"
 has "other failure points at the output" "$OUT" "see the build output above"
 case "$OUT" in *"(cause:"*) echo "  FAIL  other failure carries no cause tag"; fail=$((fail+1)) ;; *) echo "  PASS  other failure carries no cause tag"; pass=$((pass+1)) ;; esac
+
+# Branch root volumes: each unit builds from its own branch's worktree, after
+# that branch's workspace packages, against the root's read-only install.
+reset_branch_fixture
+DOCKER_OUT=compiled-marker run
+ok "branch path: returns 0" "$RC" "0"
+ok "one package build per monorepo branch" "$(grep -c './packages/\*' "$DOCKER_LOG")" "2"
+has "packages build from the branch root with the root's pnpm" "$(cat "$DOCKER_LOG")" "cd /newspack-worktrees/feat-b && corepack pnpm@10.33.0 --filter './packages/*' run --if-present build"
+pkg_b=$(line_of "cd /newspack-worktrees/feat-b && corepack pnpm@10.33.0 --filter './packages/*'"); unit_b=$(line_of "--filter 'newspack-blocks'")
+ok "packages build before the branch's units" "$([ -n "$pkg_b" ] && [ -n "$unit_b" ] && [ "$pkg_b" -lt "$unit_b" ] && echo y)" "y"
+has "unit builds from its branch root" "$(cat "$DOCKER_LOG")" "cd /newspack-worktrees/feat && corepack pnpm@10.33.0 --filter '@automattic/np-popups-fixture' run --if-present build"
+has "unit builds with the branch's NODE_PATH" "$(cat "$DOCKER_LOG")" "NODE_PATH=/newspack-worktrees/feat/node_modules/.pnpm/node_modules"
+ok "package build keeps the root's pnpm" "$(grep './packages/\*' "$DOCKER_LOG" | grep -c 'npm_config_manage_package_manager_versions=false')" "2"
+ok "unit builds keep the root's pnpm" "$(grep "filter '@automattic/np-popups-fixture'" "$DOCKER_LOG" | grep -c 'npm_config_manage_package_manager_versions=false')" "1"
+ok "no unit builds from the root checkout" "$(grep -c 'cd /newspack-monorepo' "$DOCKER_LOG")" "0"
+ok "root package node_modules copied in" "$([ -f "$W/worktrees/feat/packages/components/node_modules/x" ] && echo y)" "y"
+ok "a package's own node_modules is kept" "$([ -f "$W/worktrees/feat-b/packages/components/node_modules/keep" ] && [ ! -e "$W/worktrees/feat-b/packages/components/node_modules/x" ] && echo y)" "y"
+ok "a package with no root node_modules gets none" "$([ -e "$W/worktrees/feat/packages/colors/node_modules" ] && echo y || echo n)" "n"
+ok "a hard-linked unit cache is left out" "$([ -e "$W/worktrees/feat/plugins/newspack-popups/node_modules/.cache" ] && echo y || echo n)" "n"
+ok "the root's cache is untouched" "$([ -f "$W/plugins/newspack-popups/node_modules/.cache/c" ] && echo y)" "y"
+ok "a standalone unit gets no package build" "$(grep -c 'newspack-manager' "$DOCKER_LOG")" "0"
+
+reset_branch_fixture
+DOCKER_EXIT=0 DOCKER_OUT="export 'x' (imported as 'x') was not found in 'newspack-components'" run
+ok "branch path: a missing export fails" "$RC" "1"
+has "and names the branch-export cause" "$OUT" "the branch's own workspace packages lack an export a unit imports (cause: branch-export)"
+
+reset_branch_fixture
+DOCKER_PKG_EXIT=1 DOCKER_PKG_OUT="something broke" run
+ok "a failed package build fails" "$RC" "1"
+has "and names the branch" "$OUT" "Error: build failed for workspace packages on feat:"
+ok "and builds no unit" "$(grep -c "filter '@automattic" "$DOCKER_LOG")" "0"
+
+reset_branch_fixture
+DOCKER_PKG_OUT="export 'y' (imported as 'y') was not found in 'newspack-colors'" run
+ok "a package build with a missing export fails" "$RC" "1"
+has "with the branch-export cause" "$OUT" "(cause: branch-export)"
+
+reset_branch_fixture
+printf '{\n  "name": "newspack-workspace"\n}\n' > "$W/package.json"
+run
+has "plain pnpm without a root pin" "$(cat "$DOCKER_LOG")" "cd /newspack-worktrees/feat && pnpm --filter './packages/*'"
+
+# An env without branch volumes keeps today's build command.
+reset_fixture
+run
+ok "old path: units still build from the root checkout" "$([ "$(grep -c 'cd /newspack-monorepo' "$DOCKER_LOG")" -gt 0 ] && echo y)" "y"
+ok "old path: no pnpm setting added" "$(grep -c 'manage_package_manager' "$DOCKER_LOG" || true)" "0"
 
 # `n env up` option parsing, run as a script. An accepted option gets as far as
 # the missing compose file; a rejected one stops at "Unknown option".

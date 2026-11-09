@@ -131,6 +131,13 @@ assert_eq 1 "$rc" "a root-behind build failure fails the create"
 assert_eq escalated "$(bash "$L" get run-rb '.terminal')" "a root-behind build failure escalates the run"
 
 # The tag, not the hint's wording, decides: a reworded hint still escalates.
+# A unit built from its branch's own root reports a missing export as the
+# branch's: nothing on the root side can fix it, so it escalates too.
+setup_run run-be NPPM-3018 nppm-3018-be
+: > "$N_LOG"; out="$(N_EXIT_UP=1 N_UP_OUT="Error: build failed for newspack-popups: x (cause: branch-export)" bash "$E" create run-be newspack-popups 2>&1)"; rc=$?
+assert_eq escalated "$(bash "$L" get run-be '.terminal')" "a branch-export build failure escalates the run"
+assert_contains "$(printf '%s\n' "$out" | grep 'ERROR:')" "the branch's own workspace packages lack an export a unit imports" "and names the cause"
+
 setup_run run-rw NPPM-3017 nppm-3017-rw
 : > "$N_LOG"; out="$(N_EXIT_UP=1 N_UP_OUT="Error: build failed for newspack-popups: some new wording (cause: root-behind)" bash "$E" create run-rw newspack-popups 2>&1)"; rc=$?
 assert_eq escalated "$(bash "$L" get run-rw '.terminal')" "a reworded hint with its cause tag still escalates"

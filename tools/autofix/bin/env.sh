@@ -75,9 +75,10 @@ case "$cmd" in
       # cause in our own words: the hint around the tag ends in its remedy,
       # which is the very thing a run must not do.
       cause=""
-      case "$(grep -Eo '\(cause: (missing-module|root-behind)\)' "$up_log" | head -1 || true)" in
+      case "$(grep -Eo '\(cause: (missing-module|root-behind|branch-export)\)' "$up_log" | head -1 || true)" in
         *missing-module*) cause="the branch imports a module the root has not installed" ;;
         *root-behind*) cause="the root checkout is behind the branch (a workspace package lacks an export it imports)" ;;
+        *branch-export*) cause="the branch's own workspace packages lack an export a unit imports" ;;
       esac
       rm -f "$up_log"
       if [ -n "$cause" ]; then
