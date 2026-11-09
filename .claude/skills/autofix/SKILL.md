@@ -171,8 +171,11 @@ decision you recorded in Stage 1, which itself came from Linear's
 `branchName` — keeps Linear's autolinking while staying collision-free). The
 env up step builds the run's unit from the branch inside the env container,
 without installing anything, so a branch whose JS build needs a package the
-workspace root has not installed fails provisioning. When webpack reports it
-(a module it can't resolve, or a workspace-package export the root lacks), the
+workspace root has not installed fails provisioning. The unit builds against its
+own branch's workspace packages (`packages/*`), compiled from the branch first,
+so a fix that changes a package together with the unit is tested as one. When
+webpack reports a failure it can name (a module it can't resolve, or a
+workspace-package export the unit imports and the branch's packages lack), the
 message names that cause; any other build failure points at the build output.
 A named cause can't pass on a retry, so `create` sets `terminal: escalated`
 and dies. Stop there and report the cause: never install packages, update the
