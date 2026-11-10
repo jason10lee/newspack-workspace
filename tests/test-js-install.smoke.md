@@ -47,3 +47,13 @@ The shared install followed upstream manifests (`@wordpress/ui ^0.26`; local
 both units and left `newspack-blocks` empty; step 5 found every mtime unchanged;
 step 6 gave `a` exit 0 and `b` exit 1; no `/tmp/test-js-deps.*` directory was left
 in the env.
+
+## Run 2, 2026-11-10, after the main container reinstalled
+
+Before merging, the branch's `test-js.sh` was run in `newspack_dev` (compact). It
+found the root stale, said so, installed (46 s, `Packages: -20`), and passed 395
+tests; a second run on another unit logged `check current`, did not install, and
+passed. Then step 4 again: popups on `a` logged `check current` and ran from
+`/newspack-worktrees/tooling-tjs2-a/plugins/newspack-popups` (395 passed); the
+plugin on `b` was refused with `(cause: deps-stale)` on its reworded range. Step 5:
+every root mtime unchanged across both env runs.
