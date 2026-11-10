@@ -22,6 +22,8 @@ allows "grep -n '\${(@f)' x.sh"
 allows "grep '[@]/#' x"
 allows "$(printf "cat > f.sh <<'EOF'\ny=\${(f)x}\nz=\"\${a[@]/#/p}\"\nEOF\nbash f.sh")"
 allows "$(printf 'cat > f.sh <<"EOF"\ny=${(f)x}\nEOF')"
+allows "$(printf "cat > f.sh <<'END-OF-FILE'\ny=\${(f)x}\nEND-OF-FILE")"
+allows "$(printf "cat > f.sh <<\\\\EOF\ny=\${(f)x}\nEOF")"
 allows 'echo "${files[@]}"'
 allows 'echo ${#arr[@]}'
 allows 'git diff --name-only origin/main...HEAD'
@@ -29,6 +31,7 @@ denies "$(printf "cat > f.sh <<'EOF'\nok\nEOF\necho \${(f)x}")"
 
 out="$(bashcall 'x=${(f)y}')"
 assert_contains "$out" "literal absolute paths" "the deny says what to run instead"
+assert_contains "$out" "<<'EOF'" "and how to pass literal text, for a deny the paths advice cannot help"
 assert_eq "" "$(jq -n '{tool_name: "Read", tool_input: {file_path: "${(f)x}"}}' | bash "$HOOK")" "other tools pass untouched"
 assert_eq "" "$(printf 'not json' | bash "$HOOK")" "unreadable input is let through"
 
