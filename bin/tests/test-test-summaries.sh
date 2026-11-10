@@ -219,6 +219,14 @@ expect "js: a failed install is reported" '^install: FAILED \(exit 1\)' "$WORK/o
 expect "js: with pnpm's error" 'ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY' "$WORK/out"
 expect "js: and the tests still report" '^result:  PASS - 71 passed' "$WORK/out"
 
+# test-js.sh writes its own decision lines above the install output; a stale
+# check's line carries pnpm's ERR_ code too, and must not stand in for the
+# install's own error.
+{ echo "test-js: check stale:  ERR_PNPM_OUTDATED_LOCKFILE  Cannot install with frozen-lockfile"; echo " ERR_PNPM_FETCH_404  GET https://registry.example.test/nope: Not Found - 404"; echo "test-js: install ran (exit 1)"; cat "$WORK/js-pass.log"; } > "$WORK/js-install-noted.log"
+js_summary "$WORK/js-install-noted.log" 0 1
+expect "js: a failed install names the install's error, not the check's" 'ERR_PNPM_FETCH_404' "$WORK/out"
+reject "js: and not the check line" 'OUTDATED_LOCKFILE' "$WORK/out"
+
 NEWSPACK_HOST_ROOT=/Users/dev/newspack-workspace bash "$BIN/test-js-summary.sh" "$WORK/js-fail.log" /newspack-plugins/newspack-demo newspack-demo 0 "$WORK" 0 > "$WORK/out" 2>&1
 expect "js: the full log path is a host path under the main checkout" '^full log: /Users/dev/newspack-workspace/js-fail.log$' "$WORK/out"
 

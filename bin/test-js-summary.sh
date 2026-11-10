@@ -43,7 +43,9 @@ print_code() {
     echo "code:    ${NEWSPACK_TEST_CODE:-unknown}"
     echo "ran in:  ${RAN_IN:-unknown (pnpm matched no package, or never started)}"
     if [ "$INSTALL_STATUS" != "0" ]; then
-        INSTALL_ERR=$(sed -n '/^=== pnpm run test ===$/q;p' "$LOG" | grep -m1 -E 'ERR_|ERROR' | sed 's/^ *//')
+        # test-js.sh writes its own "test-js:" lines above the install output, and
+        # a stale check's line quotes pnpm's ERR_ code; skip them.
+        INSTALL_ERR=$(sed -n '/^=== pnpm run test ===$/q;p' "$LOG" | grep -v '^test-js:' | grep -m1 -E 'ERR_|ERROR' | sed 's/^ *//')
         echo "install: FAILED (exit $INSTALL_STATUS) - tests ran against the existing node_modules"
         echo "  ${INSTALL_ERR:-see the full log}"
     fi
