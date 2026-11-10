@@ -24,6 +24,10 @@ assert_eq "$D" "${line%%|*}" "the session starts in the pool dir"
 assert_contains "$line" "--bg -n forge-l --permission-mode auto --settings $S" "with the run's name, mode and settings"
 assert_contains "$line" "--plugin-dir $P/a --plugin-dir $P/b" "and the workspace plugins"
 assert_contains "$line" "--add-dir $AUTOFIX_WORKSPACE_ROOT/worktrees" "and the workspace's worktrees, so a run can cd into its own"
+# --add-dir takes a list, so nothing but an option may follow its value, or a
+# launch with no plugin dirs would read the prompt as a second directory.
+FORGE_PLUGINS="" launch_session forge-l "$D" "$S" "Read the brief." >/dev/null 2>&1
+assert_contains "$(tail -1 "$STUB_LOG")" "--add-dir $AUTOFIX_WORKSPACE_ROOT/worktrees --" "an option follows the added dir, even with no plugins"
 assert_contains "$line" "Read the brief." "and the prompt"
 
 STUB_BG_OUT='Workspace not trusted. Run `claude` in /x once and accept the trust prompt, then retry.' \

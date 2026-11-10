@@ -206,8 +206,10 @@ launch_session() { # rid dir settings prompt -> session id; 3 untrusted, 1 other
   # --add-dir: a run cds into its worktree to load impact-review, whose setup
   # lines run in the shell's directory, and a cd outside the session's own
   # directories is reset. Monorepo worktrees live under <workspace>/worktrees.
+  # It goes first because it takes a list: placed last, with no plugin dirs
+  # after it, it would read the prompt as another directory.
   set -- --bg -n "$rid" --permission-mode auto --settings "$settings"
-  [ ! -d "$WORKSPACE_ROOT/worktrees" ] || set -- "$@" --add-dir "$WORKSPACE_ROOT/worktrees"
+  [ ! -d "$WORKSPACE_ROOT/worktrees" ] || set -- --add-dir "$WORKSPACE_ROOT/worktrees" "$@"
   while IFS= read -r p; do [ -n "$p" ] && set -- "$@" --plugin-dir "$p"; done <<EOP
 $(plugin_dirs)
 EOP
