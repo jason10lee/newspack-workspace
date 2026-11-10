@@ -202,7 +202,13 @@ EOF
       exit 0
     fi
     plugin_dir="$(project_dir "$wt" "$(affected_repo)")" || exit 1
-    (cd "$plugin_dir" && n test-php)
+    # A unit with no PHPUnit config has no PHP suite to run, and `n test-php`
+    # there fails, which would read as a red suite on a change that broke nothing.
+    if [ -f "$plugin_dir/phpunit.xml" ] || [ -f "$plugin_dir/phpunit.xml.dist" ]; then
+      (cd "$plugin_dir" && n test-php)
+    else
+      log "suite: $(affected_repo) has no phpunit.xml, so no PHP tests"
+    fi
     # Jest runs only on tests related to the changed files, never the whole
     # suite (see "A suite guard" in tools/forge/README.md). Packages without JS tests carry an `echo`
     # placeholder as their `test` script, and are skipped.
