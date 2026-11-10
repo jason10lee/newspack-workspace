@@ -6,6 +6,7 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/repos.sh"
 source "$SCRIPT_DIR/resolve-project-path.sh"
+source "$SCRIPT_DIR/test-js-deps.sh"
 
 MONOREPO_ROOT="${MONOREPO_ROOT:-/newspack-monorepo}"
 
@@ -84,31 +85,100 @@ else
     # unreachable root would otherwise leave the shell wherever it started and run
     # `pnpm --filter` against that directory instead of the workspace.
     cd "$MONOREPO_ROOT" || exit 1
-    if [ "$NEWSPACK_TEST_OUTPUT" != "compact" ]; then
-        pnpm install
-        pnpm --filter "$PKG" run test
-        exit $?
-    fi
 
-    # Compact mode for coding agents (set by `n`; see bin/test-php.sh). The
-    # install and test output go to logs/test-js/ and only the summary prints.
+    # Every run gets a log directory, in both output modes, so an install is never
+    # invisible. One directory per run, created atomically: every env mounts the
+    # same logs/, and process IDs repeat across containers. Named after the project
+    # directory, since a scoped package name (@scope/name) carries a slash.
     LOG_DIR="$MONOREPO_ROOT/logs/test-js"
     mkdir -p "$LOG_DIR"
-    # One directory per run, created atomically: every env mounts the same logs/,
-    # and process IDs repeat across containers. Named after the project directory,
-    # since a scoped package name (@scope/name) carries a slash.
     RUN_DIR=$(mktemp -d "$LOG_DIR/$(basename "$PROJECT_DIR")-$(date -u +%Y%m%dT%H%M%SZ)-XXXXXX") || exit 1
     # mktemp makes it 0700; the host user has to be able to read what a root
     # container wrote.
     chmod 755 "$RUN_DIR"
     LOG="$RUN_DIR/output.log"
-    # Full mode carries on after a failed install and tests whatever node_modules
-    # already holds, so compact mode does too, and reports the failure instead.
-    pnpm install > "$LOG" 2>&1
-    INSTALL_STATUS=$?
+    COMPACT=0
+    [ "${NEWSPACK_TEST_OUTPUT:-}" = "compact" ] && COMPACT=1
+    # A line for the log only; say() also prints it.
+    note() { echo "test-js: $*" >> "$LOG"; }
+    say() { echo "$*"; echo "$*" >> "$LOG"; }
+
+    # The root's node_modules is shared by the main container and every isolated
+    # env, and an install from an env resolves that env's branch manifests, so it
+    # would rewrite the shared install to follow one branch. Only the main container
+    # installs, and only when the check says it must.
+    BRANCH_ROOT=""
+    ISOLATED=0
+    if in_isolated_env; then
+        ISOLATED=1
+        BRANCH_ROOT=$(branch_root_for "$PROJECT_DIR")
+    fi
+    WS_DIR="${BRANCH_ROOT:-$MONOREPO_ROOT}"
+    PNPM_PIN=$(root_pnpm_cmd "$MONOREPO_ROOT") || PNPM_PIN="pnpm"
+    CHECK_OUT=$(deps_check "$WS_DIR" "$WS_DIR/node_modules/.pnpm/lock.yaml" "$PNPM_PIN")
+    CHECK=$?
+    case "$CHECK" in
+        0) note "check current" ;;
+        1) note "check stale: $CHECK_OUT" ;;
+        *) note "check error: $CHECK_OUT" ;;
+    esac
+
+    INSTALL_STATUS=0
+    if [ "$CHECK" -ne 0 ] && [ "$ISOLATED" -eq 1 ]; then
+        say "Error: $PKG needs dependencies the shared install does not have (cause: deps-stale)."
+        say "  $CHECK_OUT"
+        say "n test-js does not install from an isolated env, because that install would rewrite the"
+        say "shared root for every env. Run the tests from the main container, or wait for a branch-private install."
+        note "refused (cause: deps-stale)"
+        exit 1
+    elif [ "$CHECK" -ne 0 ]; then
+        if [ "$CHECK" -eq 1 ]; then
+            say "Root dependencies are stale; installing."
+        else
+            say "Could not check root dependencies ($CHECK_OUT); installing."
+        fi
+        # Full mode keeps the terminal: pnpm aborts a modules purge without a TTY.
+        if [ "$COMPACT" -eq 1 ]; then
+            pnpm install >> "$LOG" 2>&1
+        else
+            pnpm install
+        fi
+        INSTALL_STATUS=$?
+        note "install ran (exit $INSTALL_STATUS)"
+    fi
+
+    # A branch-volume env tests the branch's own workspace, with the shared install
+    # laid over it read-only, the way `n env up --build-worktrees` builds it.
+    if [ -n "$BRANCH_ROOT" ]; then
+        if [ "$COMPACT" -eq 1 ]; then
+            prepare_branch_packages "$BRANCH_ROOT" "$MONOREPO_ROOT" "$PNPM_PIN" >> "$LOG" 2>&1
+        else
+            prepare_branch_packages "$BRANCH_ROOT" "$MONOREPO_ROOT" "$PNPM_PIN"
+        fi || { say "Error: could not build the branch's workspace packages for $PKG."; exit 1; }
+        run_test() {
+            # shellcheck disable=SC2086 # PNPM_PIN is "corepack pnpm@<ver>".
+            (cd "$BRANCH_ROOT" && NODE_PATH="$BRANCH_ROOT/node_modules/.pnpm/node_modules" \
+                npm_config_manage_package_manager_versions=false $PNPM_PIN --filter "$PKG" run test)
+        }
+    else
+        run_test() { pnpm --filter "$PKG" run test; }
+    fi
+
+    if [ "$COMPACT" -eq 0 ]; then
+        run_test
+        STATUS=$?
+        note "test exit $STATUS"
+        exit $STATUS
+    fi
+
+    # Compact mode for coding agents (set by `n`; see bin/test-php.sh): only the
+    # summary prints. Full mode carries on after a failed install and tests
+    # whatever node_modules already holds, so compact mode does too, and reports
+    # the failure instead.
     echo "=== pnpm run test ===" >> "$LOG"
-    pnpm --filter "$PKG" run test >> "$LOG" 2>&1
+    run_test >> "$LOG" 2>&1
     STATUS=$?
+    note "test exit $STATUS"
     bash "$SCRIPT_DIR/test-js-summary.sh" "$LOG" "$PROJECT_DIR" "$PKG" "$STATUS" "$MONOREPO_ROOT" "$INSTALL_STATUS"
     exit $STATUS
 fi
