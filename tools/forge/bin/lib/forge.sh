@@ -196,7 +196,11 @@ plugin_dirs() { # one install path per configured plugin installed for the works
 
 launch_session() { # rid dir settings prompt -> session id; 3 untrusted, 1 other failure
   local rid="$1" dir="$2" settings="$3" prompt="$4" out id p scrub=() v
+  # --add-dir: a run cds into its worktree to load impact-review, whose setup
+  # lines run in the shell's directory, and a cd outside the session's own
+  # directories is reset. Monorepo worktrees live under <workspace>/worktrees.
   set -- --bg -n "$rid" --permission-mode auto --settings "$settings"
+  [ ! -d "$WORKSPACE_ROOT/worktrees" ] || set -- "$@" --add-dir "$WORKSPACE_ROOT/worktrees"
   while IFS= read -r p; do [ -n "$p" ] && set -- "$@" --plugin-dir "$p"; done <<EOP
 $(plugin_dirs)
 EOP

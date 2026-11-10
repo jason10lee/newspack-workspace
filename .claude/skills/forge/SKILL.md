@@ -140,6 +140,8 @@ The spec's declared scope replaces autofix's 150-line cap. Make an early stop wh
 
 Follow autofix's Stage 4, "Verification": the signal passes, the suite and lint pass, the drive in the env where the profile has one, `newspack:impact-review` for a shared contract in a Newspack repo, and the adjacent-input probe. The scripts read the profile's commands. A change to the tooling runs the autofix and forge suites, which the tooling profile lists.
 
+Load `newspack:impact-review` from the run's worktree. Its setup lines run in the shell's current directory and fail outside a git checkout, so first run `cd <WT>` in a Bash call of its own, then load the skill, then `cd` back to the pool dir, the directory the session started in, so the later stages start where they always have.
+
 A failure loops back to Stage 5 under autofix's loop bound, which Stages 7 and 8 share: three fix iterations, and two hours per loop entry. Exhausting it is an early stop.
 
 ## Stage 7: Review

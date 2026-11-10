@@ -63,6 +63,8 @@ cp "$FX/issue_ok.json" "$M/issue.json"
 out="$(STUB_BG_OUT='Workspace not trusted. Run `claude` in /x once' bash "$F" launch NPPM-5 2>/dev/null)"; rc=$?
 assert_eq 4 "$rc" "an untrusted dir abandons the launch"
 assert_contains "$out" "not trusted" "and tells the operator what to do"
+assert_contains "$out" "$FORGE_POOL_ROOT," "and names the pool root to trust"
+assert_contains "$out" "every pool dir under it" "once, for every pool dir"
 r5="$(basename "$RUNS_DIR"/forge-nppm-5-*)"
 assert_eq bailed-untrusted "$(bash "$L" get "$r5" .terminal)" "the run is terminal"
 assert_eq abandoned "$(bash "$L" get "$r5" .launch)" "launch=abandoned"

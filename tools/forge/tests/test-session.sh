@@ -15,6 +15,7 @@ assert_eq "$P/a" "$(plugin_dirs 2>/dev/null | head -1)" "plugin_dirs picks the w
 assert_eq 2 "$(plugin_dirs 2>/dev/null | grep -c .)" "one dir per installed plugin"
 assert_contains "$out" "c@m is not installed" "a missing plugin is reported"
 
+mkdir -p "$AUTOFIX_WORKSPACE_ROOT/worktrees"
 D="$(mktemp -d)"; S="$D/settings.json"; echo '{}' > "$S"
 id="$(launch_session forge-l "$D" "$S" "Read the brief." 2>/dev/null)"
 assert_eq 1a2b3c4d "$id" "launch_session reads the session id"
@@ -22,6 +23,7 @@ line="$(tail -1 "$STUB_LOG")"
 assert_eq "$D" "${line%%|*}" "the session starts in the pool dir"
 assert_contains "$line" "--bg -n forge-l --permission-mode auto --settings $S" "with the run's name, mode and settings"
 assert_contains "$line" "--plugin-dir $P/a --plugin-dir $P/b" "and the workspace plugins"
+assert_contains "$line" "--add-dir $AUTOFIX_WORKSPACE_ROOT/worktrees" "and the workspace's worktrees, so a run can cd into its own"
 assert_contains "$line" "Read the brief." "and the prompt"
 
 STUB_BG_OUT='Workspace not trusted. Run `claude` in /x once and accept the trust prompt, then retry.' \

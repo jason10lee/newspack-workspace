@@ -113,7 +113,7 @@ start_session() {
   id="$(launch_session "$rid" "$pool" "$settings" "You are forge run $rid. Read $brief and follow it.")" || rc=$?
   case "$rc" in
     0) ;;
-    3) abandon "$rid" untrusted "the pool dir $pool is not trusted yet. Run \`claude\` there once, accept the trust prompt, quit, and launch again" ;;
+    3) abandon "$rid" untrusted "the pool dir $pool is not trusted. Trust the pool root once: run \`claude\` in $FORGE_POOL_ROOT, accept the trust prompt, quit, and launch again; every pool dir under it is then trusted" ;;
     *) abandon "$rid" launch "claude --bg did not start a session" ;;
   esac
   bash "$FORGE_LEDGER" set "$rid" '.session = {id: $i, launched_at: $t}' --arg i "$id" --arg t "$(now_utc)"
