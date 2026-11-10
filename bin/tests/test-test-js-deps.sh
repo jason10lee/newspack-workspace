@@ -121,6 +121,43 @@ JSON
 	run_check "$LOCK"
 	check "check: lockfile updated but not installed is exit 1" "1" "$status"
 	reset_manifest
+
+	# A manifest the copy never reaches drops out of pnpm's comparison: the frozen
+	# check passes when a lockfile importer has no manifest. So every way of missing
+	# one has to read as "could not check", never as current. Each case below leaves
+	# plugins/u stale, so a silent skip would show up as exit 0.
+	WS2="$WORK/ws2"
+	mkdir -p "$WS2/packages/a" "$WS2/plugins/u"
+	cp "$WS/package.json" "$WS2/"
+	printf "packages:\n  - 'packages/*'\n  - 'plugins/*'\n" > "$WS2/pnpm-workspace.yaml"
+	cp "$WORK/a.pristine" "$WS2/packages/a/package.json"
+	echo '{ "name": "u", "version": "1.0.0", "dependencies": { "is-number": "7.0.0" } }' > "$WS2/plugins/u/package.json"
+	(cd "$WS2" && pnpm install > "$WORK/install2.log" 2>&1) || { echo "FAIL - second scratch install"; cat "$WORK/install2.log"; exit 1; }
+	cp "$WS2/pnpm-workspace.yaml" "$WORK/ws2-yaml.pristine"
+	echo '{ "name": "u", "version": "1.0.0", "dependencies": { "is-number": "6.0.0" } }' > "$WS2/plugins/u/package.json"
+	run_check2() { out=$(deps_check "$WS2" "$WS2/node_modules/.pnpm/lock.yaml" pnpm); status=$?; }
+
+	run_check2
+	check "check: stale second unit is exit 1 (control)" "1" "$status"
+
+	printf "packages:\n  - 'packages/*'\n# units below\n  - 'plugins/*'\n" > "$WS2/pnpm-workspace.yaml"
+	run_check2
+	check "check: comment inside packages is not current" "2" "$status"
+
+	printf "packages: ['packages/*', 'plugins/*']\n" > "$WS2/pnpm-workspace.yaml"
+	run_check2
+	check "check: flow-style packages is not current" "2" "$status"
+	cp "$WORK/ws2-yaml.pristine" "$WS2/pnpm-workspace.yaml"
+
+	chmod 000 "$WS2/plugins/u"
+	run_check2
+	check "check: unreadable unit directory is not current" "2" "$status"
+	chmod 755 "$WS2/plugins/u"
+
+	mv "$WS2/plugins/u/package.json" "$WORK/u.off"
+	run_check2
+	check "check: unit without package.json is not current" "2" "$status"
+	mv "$WORK/u.off" "$WS2/plugins/u/package.json"
 else
 	echo "skip - currency-check cases: no pnpm on this host"
 fi

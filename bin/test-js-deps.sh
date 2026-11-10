@@ -35,7 +35,7 @@ deps_check() {
         return 2
     fi
     scratch=$(mktemp -d "${TMPDIR:-/tmp}/test-js-deps.XXXXXX") || { echo "could not create a scratch directory"; return 2; }
-    _deps_copy "$ws" "$lock" "$scratch"
+    _deps_copy "$ws" "$lock" "$scratch" && _deps_importers_copied "$scratch"
     rc=$?
     if [ "$rc" -eq 0 ]; then
         # Unquoted on purpose: pnpm_cmd is "corepack pnpm@<ver>" in the container.
@@ -89,6 +89,23 @@ _deps_copy() {
                 || { echo "could not copy $rel"; return 2; }
         done
     done < <(sed -n '/^packages:/,/^[^[:space:]-]/p' "$ws/pnpm-workspace.yaml" | grep -E '^[[:space:]]*-')
+    return 0
+}
+
+# Returns 2, with the reason, when a lockfile importer has no manifest in the
+# scratch copy. pnpm's frozen check passes over an importer whose manifest is
+# absent, so a manifest the copy missed (a workspace file it could not parse, an
+# unreadable unit, a mount whose worktree is gone) would otherwise read as current.
+_deps_importers_copied() {
+    local scratch="$1" key
+    while IFS= read -r key; do
+        [ "$key" = "." ] && continue
+        if [ ! -f "$scratch/$key/package.json" ]; then
+            echo "no manifest copied for lockfile importer $key"
+            return 2
+        fi
+    done < <(sed -n '/^importers:/,/^[^[:space:]]/p' "$scratch/pnpm-lock.yaml" \
+        | sed -nE "s/^  ['\"]?([^ '\"][^'\"]*)['\"]?:[[:space:]]*$/\1/p")
     return 0
 }
 
