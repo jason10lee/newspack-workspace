@@ -230,6 +230,26 @@ mv "$BR/packages/built/dist.off" "$BR/packages/built/dist"
 # packages/plain has no build script and no dist/; it must not count.
 check "stale: package without build script ignored" "1" "$(stale_status)"
 
+# An empty dist/ (a build that cleaned and then failed) is stale. GNU xargs, the
+# container's, runs its command once even on empty input, so a bare `ls -t` there
+# lists the current directory. Emulate that, from a directory whose only entry is
+# dated in the future, so a run that reads the cwd comes out "fresh".
+mkdir -p "$WORK/gnu" "$WORK/cwd"
+cat > "$WORK/gnu/xargs" <<'SHIM'
+#!/usr/bin/env bash
+input=$(cat)
+if [ -z "$input" ]; then shift; exec "$@"; fi
+printf '%s' "$input" | /usr/bin/xargs "$@"
+SHIM
+chmod +x "$WORK/gnu/xargs"
+touch -t 203001010000 "$WORK/cwd/future"
+mv "$BR/packages/built/dist" "$BR/packages/built/dist.off"
+mkdir "$BR/packages/built/dist"
+check "stale: empty dist is stale" "0" \
+	"$(cd "$WORK/cwd" && PATH="$WORK/gnu:$PATH" branch_packages_stale "$BR"; echo $?)"
+rmdir "$BR/packages/built/dist"
+mv "$BR/packages/built/dist.off" "$BR/packages/built/dist"
+
 mkdir -p "$BR/packages/plain/node_modules"
 : > "$BR/packages/plain/node_modules/branch-own"
 : > "$WORK/build.log"

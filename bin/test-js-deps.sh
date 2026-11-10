@@ -151,6 +151,9 @@ branch_packages_stale() {
         [ -f "$p/package.json" ] || continue
         [ -n "$(node -p "require('$p/package.json').scripts?.build ?? ''" 2>/dev/null)" ] || continue
         [ -d "$p/dist" ] || return 0
+        # Checked before listing: GNU xargs runs `ls -t` even on empty input, which
+        # would list the current directory instead.
+        [ -n "$(find "$p/dist" -type f -print -quit)" ] || return 0
         newest=$(find "$p/dist" -type f -print0 | xargs -0 ls -t 2>/dev/null | head -1)
         [ -n "$newest" ] || return 0
         if [ -d "$p/src" ] && [ -n "$(find "$p/src" -type f -newer "$newest" -print -quit)" ]; then
