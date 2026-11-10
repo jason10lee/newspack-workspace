@@ -122,6 +122,50 @@ branch_root_for() {
     return 0
 }
 
+# branch_packages_stale <branch_root>
+#
+# True when a package with a build script has no dist/, or has a source file newer
+# than its newest built file. A branch-path run tests against the branch's own
+# packages, so testing past a stale build would test code the branch no longer has.
+branch_packages_stale() {
+    local root="$1" p newest
+    for p in "$root"/packages/*/; do
+        p=${p%/}
+        [ -f "$p/package.json" ] || continue
+        [ -n "$(node -p "require('$p/package.json').scripts?.build ?? ''" 2>/dev/null)" ] || continue
+        [ -d "$p/dist" ] || return 0
+        newest=$(find "$p/dist" -type f -print0 | xargs -0 ls -t 2>/dev/null | head -1)
+        [ -n "$newest" ] || return 0
+        if [ -d "$p/src" ] && [ -n "$(find "$p/src" -type f -newer "$newest" -print -quit)" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# prepare_branch_packages <branch_root> <monorepo_root> <pnpm_cmd>
+#
+# Gives a branch's packages/* what a build and a test run need: each package's
+# node_modules, copied from the shared install where the branch has none (pnpm puts
+# a package's own dependencies there, outside the read-only overlay), and a fresh
+# build when branch_packages_stale says so. Writes only inside the branch.
+prepare_branch_packages() {
+    local root="$1" monorepo="$2" pnpm_cmd="$3" d p
+    for d in "$monorepo"/packages/*/node_modules; do
+        [ -d "$d" ] || continue
+        p=$(basename "$(dirname "$d")")
+        if [ -d "$root/packages/$p" ] && [ ! -e "$root/packages/$p/node_modules" ]; then
+            cp -R "$d" "$root/packages/$p/node_modules" || return 1
+        fi
+    done
+    branch_packages_stale "$root" || return 0
+    echo "Building workspace packages for $(basename "$root")..."
+    # shellcheck disable=SC2086 # pnpm_cmd is "corepack pnpm@<ver>" in the container.
+    (cd "$root" && NODE_PATH="$root/node_modules/.pnpm/node_modules" \
+        npm_config_manage_package_manager_versions=false \
+        $pnpm_cmd --filter './packages/*' run --if-present build)
+}
+
 # root_pnpm_cmd <monorepo_root>: prints "corepack pnpm@<version>" from the root's
 # packageManager field, the version the shared install was made with.
 root_pnpm_cmd() {

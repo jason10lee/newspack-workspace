@@ -157,6 +157,61 @@ echo '{ "packageManager": "yarn@4.0.0" }' > "$WORK/root-yarn/package.json"
 check "pnpm cmd: reads packageManager" "corepack pnpm@10.33.0" "$(root_pnpm_cmd "$WORK/root-pnpm")"
 check "pnpm cmd: yarn is exit 1" "1" "$(root_pnpm_cmd "$WORK/root-yarn" >/dev/null; echo $?)"
 
+# --- Branch packages ---------------------------------------------------------
+#
+# A branch-path run tests against the branch's own packages/*, so a package whose
+# source changed after its last build has to be rebuilt first, or the run tests
+# the old build. The build is a stub here: what matters is when it runs and where.
+
+BR="$WORK/branch"
+MR="$WORK/monorepo"
+mkdir -p "$BR/packages/built/src" "$BR/packages/built/dist" "$BR/packages/plain" \
+	"$MR/packages/built/node_modules" "$MR/packages/plain/node_modules"
+echo '{ "name": "built", "scripts": { "build": "x" } }' > "$BR/packages/built/package.json"
+echo '{ "name": "plain" }' > "$BR/packages/plain/package.json"
+: > "$MR/packages/built/node_modules/from-root"
+: > "$MR/packages/plain/node_modules/from-root"
+touch -t 202601010000 "$BR/packages/built/src/index.js"
+touch -t 202601020000 "$BR/packages/built/dist/index.js"
+
+cat > "$WORK/stub-pnpm" <<STUB
+#!/usr/bin/env bash
+echo "cwd=\$PWD NODE_PATH=\${NODE_PATH:-} args=\$*" >> "$WORK/build.log"
+exit \${STUB_BUILD_RC:-0}
+STUB
+chmod +x "$WORK/stub-pnpm"
+
+stale_status() { branch_packages_stale "$BR"; echo $?; }
+
+check "stale: dist newer than src" "1" "$(stale_status)"
+touch -t 202601030000 "$BR/packages/built/src/index.js"
+check "stale: src newer than dist" "0" "$(stale_status)"
+touch -t 202601010000 "$BR/packages/built/src/index.js"
+mv "$BR/packages/built/dist" "$BR/packages/built/dist.off"
+check "stale: dist missing" "0" "$(stale_status)"
+mv "$BR/packages/built/dist.off" "$BR/packages/built/dist"
+# packages/plain has no build script and no dist/; it must not count.
+check "stale: package without build script ignored" "1" "$(stale_status)"
+
+mkdir -p "$BR/packages/plain/node_modules"
+: > "$BR/packages/plain/node_modules/branch-own"
+: > "$WORK/build.log"
+prepare_branch_packages "$BR" "$MR" "$WORK/stub-pnpm"
+check "prepare: copies missing node_modules" "yes" \
+	"$([ -e "$BR/packages/built/node_modules/from-root" ] && echo yes || echo no)"
+check "prepare: leaves existing node_modules untouched" "branch-own" \
+	"$(ls -A "$BR/packages/plain/node_modules" | tr "\n" " " | sed "s/ \$//")"
+check "prepare: no build when fresh" "" "$(cat "$WORK/build.log")"
+
+touch -t 202601030000 "$BR/packages/built/src/index.js"
+prepare_branch_packages "$BR" "$MR" "$WORK/stub-pnpm"
+check "prepare: builds when stale, from the branch root, with NODE_PATH" \
+	"cwd=$BR NODE_PATH=$BR/node_modules/.pnpm/node_modules args=--filter ./packages/* run --if-present build" \
+	"$(cat "$WORK/build.log")"
+
+check "prepare: build failure is non-zero" "1" \
+	"$(STUB_BUILD_RC=3 prepare_branch_packages "$BR" "$MR" "$WORK/stub-pnpm" >/dev/null 2>&1; [ $? -ne 0 ] && echo 1 || echo 0)"
+
 if [[ $failures -gt 0 ]]; then
 	echo "$failures failure(s)"
 	exit 1
