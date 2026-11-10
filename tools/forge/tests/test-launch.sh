@@ -6,7 +6,7 @@ FX=../../autofix/tests/fixtures
 REPO="$(mktemp -d)"; export FORGE_TOOLING_REPO="$REPO" AUTOFIX_WORKSPACE_ROOT="$REPO"
 g() { git -C "$REPO" -c user.name=t -c user.email=t@example.com "$@"; }
 g init -q -b main; mkdir -p "$REPO/tools/forge/hooks"
-cp ../hooks/mcp-read-only.sh ../hooks/test-suite-guard.sh "$REPO/tools/forge/hooks/"; cp ../mcp-read-tools.txt "$REPO/tools/forge/"
+cp ../hooks/mcp-read-only.sh ../hooks/test-suite-guard.sh ../hooks/zsh-expansion-guard.sh "$REPO/tools/forge/hooks/"; cp ../mcp-read-tools.txt "$REPO/tools/forge/"
 g add -A; g commit -qm tooling
 export FORGE_PLUGINS=""
 M="$(mktemp -d)"; export AUTOFIX_LINEAR_MOCK_DIR="$M"

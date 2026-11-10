@@ -59,7 +59,7 @@ assert_eq deny "$(decision "$out")" "an environment variable does not widen the 
 
 # run settings
 . ../bin/lib/forge.sh
-TD="$(mktemp -d)"; mkdir -p "$TD/tools/forge/hooks"; cp "$HOOK" ../hooks/test-suite-guard.sh "$TD/tools/forge/hooks/"
+TD="$(mktemp -d)"; mkdir -p "$TD/tools/forge/hooks"; cp "$HOOK" ../hooks/test-suite-guard.sh ../hooks/zsh-expansion-guard.sh "$TD/tools/forge/hooks/"
 bash "$L" init forge-s NPPM-1 forge >/dev/null
 f="$(write_run_settings forge-s "$TD")"
 assert_eq "$RUNS_DIR/forge-s/settings.json" "$f" "settings are written beside the ledger"
@@ -70,6 +70,13 @@ assert_eq 'mcp__.*' "$(jq -r '.hooks.PreToolUse[0].matcher' "$f")" "the hook mat
 assert_contains "$(jq -r '.hooks.PreToolUse[0].hooks[0].command' "$f")" "$TD/tools/forge/hooks/mcp-read-only.sh" "the hook runs from the pinned tooling"
 assert_eq Bash "$(jq -r '.hooks.PreToolUse[1].matcher' "$f")" "the suite guard matches Bash"
 assert_contains "$(jq -r '.hooks.PreToolUse[1].hooks[0].command' "$f")" "$TD/tools/forge/hooks/test-suite-guard.sh" "and runs from the pinned tooling"
+assert_eq Bash "$(jq -r ".hooks.PreToolUse[2].matcher" "$f")" "the zsh expansion guard matches Bash"
+assert_contains "$(jq -r ".hooks.PreToolUse[2].hooks[0].command" "$f")" "$TD/tools/forge/hooks/zsh-expansion-guard.sh" "and runs from the pinned tooling too"
+TZ="$(mktemp -d)"; mkdir -p "$TZ/tools/forge/hooks"; cp "$HOOK" ../hooks/test-suite-guard.sh "$TZ/tools/forge/hooks/"
+err="$(mktemp)"; f="$(write_run_settings forge-s "$TZ" 2>"$err")"; rc=$?
+assert_eq 0 "$rc" "tooling pinned before the zsh expansion guard still gets settings"
+assert_eq 2 "$(jq ".hooks.PreToolUse | length" "$f")" "with the MCP hook and the suite guard only"
+assert_contains "$(cat "$err")" "predates the zsh expansion guard" "and says the run goes without it"
 TG="$(mktemp -d)"; mkdir -p "$TG/tools/forge/hooks"; cp "$HOOK" "$TG/tools/forge/hooks/"
 err="$(mktemp)"; f="$(write_run_settings forge-s "$TG" 2>"$err")"; rc=$?
 assert_eq 0 "$rc" "tooling pinned before the suite guard still gets settings, so its run can be reworked"

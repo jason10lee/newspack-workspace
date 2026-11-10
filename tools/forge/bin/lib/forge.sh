@@ -145,9 +145,10 @@ prune_tooling() { # remove exports that no unretired forge run references
 # scripts act on the real workspace and runs directory (they would otherwise
 # derive both from the export's location); the hooks are the pinned copies.
 write_run_settings() { # rid tooling_dir -> path of the settings file
-  local rid="$1" tdir="$2" hook guard f
+  local rid="$1" tdir="$2" hook guard zsh f
   hook="$tdir/tools/forge/hooks/mcp-read-only.sh"
   guard="$tdir/tools/forge/hooks/test-suite-guard.sh"
+  zsh="$tdir/tools/forge/hooks/zsh-expansion-guard.sh"
   [ -f "$hook" ] || die "pinned tooling has no MCP hook: $hook"
   # A run pinned before the guard existed keeps the settings it launched with,
   # so its rework still starts; every pin taken since carries the guard.
@@ -155,16 +156,22 @@ write_run_settings() { # rid tooling_dir -> path of the settings file
     printf 'forge: pinned tooling predates the suite guard, so this run goes without it: %s\n' "$tdir" >&2
     guard=""
   fi
+  if [ ! -f "$zsh" ]; then
+    printf 'forge: pinned tooling predates the zsh expansion guard, so this run goes without it: %s\n' "$tdir" >&2
+    zsh=""
+  fi
   case "$tdir" in *'"'*|*"'"*|*'$'*|*'`'*) die "unsafe characters in the tooling path: $tdir" ;; esac
   f="$RUNS_DIR/$rid/settings.json"
-  jq -n --arg hook "$hook" --arg guard "$guard" --arg rid "$rid" --arg ws "$WORKSPACE_ROOT" --arg runs "$RUNS_DIR" \
+  jq -n --arg hook "$hook" --arg guard "$guard" --arg zsh "$zsh" --arg rid "$rid" --arg ws "$WORKSPACE_ROOT" --arg runs "$RUNS_DIR" \
     --arg state "$FORGE_STATE" --arg wait "$FORGE_LAUNCH_WAIT" --arg self "$f" '{
     env: {FORGE_RUN_ID: $rid, AUTOFIX_WORKSPACE_ROOT: $ws, AUTOFIX_RUNS_DIR: $runs,
           FORGE_STATE: $state, FORGE_LAUNCH_WAIT: $wait, REPRISE_SETTINGS: $self},
     hooks: {PreToolUse: ([
       {matcher: "mcp__.*", hooks: [{type: "command", command: ("bash \"" + $hook + "\"")}]}]
       + (if $guard == "" then [] else
-      [{matcher: "Bash", hooks: [{type: "command", command: ("bash \"" + $guard + "\"")}]}] end))}
+      [{matcher: "Bash", hooks: [{type: "command", command: ("bash \"" + $guard + "\"")}]}] end)
+      + (if $zsh == "" then [] else
+      [{matcher: "Bash", hooks: [{type: "command", command: ("bash \"" + $zsh + "\"")}]}] end))}
   }' > "$f"
   printf '%s\n' "$f"
 }
