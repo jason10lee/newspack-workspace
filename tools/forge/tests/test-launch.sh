@@ -6,7 +6,7 @@ FX=../../autofix/tests/fixtures
 REPO="$(mktemp -d)"; export FORGE_TOOLING_REPO="$REPO" AUTOFIX_WORKSPACE_ROOT="$REPO"
 g() { git -C "$REPO" -c user.name=t -c user.email=t@example.com "$@"; }
 g init -q -b main; mkdir -p "$REPO/tools/forge/hooks"
-cp ../hooks/mcp-read-only.sh ../hooks/test-suite-guard.sh "$REPO/tools/forge/hooks/"; cp ../mcp-read-tools.txt "$REPO/tools/forge/"
+cp ../hooks/mcp-read-only.sh ../hooks/test-suite-guard.sh ../hooks/zsh-expansion-guard.sh "$REPO/tools/forge/hooks/"; cp ../mcp-read-tools.txt "$REPO/tools/forge/"
 g add -A; g commit -qm tooling
 export FORGE_PLUGINS=""
 M="$(mktemp -d)"; export AUTOFIX_LINEAR_MOCK_DIR="$M"
@@ -63,6 +63,8 @@ cp "$FX/issue_ok.json" "$M/issue.json"
 out="$(STUB_BG_OUT='Workspace not trusted. Run `claude` in /x once' bash "$F" launch NPPM-5 2>/dev/null)"; rc=$?
 assert_eq 4 "$rc" "an untrusted dir abandons the launch"
 assert_contains "$out" "not trusted" "and tells the operator what to do"
+assert_contains "$out" "$FORGE_POOL_ROOT," "and names the pool root to trust"
+assert_contains "$out" "every pool dir under it" "once, for every pool dir"
 r5="$(basename "$RUNS_DIR"/forge-nppm-5-*)"
 assert_eq bailed-untrusted "$(bash "$L" get "$r5" .terminal)" "the run is terminal"
 assert_eq abandoned "$(bash "$L" get "$r5" .launch)" "launch=abandoned"

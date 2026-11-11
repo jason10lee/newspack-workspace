@@ -5,7 +5,7 @@ export FORGE_PLUGINS="" AUTOFIX_WORKSPACE_ROOT; AUTOFIX_WORKSPACE_ROOT="$(mktemp
 export FORGE_LAUNCH_TIMEOUT=90
 . ../bin/lib/forge.sh
 
-T="$(mktemp -d)"; mkdir -p "$T/tools/forge/hooks"; : > "$T/tools/forge/hooks/mcp-read-only.sh"; : > "$T/tools/forge/hooks/test-suite-guard.sh"
+T="$(mktemp -d)"; mkdir -p "$T/tools/forge/hooks"; : > "$T/tools/forge/hooks/mcp-read-only.sh"; : > "$T/tools/forge/hooks/test-suite-guard.sh"; : > "$T/tools/forge/hooks/zsh-expansion-guard.sh"
 bash "$L" init forge-e NPPM-1 forge >/dev/null
 s="$(write_run_settings forge-e "$T")"
 assert_eq "$FORGE_STATE" "$(jq -r .env.FORGE_STATE "$s")" "the run's settings carry the forge state dir"

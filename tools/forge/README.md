@@ -83,9 +83,12 @@ judgment:
 - **A background session** (`claude --bg`), named after the run. Watch runs with
   `claude agents`; open one with `claude attach <id>`.
 - **A pool directory** under `~/.local/state/newspack/forge/dirs/<profile>/<n>`.
-  The first launch into a new one stops with `ABANDONED … not trusted`: run
-  `claude` there once, accept the trust prompt, quit, and launch again. Each
-  directory asks once.
+  Trust the pool root once: run `claude` in `~/.local/state/newspack/forge/dirs`,
+  accept the trust prompt and quit, and every pool directory under it, existing or
+  new, launches without a prompt. Until then a launch stops with
+  `ABANDONED … not trusted`. The pool is kept outside the workspace on purpose: a
+  directory under it would load the workspace's instruction files and settings,
+  and runs load none.
 - **Pinned tooling**: a read-only export of `tools/` and `.claude/skills/` from
   local `main` at launch, under `~/.local/state/newspack/forge/tooling/<sha>`.
 - **Settings** that point the scripts at the real workspace and runs

@@ -2,7 +2,10 @@
 # Test stub for the claude CLI. Logs each call with its working directory and
 # answers the three calls the forge makes from files the test controls.
 printf '%s|%s\n' "$PWD" "$*" >> "${STUB_LOG:?}"
-case "$1" in
+# A background launch is told by its --bg flag wherever it sits: options come
+# in any order, and the launcher puts --add-dir first.
+cmd="$1"; for a in "$@"; do [ "$a" = --bg ] && cmd=--bg; done
+case "$cmd" in
   --bg)
     [ -z "${STUB_ENV_LOG:-}" ] || env > "$STUB_ENV_LOG"
     if [ -n "${STUB_BG_OUT:-}" ]; then printf '%s\n' "$STUB_BG_OUT"; exit "${STUB_BG_RC:-0}"; fi

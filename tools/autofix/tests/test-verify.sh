@@ -377,6 +377,7 @@ EOF
 chmod +x "$SUITE_STUB/node"
 bash "$L" set runv '.decisions += [{key:"affected_repo", value:"my-plugin"}]'
 mkdir -p "$WT/plugins/my-plugin/src"
+: > "$WT/plugins/my-plugin/phpunit.xml"   # a unit with a PHP suite; cases below remove it
 printf '{"scripts":{"test":"newspack-scripts test"}}\n' > "$WT/plugins/my-plugin/package.json"
 bash "$V" suite runv >/dev/null 2>&1
 assert_eq 0 $? "suite exits 0"
@@ -399,6 +400,21 @@ assert_eq 0 "$(grep -c notes.txt <<<"$line")" "and nothing that is not JS or TS"
 : > "$N_LOG"
 NODE_STUB_RC=1 bash "$V" suite runv >/dev/null 2>&1 && rc=0 || rc=$?
 assert_eq 1 "$rc" "a failing Jest run fails the suite"
+# A unit with no PHP test suite skips n test-php, says so, and still runs Jest.
+: > "$N_LOG"; rm "$WT/plugins/my-plugin/phpunit.xml"
+err="$(bash "$V" suite runv 2>&1 >/dev/null)"; rc=$?
+assert_eq 0 "$rc" "suite passes a unit with no phpunit.xml"
+assert_eq 0 "$(grep -c "test-php" "$N_LOG")" "and runs no n test-php there"
+assert_contains "$err" "has no phpunit.xml" "and says why"
+assert_eq 1 "$(grep -c " node " "$N_LOG")" "but still runs Jest on the changed JS"
+: > "$N_LOG"; : > "$WT/plugins/my-plugin/phpunit.xml.dist"
+bash "$V" suite runv >/dev/null 2>&1
+assert_contains "$(cat "$N_LOG")" "plugins/my-plugin n test-php" "phpunit.xml.dist alone is a PHP suite"
+rm "$WT/plugins/my-plugin/phpunit.xml.dist"; : > "$WT/plugins/my-plugin/phpunit.xml"
+printf "#!/bin/bash\necho \"\$PWD n \$*\" >> \"\${N_LOG:?}\"\nexit 1\n" > "$SUITE_STUB/n"
+bash "$V" suite runv >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq 1 "$(( rc != 0 ))" "a failing PHP suite still fails the suite"
+printf "#!/bin/bash\necho \"\$PWD n \$*\" >> \"\${N_LOG:?}\"\nexit 0\n" > "$SUITE_STUB/n"
 : > "$N_LOG"
 bash "$V" js runv src/other.js >/dev/null 2>&1
 assert_eq 0 $? "js runs on files it is given"

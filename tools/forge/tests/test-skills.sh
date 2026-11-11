@@ -75,4 +75,11 @@ assert_contains "$pub" "every call in the batch has succeeded" "and retires only
 r0="$(first_line "$RUN" "forge-run claim \$RID")"; r1="$(first_line "$RUN" "If it printed \`FRESH_TEST_IN_PROGRESS=true\`")"
 assert_eq yes "$([ -n "$r0" ] && [ -n "$r1" ] && [ "$r0" -lt "$r1" ] && echo yes || echo no)" "Stage 0 claims before it restores an interrupted fresh test"
 
+# Stage 6 loads impact-review from the worktree and returns to the pool dir.
+s6="$(sed -n "/^## Stage 6/,/^## Stage 7/p" "$RUN")"
+assert_contains "$s6" "cd <WT>" "Stage 6 cds into the worktree for impact-review"
+assert_contains "$s6" "back to the pool dir" "and cds back afterwards"
+# the dispatcher points an untrusted launch at the pool root
+assert_contains "$(grep "not trusted" "$DIS" | head -1)" "~/.local/state/newspack/forge/dirs" "the not-trusted row names the pool root"
+
 finish
